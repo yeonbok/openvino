@@ -19,7 +19,8 @@ const std::vector<std::vector<size_t>> inputShapes = {
 };
 
 const std::vector<std::vector<size_t>> transOrder = {
-        {0, 4, 3, 2, 1},
+//        {0, 4, 3, 2, 1},
+        {0, 2, 3, 4, 1},
 };
 
 INSTANTIATE_TEST_CASE_P(taylorMultiplyTrans_Nd, MultiplyTransLayerTest,
