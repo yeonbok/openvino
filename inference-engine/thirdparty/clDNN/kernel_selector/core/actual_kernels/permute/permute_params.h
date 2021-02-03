@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2016-2021 Intel Corporation
+// Copyright (c) 2016-2021 Intel Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,23 +15,27 @@
 
 #pragma once
 
-#include "kernel_base_opencl.h"
-#include "permute_params.h"
+#include "kernel_selector_params.h"
 #include <vector>
 
 namespace kernel_selector {
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// PermuteKernelRef
+// permute_params
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class PermuteKernelRef : public KernelBaseOpenCL {
-public:
-    PermuteKernelRef() : KernelBaseOpenCL("permute_ref") {}
-    virtual ~PermuteKernelRef() {}
+struct permute_params : public base_params {
+    permute_params() : base_params(KernelType::PERMUTE) {}
 
-    JitConstants GetJitConstants(const permute_params& params) const;
-    KernelsData GetKernelsData(const Params& params, const optional_params& options) const override;
-    KernelsPriority GetKernelsPriority(const Params& params, const optional_params& options) const override;
-    ParamsKey GetSupportedKey() const override;
+    std::vector<uint16_t> order;
+    uint32_t tile_w = 8;
+    uint32_t tile_h = 8;
+
+    virtual ParamsKey GetParamsKey() const { return base_params::GetParamsKey(); }
 };
-}  // namespace kernel_selector
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// permute_optional_params
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+struct permute_optional_params : optional_params {
+    permute_optional_params() : optional_params(KernelType::PERMUTE) {}
+};
+}
