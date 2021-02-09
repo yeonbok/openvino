@@ -61,7 +61,13 @@ KERNEL (permute_b_fs_zy_xs_fsv32_xsv32)(
             unsigned int dst_h_pitch = TILE_SIZE_H/VECTORWIDTH;
             unroll_for (int i = 0; i < VECTORWIDTH; ++i) {
                 unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
-                transpose_buf[dst][dst_element] = read_buf[src][i];
+                float input_var = read_buf[src][i];
+#if HAS_FUSED_OPS
+                FUSED_OPS;
+                transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
+#else
+                transpose_buf[dst][dst_element] = ACTIVATION(read_buf[src][i], ACTIVATION_PARAMS);
+#endif
             }
         }
     }

@@ -16,6 +16,7 @@
 #include "permute_kernel_b_fs_zy_xs_fsv32_xsv32.h"
 #include "kernel_selector_utils.h"
 #include <string>
+#include <functional>
 
 namespace kernel_selector {
 ParamsKey PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetSupportedKey() const {
@@ -70,7 +71,7 @@ JitConstants PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetJitConstants(const permute
     jit.AddConstant(MakeJitConstant("TILE_SIZE_H", params.tile_h));
     jit.AddConstant(MakeJitConstant("TILE_SIZE_W", params.tile_w));
     jit.AddConstant(MakeJitConstant("LWS", dispatchData.lws[0] * dispatchData.lws[1] * dispatchData.lws[2]));
-#if 0
+#if 1
     if (!params.fused_ops.empty()) {
         if (out_idx.size() == 4)
             std::swap(out_idx[2], out_idx[3]);
@@ -80,8 +81,8 @@ JitConstants PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetJitConstants(const permute
             std::swap(out_idx[2], out_idx[5]);
             std::swap(out_idx[3], out_idx[4]);
         }
-
-        FusedOpsConfiguration conf = {"", out_idx, "input_var", params.inputs[0].GetDType(), 1};
+        // todo: this is not correct yet
+        FusedOpsConfiguration conf = {"", out_idx, "input_var", params.inputs[1].GetDType(), 1};
         jit.Merge(MakeFusedOpsJitConstants(params, {conf}));
     }
 #endif
@@ -139,7 +140,24 @@ KernelsData PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetKernelsData(const Params& p
     return {kd};
 }
 
-KernelsPriority PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetKernelsPriority(const Params& /*params*/, const optional_params& /*options*/) const {
-    return FORCE_PRIORITY_1;
+KernelsPriority PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetKernelsPriority(const Params& params/*params*/, const optional_params& /*options*/) const {
+
+    std::function<bool(const std::vector<uint16_t>&)> is_rotating_except_batch = [](const std::vector<uint16_t>& order) {
+        // Target transform: Rotate feature dim to back to be taken as inner-most axis
+        // ex) 0(b), 4(f), 1(z), 2(y), 3(x)
+        if ((int32_t) order[1] != order.size() - 1) return false;
+        for (int32_t i = 3; i < (int32_t) order.size(); ++i) {
+            if ((int32_t)order[i] !=  (i - 1)) return false;
+        }
+        return true;
+    };
+
+    KernelData kd = KernelData::Default<permute_params>(params);
+    permute_params& newParams = *static_cast<permute_params*>(kd.params.get());
+
+    if (is_rotating_except_batch(newParams.order))
+        return FORCE_PRIORITY_1;
+    else
+        return DONT_USE_IF_HAVE_SOMETHING_ELSE;
 }
 }  // namespace kernel_selector
