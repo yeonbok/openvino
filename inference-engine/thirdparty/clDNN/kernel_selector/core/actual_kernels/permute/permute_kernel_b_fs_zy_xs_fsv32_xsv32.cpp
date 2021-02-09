@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2016-2021 Intel Corporation
+﻿// Copyright (c) 2016-2020 Intel Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,12 +13,12 @@
 // limitations under the License.
 
 
-#include "permute_kernel_ref.h"
+#include "permute_kernel_b_fs_zy_xs_fsv32_xsv32.h"
 #include "kernel_selector_utils.h"
 #include <string>
 
 namespace kernel_selector {
-ParamsKey PermuteKernelRef::GetSupportedKey() const {
+ParamsKey PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetSupportedKey() const {
     ParamsKey k;
     k.EnableInputDataType(Datatype::F16);
     k.EnableInputDataType(Datatype::F32);
@@ -41,12 +41,12 @@ ParamsKey PermuteKernelRef::GetSupportedKey() const {
     return k;
 }
 
-JitConstants PermuteKernelRef::GetJitConstants(const permute_params& params) const {
+JitConstants PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetJitConstants(const permute_params& params, const CommonDispatchData& dispatchData) const {
     JitConstants jit = MakeBaseParamsJitConstants(params);
 
     std::vector<std::string> in_idx;
     std::vector<std::string> out_idx;
-    switch (DataTensor::ChannelsCount(params.inputs[0].GetLayout())) {
+    switch (params.inputs[0].GetDims().size()) {
         case 6: in_idx = {"b", "f", "x", "y", "z", "w" }; break;
         case 5: in_idx = {"b", "f", "x", "y", "z" }; break;
         default: in_idx = {"b", "f", "x", "y" }; break;
@@ -67,7 +67,10 @@ JitConstants PermuteKernelRef::GetJitConstants(const permute_params& params) con
 
     jit.AddConstant(MakeJitConstant("IN_IDX", "INPUT0_GET_INDEX(" + input_order + ")"));
     jit.AddConstant(MakeJitConstant("OUT_IDX", "OUTPUT_GET_INDEX(" + output_order + ")"));
-
+    jit.AddConstant(MakeJitConstant("TILE_SIZE_H", params.tile_h));
+    jit.AddConstant(MakeJitConstant("TILE_SIZE_W", params.tile_w));
+    jit.AddConstant(MakeJitConstant("LWS", dispatchData.lws[0] * dispatchData.lws[1] * dispatchData.lws[2]));
+#if 0
     if (!params.fused_ops.empty()) {
         if (out_idx.size() == 4)
             std::swap(out_idx[2], out_idx[3]);
@@ -81,32 +84,59 @@ JitConstants PermuteKernelRef::GetJitConstants(const permute_params& params) con
         FusedOpsConfiguration conf = {"", out_idx, "input_var", params.inputs[0].GetDType(), 1};
         jit.Merge(MakeFusedOpsJitConstants(params, {conf}));
     }
-
+#endif
     return jit;
 }
 
-KernelsData PermuteKernelRef::GetKernelsData(const Params& params, const optional_params& options) const {
+CommonDispatchData PermuteKernel_b_fs_zy_xs_fsv32_xsv32::SetDefault(const permute_params& params) const {
+    CommonDispatchData dispatchData;
+    const auto& in =  params.inputs[0];
+    const auto& tile_w = params.tile_w;
+    const auto& tile_h = params.tile_h;
+    switch (in.GetLayout()) {
+//        case DataLayout::bfyx:
+//            dispatchData.gws = {output.X().v, output.Y().v, output.Feature().v * output.Batch().v};
+//            break;
+        case DataLayout::bfzyx:
+            dispatchData.gws = {in.X().v / tile_w, in.Y().v * in.Z().v, (in.Feature().v / tile_h) * in.Batch().v};
+            break;
+//        case DataLayout::bfwzyx:
+//            dispatchData.gws = {output.X().v * output.Y().v, output.Z().v * output.W().v, output.Feature().v * output.Batch().v};
+//            break;
+        default:
+            throw std::runtime_error("Unsupported combination\n");
+            break;
+    }
+    dispatchData.lws = {8, 1, 1};
+    return dispatchData;
+}
+
+KernelsData PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetKernelsData(const Params& params, const optional_params& options) const {
     assert(params.GetType() == KernelType::PERMUTE);
 
     KernelData kd = KernelData::Default<permute_params>(params);
     permute_params& newParams = *static_cast<permute_params*>(kd.params.get());
 
+
+    //const auto& in = newParams.inputs[0];
+    auto dispatchData = SetDefault(newParams);
+#if 0
+    kernel.workGroups.global = {in.X().v / newParams.tile_w, in.Y().v * in.Z().v, (in.Feature().v / newParams.tile_h) * in.Batch().v};
+    kernel.workGroups.local = {8, 1, 1};
+#endif
+
+    auto cldnn_jit = GetJitConstants(newParams, dispatchData);
     auto entry_point = GetEntryPoint(kernelName, newParams.layerID, options);
-    auto cldnn_jit = GetJitConstants(newParams);
     std::string jit = CreateJit(kernelName, cldnn_jit, entry_point);
-
-    const auto& in = newParams.inputs[0];
     auto& kernel = kd.kernels[0];
-
-    kernel.workGroups.global = {in.X().v, in.Y().v * in.Z().v * in.W().v, in.Feature().v * in.Batch().v};
-    kernel.workGroups.local = GetOptimalLocalWorkGroupSizes(kernel.workGroups.global, params.engineInfo);
-    kernel.kernelString = GetKernelString(kernelName, jit, entry_point, params.engineInfo, DEFAULT);
-    kernel.arguments = GetArgsDesc(1, false, false, GetFusedPrimitiveInputsCount(params));
+    //kernel.kernelString = GetKernelString(kernelName, jit, entry_point, params.engineInfo, DEFAULT);
+   // kernel.arguments = GetArgsDesc(1, false, false, GetFusedPrimitiveInputsCount(params));
+    FillCLKernelData(kernel, dispatchData, params.engineInfo, kernelName, jit, entry_point, "", false, false, 1, GetFusedPrimitiveInputsCount(params));
 
     return {kd};
 }
 
-KernelsPriority PermuteKernelRef::GetKernelsPriority(const Params& /*params*/, const optional_params& /*options*/) const {
-    return DONT_USE_IF_HAVE_SOMETHING_ELSE;
+KernelsPriority PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetKernelsPriority(const Params& /*params*/, const optional_params& /*options*/) const {
+    return FORCE_PRIORITY_1;
 }
 }  // namespace kernel_selector

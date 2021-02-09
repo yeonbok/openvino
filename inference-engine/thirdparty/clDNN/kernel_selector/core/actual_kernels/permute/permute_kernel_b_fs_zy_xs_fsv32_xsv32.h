@@ -20,16 +20,16 @@
 #include <vector>
 
 namespace kernel_selector {
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// PermuteKernelRef
+// PermuteKernel_b_fs_zy_xs_fsv32_xsv32
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class PermuteKernelRef : public KernelBaseOpenCL {
+class PermuteKernel_b_fs_zy_xs_fsv32_xsv32 : public KernelBaseOpenCL {
 public:
-    PermuteKernelRef() : KernelBaseOpenCL("permute_ref") {}
-    virtual ~PermuteKernelRef() {}
+    PermuteKernel_b_fs_zy_xs_fsv32_xsv32() : KernelBaseOpenCL("permute_b_fs_zy_xs_fsv32_xsv32") {}
+    virtual ~PermuteKernel_b_fs_zy_xs_fsv32_xsv32() {}
 
-    JitConstants GetJitConstants(const permute_params& params) const;
+    virtual CommonDispatchData SetDefault(const permute_params& params) const;
+    JitConstants GetJitConstants(const permute_params& params, const CommonDispatchData& dispatchData) const;
     KernelsData GetKernelsData(const Params& params, const optional_params& options) const override;
     KernelsPriority GetKernelsPriority(const Params& params, const optional_params& options) const override;
     ParamsKey GetSupportedKey() const override;
