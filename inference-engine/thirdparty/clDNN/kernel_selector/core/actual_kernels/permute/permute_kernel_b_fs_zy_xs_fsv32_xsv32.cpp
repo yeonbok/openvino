@@ -107,7 +107,10 @@ CommonDispatchData PermuteKernel_b_fs_zy_xs_fsv32_xsv32::SetDefault(const permut
             throw std::runtime_error("Unsupported combination\n");
             break;
     }
-    dispatchData.lws = {8, 1, 1};
+//    dispatchData.lws = {8, 1, 1};
+//    dispatchData.lws = {64, 1, 1};
+    dispatchData.lws = {64, 1, 2};
+
     return dispatchData;
 }
 

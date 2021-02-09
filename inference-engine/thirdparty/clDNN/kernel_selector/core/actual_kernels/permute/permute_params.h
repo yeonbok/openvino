@@ -26,8 +26,8 @@ struct permute_params : public base_params {
     permute_params() : base_params(KernelType::PERMUTE) {}
 
     std::vector<uint16_t> order;
-    uint32_t tile_w = 32;
-    uint32_t tile_h = 32;
+    uint32_t tile_w = 8;
+    uint32_t tile_h = 8;
 
     virtual ParamsKey GetParamsKey() const { return base_params::GetParamsKey(); }
 };

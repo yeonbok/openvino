@@ -34,8 +34,13 @@ KERNEL (permute_b_fs_zy_xs_fsv32_xsv32)(
     __local float8 read_buf[(TILE_SIZE_W * TILE_SIZE_H * LWS)/VECTORWIDTH];
     __local float8 transpose_buf[(TILE_SIZE_W * TILE_SIZE_H * LWS)/VECTORWIDTH];
 
-    int local_id_x = get_local_id(0);
-    int local_buf_offset = local_id_x * (TILE_SIZE_W/VECTORWIDTH) * TILE_SIZE_H;
+    int local_id_x = get_local_id(0);;
+    int local_id_yz = get_local_id(1);
+    int local_id_f = get_local_id(2);
+
+    int local_id = local_id_x * get_local_size(1) * get_local_size(2) + local_id_yz * get_local_size(1) + local_id_f;
+
+    int local_buf_offset = local_id * (TILE_SIZE_W/VECTORWIDTH) * TILE_SIZE_H;
     // read partial data
     for(int lh = 0; lh < TILE_SIZE_H; ++lh) {
         for(int lw = 0; lw < TILE_SIZE_W/VECTORWIDTH; ++lw) {
