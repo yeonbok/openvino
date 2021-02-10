@@ -24,27 +24,40 @@ KERNEL (permute_b_fs_zy_xs_fsv32_xsv32)(
 #endif
     )
 {
+#if INPUT0_DIMS == 4 && OUTPUT_DIMS == 4
+    //|dim2:bf|dim1:y|dim0:x
+    const uint x = get_global_id(0);
+    const uint y = get_global_id(1);
+    const uint f = (uint)get_global_id(2) % (INPUT0_FEATURE_NUM/TILE_SIZE_H);
+    const uint b = (uint)get_global_id(2) / (INPUT0_FEATURE_NUM/TILE_SIZE_H);
+    int local_id_x = get_local_id(0);;
+    int local_id_y = get_local_id(1);
+    int local_id_f = get_local_id(2);
+    int local_id = local_id_x * get_local_size(1) * get_local_size(2) + local_id_y * get_local_size(1) + local_id_f;
+#elif INPUT0_DIMS == 5 && OUTPUT_DIMS == 5
     //|dim2:bf|dim1:yz|dim0:x
     const uint x = get_global_id(0);
     const uint z = get_global_id(1) / INPUT0_SIZE_Y;
     const uint y = get_global_id(1) % INPUT0_SIZE_Y;   
     const uint f = (uint)get_global_id(2) % (INPUT0_FEATURE_NUM/TILE_SIZE_H);
     const uint b = (uint)get_global_id(2) / (INPUT0_FEATURE_NUM/TILE_SIZE_H);
-
-    __local float8 read_buf[(TILE_SIZE_W * TILE_SIZE_H * LWS)/VECTORWIDTH];
-    __local float8 transpose_buf[(TILE_SIZE_W * TILE_SIZE_H * LWS)/VECTORWIDTH];
-
     int local_id_x = get_local_id(0);;
     int local_id_yz = get_local_id(1);
     int local_id_f = get_local_id(2);
-
     int local_id = local_id_x * get_local_size(1) * get_local_size(2) + local_id_yz * get_local_size(1) + local_id_f;
-
+#endif
+    __local float8 read_buf[(TILE_SIZE_W * TILE_SIZE_H * LWS)/VECTORWIDTH];
+    __local float8 transpose_buf[(TILE_SIZE_W * TILE_SIZE_H * LWS)/VECTORWIDTH];
     int local_buf_offset = local_id * (TILE_SIZE_W/VECTORWIDTH) * TILE_SIZE_H;
+
     // read partial data
     for(int lh = 0; lh < TILE_SIZE_H; ++lh) {
         for(int lw = 0; lw < TILE_SIZE_W/VECTORWIDTH; ++lw) {
-            unsigned int input_idx = b * INPUT0_BATCH_PITCH +  (TILE_SIZE_H *f + lh) * INPUT0_FEATURE_PITCH + z * INPUT0_Z_PITCH + y * INPUT0_Y_PITCH +  (TILE_SIZE_W * x + lw*VECTORWIDTH) * INPUT0_X_PITCH;
+#if INPUT0_DIMS == 5
+            unsigned int input_idx = b * INPUT0_GET_INDEX(b, TILE_SIZE_H * f + lh, z, y, TILE_SIZE_W * x + lw * VECTORWIDTH);
+#elif INPUT0_DIMS == 4
+            unsigned int input_idx = b * INPUT0_GET_INDEX(b, TILE_SIZE_H * f + lh, y, TILE_SIZE_W * x + lw * VECTORWIDTH);
+#endif
             int target_idx =  lh * TILE_SIZE_W/VECTORWIDTH + lw;
             read_buf[local_buf_offset + target_idx] = as_float8(vload8(0, input + input_idx));
         }
@@ -75,7 +88,11 @@ KERNEL (permute_b_fs_zy_xs_fsv32_xsv32)(
     for(int lh = 0; lh < TILE_SIZE_W; ++lh) {
         for(int lw = 0; lw < TILE_SIZE_H/VECTORWIDTH; ++lw) {
             // b, f, z, x, y
+#if INPUT0_DIMS == 5
             unsigned int output_idx = b * OUTPUT_BATCH_PITCH + z * OUTPUT_FEATURE_PITCH + y * OUTPUT_Z_PITCH + (x * TILE_SIZE_W + lh) * OUTPUT_Y_PITCH +  (TILE_SIZE_H * f + lw*VECTORWIDTH) * OUTPUT_X_PITCH;
+#else
+            unsigned int output_idx = b * OUTPUT_BATCH_PITCH + y * OUTPUT_FEATURE_PITCH + (x * TILE_SIZE_W + lh) * OUTPUT_Y_PITCH +  (TILE_SIZE_H * f + lw*VECTORWIDTH) * OUTPUT_X_PITCH;
+#endif
             vstore8(transpose_buf[local_buf_offset + lh * TILE_SIZE_H/VECTORWIDTH + lw], 0, output + output_idx);
         }
     }

@@ -95,22 +95,24 @@ CommonDispatchData PermuteKernel_b_fs_zy_xs_fsv32_xsv32::SetDefault(const permut
     const auto& tile_w = params.tile_w;
     const auto& tile_h = params.tile_h;
     switch (in.GetLayout()) {
-//        case DataLayout::bfyx:
-//            dispatchData.gws = {output.X().v, output.Y().v, output.Feature().v * output.Batch().v};
-//            break;
+        case DataLayout::bfyx:
+            dispatchData.gws = {in.X().v / tile_w, in.Y().v, (in.Feature().v / tile_h) * in.Batch().v};
+            // for f800, y64, x64 
+            // gws : 64/8, 64, 800
+            dispatchData.lws = {2, 1, 50}; // TODO
+            break;
         case DataLayout::bfzyx:
             dispatchData.gws = {in.X().v / tile_w, in.Y().v * in.Z().v, (in.Feature().v / tile_h) * in.Batch().v};
+            dispatchData.lws = {64, 1, 2}; // TODO
             break;
-//        case DataLayout::bfwzyx:
-//            dispatchData.gws = {output.X().v * output.Y().v, output.Z().v * output.W().v, output.Feature().v * output.Batch().v};
-//            break;
+        case DataLayout::bfwzyx:
+            dispatchData.gws = {(in.X().v / tile_w) * in.Y().v, in.Z().v * in.W().v, (in.Feature().v / tile_h) * in.Batch().v};
+            throw std::runtime_error("Unsupported combination\n"); // TODO
+            break;
         default:
             throw std::runtime_error("Unsupported combination\n");
             break;
     }
-//    dispatchData.lws = {8, 1, 1};
-//    dispatchData.lws = {64, 1, 1};
-    dispatchData.lws = {64, 1, 2};
 
     return dispatchData;
 }
@@ -120,21 +122,11 @@ KernelsData PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetKernelsData(const Params& p
 
     KernelData kd = KernelData::Default<permute_params>(params);
     permute_params& newParams = *static_cast<permute_params*>(kd.params.get());
-
-
-    //const auto& in = newParams.inputs[0];
     auto dispatchData = SetDefault(newParams);
-#if 0
-    kernel.workGroups.global = {in.X().v / newParams.tile_w, in.Y().v * in.Z().v, (in.Feature().v / newParams.tile_h) * in.Batch().v};
-    kernel.workGroups.local = {8, 1, 1};
-#endif
-
     auto cldnn_jit = GetJitConstants(newParams, dispatchData);
     auto entry_point = GetEntryPoint(kernelName, newParams.layerID, options);
     std::string jit = CreateJit(kernelName, cldnn_jit, entry_point);
     auto& kernel = kd.kernels[0];
-    //kernel.kernelString = GetKernelString(kernelName, jit, entry_point, params.engineInfo, DEFAULT);
-   // kernel.arguments = GetArgsDesc(1, false, false, GetFusedPrimitiveInputsCount(params));
     FillCLKernelData(kernel, dispatchData, params.engineInfo, kernelName, jit, entry_point, "", false, false, 1, GetFusedPrimitiveInputsCount(params));
 
     return {kd};
@@ -155,9 +147,9 @@ KernelsPriority PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetKernelsPriority(const P
     KernelData kd = KernelData::Default<permute_params>(params);
     permute_params& newParams = *static_cast<permute_params*>(kd.params.get());
 
-    if (is_rotating_except_batch(newParams.order))
+    if (is_rotating_except_batch(newParams.order)) {
         return FORCE_PRIORITY_1;
-    else
+    } else
         return DONT_USE_IF_HAVE_SOMETHING_ELSE;
 }
 }  // namespace kernel_selector

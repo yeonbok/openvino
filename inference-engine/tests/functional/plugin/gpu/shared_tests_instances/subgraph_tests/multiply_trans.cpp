@@ -15,12 +15,13 @@ const std::vector<InferenceEngine::Precision> netPrecisions = {
 };
 
 const std::vector<std::vector<size_t>> inputShapes = {
-        {1, 64, 12, 18, 512},
+//        {1, 64, 12, 18, 512},
+        {1, 800, 64, 64},
 };
 
 const std::vector<std::vector<size_t>> transOrder = {
-//        {0, 4, 3, 2, 1},
-        {0, 2, 3, 4, 1},
+//        {0, 2, 3, 4, 1},
+        {0, 2, 3, 1},
 };
 
 INSTANTIATE_TEST_CASE_P(taylorMultiplyTrans_Nd, MultiplyTransLayerTest,
