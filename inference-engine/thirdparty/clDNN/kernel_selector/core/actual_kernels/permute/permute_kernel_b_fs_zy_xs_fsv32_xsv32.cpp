@@ -115,15 +115,15 @@ CommonDispatchData PermuteKernel_b_fs_zy_xs_fsv32_xsv32::SetDefault(const permut
 
             // for f800, y64, x64 
             // gws : 64/8, 64, 810
-            dispatchData.gws = {in.X().v / tile_w, in.Y().v, ((in.Feature().v + tile_h - 1) / tile_h) * in.Batch().v};
+            dispatchData.gws = {(in.X().v + tile_w - 1) / tile_w, in.Y().v, ((in.Feature().v + tile_h - 1) / tile_h) * in.Batch().v};
             dispatchData.lws = {2, 1, 51}; // TODO
             break;
         case DataLayout::bfzyx:
-            dispatchData.gws = {in.X().v / tile_w, in.Y().v * in.Z().v, (in.Feature().v / tile_h) * in.Batch().v};
+            dispatchData.gws = {(in.X().v + tile_w - 1) / tile_w, in.Y().v * in.Z().v, ((in.Feature().v + tile_h - 1)/ tile_h) * in.Batch().v};
             dispatchData.lws = {64, 1, 2}; // TODO
             break;
         case DataLayout::bfwzyx:
-            dispatchData.gws = {(in.X().v / tile_w), in.Y().v * in.Z().v * in.W().v, (in.Feature().v / tile_h) * in.Batch().v};
+            dispatchData.gws = {(in.X().v + tile_w - 1) / tile_w, in.Y().v * in.Z().v * in.W().v, ((in.Feature().v + tile_h - 1)/ tile_h) * in.Batch().v};
             dispatchData.lws = {64, 1, 2}; // TODO
             break;
         default:

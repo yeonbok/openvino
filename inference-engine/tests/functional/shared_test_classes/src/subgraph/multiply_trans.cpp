@@ -6,12 +6,13 @@
 
 namespace SubgraphTestsDefinitions {
 std::string MultiplyTransLayerTest::getTestCaseName(const testing::TestParamInfo<MultiplyTransParamsTuple> &obj) {
-    std::vector<size_t> inputShapes;
-    std::vector<size_t> transOrder;
+    std::vector<std::vector<size_t>> pairs;
     InferenceEngine::Precision netPrecision;
     std::string targetName;
-    std::tie(inputShapes, transOrder, netPrecision, targetName) = obj.param;
+    std::tie(pairs, netPrecision, targetName) = obj.param;
     std::ostringstream results;
+    const std::vector<size_t>& inputShapes = pairs[0];
+    const std::vector<size_t>& transOrder = pairs[1];
 
     results << "IS=" << CommonTestUtils::vec2str(inputShapes) << "_";
     results << "TO=" << CommonTestUtils::vec2str(transOrder) << "_";
@@ -21,10 +22,12 @@ std::string MultiplyTransLayerTest::getTestCaseName(const testing::TestParamInfo
 }
 
 void MultiplyTransLayerTest::SetUp() {
-    std::vector<size_t> inputShape;
-    std::vector<size_t> transOrder;
+    std::vector<std::vector<size_t>> pairs;
     auto netPrecision = InferenceEngine::Precision::UNSPECIFIED;
-    std::tie(inputShape, transOrder, netPrecision, targetDevice) = this->GetParam();
+    std::tie(pairs, netPrecision, targetDevice) = this->GetParam();
+    const std::vector<size_t>& inputShape = pairs[0];
+    const std::vector<size_t>& transOrder = pairs[1];
+
     auto ngPrc = FuncTestUtils::PrecisionUtils::convertIE2nGraphPrc(netPrecision);
     auto params = ngraph::builder::makeParams(ngPrc, {inputShape});
     auto mulOuts = ngraph::helpers::convert2OutputVector(

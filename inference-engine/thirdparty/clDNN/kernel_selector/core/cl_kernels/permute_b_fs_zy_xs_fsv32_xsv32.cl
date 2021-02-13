@@ -41,7 +41,7 @@ KERNEL (permute_b_fs_zy_xs_fsv32_xsv32)(
     const uint w = get_global_id(1) / (INPUT0_SIZE_Y * INPUT0_SIZE_Z) % INPUT0_SIZE_W;
 #endif
     __local VTYPE read_buf[READ_BUF_WIDTH * TILE_SIZE_H * LWS];
-    __local VTYPE transpose_buf[TRANS_BUF_WIDTH * TILE_SIZE_H * LWS];
+    __local VTYPE transpose_buf[TRANS_BUF_WIDTH * TILE_SIZE_W * LWS];
 
     int local_id = get_local_id(0) * get_local_size(2) * get_local_size(1)
                     + get_local_id(1) * get_local_size(1)
@@ -76,8 +76,8 @@ KERNEL (permute_b_fs_zy_xs_fsv32_xsv32)(
                 unsigned int dst_h_pitch = TILE_SIZE_H/VECTORWIDTH;
                 unroll_for (int i = 0; i < VECTORWIDTH; ++i) {
                     unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
-                    INPUT0_TYPE input_var = read_buf[src][i];
 #if HAS_FUSED_OPS
+                    INPUT0_TYPE input_var = read_buf[src][i];
                     FUSED_OPS;
                     transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
 #else
@@ -128,8 +128,8 @@ KERNEL (permute_b_fs_zy_xs_fsv32_xsv32)(
                 unsigned int dst_h_pitch = (F_REMAINDER_SIZE + VECTORWIDTH - 1) / VECTORWIDTH;
                 unroll_for (int i = 0; i < VECTORWIDTH; ++i) {
                     unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
-                    INPUT0_TYPE input_var = read_buf[src][i];
 #if HAS_FUSED_OPS
+                    INPUT0_TYPE input_var = read_buf[src][i];
                     FUSED_OPS;
                     transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
 #else
@@ -161,6 +161,63 @@ KERNEL (permute_b_fs_zy_xs_fsv32_xsv32)(
         }
     } else if (f < F_REMAINDER_ITEM && x == X_REMAINDER_ITEM) {
         // (TILE_SIZE_H, x_remainder_size)
+        // read
+        int src_width = (X_REMAINDER_SIZE + VECTORWIDTH -1)/VECTORWIDTH;
+        for (int lh = 0; lh < TILE_SIZE_H; ++lh) {
+            for(int lw = 0; lw < src_width; ++lw) {
+              #if INPUT0_DIMS == 6
+                unsigned int input_idx = b * INPUT0_GET_INDEX(b, TILE_SIZE_H * f + lh, w, z, y, TILE_SIZE_W * x + lw * VECTORWIDTH);
+              #elif INPUT0_DIMS == 5
+                unsigned int input_idx = b * INPUT0_GET_INDEX(b, TILE_SIZE_H * f + lh, z, y, TILE_SIZE_W * x + lw * VECTORWIDTH);
+              #elif INPUT0_DIMS == 4
+                unsigned int input_idx = b * INPUT0_GET_INDEX(b, TILE_SIZE_H * f + lh, y, TILE_SIZE_W * x + lw * VECTORWIDTH);
+              #endif
+                unsigned int target_idx = lh * src_width + lw;
+                if ( lw == (src_width - 1)) {
+                    // final remainder
+                    unroll_for (int i = 0; i < X_REMAINDER_SIZE % VECTORWIDTH; ++i) {
+                        read_buf[local_buf_offset + target_idx][i] = input[input_idx + i];
+                    }
+                } else {
+                    read_buf[local_buf_offset + target_idx] = AS_VTYPE(VLOAD(0, input + input_idx));
+                }
+            }
+        }
+        // transpose
+        for (int lh = 0; lh < TILE_SIZE_H; ++lh) {
+            for(int lw = 0; lw < src_width ; ++lw) {
+                unsigned int src = local_buf_offset + lh * src_width + lw;
+                unsigned int dst_h = lw * VECTORWIDTH;
+                unsigned int dst_w = lh / VECTORWIDTH;
+                unsigned int dst_element = lh % VECTORWIDTH;
+                unsigned int dst_h_pitch = TILE_SIZE_H / VECTORWIDTH;
+                int read_fragment_width = (lw == (src_width - 1)) ? X_REMAINDER_SIZE % VECTORWIDTH : VECTORWIDTH;
+                unroll_for (int i = 0; i < read_fragment_width; ++i) {
+                    unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
+#if HAS_FUSED_OP
+                    INPUT0_TYPE input_var = read_buf[src][i];
+                    FUSED_OPS;
+                    transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
+#else
+                    transpose_buf[dst][dst_element] = ACTIVATION(read_buf[src][i], ACTIVATION_PARAMS);
+#endif
+                }
+            }
+        }
+        // write to ddr
+        for(int lh = 0; lh < X_REMAINDER_SIZE; ++lh) {
+            for(int lw = 0; lw < TRANS_BUF_WIDTH; ++lw) {
+                // b, f, z, x, y
+#if INPUT0_DIMS == 6
+                unsigned int output_idx = b * OUTPUT_BATCH_PITCH + w * OUTPUT_FEATURE_PITCH + z * OUTPUT_W_PITCH + y * OUTPUT_Z_PITCH +  (x * TILE_SIZE_W+ lh) * OUTPUT_Y_PITCH +  (TILE_SIZE_H * f + lw*VECTORWIDTH) * OUTPUT_X_PITCH;
+#elif INPUT0_DIMS == 5
+                unsigned int output_idx = b * OUTPUT_BATCH_PITCH + z * OUTPUT_FEATURE_PITCH + y * OUTPUT_Z_PITCH + (x * TILE_SIZE_W + lh) * OUTPUT_Y_PITCH +  (TILE_SIZE_H * f + lw*VECTORWIDTH) * OUTPUT_X_PITCH;
+#else
+                unsigned int output_idx = b * OUTPUT_BATCH_PITCH + y * OUTPUT_FEATURE_PITCH + (x * TILE_SIZE_W + lh) * OUTPUT_Y_PITCH +  (TILE_SIZE_H * f + lw*VECTORWIDTH) * OUTPUT_X_PITCH;
+#endif
+                vstore8(transpose_buf[local_buf_offset + lh * TILE_SIZE_H/VECTORWIDTH + lw], 0, output + output_idx);
+            }
+        }
     } else { // f == X_REMAINDER_ITEM && x == X_REMAINDER_ITEM)
         // point by point
     }

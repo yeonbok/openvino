@@ -15,8 +15,7 @@
 namespace SubgraphTestsDefinitions {
 
 using MultiplyTransParamsTuple = typename std::tuple<
-        std::vector<size_t>,              //input shapes
-        std::vector<size_t>,              //trans order
+        std::vector<std::vector<size_t>>,              //trans order
         InferenceEngine::Precision,       //Network precision
         std::string>;                     //Device name
 
