@@ -66,12 +66,25 @@ JitConstants PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetJitConstants(const permute
         output_order += "," + out_idx[i];
     }
 
+    int32_t vector_width = 8; // to calculate
     jit.AddConstant(MakeJitConstant("IN_IDX", "INPUT0_GET_INDEX(" + input_order + ")"));
     jit.AddConstant(MakeJitConstant("OUT_IDX", "OUTPUT_GET_INDEX(" + output_order + ")"));
     jit.AddConstant(MakeJitConstant("TILE_SIZE_H", params.tile_h));
     jit.AddConstant(MakeJitConstant("TILE_SIZE_W", params.tile_w));
     jit.AddConstant(MakeJitConstant("LWS", dispatchData.lws[0] * dispatchData.lws[1] * dispatchData.lws[2]));
-#if 1
+    jit.AddConstant(MakeJitConstant("NFEATURE_TILES", (params.inputs[0].Feature().v + params.tile_h - 1) / params.tile_h));
+    jit.AddConstant(MakeJitConstant("X_REMAINDER_ITEM", params.inputs[0].X().v / params.tile_w));
+    jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE", params.inputs[0].X().v % params.tile_w));
+    jit.AddConstant(MakeJitConstant("F_REMAINDER_ITEM", params.inputs[0].Feature().v / params.tile_h));
+    jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE", params.inputs[0].Feature().v % params.tile_h));
+    jit.AddConstant(MakeJitConstant("VECTORWIDTH", vector_width));
+    jit.AddConstant(MakeJitConstant("VTYPE", "CAT(INPUT0_TYPE, VECTORWIDTH)"));
+    jit.AddConstant(MakeJitConstant("VLOAD", "CAT(vload, VECTORWIDTH)"));
+    jit.AddConstant(MakeJitConstant("VSTORE", "CAT(vstore, VECTORWIDTH)"));
+    jit.AddConstant(MakeJitConstant("AS_VTYPE", "CAT(as_, VTYPE)"));
+    jit.AddConstant(MakeJitConstant("READ_BUF_WIDTH", params.tile_w / vector_width ));
+    jit.AddConstant(MakeJitConstant("TRANS_BUF_WIDTH", params.tile_h / vector_width ));
+
     if (!params.fused_ops.empty()) {
         if (out_idx.size() == 4)
             std::swap(out_idx[2], out_idx[3]);
@@ -85,7 +98,6 @@ JitConstants PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetJitConstants(const permute
         FusedOpsConfiguration conf = {"", out_idx, "input_var", params.inputs[1].GetDType(), 1};
         jit.Merge(MakeFusedOpsJitConstants(params, {conf}));
     }
-#endif
     return jit;
 }
 
@@ -96,18 +108,23 @@ CommonDispatchData PermuteKernel_b_fs_zy_xs_fsv32_xsv32::SetDefault(const permut
     const auto& tile_h = params.tile_h;
     switch (in.GetLayout()) {
         case DataLayout::bfyx:
-            dispatchData.gws = {in.X().v / tile_w, in.Y().v, (in.Feature().v / tile_h) * in.Batch().v};
             // for f800, y64, x64 
             // gws : 64/8, 64, 800
-            dispatchData.lws = {2, 1, 50}; // TODO
+            //dispatchData.gws = {in.X().v / tile_w, in.Y().v, (in.Feature().v / tile_h) * in.Batch().v};
+            //dispatchData.lws = {2, 1, 50}; // TODO
+
+            // for f800, y64, x64 
+            // gws : 64/8, 64, 810
+            dispatchData.gws = {in.X().v / tile_w, in.Y().v, ((in.Feature().v + tile_h - 1) / tile_h) * in.Batch().v};
+            dispatchData.lws = {2, 1, 51}; // TODO
             break;
         case DataLayout::bfzyx:
             dispatchData.gws = {in.X().v / tile_w, in.Y().v * in.Z().v, (in.Feature().v / tile_h) * in.Batch().v};
             dispatchData.lws = {64, 1, 2}; // TODO
             break;
         case DataLayout::bfwzyx:
-            dispatchData.gws = {(in.X().v / tile_w) * in.Y().v, in.Z().v * in.W().v, (in.Feature().v / tile_h) * in.Batch().v};
-            throw std::runtime_error("Unsupported combination\n"); // TODO
+            dispatchData.gws = {(in.X().v / tile_w), in.Y().v * in.Z().v * in.W().v, (in.Feature().v / tile_h) * in.Batch().v};
+            dispatchData.lws = {64, 1, 2}; // TODO
             break;
         default:
             throw std::runtime_error("Unsupported combination\n");
@@ -144,6 +161,7 @@ KernelsPriority PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetKernelsPriority(const P
         return true;
     };
 
+//    return DONT_USE_IF_HAVE_SOMETHING_ELSE*10;
     KernelData kd = KernelData::Default<permute_params>(params);
     permute_params& newParams = *static_cast<permute_params*>(kd.params.get());
 
