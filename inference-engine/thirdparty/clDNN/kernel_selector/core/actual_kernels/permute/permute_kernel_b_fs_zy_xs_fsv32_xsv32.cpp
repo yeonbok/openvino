@@ -67,8 +67,6 @@ JitConstants PermuteKernel_b_fs_zy_xs_fsv32_xsv32::GetJitConstants(const permute
     }
 
     int32_t vector_width = 8; // to calculate
-    jit.AddConstant(MakeJitConstant("IN_IDX", "INPUT0_GET_INDEX(" + input_order + ")"));
-    jit.AddConstant(MakeJitConstant("OUT_IDX", "OUTPUT_GET_INDEX(" + output_order + ")"));
     jit.AddConstant(MakeJitConstant("TILE_SIZE_H", params.tile_h));
     jit.AddConstant(MakeJitConstant("TILE_SIZE_W", params.tile_w));
     jit.AddConstant(MakeJitConstant("LWS", dispatchData.lws[0] * dispatchData.lws[1] * dispatchData.lws[2]));
@@ -121,6 +119,7 @@ CommonDispatchData PermuteKernel_b_fs_zy_xs_fsv32_xsv32::SetDefault(const permut
         case DataLayout::bfzyx:
             dispatchData.gws = {(in.X().v + tile_w - 1) / tile_w, in.Y().v * in.Z().v, ((in.Feature().v + tile_h - 1)/ tile_h) * in.Batch().v};
             dispatchData.lws = {64, 1, 2}; // TODO
+//            dispatchData.lws = {3, 1, 2}; // TODO
             break;
         case DataLayout::bfwzyx:
             dispatchData.gws = {(in.X().v + tile_w - 1) / tile_w, in.Y().v * in.Z().v * in.W().v, ((in.Feature().v + tile_h - 1)/ tile_h) * in.Batch().v};
