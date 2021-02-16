@@ -15,8 +15,7 @@ const std::vector<InferenceEngine::Precision> netPrecisions = {
 };
 
 const std::vector<std::vector<std::vector<size_t>>> cases = {
-//    {{1, 9, 2, 3, 19}, {0, 2, 3, 4, 1}}, // passing
-    {{1, 62, 12, 18, 510}, {0, 2, 3, 4, 1}}, // not passing
+    {{1, 62, 12, 18, 510}, {0, 2, 3, 4, 1}},
     {{1, 64, 12, 18, 510}, {0, 2, 3, 4, 1}},
     {{1, 64, 4, 12, 18, 512}, {0, 2, 3, 4, 5, 1}},
     {{1, 64, 12, 18, 512}, {0, 2, 3, 4, 1}},
