@@ -17,7 +17,7 @@
 #include "kernel_selector_utils.h"
 #include <string>
 #include <functional>
-
+#define CEIL_DIV(A, B) ((A + B - 1)/(B))
 namespace kernel_selector {
 ParamsKey PermuteKernel_tile_8x8::GetSupportedKey() const {
     ParamsKey k;
@@ -101,24 +101,48 @@ JitConstants PermuteKernel_tile_8x8::GetJitConstants(const permute_params& param
         output_order += "," + out_idx[i];
     }
 
-    int32_t vector_width = 8; // to calculate
+    int32_t vector_width = VECTORWIDTH; // to calculate
+    uint64_t total_lws = dispatchData.lws[0] * dispatchData.lws[1] * dispatchData.lws[2];
+    jit.AddConstant(MakeJitConstant("VECTORWIDTH", vector_width));
     jit.AddConstant(MakeJitConstant("INPUT0_TILED_ORDER", GetTiledInputOrder(params.inputs[0].GetDims().size())));
     jit.AddConstant(MakeJitConstant("OUTPUT_TILED_ORDER", GetTiledOutputOrder(params.output.GetDims().size())));
     jit.AddConstant(MakeJitConstant("TILE_SIZE_H", params.tile_h));
     jit.AddConstant(MakeJitConstant("TILE_SIZE_W", params.tile_w));
-    jit.AddConstant(MakeJitConstant("LWS", dispatchData.lws[0] * dispatchData.lws[1] * dispatchData.lws[2]));
-    jit.AddConstant(MakeJitConstant("NFEATURE_TILES", (params.inputs[0].Feature().v + params.tile_h - 1) / params.tile_h));
-    jit.AddConstant(MakeJitConstant("X_REMAINDER_ITEM", params.inputs[0].X().v / params.tile_w));
-    jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE", params.inputs[0].X().v % params.tile_w));
-    jit.AddConstant(MakeJitConstant("F_REMAINDER_ITEM", params.inputs[0].Feature().v / params.tile_h));
-    jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE", params.inputs[0].Feature().v % params.tile_h));
-    jit.AddConstant(MakeJitConstant("VECTORWIDTH", vector_width));
+    jit.AddConstant(MakeJitConstant("N_VECTORS_TILE_W", params.tile_w / vector_width));
+    jit.AddConstant(MakeJitConstant("LWS",total_lws));
+    jit.AddConstant(MakeJitConstant("NFEATURE_TILES", CEIL_DIV(params.inputs[0].Feature().v, params.tile_h)));
+
+    std::string normal_tile_cond = "true";
+    std::string x_remainder_cond = "true";
+    std::string f_remainder_cond = "true";
+
+    if (params.inputs[0].X().v % params.tile_w) {
+        jit.AddConstant(MakeJitConstant("X_REMAINDER_ITEM", params.inputs[0].X().v / params.tile_w));
+        jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE", params.inputs[0].X().v % params.tile_w));
+        jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE_AS_VECTOR", CEIL_DIV(params.inputs[0].X().v % params.tile_w, vector_width)));
+        normal_tile_cond += " && (x < X_REMAINDER_ITEM)";
+        x_remainder_cond += " && (x == X_REMAINDER_ITEM)";
+        f_remainder_cond += " && (x < X_REMAINDER_ITEM)";
+    }
+    if (params.inputs[0].Feature().v % params.tile_h) {
+        jit.AddConstant(MakeJitConstant("F_REMAINDER_ITEM", params.inputs[0].Feature().v / params.tile_h));
+        jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE", params.inputs[0].Feature().v % params.tile_h));
+        jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE_AS_VECTOR", CEIL_DIV(params.inputs[0].Feature().v % params.tile_h, vector_width)));
+        normal_tile_cond += " && (f < F_REMAINDER_ITEM)";
+        x_remainder_cond += " && (f < F_REMAINDER_ITEM)";
+        f_remainder_cond += " && (f == F_REMAINDER_ITEM)";
+    }
+
+    jit.AddConstant(MakeJitConstant("NORMAL_TILE_CONDITION", normal_tile_cond));
+    jit.AddConstant(MakeJitConstant("X_REMAINDER_CONDITION", x_remainder_cond));
+    jit.AddConstant(MakeJitConstant("F_REMAINDER_CONDITION", f_remainder_cond));
     jit.AddConstant(MakeJitConstant("VTYPE", "CAT(INPUT0_TYPE, VECTORWIDTH)"));
     jit.AddConstant(MakeJitConstant("VLOAD", "CAT(vload, VECTORWIDTH)"));
     jit.AddConstant(MakeJitConstant("VSTORE", "CAT(vstore, VECTORWIDTH)"));
     jit.AddConstant(MakeJitConstant("AS_VTYPE", "CAT(as_, VTYPE)"));
-    jit.AddConstant(MakeJitConstant("READ_BUF_WIDTH", params.tile_w / vector_width ));
+    jit.AddConstant(MakeJitConstant("LOCAL_BUF_STRIDE", (params.tile_w / vector_width) * params.tile_h));
     jit.AddConstant(MakeJitConstant("TRANS_BUF_WIDTH", params.tile_h / vector_width ));
+    jit.AddConstant(MakeJitConstant("TRANS_BUF_SIZE", (params.tile_h / vector_width) * params.tile_w * total_lws) );
 
     if (!params.fused_ops.empty()) {
         if (out_idx.size() == 4)
@@ -129,7 +153,6 @@ JitConstants PermuteKernel_tile_8x8::GetJitConstants(const permute_params& param
             std::swap(out_idx[2], out_idx[5]);
             std::swap(out_idx[3], out_idx[4]);
         }
-        // todo: this is not correct yet
         FusedOpsConfiguration conf = {"", out_idx, "input_var", params.inputs[1].GetDType(), 1};
         jit.Merge(MakeFusedOpsJitConstants(params, {conf}));
     }
@@ -150,16 +173,18 @@ CommonDispatchData PermuteKernel_tile_8x8::SetDefault(const permute_params& para
 
             // for f800, y64, x64 
             // gws : 64/8, 64, 810
-            dispatchData.gws = {(in.X().v + tile_w - 1) / tile_w, in.Y().v, ((in.Feature().v + tile_h - 1) / tile_h) * in.Batch().v};
+            dispatchData.gws = {CEIL_DIV(in.X().v , tile_w), in.Y().v, CEIL_DIV(in.Feature().v, tile_h) * in.Batch().v};
             dispatchData.lws = {2, 1, 51}; // TODO
             break;
         case DataLayout::bfzyx:
-            dispatchData.gws = {(in.X().v + tile_w - 1) / tile_w, in.Y().v * in.Z().v, ((in.Feature().v + tile_h - 1)/ tile_h) * in.Batch().v};
+            dispatchData.gws = {CEIL_DIV(in.X().v , tile_w), in.Y().v * in.Z().v, CEIL_DIV(in.Feature().v, tile_h) * in.Batch().v};
             dispatchData.lws = {64, 1, 2}; // TODO
+//            dispatchData.lws = {128, 1, 2}; // TODO
+//            dispatchData.lws = {64, 1, 2}; // TODO
 //            dispatchData.lws = {3, 1, 2}; // TODO
             break;
         case DataLayout::bfwzyx:
-            dispatchData.gws = {(in.X().v + tile_w - 1) / tile_w, in.Y().v * in.Z().v * in.W().v, ((in.Feature().v + tile_h - 1)/ tile_h) * in.Batch().v};
+            dispatchData.gws = {CEIL_DIV(in.X().v , tile_w), in.Y().v * in.Z().v * in.W().v, CEIL_DIV(in.Feature().v, tile_h) * in.Batch().v};
             dispatchData.lws = {64, 1, 2}; // TODO
             break;
         default:
