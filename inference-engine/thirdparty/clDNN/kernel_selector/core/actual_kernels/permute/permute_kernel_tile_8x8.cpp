@@ -20,7 +20,7 @@
 #include <cmath>
 
 #define CEIL_DIV(A, B) ((A + B - 1)/(B))
-#define VECTORWIDTH 8
+
 namespace kernel_selector {
 ParamsKey PermuteKernel_tile_8x8::GetSupportedKey() const {
     ParamsKey k;
