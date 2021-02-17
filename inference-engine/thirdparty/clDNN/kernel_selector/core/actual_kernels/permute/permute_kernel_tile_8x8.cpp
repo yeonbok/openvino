@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2016-2020 Intel Corporation
+﻿// Copyright (c) 2016-2021 Intel Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 #include <cmath>
 
 #define CEIL_DIV(A, B) ((A + B - 1)/(B))
+#define TILE_SIZE 8 // 8x8
 
 namespace kernel_selector {
 ParamsKey PermuteKernel_tile_8x8::GetSupportedKey() const {
@@ -49,13 +50,13 @@ static inline std::string GetTiledOutputOrder(size_t size) {
     std::string order_str = "";
     switch (size) {
         case 4 :
-            order_str = "b, y, (x * TILE_SIZE_W + lh), (TILE_SIZE_H * f + lw*VECTORWIDTH)";
+            order_str = "b, y, (x * TILE_SIZE + lh), (TILE_SIZE * f + lw*VECTORWIDTH)";
             break;
         case 5 :
-            order_str = "b, z, y, (x * TILE_SIZE_W + lh), (TILE_SIZE_H * f + lw*VECTORWIDTH)";
+            order_str = "b, z, y, (x * TILE_SIZE + lh), (TILE_SIZE * f + lw*VECTORWIDTH)";
             break;
         case 6 :
-            order_str = "b, w, z, y, (x * TILE_SIZE_W + lh), (TILE_SIZE_H * f + lw*VECTORWIDTH)";
+            order_str = "b, w, z, y, (x * TILE_SIZE + lh), (TILE_SIZE * f + lw*VECTORWIDTH)";
             break;
         default : throw std::runtime_error("Unsupported combination\n");
     }
@@ -67,13 +68,13 @@ static inline std::string GetTiledInputOrder(size_t size) {
     std::string order_str = "";
     switch (size) {
         case 4 :
-            order_str = "b, (TILE_SIZE_H * f + lh), y, (TILE_SIZE_W * x + lw * VECTORWIDTH)";
+            order_str = "b, (TILE_SIZE * f + lh), y, (TILE_SIZE * x + lw * VECTORWIDTH)";
             break;
         case 5 :
-            order_str = "b, (TILE_SIZE_H * f + lh), z, y, (TILE_SIZE_W * x + lw * VECTORWIDTH)";
+            order_str = "b, (TILE_SIZE * f + lh), z, y, (TILE_SIZE * x + lw * VECTORWIDTH)";
             break;
         case 6 :
-            order_str = "b, (TILE_SIZE_H * f + lh), w, z, y, (TILE_SIZE_W * x + lw * VECTORWIDTH)";
+            order_str = "b, (TILE_SIZE * f + lh), w, z, y, (TILE_SIZE * x + lw * VECTORWIDTH)";
             break;
         default : throw std::runtime_error("Unsupported combination\n");
     }
@@ -104,33 +105,32 @@ JitConstants PermuteKernel_tile_8x8::GetJitConstants(const permute_params& param
         output_order += "," + out_idx[i];
     }
 
-    int32_t vector_width = VECTORWIDTH; // to calculate
+    int32_t vector_width = TILE_SIZE; // to calculate
     uint64_t total_lws = dispatchData.lws[0] * dispatchData.lws[1] * dispatchData.lws[2];
     jit.AddConstant(MakeJitConstant("VECTORWIDTH", vector_width));
     jit.AddConstant(MakeJitConstant("INPUT0_TILED_ORDER", GetTiledInputOrder(params.inputs[0].GetDims().size())));
     jit.AddConstant(MakeJitConstant("OUTPUT_TILED_ORDER", GetTiledOutputOrder(params.output.GetDims().size())));
-    jit.AddConstant(MakeJitConstant("TILE_SIZE_H", params.tile_h));
-    jit.AddConstant(MakeJitConstant("TILE_SIZE_W", params.tile_w));
-    jit.AddConstant(MakeJitConstant("N_VECTORS_TILE_W", params.tile_w / vector_width));
+    jit.AddConstant(MakeJitConstant("TILE_SIZE", TILE_SIZE));
+    jit.AddConstant(MakeJitConstant("N_VECTORS_IN_TILE", TILE_SIZE / vector_width));
     jit.AddConstant(MakeJitConstant("LWS",total_lws));
-    jit.AddConstant(MakeJitConstant("NFEATURE_TILES", CEIL_DIV(params.inputs[0].Feature().v, params.tile_h)));
+    jit.AddConstant(MakeJitConstant("NFEATURE_TILES", CEIL_DIV(params.inputs[0].Feature().v, TILE_SIZE)));
 
     std::string normal_tile_cond = "true";
     std::string x_remainder_cond = "true";
     std::string f_remainder_cond = "true";
 
-    if (params.inputs[0].X().v % params.tile_w) {
-        jit.AddConstant(MakeJitConstant("X_REMAINDER_ITEM", params.inputs[0].X().v / params.tile_w));
-        jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE", params.inputs[0].X().v % params.tile_w));
-        jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE_AS_VECTOR", CEIL_DIV(params.inputs[0].X().v % params.tile_w, vector_width)));
+    if (params.inputs[0].X().v % TILE_SIZE) {
+        jit.AddConstant(MakeJitConstant("X_REMAINDER_ITEM", params.inputs[0].X().v / TILE_SIZE));
+        jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE", params.inputs[0].X().v % TILE_SIZE));
+        jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE_AS_VECTOR", CEIL_DIV(params.inputs[0].X().v % TILE_SIZE, vector_width)));
         normal_tile_cond += " && (x < X_REMAINDER_ITEM)";
         x_remainder_cond += " && (x == X_REMAINDER_ITEM)";
         f_remainder_cond += " && (x < X_REMAINDER_ITEM)";
     }
-    if (params.inputs[0].Feature().v % params.tile_h) {
-        jit.AddConstant(MakeJitConstant("F_REMAINDER_ITEM", params.inputs[0].Feature().v / params.tile_h));
-        jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE", params.inputs[0].Feature().v % params.tile_h));
-        jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE_AS_VECTOR", CEIL_DIV(params.inputs[0].Feature().v % params.tile_h, vector_width)));
+    if (params.inputs[0].Feature().v % TILE_SIZE) {
+        jit.AddConstant(MakeJitConstant("F_REMAINDER_ITEM", params.inputs[0].Feature().v / TILE_SIZE));
+        jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE", params.inputs[0].Feature().v % TILE_SIZE));
+        jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE_AS_VECTOR", CEIL_DIV(params.inputs[0].Feature().v % TILE_SIZE, vector_width)));
         normal_tile_cond += " && (f < F_REMAINDER_ITEM)";
         x_remainder_cond += " && (f < F_REMAINDER_ITEM)";
         f_remainder_cond += " && (f == F_REMAINDER_ITEM)";
@@ -139,13 +139,14 @@ JitConstants PermuteKernel_tile_8x8::GetJitConstants(const permute_params& param
     jit.AddConstant(MakeJitConstant("NORMAL_TILE_CONDITION", normal_tile_cond));
     jit.AddConstant(MakeJitConstant("X_REMAINDER_CONDITION", x_remainder_cond));
     jit.AddConstant(MakeJitConstant("F_REMAINDER_CONDITION", f_remainder_cond));
-    jit.AddConstant(MakeJitConstant("VTYPE", "CAT(INPUT0_TYPE, VECTORWIDTH)"));
+    jit.AddConstant(MakeJitConstant("INPUTVTYPE", "CAT(INPUT0_TYPE, VECTORWIDTH)"));
+    jit.AddConstant(MakeJitConstant("OUTPUTVTYPE", "CAT(OUTPUT_TYPE, VECTORWIDTH)"));
     jit.AddConstant(MakeJitConstant("VLOAD", "CAT(vload, VECTORWIDTH)"));
     jit.AddConstant(MakeJitConstant("VSTORE", "CAT(vstore, VECTORWIDTH)"));
-    jit.AddConstant(MakeJitConstant("AS_VTYPE", "CAT(as_, VTYPE)"));
-    jit.AddConstant(MakeJitConstant("LOCAL_BUF_STRIDE", (params.tile_w / vector_width) * params.tile_h));
-    jit.AddConstant(MakeJitConstant("TRANS_BUF_WIDTH", params.tile_h / vector_width ));
-    jit.AddConstant(MakeJitConstant("TRANS_BUF_SIZE", (params.tile_h / vector_width) * params.tile_w * total_lws) );
+    jit.AddConstant(MakeJitConstant("AS_INPUTVTYPE", "CAT(as_, INPUTVTYPE)"));
+    jit.AddConstant(MakeJitConstant("AS_OUTPUTVTYPE", "CAT(as_, OUTPUTVTYPE)"));
+    jit.AddConstant(MakeJitConstant("LOCAL_BUF_STRIDE", (TILE_SIZE / vector_width) * TILE_SIZE));
+    jit.AddConstant(MakeJitConstant("TRANS_BUF_SIZE", (TILE_SIZE / vector_width) * TILE_SIZE * total_lws) );
 
     if (!params.fused_ops.empty()) {
         if (out_idx.size() == 4)
@@ -162,48 +163,35 @@ JitConstants PermuteKernel_tile_8x8::GetJitConstants(const permute_params& param
     return jit;
 }
 
-static std::vector<size_t> GetBestLwsFromGws(const std::vector<size_t>& gws, const size_t tile_height, const size_t tile_width)
+static std::vector<size_t> GetBestLwsFromGws(const permute_params& params, const std::vector<size_t>& gws)
 {
-    std::vector<size_t> lws{1,1,1};
+    std::vector<size_t> lws{1, 1, 1};
+    std::vector<size_t> dims{0, 2, 1};
 
-    // SLM size: float32 * tile_height * tile_width * work_items <= 64K
-    size_t max_num_work_items = std::min(256lu, 65536 / (4 * tile_height * tile_width));
+    // SLM size: elemsize * TILE_SIZE * TILE_SIZE * work_items <= 64K
+    size_t elem_size = sizeof(params.output.GetDType());
+    size_t max_local_mem_size = 64 * 1024;
+    size_t max_num_work_items = std::min(256lu, max_local_mem_size / (elem_size * TILE_SIZE * TILE_SIZE));
 
-    // set lws[0] first
-    size_t max_divider = static_cast<size_t>(std::sqrt(gws[0])+1);
-    for (size_t divider = 1; divider <= max_divider; ++divider)
-    {
-        if (gws[0] % divider == 0)
+    for (size_t i = 0; i < dims.size(); ++i) {
+        size_t dim = dims[i];
+        size_t max_divider = static_cast<size_t>(std::sqrt(gws[dim]) + 1);
+        for (size_t divider = 1; divider <= max_divider; ++divider)
         {
-            const size_t lws0 = gws[0] / divider;
-            if (lws0 <= max_num_work_items)
+            if (gws[dim] % divider == 0)
             {
-                lws[0] = std::max(lws[0], lws0);
-            }
-            if (divider <= max_num_work_items)
-            {
-                lws[0] = std::max(lws[0], divider);
+                const size_t lws0 = gws[dim] / divider;
+                if (lws0 <= max_num_work_items)
+                {
+                    lws[dim] = std::max(lws[dim], lws0);
+                }
+                if (divider <= max_num_work_items)
+                {
+                    lws[dim] = std::max(lws[dim], divider);
+                }
             }
         }
-    }
-
-    // set lws[2]
-    max_num_work_items /= lws[0];
-    max_divider = static_cast<size_t>(std::sqrt(gws[2])+1);
-    for (size_t divider = 1; divider <= max_divider; ++divider)
-    {
-        if (gws[2] % divider == 0)
-        {
-            const size_t lws2 = gws[2] / divider;
-            if (lws2 <= max_num_work_items)
-            {
-                lws[2] = std::max(lws[2], lws2);
-            }
-            if (divider <= max_num_work_items)
-            {
-                lws[2] = std::max(lws[2], divider);
-            }
-        }
+        max_num_work_items /= lws[dim];
     }
     return lws;
 }
@@ -211,23 +199,21 @@ static std::vector<size_t> GetBestLwsFromGws(const std::vector<size_t>& gws, con
 CommonDispatchData PermuteKernel_tile_8x8::SetDefault(const permute_params& params) const {
     CommonDispatchData dispatchData;
     const auto& in =  params.inputs[0];
-    const auto& tile_w = params.tile_w;
-    const auto& tile_h = params.tile_h;
     switch (in.GetLayout()) {
         case DataLayout::bfyx:
-            dispatchData.gws = {CEIL_DIV(in.X().v , tile_w), in.Y().v, CEIL_DIV(in.Feature().v, tile_h) * in.Batch().v};
+            dispatchData.gws = {CEIL_DIV(in.X().v , TILE_SIZE), in.Y().v, CEIL_DIV(in.Feature().v, TILE_SIZE) * in.Batch().v};
             break;
         case DataLayout::bfzyx:
-            dispatchData.gws = {CEIL_DIV(in.X().v , tile_w), in.Y().v * in.Z().v, CEIL_DIV(in.Feature().v, tile_h) * in.Batch().v};
+            dispatchData.gws = {CEIL_DIV(in.X().v , TILE_SIZE), in.Y().v * in.Z().v, CEIL_DIV(in.Feature().v, TILE_SIZE) * in.Batch().v};
             break;
         case DataLayout::bfwzyx:
-            dispatchData.gws = {CEIL_DIV(in.X().v , tile_w), in.Y().v * in.Z().v * in.W().v, CEIL_DIV(in.Feature().v, tile_h) * in.Batch().v};
+            dispatchData.gws = {CEIL_DIV(in.X().v , TILE_SIZE), in.Y().v * in.Z().v * in.W().v, CEIL_DIV(in.Feature().v, TILE_SIZE) * in.Batch().v};
             break;
         default:
             throw std::runtime_error("Unsupported combination\n");
             break;
     }
-    dispatchData.lws = GetBestLwsFromGws(dispatchData.gws, tile_h, tile_w);
+    dispatchData.lws = GetBestLwsFromGws(params, dispatchData.gws);
     return dispatchData;
 }
 
@@ -262,7 +248,7 @@ KernelsPriority PermuteKernel_tile_8x8::GetKernelsPriority(const Params& params/
     KernelData kd = KernelData::Default<permute_params>(params);
     permute_params& newParams = *static_cast<permute_params*>(kd.params.get());
 
-    if (is_rotating_except_batch(newParams.order)) {
+    if (is_rotating_except_batch(newParams.order) && (newParams.inputs[0].Feature().v > TILE_SIZE) && (newParams.inputs[0].X().v > TILE_SIZE)) {
         return FORCE_PRIORITY_1;
     } else
         return DONT_USE_IF_HAVE_SOMETHING_ELSE;
