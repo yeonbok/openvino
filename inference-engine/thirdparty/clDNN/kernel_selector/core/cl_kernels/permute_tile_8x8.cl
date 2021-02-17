@@ -56,7 +56,7 @@ KERNEL (permute_tile_8x8)(
             for (int lw = 0; lw < N_VECTORS_IN_TILE; ++lw) {
                 // read
                 unsigned int input_idx = INPUT0_GET_TILED_INDEX(INPUT0_TILED_ORDER);
-                INPUTVTYPE read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx));
+                INPUTVTYPE read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx + lw));
                 // transpose
                 unsigned int dst_h = lw * VECTORWIDTH;
                 unsigned int dst_w = lh / VECTORWIDTH;
@@ -89,7 +89,7 @@ KERNEL (permute_tile_8x8)(
             for (int lw = 0; lw < N_VECTORS_IN_TILE; ++lw) {
                 // read
                 unsigned int input_idx = INPUT0_GET_TILED_INDEX(INPUT0_TILED_ORDER);
-                INPUTVTYPE read_data = AS_OUTPUTVTYPE(VLOAD(0, input + input_idx));
+                INPUTVTYPE read_data = AS_OUTPUTVTYPE(VLOAD(0, input + input_idx + lw));
                 // transpose
                 unsigned int dst_h = lw * VECTORWIDTH;
                 unsigned int dst_w = lh / VECTORWIDTH;
@@ -131,15 +131,7 @@ KERNEL (permute_tile_8x8)(
             for (int lw = 0; lw < src_width; ++lw) {
                 // read
                 unsigned int input_idx = INPUT0_GET_TILED_INDEX(INPUT0_TILED_ORDER);
-                INPUTVTYPE read_data;
-                if ( lw == (src_width - 1)) {
-                    // final remainder
-                    unroll_for (int i = 0; i < X_REMAINDER_SIZE % VECTORWIDTH; ++i) {
-                        read_data[i] = input[input_idx + i];
-                    }
-                } else {
-                    read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx));
-                }
+                INPUTVTYPE read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx + lw));
                 // transpose
                 unsigned int dst_h = lw * VECTORWIDTH;
                 unsigned int dst_w = lh / VECTORWIDTH;
@@ -148,7 +140,7 @@ KERNEL (permute_tile_8x8)(
                 int read_fragment_width = (lw == (src_width - 1)) ? X_REMAINDER_SIZE % VECTORWIDTH : VECTORWIDTH;
                 unroll_for (int i = 0; i < read_fragment_width; ++i) {
                     unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
-#if HAS_FUSED_OP
+#if HAS_FUSED_OPS
                     INPUT0_TYPE input_var = read_data[i];
                     FUSED_OPS;
                     transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
@@ -174,15 +166,7 @@ KERNEL (permute_tile_8x8)(
             for(int lw = 0; lw < X_REMAINDER_SIZE_AS_VECTOR; ++lw) {
                 // read
                 unsigned int input_idx = INPUT0_GET_TILED_INDEX(INPUT0_TILED_ORDER);
-                INPUTVTYPE read_data;
-                if (lw == (X_REMAINDER_SIZE_AS_VECTOR - 1)) {
-                    // final remainder
-                    for (int i = 0; i < X_REMAINDER_SIZE % VECTORWIDTH; ++i) {
-                        read_data[i] = input[input_idx + i];
-                    }
-                } else {
-                    read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx));
-                }
+                INPUTVTYPE read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx + lw));
                 // transpose
                 unsigned int src = local_buf_offset + lh * X_REMAINDER_SIZE_AS_VECTOR + lw;
                 unsigned int dst_h = lw * VECTORWIDTH;
