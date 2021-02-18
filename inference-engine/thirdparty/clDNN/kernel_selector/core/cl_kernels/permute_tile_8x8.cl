@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 #include "include/include_all.cl"
 #define unroll_for __attribute__((opencl_unroll_hint)) for
 #define CEIL_DIV(A, B) (((A) + (B) - 1) / (B))
@@ -51,151 +50,75 @@ KERNEL (permute_tile_8x8)(
 
     int local_buf_offset = local_id * LOCAL_BUF_STRIDE;
 
-    if (NORMAL_TILE_CONDITION) {
-        for (int lh = 0; lh < TILE_SIZE; ++lh) {
-            for (int lw = 0; lw < N_VECTORS_IN_TILE; ++lw) {
-                // read
-                unsigned int input_idx = INPUT0_GET_TILED_INDEX(INPUT0_TILED_ORDER);
-                INPUTVTYPE read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx + lw));
-                // transpose
-                unsigned int dst_h = lw * VECTORWIDTH;
-                unsigned int dst_w = lh / VECTORWIDTH;
-                unsigned int dst_element = lh % VECTORWIDTH;
-                unsigned int dst_h_pitch = N_VECTORS_IN_TILE;
-                unroll_for (int i = 0; i < VECTORWIDTH; ++i) {
-                    unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
-#if HAS_FUSED_OPS
-                    INPUT0_TYPE input_var = read_data[i];
-                    FUSED_OPS;
-                    transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
-#else
-                    transpose_buf[dst][dst_element] = ACTIVATION(read_data[i], ACTIVATION_PARAMS);
-#endif
-                }
-            }
-        }
-        // write to ddr
-        for(int lh = 0; lh < TILE_SIZE; ++lh) {
-            for(int lw = 0; lw < N_VECTORS_IN_TILE; ++lw) {
-                // b, f, z, x, y
-                unsigned int output_idx = OUTPUT_GET_TILED_INDEX(OUTPUT_TILED_ORDER);
-                VSTORE(transpose_buf[local_buf_offset + lh * N_VECTORS_IN_TILE + lw], 0, output + output_idx);
-            }
-        }
-    }
+    int src_height = TILE_SIZE;
+    int src_width = N_VECTORS_IN_TILE;
 #ifdef F_REMAINDER_ITEM
-    else if (F_REMAINDER_CONDITION) {
-        for (int lh = 0; lh < F_REMAINDER_SIZE; ++lh) {
-            for (int lw = 0; lw < N_VECTORS_IN_TILE; ++lw) {
-                // read
-                unsigned int input_idx = INPUT0_GET_TILED_INDEX(INPUT0_TILED_ORDER);
-                INPUTVTYPE read_data = AS_OUTPUTVTYPE(VLOAD(0, input + input_idx + lw));
-                // transpose
-                unsigned int dst_h = lw * VECTORWIDTH;
-                unsigned int dst_w = lh / VECTORWIDTH;
-                unsigned int dst_element = lh % VECTORWIDTH;
-                unsigned int dst_h_pitch = CEIL_DIV(F_REMAINDER_SIZE, VECTORWIDTH);
-                unroll_for (int i = 0; i < VECTORWIDTH; ++i) {
-                    unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
-#if HAS_FUSED_OPS
-                    INPUT0_TYPE input_var = read_data[i];
-                    FUSED_OPS;
-                    transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
-#else
-                    transpose_buf[dst][dst_element] = ACTIVATION(read_data[i], ACTIVATION_PARAMS);
+    if (F_REMAINDER_CONDITION)
+        src_height = F_REMAINDER_SIZE;
 #endif
-                }
-            }
-        }
-        // write to ddr
-        for (int lh = 0; lh < TILE_SIZE; ++lh) {
-            for (int lw = 0; lw < CEIL_DIV(F_REMAINDER_SIZE, VECTORWIDTH); ++lw) {
-                unsigned int output_idx = OUTPUT_GET_TILED_INDEX(OUTPUT_TILED_ORDER);
-                if (lw == (CEIL_DIV(F_REMAINDER_SIZE, VECTORWIDTH) - 1)) {
-                    for ( int i = 0; i < F_REMAINDER_SIZE % VECTORWIDTH; ++i) {
-                        output[output_idx + i] = transpose_buf[local_buf_offset + lh * CEIL_DIV(F_REMAINDER_SIZE, VECTORWIDTH) + lw][i];
-                    }
-                } else {
-                    // still vector
-                    VSTORE(transpose_buf[local_buf_offset + lh * CEIL_DIV(F_REMAINDER_SIZE, VECTORWIDTH) + lw], 0, output + output_idx);
-                }
-            }
-        }
-    }
-#endif
+
 #ifdef X_REMAINDER_ITEM
-    else if (X_REMAINDER_CONDITION) {
-        // read
-        int src_width = CEIL_DIV(X_REMAINDER_SIZE, VECTORWIDTH);
-        for (int lh = 0; lh < TILE_SIZE; ++lh) {
-            for (int lw = 0; lw < src_width; ++lw) {
-                // read
-                unsigned int input_idx = INPUT0_GET_TILED_INDEX(INPUT0_TILED_ORDER);
-                INPUTVTYPE read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx + lw));
-                // transpose
-                unsigned int dst_h = lw * VECTORWIDTH;
-                unsigned int dst_w = lh / VECTORWIDTH;
-                unsigned int dst_element = lh % VECTORWIDTH;
-                unsigned int dst_h_pitch = N_VECTORS_IN_TILE;
-                int read_fragment_width = (lw == (src_width - 1)) ? X_REMAINDER_SIZE % VECTORWIDTH : VECTORWIDTH;
-                unroll_for (int i = 0; i < read_fragment_width; ++i) {
-                    unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
-#if HAS_FUSED_OPS
-                    INPUT0_TYPE input_var = read_data[i];
-                    FUSED_OPS;
-                    transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
-#else
-                    transpose_buf[dst][dst_element] = ACTIVATION(read_data[i], ACTIVATION_PARAMS);
+        if (X_REMAINDER_CONDITION)
+            src_width = X_REMAINDER_SIZE_AS_VECTOR;
 #endif
-                }
-            }
-        }
-        // write to ddr
-        for (int lh = 0; lh < X_REMAINDER_SIZE; ++lh) {
-            unroll_for (int lw = 0; lw < N_VECTORS_IN_TILE; ++lw) {
-                unsigned int output_idx = OUTPUT_GET_TILED_INDEX(OUTPUT_TILED_ORDER);
-                VSTORE(transpose_buf[local_buf_offset + lh * N_VECTORS_IN_TILE + lw], 0, output + output_idx);
+    for (int lh = 0; lh < src_height; ++lh) {
+        for (int lw = 0; lw < src_width; ++lw) {
+            // read
+            unsigned int input_idx = INPUT0_GET_TILED_INDEX(INPUT0_TILED_ORDER);
+            INPUTVTYPE read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx + lw));
+            // transpose
+            unsigned int dst_h = lw * VECTORWIDTH;
+            unsigned int dst_w = lh / VECTORWIDTH;
+            unsigned int dst_element = lh % VECTORWIDTH;
+            unsigned int dst_h_pitch = N_VECTORS_IN_TILE;
+            int read_fragment_width = VECTORWIDTH;
+#ifdef X_REMAINDER_ITEM
+            if (X_REMAINDER_CONDITION) {
+                read_fragment_width = (lw == (src_width - 1)) ? X_REMAINDER_SIZE % VECTORWIDTH : VECTORWIDTH;
+            } 
+#endif
+            unroll_for (int i = 0; i < read_fragment_width; ++i) {
+                unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
+#if HAS_FUSED_OPS
+                INPUT0_TYPE input_var = read_data[i];
+                FUSED_OPS;
+                transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
+#else
+                transpose_buf[dst][dst_element] = ACTIVATION(read_data[i], ACTIVATION_PARAMS);
+#endif
             }
         }
     }
+    // write to ddr
+    int dst_height = TILE_SIZE;
+    int dst_width  = N_VECTORS_IN_TILE;
+#ifdef X_REMAINDER_ITEM
+    if (X_REMAINDER_CONDITION)
+        dst_height = X_REMAINDER_SIZE;
 #endif
-#if defined(X_REMAINDER_ITEM) && defined(F_REMAINDER_ITEM)
-     else if (f == F_REMAINDER_ITEM && x == X_REMAINDER_ITEM) { 
-        // point by point
-        for (int lh = 0; lh < F_REMAINDER_SIZE; ++lh) {
-            for(int lw = 0; lw < X_REMAINDER_SIZE_AS_VECTOR; ++lw) {
-                // read
-                unsigned int input_idx = INPUT0_GET_TILED_INDEX(INPUT0_TILED_ORDER);
-                INPUTVTYPE read_data = AS_INPUTVTYPE(VLOAD(0, input + input_idx + lw));
-                // transpose
-                unsigned int src = local_buf_offset + lh * X_REMAINDER_SIZE_AS_VECTOR + lw;
-                unsigned int dst_h = lw * VECTORWIDTH;
-                unsigned int dst_w = lh / VECTORWIDTH;
-                unsigned int dst_element = lh % VECTORWIDTH;
-                unsigned int dst_h_pitch = CEIL_DIV(F_REMAINDER_SIZE, VECTORWIDTH);
-                int read_fragment_width = (lw == (X_REMAINDER_SIZE_AS_VECTOR - 1)) ? X_REMAINDER_SIZE % VECTORWIDTH : VECTORWIDTH;
-                for (int i = 0; i < read_fragment_width; ++i) {
-                    unsigned int dst = local_buf_offset + (dst_h + i) * dst_h_pitch + dst_w;
-#if HAS_FUSED_OPS
-                    INPUT0_TYPE input_var = read_data[i];
-                    FUSED_OPS;
-                    transpose_buf[dst][dst_element] = FUSED_OPS_RESULT;
+
+#ifdef F_REMAINDER_ITEM
+    if (F_REMAINDER_CONDITION)
+        dst_width = F_REMAINDER_SIZE_AS_VECTOR;
+    else
+        dst_width = N_VECTORS_IN_TILE;
+#endif
+
+    for(int lh = 0; lh < dst_height; ++lh) {
+        for(int lw = 0; lw < dst_width; ++lw) {
+            // b, f, z, x, y
+            unsigned int output_idx = OUTPUT_GET_TILED_INDEX(OUTPUT_TILED_ORDER);
+#ifdef F_REMAINDER_ITEM
+            if (F_REMAINDER_CONDITION && (lw == (CEIL_DIV(F_REMAINDER_SIZE, VECTORWIDTH) - 1))) {
+                for ( int i = 0; i < F_REMAINDER_SIZE % VECTORWIDTH; ++i) {
+                    output[output_idx + i] = transpose_buf[local_buf_offset + lh * CEIL_DIV(F_REMAINDER_SIZE, VECTORWIDTH) + lw][i];
+                }
+            } else {
+                VSTORE(transpose_buf[local_buf_offset + lh * CEIL_DIV(F_REMAINDER_SIZE, VECTORWIDTH) + lw], 0, output + output_idx);
+            }
 #else
-                    transpose_buf[dst][dst_element] = ACTIVATION(read_data[i], ACTIVATION_PARAMS);
+            VSTORE(transpose_buf[local_buf_offset + lh * N_VECTORS_IN_TILE + lw], 0, output + output_idx);
 #endif
-                }
-            }
-        }
-        // write to ddr
-        for(int lh = 0; lh < X_REMAINDER_SIZE; ++lh) {
-            for(int lw = 0; lw < F_REMAINDER_SIZE_AS_VECTOR; ++lw) {
-                unsigned int output_idx = OUTPUT_GET_TILED_INDEX(OUTPUT_TILED_ORDER);
-                int read_fragment_width = (lw == (F_REMAINDER_SIZE_AS_VECTOR - 1)) ? (F_REMAINDER_SIZE % VECTORWIDTH) : VECTORWIDTH;
-                for ( int i = 0; i < read_fragment_width; ++i) {
-                    output[output_idx + i] = transpose_buf[local_buf_offset + lh * F_REMAINDER_SIZE_AS_VECTOR + lw][i];
-                }
-            }
         }
     }
-#endif
 }

@@ -113,7 +113,6 @@ JitConstants PermuteKernel_tile_8x8::GetJitConstants(const permute_params& param
     jit.AddConstant(MakeJitConstant("LWS",total_lws));
     jit.AddConstant(MakeJitConstant("NFEATURE_TILES", CEIL_DIV(params.inputs[0].Feature().v, tile_size)));
 
-    std::string normal_tile_cond = "true";
     std::string x_remainder_cond = "true";
     std::string f_remainder_cond = "true";
 
@@ -121,20 +120,15 @@ JitConstants PermuteKernel_tile_8x8::GetJitConstants(const permute_params& param
         jit.AddConstant(MakeJitConstant("X_REMAINDER_ITEM", params.inputs[0].X().v / tile_size));
         jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE", params.inputs[0].X().v % tile_size));
         jit.AddConstant(MakeJitConstant("X_REMAINDER_SIZE_AS_VECTOR", CEIL_DIV(params.inputs[0].X().v % tile_size, vector_width)));
-        normal_tile_cond += " && (x < X_REMAINDER_ITEM)";
         x_remainder_cond += " && (x == X_REMAINDER_ITEM)";
-        f_remainder_cond += " && (x < X_REMAINDER_ITEM)";
     }
     if (params.inputs[0].Feature().v % tile_size) {
         jit.AddConstant(MakeJitConstant("F_REMAINDER_ITEM", params.inputs[0].Feature().v / tile_size));
         jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE", params.inputs[0].Feature().v % tile_size));
         jit.AddConstant(MakeJitConstant("F_REMAINDER_SIZE_AS_VECTOR", CEIL_DIV(params.inputs[0].Feature().v % tile_size, vector_width)));
-        normal_tile_cond += " && (f < F_REMAINDER_ITEM)";
-        x_remainder_cond += " && (f < F_REMAINDER_ITEM)";
         f_remainder_cond += " && (f == F_REMAINDER_ITEM)";
     }
 
-    jit.AddConstant(MakeJitConstant("NORMAL_TILE_CONDITION", normal_tile_cond));
     jit.AddConstant(MakeJitConstant("X_REMAINDER_CONDITION", x_remainder_cond));
     jit.AddConstant(MakeJitConstant("F_REMAINDER_CONDITION", f_remainder_cond));
     jit.AddConstant(MakeJitConstant("INPUTVTYPE", "CAT(INPUT0_TYPE, VECTORWIDTH)"));
@@ -148,16 +142,6 @@ JitConstants PermuteKernel_tile_8x8::GetJitConstants(const permute_params& param
 
     if (!params.fused_ops.empty()) {
         std::vector<std::string> output_order = GetTiledFusedOpOrderVector(params.output.GetDims().size());
-#if 0
-        if (output_order.size() == 4)
-            std::swap(output_order[2], output_order[3]);
-        else if (output_order.size() == 5)
-            std::swap(output_order[2], output_order[4]);
-        else if (output_order.size() == 6) {
-            std::swap(output_order[2], output_order[5]);
-            std::swap(output_order[3], output_order[4]);
-        }
-#endif
         FusedOpsConfiguration conf = {"", output_order, "input_var", params.inputs[0].GetDType(), 1};
         jit.Merge(MakeFusedOpsJitConstants(params, {conf}));
     }
@@ -224,7 +208,7 @@ KernelsData PermuteKernel_tile_8x8::GetKernelsData(const Params& params, const o
     permute_params& newParams = *static_cast<permute_params*>(kd.params.get());
 
     // supports 4x4 or 8x8 tiling
-    if (newParams.inputs[0].X().v < 8 || newParams.inputs[0].Feature().v)
+    if (newParams.inputs[0].X().v < 8 || newParams.inputs[0].Feature().v < 8)
         tile_size = 4;
 
     auto dispatchData = SetDefault(newParams);
