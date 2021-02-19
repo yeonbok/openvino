@@ -838,12 +838,12 @@ TEST(permute_gpu_f32, basic_bfzyx_permute_0_2_3_4_1)
 }
 
 /**
- * Test cases for permute_tile_8x8 kernel
+ * Test cases for permute_tile_8x8_4x4 kernel
  *
  * This TCs are enabled only when batch axis move to the last.
  * i.e permute order is 0,3,1,2 or 0,4,1,2,3 or 0,5,1,2,3,4
  */
-TEST(permute_gpu_f32_tile_8x8, normal_bfyx_0_3_1_2) {
+TEST(permute_gpu_f32_tile_8x8_4x4, normal_bfyx_0_3_1_2) {
     //  Input               : bfyx:2x8x2x8
     //  Permute order       : { 0,3,1,2 }
 
@@ -899,7 +899,7 @@ TEST(permute_gpu_f32_tile_8x8, normal_bfyx_0_3_1_2) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, f_remainder_bfyx_0_3_1_2) {
+TEST(permute_gpu_f32_tile_8x8_4x4, f_remainder_bfyx_0_3_1_2) {
     //  Input               : bfyx:2x5x2x8
     //  Permute order       : { 0,3,1,2 }
 
@@ -949,7 +949,7 @@ TEST(permute_gpu_f32_tile_8x8, f_remainder_bfyx_0_3_1_2) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, x_remainder_bfyx_0_3_1_2) {
+TEST(permute_gpu_f32_tile_8x8_4x4, x_remainder_bfyx_0_3_1_2) {
     //  Input               : bfyx:2x8x2x5
     //  Permute order       : { 0,3,1,2 }
 
@@ -1005,7 +1005,7 @@ TEST(permute_gpu_f32_tile_8x8, x_remainder_bfyx_0_3_1_2) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, xf_remainder_bfyx_0_3_1_2) {
+TEST(permute_gpu_f32_tile_8x8_4x4, xf_remainder_bfyx_0_3_1_2) {
     //  Input               : bfyx:2x5x2x5
     //  Permute order       : { 0,3,1,2 }
 
@@ -1055,7 +1055,7 @@ TEST(permute_gpu_f32_tile_8x8, xf_remainder_bfyx_0_3_1_2) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, normal_bfzyx_0_4_1_2_3) {
+TEST(permute_gpu_f32_tile_8x8_4x4, normal_bfzyx_0_4_1_2_3) {
     //  Input               : bfzyx:2x8x2x2x8
     //  Permute order       : { 0,4,1,2,3 }
 
@@ -1117,7 +1117,7 @@ TEST(permute_gpu_f32_tile_8x8, normal_bfzyx_0_4_1_2_3) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, f_remainder_bfzyx_0_4_1_2_3) {
+TEST(permute_gpu_f32_tile_8x8_4x4, f_remainder_bfzyx_0_4_1_2_3) {
     //  Input               : bfzyx:2x5x2x2x8
     //  Permute order       : { 0,4,1,2,3 }
 
@@ -1171,7 +1171,7 @@ TEST(permute_gpu_f32_tile_8x8, f_remainder_bfzyx_0_4_1_2_3) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, x_remainder_bfzyx_0_4_1_2_3) {
+TEST(permute_gpu_f32_tile_8x8_4x4, x_remainder_bfzyx_0_4_1_2_3) {
     //  Input               : bfzyx:2x8x2x2x5
     //  Permute order       : { 0,4,1,2,3 }
 
@@ -1225,7 +1225,7 @@ TEST(permute_gpu_f32_tile_8x8, x_remainder_bfzyx_0_4_1_2_3) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, xf_remainder_bfzyx_0_4_1_2_3) {
+TEST(permute_gpu_f32_tile_8x8_4x4, xf_remainder_bfzyx_0_4_1_2_3) {
     //  Input               : bfzyx:2x5x2x2x5
     //  Permute order       : { 0,4,1,2,3 }
 
@@ -1279,7 +1279,7 @@ TEST(permute_gpu_f32_tile_8x8, xf_remainder_bfzyx_0_4_1_2_3) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, normal_bfwzyx_0_5_4_1_2_3) {
+TEST(permute_gpu_f32_tile_8x8_4x4, normal_bfwzyx_0_5_4_1_2_3) {
     //  Input               : bfwzyx:2x8x2x2x2x8
     //  Permute order       : { 0,5,1,2,3,4 }
 
@@ -1351,7 +1351,7 @@ TEST(permute_gpu_f32_tile_8x8, normal_bfwzyx_0_5_4_1_2_3) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, f_remainder_bfwzyx_0_5_4_1_2_3) {
+TEST(permute_gpu_f32_tile_8x8_4x4, f_remainder_bfwzyx_0_5_4_1_2_3) {
     //  Input               : bfwzyx:2x5x2x2x2x8
     //  Permute order       : { 0,5,1,2,3,4 }
 
@@ -1411,7 +1411,7 @@ TEST(permute_gpu_f32_tile_8x8, f_remainder_bfwzyx_0_5_4_1_2_3) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, x_remainder_bfwzyx_0_5_4_1_2_3) {
+TEST(permute_gpu_f32_tile_8x8_4x4, x_remainder_bfwzyx_0_5_4_1_2_3) {
     //  Input               : bfwzyx:2x8x2x2x2x5
     //  Permute order       : { 0,5,1,2,3,4 }
 
@@ -1471,7 +1471,7 @@ TEST(permute_gpu_f32_tile_8x8, x_remainder_bfwzyx_0_5_4_1_2_3) {
     }
 }
 
-TEST(permute_gpu_f32_tile_8x8, xf_remainder_bfwzyx_0_5_4_1_2_3) {
+TEST(permute_gpu_f32_tile_8x8_4x4, xf_remainder_bfwzyx_0_5_4_1_2_3) {
     //  Input               : bfwzyx:2x5x2x2x2x5
     //  Permute order       : { 0,5,1,2,3,4 }
 
