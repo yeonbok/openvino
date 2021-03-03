@@ -337,11 +337,11 @@ kernels_cache::kernels_map kernels_cache::build_program(const program_code& prog
         uint32_t part_idx = 0;
         std::vector<std::future<void>> builds;
         for (size_t i = 0; i < program_source.source.size(); i++) {
-            builds.push_back(std::async(std::launch::async,[&]() {
-            //std::async(std::launch::async,[&]() {
+            size_t batch_id = i;
+            builds.push_back(std::async(std::launch::async, [&] (size_t batch_id) {
                 auto start_each_batch = std::chrono::high_resolution_clock::now();
-                auto sources_bucket_to_compile = program_source.source[i];
-                const auto& hash_value = program_source.hash_values[i];
+                auto sources_bucket_to_compile = program_source.source[batch_id];
+                const auto& hash_value = program_source.hash_values[batch_id];
                 std::string cached_bin_name = get_cache_path() + std::to_string(hash_value) + ".cl_cache";
                 cl::Program::Binaries precompiled_kernels = {};
                 if (is_cache_enabled()) {
@@ -399,10 +399,12 @@ kernels_cache::kernels_map kernels_cache::build_program(const program_code& prog
                         program.build(_context.device(), program_source.options.c_str());
                         program.createKernels(&kernels);
                     }
-                    std::lock_guard<std::mutex> lock(_context.get_cache_mutex());
-                    for (auto& k : kernels) {
-                        auto kernel_name = k.getInfo<CL_KERNEL_FUNCTION_NAME>();
-                        kmap.emplace(kernel_name, kernels_cache::kernel_type(k, _context.get_device_info().supports_usm));
+                    {
+                        std::lock_guard<std::mutex> lock(_context.get_cache_mutex());
+                        for (auto& k : kernels) {
+                            auto kernel_name = k.getInfo<CL_KERNEL_FUNCTION_NAME>();
+                            kmap.emplace(kernel_name, kernels_cache::kernel_type(k, _context.get_device_info().supports_usm));
+                        }
                     }
                 } catch (const cl::BuildError& err) {
                     if (dump_sources && dump_file.good())
@@ -422,13 +424,9 @@ kernels_cache::kernels_map kernels_cache::build_program(const program_code& prog
                 auto end_each_batch = std::chrono::high_resolution_clock::now();
                 auto total_each_batch = std::chrono::duration_cast<std::chrono::milliseconds>(end_each_batch - start_each_batch);
                 std::cout << "[ INFO ] Build batch in bucket took "  << total_each_batch.count() << " ms" << std::endl;
-            //}).wait();
-            }));
+            }, batch_id));
         }
         std::for_each(builds.begin(), builds.end(), [&] (std::future<void>& f){ f.wait();});
-        
-
-        std::lock_guard<std::mutex> lock(_context.get_cache_mutex());
         if (!err_log.empty()) {
             static const size_t max_msg_length = 128;
             std::string short_err_log(err_log, 0, std::min(err_log.length(), max_msg_length));
@@ -447,7 +445,7 @@ kernels_cache::kernel_type kernels_cache::get_kernel(kernel_id id, bool one_time
         return _one_time_kernels.at(id);
     } else {
         auto kernel = _kernels.at(id);
-        std::cout << id << std::endl;
+//        std::cout << "get_kernel: " << id << std::endl;
         return kernel;
     }
 }
@@ -456,7 +454,6 @@ void kernels_cache::build_all() {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "KernelsCache::BuildAll");
     if (!_pending_compilation)
         return;
-
     kernels_cache::sorted_code sorted_program_code;
     {
         std::lock_guard<std::mutex> lock(_context.get_cache_mutex());
