@@ -150,7 +150,6 @@ include_directories(
     "${__CLDNN_Directory__ks_core}/common"
     "${__CLDNN_Directory__ks_actual_kernels}"
     "${__CLDNN_Directory__ks_common}"
-    "/home/donghyeon/openvino.work/inference-engine/temp/tbb/include" # TODO:
   )
 
 # =================================== Link targets and dependencies ====================================
@@ -166,7 +165,6 @@ target_link_libraries("${CLDNN_BUILD__PROJ}" PRIVATE
     clDNN_OpenCL
     cldnn_kernel_selector
     openvino::itt
-    "/home/donghyeon/openvino.work/inference-engine/temp/tbb/lib" # TODO:
   )
 
 if(WIN32)

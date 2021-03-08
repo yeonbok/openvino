@@ -51,6 +51,62 @@ if(POLICY CMP0063)
 endif()
 
 # ======================================================================================================
+# for tbb
+macro(find_package_tbb)
+    if(WIN32)
+        find_package(TBB ${ARGN} COMPONENTS tbb)
+    elseif(APPLE)
+        find_package(TBB ${ARGN} COMPONENTS tbb)
+    elseif(UNIX)
+        find_package(TBB ${ARGN} COMPONENTS tbb)
+    endif()
+
+    if(TBB_FOUND)
+        # Check for TBB version, required >= 2017
+        foreach (_tbb_ver_header tbb_stddef.h version.h)
+            get_target_property(_tbb_include_dirs TBB::tbb
+                INTERFACE_INCLUDE_DIRECTORIES)
+            #pre-oneTBB path is default 		
+            set(_tbb_ver_header_full_path
+                "${_tbb_include_dirs}/tbb/${_tbb_ver_header}")
+            if(EXISTS "${_tbb_include_dirs}/oneapi/tbb")
+            set(_tbb_ver_header_full_path
+                "${_tbb_include_dirs}/oneapi/tbb/${_tbb_ver_header}")
+            endif()
+            if(EXISTS ${_tbb_ver_header_full_path})
+                file(READ "${_tbb_ver_header_full_path}" _tbb_ver)
+                string(REGEX REPLACE
+                    ".*#define TBB_INTERFACE_VERSION ([0-9]+).*" "\\1"
+                    TBB_INTERFACE_VERSION "${_tbb_ver}")
+                if (${TBB_INTERFACE_VERSION} VERSION_LESS 9100)
+                    if("${mode}" STREQUAL REQUIRED)
+                        message(FATAL_ERROR
+                            "oneDNN requires TBB version 2017 or above")
+                    endif()
+                    unset(TBB_FOUND)
+                else()
+                    break()
+                endif()
+            endif()
+        endforeach()
+    endif()
+endmacro()
+
+find_package_tbb(REQUIRED)
+if(TBB_FOUND)
+    include_directories(BEFORE SYSTEM  ${_tbb_include_dirs})
+    list(APPEND EXTRA_SHARED_LIBS ${TBB_IMPORTED_TARGETS})
+
+    # Print TBB location
+    get_filename_component(_tbb_root "${_tbb_include_dirs}" PATH)
+    get_filename_component(_tbb_root "${_tbb_root}" ABSOLUTE)
+    message(STATUS "TBB: ${_tbb_root}")
+
+    unset(_tbb_include_dirs)
+    unset(_tbb_root)
+endif()
+
+# ======================================================================================================
 # ==================================== BUILD CONFIGURATIONS (part 2) ===================================
 # ======================================================================================================
 # The section must be after project definition and its supported languages because otherwise
