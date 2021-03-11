@@ -51,7 +51,6 @@
 #endif
 
 namespace {
-
 std::mutex cacheAccessMutex;
 
 #ifdef ENABLE_UNICODE_PATH_SUPPORT
@@ -457,16 +456,16 @@ void kernels_cache::build_all() {
     }
     auto start = std::chrono::high_resolution_clock::now();
     std::vector<std::future<void>> builds;
-    std::cout << "sorted_program_code.size()" << sorted_program_code.size() << std::endl;
+//    std::cout << "sorted_program_code.size()" << sorted_program_code.size() << std::endl;
     for (auto& program : sorted_program_code) {
-        builds.push_back(std::async(std::launch::async,[&]() {
+        builds.push_back(std::async(std::launch::async, [&]() {
             auto kernels = build_program(program.second);
 
             std::lock_guard<std::mutex> lock(_context.get_cache_mutex());
             for (auto &k : kernels) {
                 const auto &entry_point = k.first;
                 const auto &k_id = program.second.entry_point_to_id[entry_point];
-                std::cout << "  k_id " << k_id << std::endl;
+//                std::cout << "  k_id " << k_id << std::endl;
                 if (program.second.one_time) {
                     _one_time_kernels[k_id] = k.second;
                 } else {
