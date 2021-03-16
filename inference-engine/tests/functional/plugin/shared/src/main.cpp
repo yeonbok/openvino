@@ -28,5 +28,6 @@ int main(int argc, char* argv[]) {
     ::testing::AddGlobalTestEnvironment(new LayerTestsUtils::TestEnvironment);
     auto retcode = RUN_ALL_TESTS();
 
+    getchar();
     return retcode;
 }

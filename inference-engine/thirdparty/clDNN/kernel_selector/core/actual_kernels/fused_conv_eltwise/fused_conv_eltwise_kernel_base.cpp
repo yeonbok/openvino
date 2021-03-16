@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <iostream>
 
 namespace kernel_selector {
 std::string fused_conv_eltwise_params::to_string() const {
@@ -282,6 +283,17 @@ KernelsData fused_conv_eltwise_kernel_base::GetCommonKernelsData(const Params& p
     auto cldnnJit = GetJitConstants(newParams, dispatchData);
     auto entryPoint = GetEntryPoint(finalKernelName, newParams.layerID, options);
     auto jit = CreateJit(finalKernelName, cldnnJit, entryPoint);
+
+
+    std::cout << "-------------------------------------------------------" << std::endl;
+    std::cout << "Jit file for fused_conv_eltwise" << std::endl;
+    std::cout << "-------------------------------------------------------" << std::endl;
+    std::cout << std::endl;
+    std::cout << jit << std::endl;
+
+    std::cout << std::endl;
+    std::cout << "-------------------------------------------------------" << std::endl;
+    std::cout << "-------------------------------------------------------" << std::endl;
 
     auto& kernel = kd.kernels[0];
     FillCLKernelData(kernel,

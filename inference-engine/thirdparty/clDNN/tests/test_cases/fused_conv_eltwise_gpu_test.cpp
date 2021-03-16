@@ -34,11 +34,273 @@
 #include <cmath>
 #include <gmock/gmock.h>
 #include <limits>
+#include <iostream>
 
 using namespace cldnn;
 using namespace tests;
 using namespace testing;
+#if 1
 
+TEST(fused_conv_eltwise, trial_new_pattern01)
+{
+    const auto& engine = get_test_engine();
+
+    auto input = memory::allocate(engine, { data_types::f32, format::bfyx, { 1, 1, 4, 5 } });
+    auto weights = memory::allocate(engine, { data_types::f32, format::bfyx, { 1, 1, 1, 1 } });
+    auto sum_input = memory::allocate(engine, { data_types::f32, format::bfyx, { 1, 1, 1, 1 } });
+
+    set_values(input, {
+        1.0f,  2.0f, -15.f,  3.0f, 4.0f, -15.f, 5.0f,  6.0f, -15.f, 7.0f,
+        -15.f, 0.0f,  0.0f, -15.f, 0.5f, -0.5f, -15.f, 8.0f,  1.5f,  5.2f
+    });
+
+    topology topology(
+        input_layout("input", input.get_layout()),
+        data("sum_input", sum_input),
+        data("weights", weights),
+        convolution("conv", "input", { "weights" }),
+        eltwise("eltwise1", "conv", "sum_input", eltwise_mode::sum),
+        eltwise("eltwise2", "eltwise1", "conv", eltwise_mode::prod),
+        reorder("out_reorder", "eltwise2", format::bfyx, data_types::f32));
+
+    std::cout << "*************************************************************" << std::endl;
+    std::cout << "Test : fused_conv_eltwise, trial_new_pattern01" << std::endl;
+    std::cout << "input : f32, bfyx, {1,1,4,5}" << std::endl;
+    std::cout << "weights : f32, bfyx {1,1,1,1}" << std::endl;
+    std::cout << "sum_input : f32, bfyx {1,1,1,1}" << std::endl;
+
+    std::cout << "topology topology(" << std::endl;
+    std::cout << "    input_layout(\"input\", input.get_layout())," << std::endl;
+    std::cout << "    data(\"sum_input\", sum_input)," << std::endl;
+    std::cout << "    data(\"weights\", weights)," << std::endl;
+    std::cout << "    convolution(\"conv\", \"input\", { \"weights\" })," << std::endl;
+    std::cout << "    eltwise(\"eltwise1\", \"conv\", \"sum_input\", eltwise_mode::sum)," << std::endl;
+    std::cout << "    eltwise(\"eltwise2\", \"eltwise1\", \"conv\", eltwise_mode::prod)," << std::endl;
+    std::cout << "    reorder(\"out_reorder\", \"eltwise\", format::bfyx, data_types::f32));" << std::endl << std::endl;
+
+    build_options opt;
+    opt.set_option(build_option::optimize_data(true));
+    network network(engine, topology, opt);
+    network.set_input_data("input", input);
+
+    auto outputs = network.execute();
+    EXPECT_EQ(outputs.size(), size_t(1));
+    EXPECT_EQ(outputs.begin()->first, "out_reorder");
+
+    auto output = outputs.begin()->second.get_memory();
+    auto&& out_layout = output.get_layout();
+
+    EXPECT_EQ(out_layout.format, format::bfyx);
+    EXPECT_EQ(out_layout.size.batch[0], 1);
+    EXPECT_EQ(out_layout.size.feature[0], 1);
+    EXPECT_EQ(out_layout.size.spatial[0], 4);
+    EXPECT_EQ(out_layout.size.spatial[1], 5);
+}
+
+TEST(fused_conv_eltwise, basic_0)
+{
+    const auto& engine = get_test_engine();
+
+    auto input = memory::allocate(engine, { data_types::f32, format::bfyx, { 1, 1, 4, 5 } });
+    auto weights = memory::allocate(engine, { data_types::f32, format::bfyx, { 1, 1, 1, 1 } });
+
+    set_values(input, {
+        1.0f,  2.0f, -15.f,  3.0f, 4.0f, -15.f, 5.0f,  6.0f, -15.f, 7.0f,
+        -15.f, 0.0f,  0.0f, -15.f, 0.5f, -0.5f, -15.f, 8.0f,  1.5f,  5.2f
+    });
+
+    topology topology(
+        input_layout("input", input.get_layout()),
+        data("weights", weights),
+        convolution("conv", "input", { "weights" }),
+        eltwise("eltwise", "input", "conv", eltwise_mode::sum),
+        reorder("out_reorder", "eltwise", format::bfyx, data_types::f32));
+
+    std::cout << "*************************************************************" << std::endl;
+    std::cout << "Test : fused_conv_eltwise, basic_0" << std::endl;
+    std::cout << "input : f32, bfyx, {1,1,4,5}" << std::endl;
+    std::cout << "weights : f32, bfyx {1,1,1,1}" << std::endl;
+
+    std::cout << "topology topology(\n\tinput_layout(\"input\", input.get_layout()),\n";
+    std::cout << "\tdata(\"weights\", weights),\n";
+    std::cout << "\tconvolution(\"conv\", \"input\", { \"weights\" }),\n";
+    std::cout << "\teltwise(\"eltwise\", \"input\", \"conv\", eltwise_mode::sum),\n";
+    std::cout << "\treorder(\"out_reorder\", \"eltwise\", format::bfyx, data_types::f32));" << std::endl << std::endl;
+
+    build_options opt;
+    opt.set_option(build_option::optimize_data(true));
+    network network(engine, topology, opt);
+    network.set_input_data("input", input);
+
+    auto outputs = network.execute();
+    EXPECT_EQ(outputs.size(), size_t(1));
+    EXPECT_EQ(outputs.begin()->first, "out_reorder");
+
+    auto output = outputs.begin()->second.get_memory();
+    auto&& out_layout = output.get_layout();
+
+    EXPECT_EQ(out_layout.format, format::bfyx);
+    EXPECT_EQ(out_layout.size.batch[0], 1);
+    EXPECT_EQ(out_layout.size.feature[0], 1);
+    EXPECT_EQ(out_layout.size.spatial[0], 4);
+    EXPECT_EQ(out_layout.size.spatial[1], 5);
+}
+
+TEST(fused_conv_eltwise, dont_fuse_if_conv_elt_are_outputs)
+{
+    const auto& engine = get_test_engine();
+
+    auto input = memory::allocate(engine, { data_types::f32, format::bfyx,{ 1, 1, 4, 5 } });
+    auto weights = memory::allocate(engine, { data_types::f32, format::bfyx,{ 1, 1, 1, 1 } });
+
+    set_values(input, {
+        1.0f,  2.0f, -15.f,  3.0f, 4.0f, -15.f, 5.0f,  6.0f, -15.f, 7.0f,
+        -15.f, 0.0f,  0.0f, -15.f, 0.5f, -0.5f, -15.f, 8.0f,  1.5f,  5.2f
+        });
+
+    topology topology(
+        input_layout("input", input.get_layout()),
+        data("weights", weights),
+        convolution("conv", "input", { "weights" }),
+        eltwise("out", "input", "conv", eltwise_mode::sum));
+
+    std::cout << "*************************************************************" << std::endl;
+    std::cout << "Test : fused_conv_eltwise, dont_fuse_if_conv_elt_are_outputs" << std::endl;
+    std::cout << "input : f32, bfyx, {1,1,4,5}" << std::endl;
+    std::cout << "weights : f32, bfyx {1,1,1,1}" << std::endl;
+
+    std::cout << "topology topology(\n";
+    std::cout << "\tinput_layout(\"input\", input.get_layout()),\n";
+    std::cout << "\tdata(\"weights\", weights),\n";
+    std::cout << "\tconvolution(\"conv\", \"input\", { \"weights\" }),\n";
+    std::cout << "\teltwise(\"out\", \"input\", \"conv\", eltwise_mode::sum));" << std::endl << std::endl;
+
+    build_options opt;
+    opt.set_option(build_option::optimize_data(true));
+    network network(engine, topology, opt);
+    network.set_input_data("input", input);
+
+    auto outputs = network.execute();
+    EXPECT_EQ(outputs.size(), size_t(1));
+    EXPECT_EQ(outputs.begin()->first, "out");
+
+    auto output = outputs.begin()->second.get_memory();
+    auto&& out_layout = output.get_layout();
+
+    EXPECT_EQ(out_layout.format, format::bfyx);
+    EXPECT_EQ(out_layout.size.batch[0], 1);
+    EXPECT_EQ(out_layout.size.feature[0], 1);
+    EXPECT_EQ(out_layout.size.spatial[0], 4);
+    EXPECT_EQ(out_layout.size.spatial[1], 5);
+}
+
+TEST(fused_conv_eltwise, basic_image2d)
+{
+    const auto& engine = get_test_engine();
+
+    auto input = memory::allocate(engine, { data_types::f16, format::bfyx, { 1, 4, 128, 2 } });
+    auto input2 = memory::allocate(engine, { data_types::f16, format::bfyx, { 1, 3, 256, 4 } });
+    auto weights = memory::allocate(engine, { data_types::f16, format::bfyx, { 12, 4, 1, 1 } });
+
+    auto input_data1 = generate_random_4d<FLOAT16>(1, 4, 2, 128, -1, 1);
+    auto input_data1_bfyx = flatten_4d(format::bfyx, input_data1);
+    set_values(input, input_data1_bfyx);
+
+    auto input_data2 = generate_random_4d<FLOAT16>(1, 3, 4, 256, -1, 1);
+    auto input_data2_bfyx = flatten_4d(format::bfyx, input_data2);
+    set_values(input2, input_data2_bfyx);
+
+    auto weights_data= generate_random_4d<FLOAT16>(12, 4, 1, 1, -1, 1);
+    auto weights_data_bfyx = flatten_4d(format::bfyx, weights_data);
+    set_values(weights, weights_data_bfyx);
+
+    topology topology_act(
+        input_layout("input", input.get_layout()),
+        input_layout("input2", input2.get_layout()),
+        data("weights", weights),
+        convolution("conv", "input", { "weights" }),
+        depth_to_space("depth_to_space", "conv", 2, depth_to_space_mode::blocks_first),
+        eltwise("eltwise_out", "input2", "depth_to_space", eltwise_mode::sum)
+    );
+
+    std::cout << "*************************************************************" << std::endl;
+    std::cout << "Test : fused_conv_eltwise, basic_image2d" << std::endl;
+    std::cout << "input   : f16, bfyx, { 1, 4, 128, 2 }" << std::endl;
+    std::cout << "input2  : f16, bfyx, { 1, 3, 256, 4 }" << std::endl;
+    std::cout << "weights : f16, bfyx { 12, 4, 1, 1 }" << std::endl;
+    std::cout << "build_option::optimize_data(true)" << std::endl;
+
+    std::cout << "topology topology_act(" << std::endl;
+    std::cout << "    input_layout(\"input\", input.get_layout())," << std::endl;
+    std::cout << "    input_layout(\"input2\", input2.get_layout())," << std::endl;
+    std::cout << "    data(\"weights\", weights)," << std::endl;
+    std::cout << "    convolution(\"conv\", \"input\", { \"weights\" })," << std::endl;
+    std::cout << "    depth_to_space(\"depth_to_space\", \"conv\", 2, depth_to_space_mode::blocks_first)," << std::endl;
+    std::cout << "    eltwise(\"eltwise_out\", \"input2\", \"depth_to_space\", eltwise_mode::sum));" << std::endl << std::endl;
+
+    build_options opt_act;
+    opt_act.set_option(build_option::optimize_data(true));
+    network network_act(engine, topology_act, opt_act);
+    network_act.set_input_data("input", input);
+    network_act.set_input_data("input2", input2);
+
+    auto outputs_act = network_act.execute();
+    EXPECT_EQ(outputs_act.size(), size_t(1));
+    EXPECT_EQ(outputs_act.begin()->first, "eltwise_out");
+
+    auto output_act = outputs_act.begin()->second.get_memory();
+    auto out_act_ptr = output_act.pointer<uint8_t>();
+
+    topology topology_ref(
+        input_layout("input", input.get_layout()),
+        input_layout("input2", input2.get_layout()),
+        data("weights", weights),
+        convolution("conv", "input", { "weights" }),
+        depth_to_space("depth_to_space", "conv", 2, depth_to_space_mode::blocks_first),
+        eltwise("eltwise", "input2", "depth_to_space", eltwise_mode::sum),
+        reorder("reorder_out", "eltwise", format::image_2d_rgba, data_types::u8));
+
+
+    std::cout << "*************************************************************" << std::endl;
+    std::cout << "Test : fused_conv_eltwise, basic_image2d (ref)" << std::endl;
+    std::cout << "input   : f16, bfyx, { 1, 4, 128, 2 }" << std::endl;
+    std::cout << "input2  : f16, bfyx, { 1, 3, 256, 4 }" << std::endl;
+    std::cout << "weights : f16, bfyx { 12, 4, 1, 1 }" << std::endl;
+    std::cout << "build_option::optimize_data(false)" << std::endl;
+
+    std::cout << "topology topology_ref(" << std::endl;
+    std::cout << "    input_layout(\"input\", input.get_layout())," << std::endl;
+    std::cout << "    input_layout(\"input2\", input2.get_layout())," << std::endl;
+    std::cout << "    data(\"weights\", weights)," << std::endl;
+    std::cout << "    convolution(\"conv\", \"input\", { \"weights\" })," << std::endl;
+    std::cout << "    depth_to_space(\"depth_to_space\", \"conv\", 2, depth_to_space_mode::blocks_first)," << std::endl;
+    std::cout << "    eltwise(\"eltwise\", \"input2\", \"depth_to_space\", eltwise_mode::sum)," << std::endl;
+    std::cout << "    reorder(\"reorder_out\", \"eltwise\", format::image_2d_rgba, data_types::u8));" << std::endl << std::endl;
+
+    auto primitive_ref_ids = topology_ref.get_primitive_ids();
+    for (auto& prim_id : primitive_ref_ids) {
+        std::cout << prim_id << std::endl;
+    }
+
+    build_options opt_ref;
+    opt_ref.set_option(build_option::optimize_data(false));
+    network network_ref(engine, topology_ref, opt_ref);
+    network_ref.set_input_data("input", input);
+    network_ref.set_input_data("input2", input2);
+
+    auto outputs_ref = network_ref.execute();
+    EXPECT_EQ(outputs_ref.size(), size_t(1));
+    EXPECT_EQ(outputs_ref.begin()->first, "reorder_out");
+
+    auto output_ref = outputs_ref.begin()->second.get_memory();
+    auto out_ref_ptr = output_ref.pointer<uint8_t>();
+
+    for (int i = 0;i < 3 * 256 * 4;i++) {
+        EXPECT_EQ(out_act_ptr[i], out_ref_ptr[i]);
+    }
+}
+
+#else
 TEST(fused_conv_eltwise, basic_0)
 {
     const auto& engine = get_test_engine();
@@ -361,3 +623,4 @@ TEST_F(FusedConvTest_all_float, DISABLED_basic) {
                                true,           // eltw_activation
                                0.0f));         // eltw_activation_slp
 }
+#endif
