@@ -34,6 +34,7 @@ configuration::configuration()
       throttle_mode(throttle_mode_types::disabled),
       queues_num(0),
       tuning_cache_path("cache.json"),
-      kernels_cache_path("") {}
+      kernels_cache_path(""),
+      n_threads(2) {}
 }  // namespace gpu
 }  // namespace cldnn
