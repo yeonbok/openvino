@@ -17,6 +17,7 @@
 #include <vector>
 #include <utility>
 #include <algorithm>
+#include <iostream>
 
 namespace kernel_selector {
 constexpr size_t sub_group_size = 16;
@@ -80,6 +81,7 @@ bool fused_conv_eltwise_kernel_bfyx_iyxo::Validate(const Params& p, const option
     if (params.inputs[0].X().v % 128 || params.inputs[0].Y().v % 2)
         return false;
 
+    std::cout << "fused_conv_eltwise_kernel_bfyx_iyxo::Validate true" << std::endl;
     return true;
 }
 

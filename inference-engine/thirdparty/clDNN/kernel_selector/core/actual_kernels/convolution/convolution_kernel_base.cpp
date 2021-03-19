@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <iostream>
 
 namespace kernel_selector {
 bool ConvolutionKernelBase::Validate(const Params& p, const optional_params& o) const {
@@ -228,6 +229,16 @@ KernelsData ConvolutionKernelBase::GetCommonKernelsData(const Params& params,
     auto cldnnJit = GetJitConstants(newParams, dispatchData);
     auto entryPoint = GetEntryPoint(finalKernelName, newParams.layerID, options);
     auto jit = CreateJit(finalKernelName, cldnnJit, entryPoint);
+
+    std::cout << "-------------------------------------------------------" << std::endl;
+    std::cout << "Jit file for convolution - " << finalKernelName << std::endl;
+    std::cout << "-------------------------------------------------------" << std::endl;
+    std::cout << std::endl;
+    std::cout << jit << std::endl;
+
+    std::cout << std::endl;
+    std::cout << "-------------------------------------------------------" << std::endl;
+    std::cout << "-------------------------------------------------------" << std::endl;
 
     auto& kernel = kd.kernels[0];
     FillCLKernelData(kernel,

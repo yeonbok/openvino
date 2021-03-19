@@ -17,6 +17,7 @@
 #include <vector>
 #include <utility>
 #include <algorithm>
+#include <iostream>
 
 namespace kernel_selector {
 // Sub-group size used by "kernel_name_bfyx_os_iyx_osv16" kernel.
@@ -202,6 +203,7 @@ bool fused_conv_eltwise_kernel_bfyx_os_iyx_osv16::Validate(const Params& p, cons
         return false;
     }
 
+    std::cout << "fused_conv_eltwise_kernel_bfyx_os_iyx_osv16::Validate true" << std::endl;
     return true;
 }
 

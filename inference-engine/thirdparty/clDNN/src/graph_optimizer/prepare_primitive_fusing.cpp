@@ -61,6 +61,7 @@
 #include <string>
 #include <utility>
 #include "error_handler.h"
+#include "to_string_utils.h"
 
 void prepare_primitive_fusing::run(program_impl& p) {
     fuse_reorders(p);
@@ -928,11 +929,17 @@ void prepare_conv_eltw_fusing::fuse_conv_depth_to_space(program_impl& p, program
 void prepare_conv_eltw_fusing::fuse_conv_eltwise(program_impl& p, program_node* node) {
     // make sure this convolution have only 1 user and it's eltwise
     // make sure convolution is not an output
-    if (node->get_users().size() != 1 || node->is_output())
+    if (node->get_users().size() != 1 || node->is_output()) {
+        std::cout << "Fail to prepare_conv_eltw_fusing : conv should have only 1 user and it's eltwise " << std::endl;
         return;
+    }
 
-    if (!(*(node->get_users().begin()))->is_type<eltwise>())
+    if (!(*(node->get_users().begin()))->is_type<eltwise>()) {
+        auto id = (*(node->get_users().begin()))->id();
+        auto type = (*(node->get_users().begin()))->type();
+        std::cout << "Fail to prepare_conv_eltw_fusing : conv only have the user which should be eltwise " << id << " type " <<  type << std::endl;
         return;
+    }
 
     convolution_node* conv_node = static_cast<convolution_node*>(node);
     convolution& conv = const_cast<convolution&>(*conv_node->get_primitive());
@@ -956,8 +963,10 @@ void prepare_conv_eltw_fusing::fuse_conv_eltwise(program_impl& p, program_node* 
             (fmt != format::b_fs_yx_fsv4 || dep_dt != data_types::u8) &&
             (fmt != format::bfyx || dep_dt != data_types::f32) && (fmt != format::bfyx || dep_dt != data_types::u8) &&
             (fmt != format::bfyx || dep_dt != data_types::i8) && (fmt != format::yxfb || dep_dt != data_types::f16) &&
-            (fmt != format::bfyx || dep_dt != data_types::f16 || !if_already_depth_to_space_fused))
+            (fmt != format::bfyx || dep_dt != data_types::f16 || !if_already_depth_to_space_fused)) {
+            std::cout << "Fail to prepare_conv_eltw_fusing : Invalid fused_conv_eltw format  format: " << cldnn::fmt_to_str(fmt) << ", data_type: " <<  cldnn::dt_to_str(dep_dt) << std::endl;
             return;
+        }
     }
 
     auto weights_node_ptr = p.get_node_ptr(conv.weights[0]);
@@ -987,8 +996,10 @@ void prepare_conv_eltw_fusing::fuse_conv_eltwise(program_impl& p, program_node* 
 
     // make sure eltwise have only 2 inputs
     // make sure eltwise is not an output
-    if (!if_already_depth_to_space_fused && (eltw_node->inputs_count() != 2 || eltw_node->is_output()))
+    if (!if_already_depth_to_space_fused && (eltw_node->inputs_count() != 2 || eltw_node->is_output())) {
+        std::cout << "Fail to prepare_conv_eltw_fusing : eltwise have only 2 inputs and not an output " << std::endl;
         return;
+    }
 
     // only single ADD operation is currently supported
     // TODO: enable more

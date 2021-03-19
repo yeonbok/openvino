@@ -18,6 +18,7 @@
 #include "kernel_selector_utils.h"
 #include <string>
 #include <vector>
+#include <iostream>
 
 namespace kernel_selector {
 
@@ -113,6 +114,7 @@ bool fused_conv_eltwise_kernel_bfyx_1x1_opt::Validate(const Params& p, const opt
     if (cp.output.Y().v % block.out_height != 0)
         return false;
 
+    std::cout << "fused_conv_eltwise_kernel_bfyx_1x1_opt::Validate true" << std::endl;
     return true;
 }
 

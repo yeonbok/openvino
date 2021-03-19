@@ -16,6 +16,7 @@
 #include "fused_conv_eltwise_kernel_yxfb_yxio_b16.h"
 #include <string>
 #include <algorithm>
+#include <iostream>
 
 namespace kernel_selector {
 
@@ -134,6 +135,7 @@ bool fused_conv_eltwise_kernel_yxfb_yxio_b16::Validate(const Params& p, const op
         }
     }
 
+    std::cout << "fused_conv_eltwise_kernel_yxfb_yxio_b16::Validate true" << std::endl;
     return true;
 }
 

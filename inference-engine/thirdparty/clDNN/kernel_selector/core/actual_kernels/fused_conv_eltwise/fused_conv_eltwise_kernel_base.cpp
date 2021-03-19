@@ -106,6 +106,7 @@ bool fused_conv_eltwise_kernel_base::Validate(const Params& p, const optional_pa
         return false;
     }
 
+    std::cout << "fused_conv_eltwise_kernel_base::Validate true" << std::endl;
     return true;
 }
 
@@ -253,6 +254,10 @@ KernelsData fused_conv_eltwise_kernel_base::GetCommonKernelsData(const Params& p
                                                                  const std::string exeMode,
                                                                  int autoTuneIndex) const {
     if (!Validate(params, options)) {
+        KernelData kd = KernelData::Default<fused_conv_eltwise_params>(params);
+        fused_conv_eltwise_params& newParams = *static_cast<fused_conv_eltwise_params*>(kd.params.get());
+        auto finalKernelName = GetKernelName(newParams);
+        std::cout << "Fail to validate - " << finalKernelName << std::endl;
         return {};
     }
 
@@ -276,6 +281,8 @@ KernelsData fused_conv_eltwise_kernel_base::GetCommonKernelsData(const Params& p
                                        GetSupportedKey());
 
     if (!succeed) {
+        auto finalKernelName = GetKernelName(newParams);
+        std::cout << "Fail to UpdateWeightsParams - " << finalKernelName << std::endl;
         return {};
     }
 
@@ -286,7 +293,7 @@ KernelsData fused_conv_eltwise_kernel_base::GetCommonKernelsData(const Params& p
 
 
     std::cout << "-------------------------------------------------------" << std::endl;
-    std::cout << "Jit file for fused_conv_eltwise" << std::endl;
+    std::cout << "Jit file for fused_conv_eltwise - " << finalKernelName << std::endl;
     std::cout << "-------------------------------------------------------" << std::endl;
     std::cout << std::endl;
     std::cout << jit << std::endl;
