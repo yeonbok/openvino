@@ -12,6 +12,7 @@
 #include "ie_api.h"
 #include "file_utils.h"
 #include "cldnn_itt.h"
+#include <thread>
 
 #ifdef _WIN32
 # include <direct.h>
@@ -222,6 +223,19 @@ void Config::UpdateFromMap(const std::map<std::string, std::string>& configMap) 
             } else {
                 THROW_IE_EXCEPTION << NOT_FOUND_str << "Unsupported KEY_CLDNN_ENABLE_FP16_FOR_QUANTIZED_MODELS flag value: " << val;
             }
+        } else if (key.compare(CLDNNConfigParams::KEY_CLDNN_N_OPENCL_BUILD_THREADS) == 0) {
+            int max_threads = std::thread::hardware_concurrency();
+            try {
+                int val_i = std::stoi(val);
+                if (val_i <= 0 || val_i > max_threads) {
+                    n_threads = max_threads;
+                } else {
+                    n_threads = val_i;
+                }
+            } catch (const std::exception&) {
+                THROW_IE_EXCEPTION << "Wrong value for property key " << CLDNNConfigParams::KEY_CLDNN_N_OPENCL_BUILD_THREADS
+                                    << "CLDNNConfigParams::KEY_CLDNN_N_OPENCL_BUILD_THREADS";
+            }
         } else {
             THROW_IE_EXCEPTION << NOT_FOUND_str << "Unsupported property key by plugin: " << key;
         }
@@ -307,5 +321,6 @@ void Config::adjustKeyMapValues() {
     key_config_map[PluginConfigParams::KEY_GPU_THROUGHPUT_STREAMS] = std::to_string(throughput_streams);
     key_config_map[PluginConfigParams::KEY_DEVICE_ID] = device_id;
     key_config_map[PluginConfigParams::KEY_CONFIG_FILE] = "";
+    key_config_map[CLDNNConfigParams::KEY_CLDNN_N_OPENCL_BUILD_THREADS] = std::to_string(n_threads);
 }
 }  // namespace CLDNNPlugin
