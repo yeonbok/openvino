@@ -135,6 +135,7 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <thread>
 
 namespace cldnn {
 
