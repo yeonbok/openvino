@@ -76,7 +76,7 @@ DECLARE_CLDNN_CONFIG_KEY(NV12_TWO_INPUTS);
 * @brief This key sets the number of threads used to build program.
 * 2 is a default value.
 */
-DECLARE_CLDNN_CONFIG_KEY(N_OPENCL_BUILD_THREADS);
+DECLARE_CLDNN_CONFIG_KEY(MAX_NUM_THREADS);
 
 }  // namespace CLDNNConfigParams
 }  // namespace InferenceEngine

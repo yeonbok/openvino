@@ -35,6 +35,6 @@ configuration::configuration()
       queues_num(0),
       tuning_cache_path("cache.json"),
       kernels_cache_path(""),
-      n_threads(2) {}
+      n_threads(std::thread::hardware_concurrency()) {}
 }  // namespace gpu
 }  // namespace cldnn
