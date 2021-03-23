@@ -366,9 +366,12 @@ void prepare_primitive_fusing::fuse_simple_primitives(program_impl &p) {
     while (itr != p.get_processing_order().end()) {
         auto node_itr = itr++;
         auto& node = (*node_itr);
+        std::cout << node->get_primitive()->id << std::endl;
 
-        if (node->is_output() || node->is_constant())
+        if (node->is_output() || node->is_constant()) {
+            std::cout << "do nothing" << std::endl;
             continue;
+        }
 
         auto is_grouped_conv = [](convolution_node& node) -> bool {
             auto in_size = node.get_dependency(0).get_output_layout().size;
@@ -726,6 +729,7 @@ void prepare_primitive_fusing::fuse_simple_primitives(program_impl &p) {
         };
 
         auto fuse_eltwise_f = [&](eltwise_node& node) {
+            printf("fuse eltwise\n");
             std::shared_ptr<const cldnn::eltwise> prim = node.get_primitive();
             const std::vector<eltwise_mode> supported_modes = {
                 eltwise_mode::sum,
@@ -734,8 +738,10 @@ void prepare_primitive_fusing::fuse_simple_primitives(program_impl &p) {
 
             if (node.is_output() || node.inputs_count() != 2 ||
                 std::find(supported_modes.begin(), supported_modes.end(), prim->mode) == supported_modes.end() ||
-                !prim->stride.empty())
+                !prim->stride.empty()) {
+                printf(" ... not support\n");
                 return;
+            }
 
             std::vector<cldnn::program_node*> parents = node.get_dependencies();
             std::list<cldnn::program_node*> users = node.get_users();
@@ -759,11 +765,15 @@ void prepare_primitive_fusing::fuse_simple_primitives(program_impl &p) {
                                       (parents[i]->is_type<pooling>() && pooling_supports_fusings(parents[i]->as<pooling>())) ||
                                       (parents[i]->is_type<depth_to_space>() && dts_supports_fusings(parents[i]->as<depth_to_space>())) ||
                                       (parents[i]->is_type<reduce>() && reduce_supports_fusings(parents[i]->as<reduce>()));
+
+                printf("... 1. can fuse parantes[%d] = %d\n", (int32_t) i, (int32_t) can_fuse_parents[i]);
+                std::cout << parents[i]->get_primitive()->id << std::endl;
             }
 
             // Disable fusion to a node on constant path when second input is in data flow
             for (size_t i = 0; i < parents.size(); i++) {
                 can_fuse_parents[i] = can_fuse_parents[i] && (!parents[i]->is_constant() || parents[parents.size() - 1 - i]->is_constant());
+                printf("... 2. can fuse parantes[%d] = %d\n", (int32_t) i, (int32_t) can_fuse_parents[i]);
             }
 
             auto parent1 = parents[0];
@@ -809,14 +819,19 @@ void prepare_primitive_fusing::fuse_simple_primitives(program_impl &p) {
             auto fused_node = parents[fused_idx];
             auto peer_node = parents[peer_idx];
 
-            if (parent1->is_type<convolution>() && !conv_supports_fusings(parent1->as<convolution>()))
+            if (parent1->is_type<convolution>() && !conv_supports_fusings(parent1->as<convolution>())) {
+                printf("return 1\n");
                 return;
+            }
 
-            if (parent2->is_type<convolution>() && !conv_supports_fusings(parent2->as<convolution>()))
+            if (parent2->is_type<convolution>() && !conv_supports_fusings(parent2->as<convolution>())) {
+                printf("return 1\n");
                 return;
+            }
 
             // This fusing can be extended to support peer node in any layout
-            bool merge_allowed = fused_node->get_users().size() == 1;
+//            bool merge_allowed = fused_node->get_users().size() == 1;
+            bool merge_allowed = true;
 
             for (auto& parent : fused_node->get_dependencies())
                 if (parent->id() == peer_node->id())
@@ -836,8 +851,10 @@ void prepare_primitive_fusing::fuse_simple_primitives(program_impl &p) {
             }
 
             p.fuse_nodes(*fused_node, node);
+            printf("fuse nodes!\n");
         };
 
+        std::cout << "do for types!" << std::endl;
         program_helpers::do_for_types<activation, scale, quantize, eltwise>(*node,
                 fuse_activation_f,
                 fuse_scale_f,
@@ -964,7 +981,8 @@ void prepare_conv_eltw_fusing::fuse_conv_eltwise(program_impl& p, program_node* 
             (fmt != format::bfyx || dep_dt != data_types::f32) && (fmt != format::bfyx || dep_dt != data_types::u8) &&
             (fmt != format::bfyx || dep_dt != data_types::i8) && (fmt != format::yxfb || dep_dt != data_types::f16) &&
             (fmt != format::bfyx || dep_dt != data_types::f16 || !if_already_depth_to_space_fused)) {
-            std::cout << "Fail to prepare_conv_eltw_fusing : Invalid fused_conv_eltw format  format: " << cldnn::fmt_to_str(fmt) << ", data_type: " <<  cldnn::dt_to_str(dep_dt) << std::endl;
+            std::cout << "Fail to prepare_conv_eltw_fusing : Invalid fused_conv_eltw format  format: "
+                << cldnn::fmt_to_str(fmt) << ", data_type: " <<  cldnn::dt_to_str(dep_dt) << std::endl;
             return;
         }
     }

@@ -300,6 +300,68 @@ TEST(fused_conv_eltwise, paul_origin_f32_b_fs_yx_fsv16_os_is_yx_osv16_isv16)
     EXPECT_EQ(out_layout.size.spatial[1], 40);
 }
 
+TEST(fused_conv_eltwise, taylor_trial_new_pattern01_b_fs_yx_fsv16_f32)
+{
+    //Test pattern of Conv_208/WithoutBiases in yolov5s-gpu-rg.xml
+    const auto& engine = get_test_engine();
+
+    auto input = memory::allocate(engine, { data_types::f32, format::b_fs_yx_fsv16, { 1, 128, 40, 40 } /*memory order*/ }); //memory order
+    auto weights = memory::allocate(engine, { data_types::f32, format::os_is_yx_osv16_isv16, { 128, 128, 1, 1 } });
+    auto sum_input = memory::allocate(engine, { data_types::f32, format::b_fs_yx_fsv16, { 1, 1, 1, 1 } });
+
+    const int32_t total_size = 128 * 40 * 40;
+    std::vector<float> inputVec(total_size);
+    for (int i = 0; i < total_size; i++)
+    {
+        inputVec[i] = float(i+1);
+    }
+
+    set_values(input, inputVec);
+
+    topology topology(
+        input_layout("input", input.get_layout()),
+        data("sum_input", sum_input),
+        data("weights", weights),
+        convolution("conv", "input", { "weights" }),
+        eltwise("eltwise1", "conv", "sum_input", eltwise_mode::sum),
+        eltwise("eltwise2", "eltwise1", "conv", eltwise_mode::prod),
+//        eltwise("eltwise1", "conv", "sum_input", eltwise_mode::sum),
+        reorder("out_reorder", "eltwise2", format::b_fs_yx_fsv16, data_types::f32));
+
+    std::cout << "*************************************************************" << std::endl;
+    std::cout << "Test : fused_conv_eltwise_trial_new_pattern01_b_fs_yx_fsv16_fp32" << std::endl;
+    std::cout << "input : f32, b_fs_yx_fsv16, {1, 128, 40, 40}" << std::endl;
+    std::cout << "weights : f32, os_is_yx_osv16_isv16 {128, 128, 1, 1}" << std::endl;
+    std::cout << "sum_input : f32, b_fs_yx_fsv16 {1, 1, 1, 1}" << std::endl;
+
+    std::cout << "topology topology(" << std::endl;
+    std::cout << "    input_layout(\"input\", input.get_layout())," << std::endl;
+    std::cout << "    data(\"sum_input\", sum_input)," << std::endl;
+    std::cout << "    data(\"weights\", weights)," << std::endl;
+    std::cout << "    convolution(\"conv\", \"input\", { \"weights\" })," << std::endl;
+    std::cout << "    eltwise(\"eltwise1\", \"conv\", \"sum_input\", eltwise_mode::sum)," << std::endl;
+    std::cout << "    eltwise(\"eltwise2\", \"eltwise1\", \"conv\", eltwise_mode::prod)," << std::endl;
+    std::cout << "    reorder(\"out_reorder\", \"eltwise\", format::bfyx, data_types::f32));" << std::endl << std::endl;
+
+    build_options opt;
+    opt.set_option(build_option::graph_dumps_dir("/home/yblee/conv_fusing"));
+    opt.set_option(build_option::optimize_data(true));
+    network network(engine, topology, opt);
+    network.set_input_data("input", input);
+
+    auto outputs = network.execute();
+    EXPECT_EQ(outputs.size(), size_t(1));
+    EXPECT_EQ(outputs.begin()->first, "out_reorder");
+
+    auto output = outputs.begin()->second.get_memory();
+    auto&& out_layout = output.get_layout();
+
+    EXPECT_EQ(out_layout.format, format::b_fs_yx_fsv16);
+    EXPECT_EQ(out_layout.size.batch[0], 1);
+    EXPECT_EQ(out_layout.size.feature[0], 128);
+    EXPECT_EQ(out_layout.size.spatial[0], 40);
+    EXPECT_EQ(out_layout.size.spatial[1], 40);
+}
 TEST(fused_conv_eltwise, paul_trial_new_pattern01_b_fs_yx_fsv16_f32)
 {
     //Test pattern of Conv_208/WithoutBiases in yolov5s-gpu-rg.xml
