@@ -232,8 +232,9 @@ void Config::UpdateFromMap(const std::map<std::string, std::string>& configMap) 
                     n_threads = val_i;
                 }
             } catch (const std::exception&) {
-                THROW_IE_EXCEPTION << "Wrong value for property key " << CLDNNConfigParams::KEY_CLDNN_MAX_NUM_THREADS
-                                    << ". Expected only integer";
+                THROW_IE_EXCEPTION << "Wrong value for property key " << CLDNNConfigParams::KEY_CLDNN_MAX_NUM_THREADS << ": " << val
+                                   << "\nSpecify the number of threads use for build as an integer."
+                                   << "\nOut of range value will be set as a default value, maximum concurrent threads.";
             }
         } else {
             THROW_IE_EXCEPTION_WITH_STATUS(NotFound) << "Unsupported property key by plugin: " << key;
