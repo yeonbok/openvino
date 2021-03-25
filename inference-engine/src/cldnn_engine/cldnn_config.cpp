@@ -223,7 +223,7 @@ void Config::UpdateFromMap(const std::map<std::string, std::string>& configMap) 
                 THROW_IE_EXCEPTION_WITH_STATUS(NotFound) << "Unsupported KEY_CLDNN_ENABLE_FP16_FOR_QUANTIZED_MODELS flag value: " << val;
             }
         } else if (key.compare(CLDNNConfigParams::KEY_CLDNN_MAX_NUM_THREADS) == 0) {
-            int max_threads = std::thread::hardware_concurrency();
+            int max_threads = (std::thread::hardware_concurrency() == 0) ? 1 : std::thread::hardware_concurrency();
             try {
                 int val_i = std::stoi(val);
                 if (val_i <= 0 || val_i > max_threads) {

@@ -96,7 +96,7 @@ struct engine_configuration {
         bool memory_pool = true,
         uint16_t n_streams = 1,
         const std::string& kernels_cache_path = "",
-        int n_threads = std::thread::hardware_concurrency(),
+        int n_threads = (std::thread::hardware_concurrency() == 0) ? 1 : std::thread::hardware_concurrency(),
         const std::string& tuning_cache_path = "cache.json")
         : enable_profiling(profiling)
         , meaningful_kernels_names(decorate_kernel_names)
