@@ -62,7 +62,7 @@ TEST(fused_conv_eltwise, yolov5_fused_eltw_pattern01_b_fs_yx_fsv16_f32)
 
     set_values(input, inputVec);
 
-    topology topology_act(
+    topology topology(
         input_layout("input", input.get_layout()),
         data("sum_input", sum_input),
         data("weights", weights),
@@ -89,7 +89,8 @@ TEST(fused_conv_eltwise, yolov5_fused_eltw_pattern01_b_fs_yx_fsv16_f32)
     build_options opt_act;
     // opt_act.set_option(build_option::graph_dumps_dir("/home/yblee/conv_fusing"));
     opt_act.set_option(build_option::optimize_data(true));
-    network network_act(engine, topology_act, opt_act);
+    // fused network
+    network network_act(engine, topology, opt_act);
     network_act.set_input_data("input", input);
 
     auto outputs_act = network_act.execute();
@@ -106,19 +107,11 @@ TEST(fused_conv_eltwise, yolov5_fused_eltw_pattern01_b_fs_yx_fsv16_f32)
     EXPECT_EQ(out_layout_act.size.spatial[0], 40);
     EXPECT_EQ(out_layout_act.size.spatial[1], 40);
 
-    topology topology_ref(
-        input_layout("input", input.get_layout()),
-        data("sum_input", sum_input),
-        data("weights", weights),
-        convolution("conv", "input", { "weights" }),
-        eltwise("eltwise1", "conv", "sum_input", eltwise_mode::sum),
-        eltwise("eltwise2", "eltwise1", "conv", eltwise_mode::prod),
-        reorder("out_reorder", "eltwise2", format::b_fs_yx_fsv16, data_types::f32));
-
     build_options opt_ref;
     // opt_ref.set_option(build_option::graph_dumps_dir("/home/yblee/conv_fusing"));
     opt_ref.set_option(build_option::optimize_data(false));
-    network network_ref(engine, topology_ref, opt_ref);
+    // unfused network
+    network network_ref(engine, topology, opt_ref);
     network_ref.set_input_data("input", input);
 
     auto outputs_ref = network_ref.execute();
@@ -166,7 +159,7 @@ TEST(fused_conv_eltwise, yolov5_fused_eltw_pattern02_b_fs_yx_fsv16_f32)
 
     set_values(input, inputVec);
 
-    topology topology_act(
+    topology topology(
         input_layout("input", input.get_layout()),
         data("sum_input", sum_input),
         data("weights", weights),
@@ -201,7 +194,8 @@ TEST(fused_conv_eltwise, yolov5_fused_eltw_pattern02_b_fs_yx_fsv16_f32)
     build_options opt_act;
     // opt_act.set_option(build_option::graph_dumps_dir("/home/yblee/conv_fusing"));
     opt_act.set_option(build_option::optimize_data(true));
-    network network_act(engine, topology_act, opt_act);
+    // fused network
+    network network_act(engine, topology, opt_act);
     network_act.set_input_data("input", input);
 
     auto outputs_act = network_act.execute();
@@ -218,22 +212,11 @@ TEST(fused_conv_eltwise, yolov5_fused_eltw_pattern02_b_fs_yx_fsv16_f32)
     EXPECT_EQ(out_layout_act.size.spatial[0], 40);
     EXPECT_EQ(out_layout_act.size.spatial[1], 40);
 
-    topology topology_ref(
-        input_layout("input", input.get_layout()),
-        data("sum_input", sum_input),
-        data("weights", weights),
-        data("prod_input1", prod_input1),
-        data("prod_input2", prod_input2),
-        eltwise("eltwise1", "prod_input1", "prod_input2", eltwise_mode::prod),
-        convolution("conv", "input", { "weights" }),
-        eltwise("eltwise2", "conv", "sum_input", eltwise_mode::sum),
-        eltwise("eltwise3", { "eltwise2", "conv", "eltwise1" }, eltwise_mode::prod),
-        reorder("out_reorder", "eltwise3", format::b_fs_yx_fsv16, data_types::f32));
-
     build_options opt_ref;
     // opt_ref.set_option(build_option::graph_dumps_dir("/home/yblee/conv_fusing"));
     opt_ref.set_option(build_option::optimize_data(false));
-    network network_ref(engine, topology_ref, opt_ref);
+    // unfused network
+    network network_ref(engine, topology, opt_ref);
     network_ref.set_input_data("input", input);
 
     auto outputs_ref = network_ref.execute();
@@ -278,7 +261,7 @@ TEST(fused_conv_eltwise, yolov5_fused_eltw_pattern03_b_fs_yx_fsv16_f32)
 
     set_values(input, inputVec);
 
-    topology topology_act(
+    topology topology(
         input_layout("input", input.get_layout()),
         data("sum_input1", sum_input1),
         data("sum_input2", sum_input2),
@@ -310,7 +293,8 @@ TEST(fused_conv_eltwise, yolov5_fused_eltw_pattern03_b_fs_yx_fsv16_f32)
     build_options opt_act;
     // opt_act.set_option(build_option::graph_dumps_dir("/home/yblee/conv_fusing"));
     opt_act.set_option(build_option::optimize_data(true));
-    network network_act(engine, topology_act, opt_act);
+    // fused network
+    network network_act(engine, topology, opt_act);
     network_act.set_input_data("input", input);
 
     auto outputs_act = network_act.execute();
@@ -327,21 +311,11 @@ TEST(fused_conv_eltwise, yolov5_fused_eltw_pattern03_b_fs_yx_fsv16_f32)
     EXPECT_EQ(out_layout_act.size.spatial[0], 40);
     EXPECT_EQ(out_layout_act.size.spatial[1], 40);
 
-    topology topology_ref(
-        input_layout("input", input.get_layout()),
-        data("sum_input1", sum_input1),
-        data("sum_input2", sum_input2),
-        data("weights", weights),
-        convolution("conv", "input", { "weights" }),
-        eltwise("eltwise1", "conv", "sum_input1", eltwise_mode::sum),
-        eltwise("eltwise2", "conv", "sum_input2", eltwise_mode::sum),
-        eltwise("eltwise3", "eltwise1", "eltwise2", eltwise_mode::prod),
-        reorder("out_reorder", "eltwise3", format::b_fs_yx_fsv16, data_types::f32));
-
     build_options opt_ref;
     // opt_ref.set_option(build_option::graph_dumps_dir("/home/yblee/conv_fusing"));
     opt_ref.set_option(build_option::optimize_data(false));
-    network network_ref(engine, topology_ref, opt_ref);
+    // unfused network
+    network network_ref(engine, topology, opt_ref);
     network_ref.set_input_data("input", input);
 
     auto outputs_ref = network_ref.execute();
