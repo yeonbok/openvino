@@ -156,6 +156,7 @@ public:
 
     static std::vector<std::string> getHeteroDevices(std::string fallbackDevice);
     static std::vector<std::string> getMultiDevices(std::string devicesList);
+    static std::string getBatchDevice(std::string devicesList);
 };
 
 }  // namespace InferenceEngine
