@@ -7,6 +7,7 @@
 #include <vpu/utils/profiling.hpp>
 #include <vpu/middleend/sw/utility.hpp>
 
+#include <ie_parallel.hpp>
 #include <precision_utils.h>
 
 namespace vpu {

@@ -10,6 +10,7 @@
 #include <vpu/model/data_contents/batch_norm_contents.hpp>
 
 #include <precision_utils.h>
+#include <ie_parallel.hpp>
 
 #include <cmath>
 #include <vector>

@@ -6,6 +6,8 @@
 #include <vpu/stages/stub_stage.hpp>
 #include <vpu/model/data_contents/merge_fc_content.hpp>
 
+#include <ie_parallel.hpp>
+
 #include <memory>
 #include <utility>
 #include <vector>

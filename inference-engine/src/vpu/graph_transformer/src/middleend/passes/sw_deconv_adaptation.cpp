@@ -8,6 +8,8 @@
 #include <vpu/utils/numeric.hpp>
 #include <vpu/model/data_contents/deconvolution_contents.hpp>
 
+#include <ie_parallel.hpp>
+
 #include <vector>
 #include <string>
 #include <memory>

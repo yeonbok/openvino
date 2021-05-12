@@ -25,6 +25,8 @@
 #include <ngraph_functions/builders.hpp>
 #include <functional_test_utils/blob_utils.hpp>
 
+#include "ie_parallel.hpp"
+
 using namespace ::testing;
 using namespace InferenceEngine;
 
