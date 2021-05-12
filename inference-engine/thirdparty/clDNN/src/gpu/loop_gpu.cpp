@@ -306,21 +306,15 @@ struct loop_gpu : typed_primitive_impl<loop> {
             }
             body_network->set_input_data(concatenated_input.sliced_data_id, *concatenated_input.get_sliced_mem(0));
         }
+        for (const auto& backedge_memory_mapping : instance.backedge_memory_mappings) {
+            backedge_memory_mapping.setup_iteration(0);
+        }
+        for (const auto& concat_output_mem_mapping : concatenated_output_mem_mappings) {
+            concat_output_mem_mapping.setup_concatenated_output_memory(0);
+        }
 
         std::vector<event_impl::ptr> loop_carried_dep(events);
         while (current_iteration < trip_count && execution_condition) {
-            // Copy & Set sliced input memory offset
-
-            // Set backedges
-            for (const auto& backedge_memory_mapping : instance.backedge_memory_mappings) {
-                backedge_memory_mapping.setup_iteration(current_iteration);
-            }
-
-            // Set sliced output memory
-            for (const auto& concat_output_mem_mapping : concatenated_output_mem_mappings) {
-                concat_output_mem_mapping.setup_concatenated_output_memory(current_iteration);
-            }
-
             body_network->execute(loop_carried_dep);
             loop_carried_dep.clear();
             for (const auto& backedge : node.get_back_edges()) {
@@ -328,6 +322,20 @@ struct loop_gpu : typed_primitive_impl<loop> {
                 loop_carried_dep.emplace_back(body_event);
             }
 
+            // update index & execution condition for the next iteration
+            if (current_iteration + 1 < trip_count) {
+                for (size_t i = 0; i < instance.concatenated_input_mem_mappings.size(); ++i) {
+                    const auto& concatenated_input = concatenated_input_mem_mappings.at(i);
+                    memory_impl::ptr mem = concatenated_input.get_sliced_mem(static_cast<int>(current_iteration + 1));
+                    concatenated_input.sliced_data_prim->set_output_memory(*mem);
+                }
+                for (const auto& backedge_memory_mapping : instance.backedge_memory_mappings) {
+                    backedge_memory_mapping.setup_iteration(current_iteration + 1);
+                }
+                for (const auto& concat_output_mem_mapping : concatenated_output_mem_mappings) {
+                    concat_output_mem_mapping.setup_concatenated_output_memory(current_iteration + 1);
+                }
+            }
             //TODO: "curreint_iteration primitive and execution_condition is prepared
             //as they are presented in the ngraph opset document for loop operation.
             //However they are not being used yet and only TensorIterator which has fixed sequence length is being validated.
@@ -336,15 +344,6 @@ struct loop_gpu : typed_primitive_impl<loop> {
             }
             if (node.is_execution_condition_used()) {
                 execution_condition = read_scalar_value(*execution_condition_mem);
-            }
-            // update index & execution condition for the next iteration
-            if (current_iteration + 1 < trip_count) {
-                for (size_t i = 0; i < instance.concatenated_input_mem_mappings.size(); ++i) {
-                    const auto& concatenated_input = concatenated_input_mem_mappings.at(i);
-                    memory_impl::ptr mem = concatenated_input.get_sliced_mem(static_cast<int>(current_iteration + 1));
-                    // set input mem
-                    concatenated_input.sliced_data_prim->set_output_memory(*mem);
-                }
             }
             ++current_iteration;
         }
@@ -356,11 +355,13 @@ struct loop_gpu : typed_primitive_impl<loop> {
             const auto& concat_output = concatenated_output_mem_mappings.at(i);
             concat_output.restore_concatenated_mem();
         }
+
         if (node.is_current_iteration_used()) {
             const primitive_id& num_iteration_id = node.get_num_iteration_id();
             memory_impl& num_iteration_mem = outer_network.get_primitive(num_iteration_id)->output_memory();
             write_scalar_value(num_iteration_mem, current_iteration);
         }
+
         dynamic_cast<cldnn::user_event*>(ev.get())->set();
         return ev;
     }
