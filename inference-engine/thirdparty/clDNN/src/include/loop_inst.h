@@ -399,15 +399,16 @@ private:
             concat_data_prim->set_output_memory(*sliced_output_mem);
         }
 
-        memory_impl::ptr get_sliced_mem(int iteration) const {
+        void copy_sliced_input_mem(int iteration) const {
             const int offset = bytes_initial_offset + bytes_stride * iteration;
-            {
-                mem_lock<uint8_t> from_lock{ concatenated_mem };
-                mem_lock<uint8_t> to_lock{ sliced_mems.at(iteration) };
-                const auto src = from_lock.begin() + offset;
-                const auto dst = to_lock.begin();
-                std::copy(src, src + bytes_per_iteration, dst);
-            }
+            mem_lock<uint8_t> from_lock{ concatenated_mem };
+            mem_lock<uint8_t> to_lock{ sliced_mems.at(iteration) };
+            const auto src = from_lock.begin() + offset;
+            const auto dst = to_lock.begin();
+            std::copy(src, src + bytes_per_iteration, dst);
+        }
+
+        memory_impl::ptr get_sliced_mem(int iteration) const {
             return sliced_mems.at(iteration);
         }
 

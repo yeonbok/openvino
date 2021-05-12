@@ -76,7 +76,7 @@ struct loop_gpu : typed_primitive_impl<loop> {
                 std::vector<memory_impl::ptr> sliced_mems;
                 sliced_mems.reserve(max_iteration);
                 for (int j=0; j < max_iteration; ++j) {
-                    memory_impl::ptr sliced_mem = engine.allocate_memory(sliced_layout, 0);
+                    memory_impl::ptr sliced_mem = engine.allocate_memory(sliced_layout, body_network->get_id());
                     sliced_mems.push_back(sliced_mem);
                 }
 
@@ -119,7 +119,7 @@ struct loop_gpu : typed_primitive_impl<loop> {
                     std::vector<memory_impl::ptr> sliced_mems;
                     sliced_mems.reserve(max_iteration);
                     for (int j=0; j < max_iteration; ++j) {
-                        memory_impl::ptr sliced_mem = engine.allocate_memory(sliced_layout, 0);
+                        memory_impl::ptr sliced_mem = engine.allocate_memory(sliced_layout, body_network->get_id());
                         sliced_mems.push_back(sliced_mem);
                     }
                     const int linear_size = static_cast<int>(sliced_layout.get_linear_size());
@@ -162,8 +162,8 @@ struct loop_gpu : typed_primitive_impl<loop> {
                 memory_impl::ptr backedge_mem;
                 if (output_mapping.empty()) {
                     auto output_prim = body_network->get_primitive(back_edge.from);
-                    layout output_layout = output_prim->output_memory().get_layout();
-                    backedge_mem = body_network->get_engine().allocate_memory(output_layout, 0);
+                    memory_impl& memory = output_prim->output_memory();
+                    backedge_mem = (memory_impl::ptr) &memory;
                 } else {
                     backedge_mem = get_external_memory(instance, output_mapping.front()->external_id);
                 }
@@ -209,20 +209,6 @@ struct loop_gpu : typed_primitive_impl<loop> {
             assert(false);
         }
         return trip_count;
-    }
-
-    static void copy_buffer(cldnn::memory_impl& src_mem, cldnn::memory_impl& dst_mem,
-                            const size_t size, const size_t src_offset = 0, const size_t dst_offset = 0) {
-        assert(src_mem.get_layout().data_type == dst_mem.get_layout().data_type);
-
-        size_t bytes_per_element = data_type_traits::size_of(src_mem.get_layout().data_type);
-        mem_lock<uint8_t> from_lock{ src_mem };
-        mem_lock<uint8_t> to_lock{ dst_mem };
-
-        const size_t byte_size_to_copy = size * bytes_per_element;
-        const auto src = from_lock.begin() + src_offset * bytes_per_element;
-        const auto dst = to_lock.begin() + (dst_offset * bytes_per_element);
-        std::copy(src, src + byte_size_to_copy, dst);
     }
 
     static void write_scalar_value(memory_impl& mem, int64_t input) {
@@ -312,7 +298,15 @@ struct loop_gpu : typed_primitive_impl<loop> {
 
         const auto& concatenated_input_mem_mappings = instance.concatenated_input_mem_mappings;
         const auto& concatenated_output_mem_mappings = instance.concatenated_output_mem_mappings;
-        std::vector<event_impl::ptr> loop_carried_dep;
+
+        for (size_t im = 0; im < instance.concatenated_input_mem_mappings.size(); ++im) {
+            const auto& concatenated_input = concatenated_input_mem_mappings.at(im);
+            for (int32_t iter = 0; iter < node.get_max_iteration(); ++iter) {
+                concatenated_input.copy_sliced_input_mem(static_cast<int>(iter));
+            }
+        }
+
+        std::vector<event_impl::ptr> loop_carried_dep(events);
         while (current_iteration < trip_count && execution_condition) {
             // Copy & Set sliced input memory offset
             for (size_t i = 0; i < instance.concatenated_input_mem_mappings.size(); ++i) {
@@ -320,9 +314,9 @@ struct loop_gpu : typed_primitive_impl<loop> {
                 memory_impl::ptr mem = concatenated_input.get_sliced_mem(static_cast<int>(current_iteration));
                 // set input mem
                 if (current_iteration == 0) {
-                    body_network->set_input_data(concatenated_input.sliced_data_id, *mem);
+                   body_network->set_input_data(concatenated_input.sliced_data_id, *mem);
                 } else {
-                    concatenated_input.sliced_data_prim->set_output_memory(*mem);
+                   concatenated_input.sliced_data_prim->set_output_memory(*mem);
                 }
             }
 
@@ -335,11 +329,8 @@ struct loop_gpu : typed_primitive_impl<loop> {
             for (const auto& concat_output_mem_mapping : concatenated_output_mem_mappings) {
                 concat_output_mem_mapping.setup_concatenated_output_memory(current_iteration);
             }
-            if (current_iteration == 0) {
-                body_network->execute(events);
-            } else {
-                body_network->execute(loop_carried_dep);
-            }
+
+            body_network->execute(loop_carried_dep);
             loop_carried_dep.clear();
             for (const auto& backedge : node.get_back_edges()) {
                 event_impl::ptr body_event = body_network->get_primitive_event(backedge.from);
