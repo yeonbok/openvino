@@ -109,6 +109,12 @@ public:
     void reset_output_change() { _output_changed = false; }
 
     void build_deps();
+    void reset_deps(std::vector<std::shared_ptr<primitive_inst>> const& new_deps) {
+        _deps.clear();
+        for (const auto& d : new_deps) {
+            _deps.emplace_back(d);
+        }
+    }
 
     memory_impl& fused_memory(size_t dep_id) const {
         return dep_memory(get_fused_mem_offset() + dep_id);

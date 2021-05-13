@@ -247,8 +247,8 @@ struct loop_gpu : typed_primitive_impl<loop> {
     }
 
     event_impl::ptr execute_impl(const std::vector<event_impl::ptr>& events, loop_inst& instance) override {
-        for (auto& e : events)
-            e->wait();
+//        for (auto& e : events)
+//            e->wait();
         auto& outer_network = instance.get_network();
         const uint32_t& net_id = instance.get_network().get_id();
         auto ev = outer_network.get_engine().create_user_event(net_id, false);
@@ -313,15 +313,20 @@ struct loop_gpu : typed_primitive_impl<loop> {
             concat_output_mem_mapping.setup_concatenated_output_memory(0);
         }
 
-        std::vector<event_impl::ptr> loop_carried_dep(events);
         while (current_iteration < trip_count && execution_condition) {
-            body_network->execute(loop_carried_dep);
-            loop_carried_dep.clear();
-            for (const auto& backedge : node.get_back_edges()) {
-                event_impl::ptr body_event = body_network->get_primitive_event(backedge.from);
-                loop_carried_dep.emplace_back(body_event);
+            if (current_iteration == 0) {
+                body_network->execute(events);
+            } else {
+                if (current_iteration == 1) {
+                    for (auto& backedge : node.get_back_edges()) {
+                        auto from_inst = body_network->get_primitive(backedge.from);
+                        auto to_inst = body_network->get_primitive(backedge.to);
+                        std::vector<std::shared_ptr<primitive_inst>> new_deps = {from_inst};
+                        to_inst->reset_deps(new_deps);
+                    }
+                }
+                body_network->execute({});
             }
-
             // update index & execution condition for the next iteration
             if (current_iteration + 1 < trip_count) {
                 for (size_t i = 0; i < instance.concatenated_input_mem_mappings.size(); ++i) {
