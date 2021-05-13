@@ -16,6 +16,7 @@
 #include "api/mutable_data.hpp"
 #include "api/data.hpp"
 #include "api/reorder.hpp"
+#include "api/topology.hpp"
 
 #include <vector>
 #include <algorithm>
@@ -100,16 +101,13 @@ void CreateTensorIteratorOp(Program &p, const std::shared_ptr<TensorIterator> &o
             cldnn::primitive_id to_id = layer_type_name_ID(to);
             cldnn::primitive_id from_id = layer_type_name_ID(from);
 
-            // TODO(eunsoo): reorder required?
-            // add additional reorder in case TI output type != body output type
+            // reset output data type because the data types of the outputs of the
+            // body topology are always FP32 regardless of ngraph data type
             {
-                const auto& to_output_type = to->get_element_type();
-                const auto new_from_output_type = DataTypeFromPrecision(to_output_type);
-                cldnn::primitive_id new_from_id = from_id + "_reorder";
-                auto reorderPrim = cldnn::reorder(new_from_id, from_id, cldnn::format::any, new_from_output_type);
-                body_topology.add(reorderPrim);
-                reordered_output_ids[from_id] = new_from_id;
-                from_id = new_from_id;
+                const auto from_prim = body_topology.at(from_id);
+                const auto& to_ngraph_type = to->get_element_type();
+                const auto to_cldnn_type = DataTypeFromPrecision(to_ngraph_type);
+                from_prim->output_data_type = to_cldnn_type;
             }
             back_edges.emplace_back(from_id, to_id);
         }
@@ -168,14 +166,6 @@ void CreateTensorIteratorOp(Program &p, const std::shared_ptr<TensorIterator> &o
         }
         const auto& body_output = body_outputs.at(loop_output_desc->m_body_value_index);
         cldnn::primitive_id internal_id = layer_type_name_ID(body_output);
-
-        // add additional reorder in case TI output type != body output type
-        {
-            const auto target = reordered_output_ids.find(internal_id);
-            if (target != reordered_output_ids.end()) {
-                internal_id = target->second;
-            }
-        }
 
         // update primitive_map
         if (const auto& concatOutput =
