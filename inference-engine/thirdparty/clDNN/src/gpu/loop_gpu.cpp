@@ -325,7 +325,7 @@ struct loop_gpu : typed_primitive_impl<loop> {
                         to_inst->reset_deps(new_deps);
                     }
                 }
-                body_network->execute({});
+                body_network->execute_subnet({});
             }
             // update index & execution condition for the next iteration
             if (current_iteration + 1 < trip_count) {
@@ -352,8 +352,8 @@ struct loop_gpu : typed_primitive_impl<loop> {
             }
             ++current_iteration;
         }
-
-        body_network->reset_execution();
+        outer_network.get_engine().flush_network(body_network->get_id());
+//        body_network->reset_execution();
 
         // Concatenate sliced output to the outer network
         for (size_t i = 0; i < concatenated_output_mem_mappings.size(); ++i) {

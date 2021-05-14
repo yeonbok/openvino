@@ -483,6 +483,115 @@ void network_impl::add_to_exec_order(const primitive_id& id) {
     _exec_order.push_back(inst);
 }
 
+void network_impl::execute_subnet(const std::vector<refcounted_obj_ptr<event_impl>>& events) {
+    OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "NetworkImpl::Execute");
+    // Wait for previous execution completion
+    reset_execution(false);
+
+    // collect all shared media surfaces and enqueue acquire/relese
+    auto check_and_add_to_return_vec = [](std::shared_ptr<primitive_inst> prim, std::vector<cl_mem>& return_vec) {
+        const auto& mem = prim->output_memory().get_internal_params();
+        if (mem.mem_type == shared_mem_type::shared_mem_vasurface ||
+            mem.mem_type == shared_mem_type::shared_mem_dxbuffer) {
+            return_vec.push_back(static_cast<cl_mem>(mem.mem));
+        }
+    };
+    std::vector<cl_mem> surfaces;
+
+    for (auto& inst : _inputs) {
+        check_and_add_to_return_vec(inst, surfaces);
+    }
+
+    for (auto& inst : _outputs) {
+        check_and_add_to_return_vec(inst, surfaces);
+    }
+ //   cl_int err;
+//    cl::SharedSurfLock lock(get_engine().get_context()->queue(get_id()).get(), surfaces, &err);
+
+    set_arguments();
+
+    for (auto& inst : _exec_order) {
+#ifdef DEBUG_DUMP_PATH
+        auto& node = _program->get_node(inst->id());
+
+        std::string layer_name = node.id();
+#if DUMP_VERBOSE
+        std::cerr << get_primitive_info(inst->id()) << std::endl;
+#endif
+#if DUMP_SINGLE_LAYER
+        if (layer_name == DUMP_LAYER_NAME) {
+#endif
+            std::cerr << "Dump " << layer_name << " layer" << std::endl;
+            for (size_t i = 0; i < get_primitive(inst->id())->dependencies().size(); i++) {
+                log_memory_to_file(get_primitive(inst->id())->dep_memory(i),
+                                   layer_name + "_src_" + std::to_string(i));
+            }
+#if DUMP_SINGLE_LAYER
+        }
+#endif
+#endif
+
+        // If a node has mutable input or it's an output, then the input/output buffers might be changed
+        // So we need to set arguments on each execution.
+        if (inst->has_mutable_input() || inst->is_output()) {
+            inst->set_arguments();
+        }
+        execute_primitive(inst, events);
+#ifdef DEBUG_DUMP_PATH
+#if DUMP_SINGLE_LAYER
+        if (layer_name == DUMP_LAYER_NAME)
+#endif
+        {
+            log_memory_to_file(get_primitive(inst->id())->output_memory(), layer_name + "_dst_0");
+        }
+
+        get_engine().flush_network(get_id());
+#endif
+    }
+
+    for (auto& inst : _program->get_processing_order()) {
+        // Special handling for mutable data. The event should be the same as the user or dependency with highest
+        // processing_num as the mutable_data can be updated when is both user or dependency.
+        if (inst->is_type<mutable_data>()) {
+            decltype(_program->get_processing_order().get_processing_number(inst)) proc_num = 0;
+            for (auto& user : inst->get_users()) {
+                auto user_proc_num = _program->get_processing_order().get_processing_number(user);
+                if (user_proc_num > proc_num) {
+                    _events[inst->id()] = _events[user->id()];
+                    proc_num = user_proc_num;
+                }
+            }
+
+            if (!inst->get_dependencies().empty()) {
+                for (auto& dep : inst->get_dependencies()) {
+                    auto dep_proc_num = _program->get_processing_order().get_processing_number(dep);
+                    if (dep_proc_num > proc_num) {
+                        _events[inst->id()] = _events[dep->id()];
+                        proc_num = dep_proc_num;
+                    }
+                }
+            }
+        }
+    }
+
+    for (auto& dout : _data_outputs) {  // data primitives are not executed so if they are marked as output we need to add
+                                        // them valid events manually
+        _events[dout->id()] = get_engine().create_user_event(get_id(), true);
+    }
+
+    for (auto& prim : _primitives) {
+        prim.second->reset_output_change();
+    }
+
+    get_engine().get_context()->reset_events(get_id());
+
+    // Using output of previouse network as input to another one may cause hazard (in OOOQ mode) if user would not
+    // provide proper event to execution. Flushing pipeline should prevent this kind of issues.
+    // In scenarios with a big number of very small networks it can provide performance drop.
+//    get_engine().flush_network(get_id());
+}
+
+
 void network_impl::execute(const std::vector<refcounted_obj_ptr<event_impl>>& events) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "NetworkImpl::Execute");
     // Wait for previous execution completion

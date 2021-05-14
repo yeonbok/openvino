@@ -63,6 +63,7 @@ public:
     const program_impl::primitives_info& get_primitives_info() const;
     const program_impl::graph_optimizer_info& get_optimizer_passes_info() const;
     void execute(const std::vector<event_impl::ptr>& events);
+    void execute_subnet(const std::vector<event_impl::ptr>& events);
     void validate_primitives();
     void set_arguments();
     // Implementation specific calls
