@@ -350,6 +350,8 @@ struct loop_gpu : typed_primitive_impl<loop> {
             if (node.is_execution_condition_used()) {
                 execution_condition = read_scalar_value(*execution_condition_mem);
             }
+            if (current_iteration > 4)
+                outer_network.get_engine().flush_network(body_network->get_id());
             ++current_iteration;
         }
         outer_network.get_engine().flush_network(body_network->get_id());
