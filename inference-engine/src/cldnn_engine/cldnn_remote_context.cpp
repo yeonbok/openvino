@@ -268,7 +268,8 @@ CLDNNExecutionContextImpl::CLDNNExecutionContextImpl(const std::shared_ptr<IInfe
                 m_config.memory_pool_on,
                 m_config.throughput_streams,
                 m_config.kernels_cache_dir,
-                m_config.n_threads));
+                m_config.n_threads,
+                m_config.enable_loop_unrolling));
     }
 }
 
