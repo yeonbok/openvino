@@ -78,5 +78,13 @@ DECLARE_CLDNN_CONFIG_KEY(NV12_TWO_INPUTS);
 */
 DECLARE_CLDNN_CONFIG_KEY(MAX_NUM_THREADS);
 
+/**
+* @brief This key enable loop unrolling for recurrent layers such as LSTM, GRU and TensorIterator.
+* By default the graph optimization unrolls TensorIterator layers.
+* If the ENABLE_LOOP_UNROLLING is turn off, TensorIterator body is separated to sub-program instead of loop unrolling,
+* compile it once, and then execute it with proper inputs and outputs for each iteration.
+*/
+DECLARE_CLDNN_CONFIG_KEY(ENABLE_LOOP_UNROLLING);
+
 }  // namespace CLDNNConfigParams
 }  // namespace InferenceEngine
