@@ -75,6 +75,7 @@ public:
                                    cl::NDRange const& local,
                                    std::vector<event_impl::ptr> const& deps);
     event_impl::ptr enqueue_marker(std::vector<event_impl::ptr> const& deps);
+    event_impl::ptr ocl_event(const cl::Event& ocl_event);
     event_impl::ptr group_events(std::vector<event_impl::ptr> const& deps);
     void reset_events();
     event_impl::ptr create_user_event(bool set);

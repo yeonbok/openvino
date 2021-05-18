@@ -167,6 +167,10 @@ event_impl::ptr gpu_toolkit::enqueue_marker(uint32_t queue_id, std::vector<event
     return get_command_queue(queue_id).enqueue_marker(deps);
 }
 
+event_impl::ptr gpu_toolkit::ocl_event(uint32_t queue_id, const cl::Event& ocl_ev) {
+    return get_command_queue(queue_id).ocl_event(ocl_ev);
+}
+
 event_impl::ptr gpu_toolkit::group_events(uint32_t queue_id, std::vector<event_impl::ptr> const& deps) {
     return get_command_queue(queue_id).group_events(deps);
 }
