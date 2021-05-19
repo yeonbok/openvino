@@ -101,6 +101,9 @@ event_impl::ptr gpu_queue::enqueue_marker(std::vector<event_impl::ptr> const& de
         return _events_pool->get_from_base_pool(context(), _last_barrier_ev, _last_barrier);
     }
 }
+event_impl::ptr gpu_queue::ocl_event(const cl::Event& ocl_event) {
+    return _events_pool->get_from_base_pool(context(), ocl_event, ++_queue_counter);
+}
 
 event_impl::ptr gpu_queue::group_events(std::vector<event_impl::ptr> const& deps) {
     return _events_pool->get_from_group_pool(context(), deps);

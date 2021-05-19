@@ -22,6 +22,10 @@
 
 #include "network_impl.h"
 #include "primitive_inst.h"
+#include "error_handler.h"
+#include "engine_impl.h"
+#include "../src/gpu/ocl_queue_wrapper.h"
+#include "../src/gpu/ocl_base_event.h"
 #include <string>
 #include <memory>
 #include <vector>
@@ -49,7 +53,7 @@ private:
 
     void setup_internal_mutabledata_node(primitive_id md_id, layout md_layout, std::vector<primitive_id> md_inputs_id = {}, uint32_t net_id = 0) const {
         if (body.get_primitives().count(md_id) == 0) {
-            backedge_mem_impls[md_id] = get_program().get_engine().allocate_memory(md_layout, net_id);
+            backedge_mem_impls[md_id] = get_program().get_engine().allocate_memory(md_layout, net_id, false);
             backedge_mem[md_id] = std::make_shared<memory>(backedge_mem_impls[md_id].get());
             backedge_layers[md_id] = std::make_shared<mutable_data>(md_id, md_inputs_id, *backedge_mem[md_id]);
             body.add(backedge_layers[md_id]);
@@ -366,7 +370,9 @@ private:
     };
 
     struct concatenated_memory_mapping {
-        concatenated_memory_mapping(const primitive_id& concat_data_id,
+        concatenated_memory_mapping(
+                             network_impl::ptr body_network,
+                             const primitive_id& concat_data_id,
                              const primitive_id& sliced_data_id,
                              memory_impl::ptr concatenated_mem,
                              std::vector<memory_impl::ptr> sliced_mems,
@@ -380,7 +386,19 @@ private:
             bytes_per_element(static_cast<int>(data_type_traits::size_of(concatenated_mem->get_layout().data_type))),
             bytes_per_iteration(iteration_elements * bytes_per_element),
             bytes_stride(stride * bytes_per_element),
-            bytes_initial_offset(initial_offset * bytes_per_element) {}
+            bytes_initial_offset(initial_offset * bytes_per_element),
+            body_network(body_network) {
+//               assert(concatenated_mem->get_allocation_type() == allocation_type::usm_shared);
+               concatenated_mem_ptr = concatenated_mem->lock();
+               concatenated_mem->unlock();
+
+               sliced_mem_ptrs.reserve(sliced_mems.size());
+               for (const auto& sliced_mem : sliced_mems) {
+//                   assert(sliced_mem->get_allocation_type() == allocation_type::usm_shared);
+                   sliced_mem_ptrs.push_back(sliced_mem->lock());
+                   sliced_mem->unlock();
+               }
+            }
 
         void restore_concatenated_mem() const {
             mem_lock<uint8_t> concat_mem_lock{ concatenated_mem };
@@ -412,6 +430,60 @@ private:
             return sliced_mems.at(iteration);
         }
 
+        std::vector<cl::Event> get_cl_event(const std::vector<event_impl::ptr>& deps) const {
+//            assert(!body_network->get_engine().get_context()->get_configuration().host_out_of_order);
+            std::vector<cl::Event> dep_events;
+            for (auto& dep : deps) {
+                if (auto ocl_base_ev = dynamic_cast<gpu::ocl_base_event*>(dep.get())) {
+                    dep_events.push_back(ocl_base_ev->get());
+                }
+            }
+            // if (!context()->get_configuration().host_out_of_order) {
+            //     for (auto& dep : deps) {
+            //         if (auto ocl_base_ev = dynamic_cast<ocl_base_event*>(dep.get())) {
+            //             dep_events.push_back(ocl_base_ev->get());
+            //         }
+            //     }
+            // } else {
+            //     dep_events_ptr = nullptr;
+
+            //     sync_events(deps);
+            // }
+            return dep_events;
+        }
+
+        event_impl::ptr enqueue_sliced_input_memcpy(int iteration, const std::vector<event_impl::ptr>& events) const {
+            // direction = 0: concatenated memory to sliced memory
+            return enqueue_usm_memcpy(iteration, events, 0);
+        }
+
+        event_impl::ptr enqueue_concatenated_output_memcpy(int iteration, const std::vector<event_impl::ptr>& events) const {
+            // direction = 1: sliced memory to concatenated memory
+            return enqueue_usm_memcpy(iteration, events, 1);
+        }
+
+        event_impl::ptr enqueue_usm_memcpy(int iteration, const std::vector<event_impl::ptr>& events, int direction) const {
+            assert(direction == 0 || direction == 1);
+
+            std::shared_ptr<cldnn::gpu_toolkit> ctx = body_network->get_engine().get_context();
+            const uint32_t queue_id = body_network->get_id();
+            const cl::CommandQueue& cmd_queue = ctx->queue(queue_id);
+
+            const int offset = bytes_initial_offset + bytes_stride * iteration;
+            // concatenated memory to sliced memory (direction = 0)
+            void* src = reinterpret_cast<uint8_t*>(concatenated_mem_ptr) + offset;
+            void* dst = sliced_mem_ptrs.at(iteration);
+            if (direction == 1) {
+                // sliced memory to concatenated memory
+                std::swap(src, dst);
+            }
+            // TODO(eunsoo): blocking should be true?
+            std::vector<cl::Event> dep_events = get_cl_event(events);
+            cl::Event ret_event;
+            cl::usm::enqueue_memcpy(cmd_queue, dst, src, bytes_per_iteration, false, &dep_events, &ret_event);
+            return ctx->ocl_event(queue_id, ret_event);
+        }
+
         primitive_id concat_data_id;
         primitive_id sliced_data_id;
         std::shared_ptr<primitive_inst> concat_data_prim;
@@ -422,6 +494,9 @@ private:
         const int bytes_per_iteration;
         const int bytes_stride;
         const int bytes_initial_offset;
+        network_impl::ptr body_network;
+        void* concatenated_mem_ptr;
+        std::vector<void*> sliced_mem_ptrs;
     };
 
     static layout calc_output_layout(const loop_node& node);

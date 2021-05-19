@@ -94,6 +94,7 @@ public:
                                    cl::NDRange const& local,
                                    std::vector<event_impl::ptr> const& deps);
     event_impl::ptr enqueue_marker(uint32_t queue_id, std::vector<event_impl::ptr> const& deps);
+    event_impl::ptr ocl_event(uint32_t queue_id, const cl::Event& ocl_ev);
     event_impl::ptr group_events(uint32_t queue_id, std::vector<event_impl::ptr> const& deps);
     void reset_events(uint32_t queue_id);
     event_impl::ptr create_user_event(uint32_t queue_id, bool set);
