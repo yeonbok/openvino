@@ -24,6 +24,8 @@
 #include "memory_impl.h"
 #include <vector>
 #include <algorithm>
+#include "cl2_ext.hpp"
+#include "gpu/memory_gpu.h"
 
 namespace cldnn {
 namespace gpu {
@@ -267,9 +269,10 @@ struct loop_gpu : typed_primitive_impl<loop> {
         }
 
         // read initial execution condition from outer network
-        const primitive_id& initial_execution_id = node.get_initial_execution_id();
-        memory_impl& initial_execution_mem = outer_network.get_primitive(initial_execution_id)->output_memory();
-        int64_t execution_condition = read_scalar_value(initial_execution_mem);
+//        const primitive_id& initial_execution_id = node.get_initial_execution_id();
+//        memory_impl& initial_execution_mem = outer_network.get_primitive(initial_execution_id)->output_memory();
+//        int64_t execution_condition = read_scalar_value(initial_execution_mem);
+        int64_t execution_condition = 1;
 
         // shortcut of current_iteration memory in body network (slice of input)
         memory_impl* current_iteration_mem = nullptr;
@@ -309,9 +312,21 @@ struct loop_gpu : typed_primitive_impl<loop> {
 #endif
             body_network->set_input_data(concatenated_input.sliced_data_id, *concatenated_input.get_sliced_mem(0));
         }
+#if 0
         for (const auto& backedge_memory_mapping : instance.backedge_memory_mappings) {
             backedge_memory_mapping.setup_iteration(0);
         }
+#else
+        for (const auto& backedge_mmap : instance.backedge_memory_mappings) {
+            //backedge_mmap.initial_mem => backedge_mmap.from_mems.fron
+            cl::Event ret_event;
+            const auto& engine = outer_network.get_engine();
+            engine.get_context()->queue(body_network->get_id()).enqueueCopyUsm(
+                                dynamic_cast<gpu::gpu_usm&>(*backedge_mmap.initial_mem).get_buffer(),
+                                dynamic_cast<gpu::gpu_usm&>(*backedge_mmap.from_mems.front()).get_buffer(),
+                                backedge_mmap.total_bytes, false, nullptr, &ret_event);
+        }
+#endif
         for (const auto& concat_output_mem_mapping : concatenated_output_mem_mappings) {
             concat_output_mem_mapping.setup_concatenated_output_memory(0);
         }
@@ -326,9 +341,10 @@ struct loop_gpu : typed_primitive_impl<loop> {
                 event_impl::ptr input_memcpy_event = concatenated_input.enqueue_sliced_input_memcpy(current_iteration, {});
 //                loop_carried_dep.push_back(input_memcpy_event);
             }
-            for (const auto& backedge_memory_mapping : instance.backedge_memory_mappings) {
-                backedge_memory_mapping.setup_iteration(current_iteration);
-            }
+
+//            for (const auto& backedge_memory_mapping : instance.backedge_memory_mappings) {
+//                backedge_memory_mapping.setup_iteration(current_iteration);
+//            }
             for (const auto& concat_output_mem_mapping : concatenated_output_mem_mappings) {
                 concat_output_mem_mapping.setup_concatenated_output_memory(current_iteration);
             }
