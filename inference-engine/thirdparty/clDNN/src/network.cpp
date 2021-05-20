@@ -366,7 +366,8 @@ void network_impl::set_input_data(const primitive_id& id, memory_impl& data) {
     auto input = std::static_pointer_cast<input_layout_inst>(primitive_inst);
 
     // Wait for previous execution completion
-    reset_execution(true);
+//    reset_execution(true);
+    reset_execution(false);
     input->set_data(data);
 }
 
