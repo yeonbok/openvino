@@ -78,5 +78,15 @@ DECLARE_CLDNN_CONFIG_KEY(NV12_TWO_INPUTS);
 */
 DECLARE_CLDNN_CONFIG_KEY(MAX_NUM_THREADS);
 
+/**
+* @brief Turning on this key enables to unroll recurrent layers such as TensorIterator or Loop with fixed iteration count.
+* This key is turned on by default. Note that unrolling loops will cause increase of clDNN build time,
+* because the kernels in the body network are created and built for all iterations.
+* Also, disabling unrolling for loops with small iteration count and small body network might perform worse than
+* unrolling, because the overhead for handling subnetworks might be more significant.
+* Thus this config should be set considering the iteration count and body network's size.
+*/
+DECLARE_CLDNN_CONFIG_KEY(ENABLE_LOOP_UNROLLING);
+
 }  // namespace CLDNNConfigParams
 }  // namespace InferenceEngine
