@@ -215,16 +215,23 @@ struct detection_output_cpu : typed_primitive_impl<detection_output> {
                           const float nms_threshold,
                           const int top_k,
                           std::vector<int>& indices) {
+        printf("top_k : %d, # scores: %d\n", top_k, static_cast<int>(scores.size()));
+        std::vector<std::pair<bounding_box, std::pair<float, int>>> box_score_pairs;
+        for (auto s : scores) {
+            box_score_pairs.push_back(std::make_pair(bboxes[s.second], s));
+        }
+
         if (top_k > -1 && static_cast<size_t>(top_k) < static_cast<size_t>(scores.size())) {
-            std::partial_sort(scores.begin(),
-                              scores.begin() + top_k,
-                              scores.end(),
-                              comp_score_descend<int>);
-            scores.resize(top_k);
+            std::partial_sort(box_score_pairs.begin(),
+                              box_score_pairs.begin() + top_k,
+                              box_score_pairs.end(),
+                              comp_box_position<int>);
+            box_score_pairs.resize(top_k);
         } else {
-            std::stable_sort(scores.begin(), scores.end(), comp_score_descend<int>);
+            std::stable_sort(box_score_pairs.begin(), box_score_pairs.end(), comp_box_position<int>);
         }
         // NMS
+#if 0
         for (const auto& s : scores) {
             const int idx = s.second;
             bool keep = true;
@@ -240,12 +247,154 @@ struct detection_output_cpu : typed_primitive_impl<detection_output> {
                 indices.push_back(idx);
             }
         }
+#endif
+        // divide box_score_pairs to 4 parts
+        int size_per_split = box_score_pairs.size() / 4;
+        std::vector<std::pair<bounding_box, std::pair<float, int>>>
+            box_score_pairs_0(box_score_pairs.begin(), box_score_pairs.begin() + size_per_split);
+        std::vector<std::pair<bounding_box, std::pair<float, int>>>
+            box_score_pairs_1(box_score_pairs.begin() + size_per_split, box_score_pairs.begin() + 2*size_per_split);
+        std::vector<std::pair<bounding_box, std::pair<float, int>>>
+            box_score_pairs_2(box_score_pairs.begin() + 2*size_per_split, box_score_pairs.begin() + 3*size_per_split);
+        std::vector<std::pair<bounding_box, std::pair<float, int>>>
+            box_score_pairs_3(box_score_pairs.begin() + 3*size_per_split, box_score_pairs.end());
+
+        std::vector<int> keep_indices_0;
+        std::vector<int> keep_indices_1;
+        std::vector<int> keep_indices_2;
+        std::vector<int> keep_indices_3;
+        std::vector<int> keep_indices_merge;
+#if 0
+        for (const auto& b : box_score_pairs) {
+            const int idx = b.second.second;
+            bool keep = true;
+            for (int k = 0; k < static_cast<int>(indices.size()); ++k) {
+                const int kept_idx = indices[k];
+                float overlap = jaccard_overlap(bboxes[idx], bboxes[kept_idx]);
+                if (overlap > nms_threshold) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (keep) {
+                indices.push_back(idx);
+            }
+        }
+#endif
+        for (const auto& b : box_score_pairs_0) {
+            const int idx = b.second.second;
+            bool keep = true;
+            for (int k = 0; k < static_cast<int>(keep_indices_0.size()); ++k) {
+                const int kept_idx = keep_indices_0[k];
+                float overlap = jaccard_overlap(bboxes[idx], bboxes[kept_idx]);
+                if (overlap > nms_threshold) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (keep) {
+                keep_indices_0.push_back(idx);
+            }
+        }
+        for (const auto& b : box_score_pairs_1) {
+            const int idx = b.second.second;
+            bool keep = true;
+            for (int k = 0; k < static_cast<int>(keep_indices_1.size()); ++k) {
+                const int kept_idx = keep_indices_1[k];
+                float overlap = jaccard_overlap(bboxes[idx], bboxes[kept_idx]);
+                if (overlap > nms_threshold) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (keep) {
+                keep_indices_1.push_back(idx);
+            }
+        }
+        for (const auto& b : box_score_pairs_2) {
+            const int idx = b.second.second;
+            bool keep = true;
+            for (int k = 0; k < static_cast<int>(keep_indices_2.size()); ++k) {
+                const int kept_idx = keep_indices_2[k];
+                float overlap = jaccard_overlap(bboxes[idx], bboxes[kept_idx]);
+                if (overlap > nms_threshold) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (keep) {
+                keep_indices_2.push_back(idx);
+            }
+        }
+        for (const auto& b : box_score_pairs_3) {
+            const int idx = b.second.second;
+            bool keep = true;
+            for (int k = 0; k < static_cast<int>(keep_indices_3.size()); ++k) {
+                const int kept_idx = keep_indices_3[k];
+                float overlap = jaccard_overlap(bboxes[idx], bboxes[kept_idx]);
+                if (overlap > nms_threshold) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (keep) {
+                keep_indices_3.push_back(idx);
+            }
+        }
+
+        std::copy(keep_indices_0.begin(), keep_indices_0.end(), std::back_inserter(keep_indices_merge));
+        std::copy(keep_indices_1.begin(), keep_indices_1.end(), std::back_inserter(keep_indices_merge));
+        std::copy(keep_indices_2.begin(), keep_indices_2.end(), std::back_inserter(keep_indices_merge));
+        std::copy(keep_indices_3.begin(), keep_indices_3.end(), std::back_inserter(keep_indices_merge));
+        printf("keep_indices_0 : %d\n", static_cast<int>(keep_indices_0.size()));
+        printf("keep_indices_1 : %d\n", static_cast<int>(keep_indices_1.size()));
+        printf("keep_indices_2 : %d\n", static_cast<int>(keep_indices_2.size()));
+        printf("keep_indices_3 : %d\n", static_cast<int>(keep_indices_3.size()));
+        printf("keep_indices__merged : %d\n", static_cast<int>(keep_indices_merge.size()));
+
+        for (const auto& b : keep_indices_merge) {
+            const int idx = b;
+            bool keep = true;
+            for (int k = 0; k < static_cast<int>(indices.size()); ++k) {
+                const int kept_idx = indices[k];
+                float overlap = jaccard_overlap(bboxes[idx], bboxes[kept_idx]);
+                if (overlap > nms_threshold) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (keep) {
+                indices.push_back(idx);
+            }
+        }
+        printf("kept indices: ");
+        for (auto i : indices) {
+            printf("%d, ", i);
+        }
+        printf("\n");
     }
 
     template <typename T>
     static bool comp_score_descend(const std::pair<float, T>& pair1,
                                    const std::pair<float, T>& pair2) {
         return pair1.first > pair2.first;
+    }
+
+    template <typename T>
+    static bool comp_box_position(const std::pair<bounding_box, std::pair<float, T>>& pair1,
+                                   const std::pair<bounding_box, std::pair<float, T>>& pair2) {
+#if 0
+        float pair1_x_center = (pair1.first.xmax - pair1.first.xmin) / 2;
+        float pair2_x_center = (pair2.first.xmax - pair2.first.xmin) / 2;
+        if (pair1_x_center < pair2_x_center)
+            return true;
+        else if (pair1_x_center == pair2_x_center)
+            return pair1.second.first > pair2.second.first;
+        else
+            return false;
+#else
+            return pair1.second.first > pair2.second.first;
+#endif
     }
 
     template <typename dtype>
@@ -275,6 +424,8 @@ struct detection_output_cpu : typed_primitive_impl<detection_output> {
 #endif
 #endif
             if (nms_type == CAFFE) {
+                printf("================== CAFFE NMS ==================\n");
+                printf("# classes = %d\n", static_cast<int>(args.num_classes));
                 for (int cls = 0; cls < static_cast<int>(args.num_classes); ++cls) {
                     if (static_cast<int>(cls) == args.background_label_id) {
                         conf_per_image[cls].clear();
