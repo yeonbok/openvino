@@ -13,22 +13,28 @@ std::string ConvolutionLayerTest::getTestCaseName(testing::TestParamInfo<convLay
     InferenceEngine::Layout inLayout, outLayout;
     InferenceEngine::SizeVector inputShapes;
     std::string targetDevice;
-    std::tie(convParams, netPrecision, inPrc, outPrc, inLayout, outLayout, inputShapes, targetDevice) =
+    std::tie(convParams, netPrecision, inPrc, outPrc, inLayout, outLayout, targetDevice) =
         obj.param;
     ngraph::op::PadType padType;
     InferenceEngine::SizeVector kernel, stride, dilation;
     std::vector<ptrdiff_t> padBegin, padEnd;
     size_t convOutChannels;
-    std::tie(kernel, stride, padBegin, padEnd, dilation, convOutChannels, padType) = convParams;
+    size_t convInputChannels;
+    size_t convInputWidth;
+    std::tie(kernel, stride, padBegin, padEnd, dilation, convInputWidth, convInputChannels, convOutChannels, padType) = convParams;
+    inputShapes.push_back(1);
+    inputShapes.push_back(convInputChannels);
+    inputShapes.push_back(convInputWidth);
+    inputShapes.push_back(convInputWidth);
 
     std::ostringstream result;
-    result << "IS=" << CommonTestUtils::vec2str(inputShapes) << "_";
-    result << "K" << CommonTestUtils::vec2str(kernel) << "_";
-    result << "S" << CommonTestUtils::vec2str(stride) << "_";
-    result << "PB" << CommonTestUtils::vec2str(padBegin) << "_";
-    result << "PE" << CommonTestUtils::vec2str(padEnd) << "_";
-    result << "D=" << CommonTestUtils::vec2str(dilation) << "_";
-    result << "O=" << convOutChannels << "_";
+    result << "InShape=" << CommonTestUtils::vec2str(inputShapes) << "_";
+    result << "Kernel=" << CommonTestUtils::vec2str(kernel) << "_";
+    result << "Stride=" << CommonTestUtils::vec2str(stride) << "_";
+    result << "PB=" << CommonTestUtils::vec2str(padBegin) << "_";
+    result << "PE=" << CommonTestUtils::vec2str(padEnd) << "_";
+    result << "Dalation=" << CommonTestUtils::vec2str(dilation) << "_";
+    result << "OutChannels=" << convOutChannels << "_";
     result << "AP=" << padType << "_";
     result << "netPRC=" << netPrecision.name() << "_";
     result << "inPRC=" << inPrc.name() << "_";
@@ -43,18 +49,26 @@ void ConvolutionLayerTest::SetUp() {
     convSpecificParams convParams;
     std::vector<size_t> inputShape;
     auto netPrecision   = InferenceEngine::Precision::UNSPECIFIED;
-    std::tie(convParams, netPrecision, inPrc, outPrc, inLayout, outLayout, inputShape, targetDevice) =
+    std::tie(convParams, netPrecision, inPrc, outPrc, inLayout, outLayout, targetDevice) =
         this->GetParam();
     ngraph::op::PadType padType;
     InferenceEngine::SizeVector kernel, stride, dilation;
     std::vector<ptrdiff_t> padBegin, padEnd;
     size_t convOutChannels;
-    std::tie(kernel, stride, padBegin, padEnd, dilation, convOutChannels, padType) = convParams;
+    size_t convInputChannels;
+    size_t convInputWidth;
+    std::tie(kernel, stride, padBegin, padEnd, dilation, convInputWidth, convInputChannels, convOutChannels, padType) = convParams;
     auto ngPrc = FuncTestUtils::PrecisionUtils::convertIE2nGraphPrc(netPrecision);
+    std::vector<float> filter_weights;
+    inputShape.push_back(1);
+    inputShape.push_back(convInputChannels);
+    inputShape.push_back(convInputWidth);
+    inputShape.push_back(convInputWidth);
+
     auto params = ngraph::builder::makeParams(ngPrc, {inputShape});
     auto paramOuts = ngraph::helpers::convert2OutputVector(
             ngraph::helpers::castOps2Nodes<ngraph::op::Parameter>(params));
-    std::vector<float> filter_weights;
+
     if (targetDevice == CommonTestUtils::DEVICE_GNA) {
         auto filter_size = std::accumulate(std::begin(kernel), std::end(kernel), 1, std::multiplies<size_t>());
         filter_weights = CommonTestUtils::generate_float_numbers(convOutChannels * inputShape[1] * filter_size,

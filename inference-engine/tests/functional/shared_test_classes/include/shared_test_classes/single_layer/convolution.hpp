@@ -22,6 +22,8 @@ typedef std::tuple<
         std::vector<ptrdiff_t>,         // Pad begin
         std::vector<ptrdiff_t>,         // Pad end
         InferenceEngine::SizeVector,    // Dilation
+        size_t,                         // Num input channels
+        size_t,                         // Num inputWidth
         size_t,                         // Num out channels
         ngraph::op::PadType             // Padding type
 > convSpecificParams;
@@ -32,7 +34,6 @@ typedef std::tuple<
         InferenceEngine::Precision,     // Output precision
         InferenceEngine::Layout,        // Input layout
         InferenceEngine::Layout,        // Output layout
-        InferenceEngine::SizeVector,    // Input shapes
         LayerTestsUtils::TargetDevice   // Device name
 > convLayerTestParamsSet;
 

@@ -13,6 +13,7 @@
 #include <vector>
 #include <tuple>
 #include <set>
+#include <iostream>
 
 // #define ENABLE_ENV
 // #define ENABLE_ENV_PRINT
@@ -62,7 +63,6 @@ kernel_selector_base::kernel_selector_base() {
     AddToForceMap(forceKernels, false, "CL_DNN_DENY_KERNELS");
 #endif
 }
-
 KernelsData kernel_selector_base::GetNaiveBestKernel(const Params& params,
                                                      const optional_params& options,
                                                      KernelType kType) const {
@@ -104,6 +104,7 @@ KernelsData kernel_selector_base::GetNaiveBestKernel(const Params& params,
 
     // TODO: find a better place to located this assignment
     if (kernelsData.size()) {
+        std::cout << kernelName<< std::endl;
         kernelsData[0].kernelName = kernelName;
         kernelsData[0].kernels[0].layerID = params.layerID;
     }
