@@ -831,9 +831,10 @@ format layout_optimizer::get_preferred_format(program_node& node) {
     if (!_format_forcing.empty() && _format_forcing.count(node.id()) != 0) {
         expected = _format_forcing.at(node.id());
     } else if (node.is_type<convolution>()) {
-        auto& conv_node = node.as<convolution>();
-        auto weights_layout = conv_node.weights(0).get_output_layout();
-        expected = get_expected_layout(output_layout, conv_node, weights_layout).format;
+//        auto& conv_node = node.as<convolution>();
+//        auto weights_layout = conv_node.weights(0).get_output_layout();
+//        expected = get_expected_layout(output_layout, conv_node, weights_layout).format;
+        expected = format::b_fs_yx_fsv16;
     } else if (node.is_type<binary_convolution>()) {
         auto& bconv_node = node.as<binary_convolution>();
         auto weights_layout = bconv_node.weights(0).get_output_layout();
