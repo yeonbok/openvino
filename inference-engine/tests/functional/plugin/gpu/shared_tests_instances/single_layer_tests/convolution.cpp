@@ -15,15 +15,14 @@ const std::vector<InferenceEngine::Precision> netPrecisions = {
 };
 
 /* ============= 2D Convolution ============= */
-const std::vector<std::vector<size_t >> kernels = {{3, 3},
-                                                   {5, 5}};
+const std::vector<std::vector<size_t >> kernels = {{3, 3}};
 const std::vector<std::vector<size_t >> strides = {{1, 1}};
-const std::vector<size_t> inputWidths = {{30, 60, 90, 120, 240, 360, 480, 640}};
+const std::vector<size_t> inputWidths = {{128}};
 const std::vector<std::vector<ptrdiff_t>> padBegins = {{0, 0}};
 const std::vector<std::vector<ptrdiff_t>> padEnds = {{0, 0}};
 const std::vector<std::vector<size_t >> dilations = {{1, 1}};
-const std::vector<size_t> numInChannels = {3, 9, 12, 36, 48, 64, 128, 256};
-const std::vector<size_t> numOutChannels = {3, 6, 9, 12, 15};
+const std::vector<size_t> numInChannels = {96};
+const std::vector<size_t> numOutChannels = {3};
 const std::vector<ngraph::op::PadType> padTypes = {
         ngraph::op::PadType::EXPLICIT,
 };

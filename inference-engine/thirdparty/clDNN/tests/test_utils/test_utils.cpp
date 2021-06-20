@@ -351,7 +351,8 @@ namespace tests
 
     const cldnn::engine & get_test_engine()
     {
-        static const cldnn::engine engine;
+        cldnn::engine_configuration cfg {true, false, false, "", "", true, "", ""};
+        static const cldnn::engine engine(cfg);
         return engine;
     }
 
