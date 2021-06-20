@@ -7452,21 +7452,10 @@ TEST_P(convolution_grouped_gpu, base) {
 INSTANTIATE_TEST_SUITE_P(conv_fp16_cases,
                         convolution_general_gpu,
                         ::testing::Values(
-                            // Input X size, Input Y size, Input Z size, Input features, Output features,
-                            // Kernel size X, Kernel size Y, Kernel size Z, Groups number, Stride, Batch,
-                            // Input data format, Implementation name, WithBias
-                            TestParamType_general_convolution_gpu(8, 8, 1, 8, 16, 3, 3, 1, 1, 1, 16, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", true),
-                            TestParamType_general_convolution_gpu(12, 12, 1, 4, 16, 3, 3, 1, 1, 1, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", false),
-                            TestParamType_general_convolution_gpu(11, 11, 1, 96, 48, 3, 3, 1, 1, 1, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", true),
-                            TestParamType_general_convolution_gpu(12, 12, 1, 32, 48, 3, 3, 1, 1, 1, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", false),
-                            TestParamType_general_convolution_gpu(7, 7, 1, 16, 16, 3, 3, 1, 1, 1, 16, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", true),
-                            TestParamType_general_convolution_gpu(7, 8, 1, 20, 64, 4, 4, 1, 1, 1, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", false),
-                            TestParamType_general_convolution_gpu(5, 5, 1, 80, 64, 3, 3, 1, 1, 1, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", false),
-                            TestParamType_general_convolution_gpu(7, 7, 1, 32, 64, 4, 4, 1, 1, 1, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", true),
-                            TestParamType_general_convolution_gpu(5, 5, 1, 32, 64, 3, 3, 1, 1, 1, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", true),
-                            TestParamType_general_convolution_gpu(12, 10, 1, 32, 64, 5, 5, 1, 1, 1, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", false),
-                            TestParamType_general_convolution_gpu(5, 5, 1, 32, 64, 3, 3, 1, 1, 1, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", false),
-                            TestParamType_general_convolution_gpu(5, 5, 1, 64, 64, 3, 3, 1, 1, 2, 2, format::fs_b_yx_fsv32, "convolution_gpu_fs_byx_fsv32", true)
+                            // 9999 are dummy
+                            // in_f = 96, o_f = 3, k_x = 3 && variable input width
+                            TestParamType_general_convolution_gpu(999/*x*/, 999/*y*/, 999/*z*/, 96/*in_f*/, 3/*o_f*/, 3/*k_x*/, 3/*k_y*/, 999/*k_z*/, 1/*g*/, 1/*s*/, 1/*b*/, format::bfyx, "convolution_gpu_bfyx_os_iyx_osv16", false),
+                            TestParamType_general_convolution_gpu(999/*x*/, 999/*y*/, 999/*z*/, 96/*in_f*/, 3/*o_f*/, 3/*k_x*/, 3/*k_y*/, 999/*k_z*/, 1/*g*/, 1/*s*/, 1/*b*/, format::b_fs_yx_fsv16, "convolution_gpu_bfyx_f16", false)
                         ),
                         convolution_general_gpu::PrintToStringParamName);
 
@@ -7479,12 +7468,12 @@ TEST_P(convolution_general_gpu, conv_fp16_cases) {
         return;
     }
 
-    const int input_x = testing::get<0>(GetParam()),
-              input_y = testing::get<1>(GetParam()),
-              input_f = testing::get<3>(GetParam()),
-              output_f = testing::get<4>(GetParam()),
-              filter_x = testing::get<5>(GetParam()),
-              filter_y = testing::get<6>(GetParam()),
+    const int input_x = 128,
+              input_y = 128,
+              input_f = 96,
+              output_f = 3,
+              filter_x = 3,
+              filter_y = 3,
               groups = testing::get<8>(GetParam()),
               stride = testing::get<9>(GetParam()),
               batch_num = testing::get<10>(GetParam()),
@@ -7493,7 +7482,6 @@ TEST_P(convolution_general_gpu, conv_fp16_cases) {
               input_offset_x = (filter_x - 1) / 2;
     auto input_data_format = testing::get<11>(GetParam());
     auto impl_name = testing::get<12>(GetParam());
-    auto with_bias = testing::get<13>(GetParam());
 
     auto input_size = tensor(batch_num, input_f, input_x, input_y);
     auto input_data = generate_random_4d<FLOAT16>(batch_num, input_f, input_y, input_x, -1, 1);
@@ -7556,6 +7544,7 @@ TEST_P(convolution_general_gpu, conv_fp16_cases) {
                                                               -input_offset_y, -input_offset_x,  // input padding
                                                               output_padding, output_padding);   // output_padding
             }
+
         }
 
         topology.add(input_layout("input", input_mem->get_layout()),
@@ -7571,6 +7560,18 @@ TEST_P(convolution_general_gpu, conv_fp16_cases) {
         conv_fsv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
         topology.add(conv_fsv);
     }
+    topology.add(input_layout("input", input_mem.get_layout()),
+                 data("weights_fsv", weights_mem),
+                 reorder("input_fsv", "input", {data_types::f16, input_data_format, input_size}));
+
+    auto conv_fsv = convolution("conv_fsv",
+                                "input_fsv",
+                                {"weights_fsv"},
+                                groups,
+                                {1, 1, stride, stride},
+                                {0, 0, input_offset_x, input_offset_y});
+    conv_fsv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
+    topology.add(conv_fsv);
     build_options options;
     options.set_option(build_option::optimize_data(true));
     implementation_desc conv_impl = {input_data_format, impl_name};
@@ -8637,3 +8638,218 @@ INSTANTIATE_TEST_SUITE_P(DISABLED_CONVOLUTION,
                         convolution_test,
                         ::testing::ValuesIn(convolution_test::generate_all_test_params()),
                         tests::generic_test::custom_param_name_functor());
+
+double get_exectime(const std::map<cldnn::primitive_id, cldnn::network_output>& outputs,
+                            const std::string& primitive_id)
+{
+    using namespace std::chrono;
+    cldnn::event e = outputs.at(primitive_id).get_event();
+    e.wait(); // should ensure execution completion, if not segfault will occur
+    double avg_time = 0.0;
+    auto intervals = e.get_profiling_info();
+    for (auto& q : intervals)
+    {
+        if (q.name.find("executing") == std::string::npos) {
+            continue;
+        }
+        avg_time = duration_cast<duration<double, microseconds::period>>(q.value->value()).count();
+        break;
+    }
+    return avg_time;
+}
+
+void run_conv_tests_fp16(const int input_x, const int input_y, const int input_f, const int output_f, const int filter_x,  const int filter_y, cldnn::format conv_format, std::ofstream& outfile) {
+    const auto& engine = get_test_engine();
+    if (!engine.get_info().supports_fp16)
+    {
+        std::cout << "[ SKIPPED ] The test is skipped (cl_khr_fp16 is not supported)." << std::endl;
+        EXPECT_EQ(1, 1);
+        return;
+    }
+    std::string impl_name;
+    if (conv_format == format::b_fs_yx_fsv16)
+        impl_name = "convolution_gpu_bfyx_f16";
+    else
+        impl_name = "convolution_gpu_bfyx_os_iyx_osv16";
+
+    const auto batch_num = 1;
+    const auto groups = 1;
+    const auto stride = 1;
+    const auto output_padding = 0;
+    const auto input_offset_y = (filter_y - 1) / 2;
+    const auto input_offset_x = (filter_x - 1) / 2;
+
+    auto input_size = tensor(batch_num, input_f, input_x, input_y);
+    auto input_data = generate_random_4d<FLOAT16>(batch_num, input_f, input_y, input_x, -1, 1);
+    auto input_data_bfyx = flatten_4d(format::bfyx, input_data);
+    auto input_mem = memory::allocate(engine, { data_types::f16, conv_format, input_size });
+    set_values(input_mem, input_data_bfyx);
+
+    auto weights_size = tensor(output_f, input_f, filter_y, filter_x, 1);
+
+    auto weights_data = generate_random_4d<FLOAT16>(output_f, input_f, filter_y, filter_x, -1, 1);
+    auto weights_data_bfyx = flatten_4d(format::bfyx, weights_data);
+    auto weights_mem = memory::allocate(engine, {data_types::f16, format::bfyx, weights_size});
+    set_values(weights_mem, weights_data_bfyx);
+
+    // Will be used to store reference values calculated in branches depending on bias
+    topology topology;
+
+    topology.add(input_layout("input", input_mem.get_layout()),
+            data("weights_fsv", weights_mem),
+            reorder("input_fsv", "input", {data_types::f16, conv_format, input_size}));
+
+    auto conv = convolution("conv",
+            "input_fsv",
+            {"weights_fsv"},
+            groups,
+            {1, 1, stride, stride},
+            {0, 0, input_offset_x, input_offset_y});
+    conv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
+    topology.add(conv);
+    build_options options;
+    options.set_option(build_option::optimize_data(true));
+    implementation_desc conv_impl = {conv_format, impl_name};
+    options.set_option(build_option::force_implementations({{"conv", conv_impl}}));
+    network network(engine, topology, options);
+
+    network.set_input_data("input", input_mem);
+    auto r = 10;
+    double exectime = 0.f;
+    for (int i = 0; i < r; ++i) {
+        const auto& outputs = network.execute();
+        exectime += get_exectime(outputs, "conv");
+    }
+    exectime /= r;
+
+    if (impl_name ==  "convolution_gpu_bfyx_f16") {
+        outfile << "fp16, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+    } else {
+        outfile << "fp16, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+    }
+
+    return;
+}
+
+void run_conv_tests_fp32(const int input_x, const int input_y, const int input_f, const int output_f, const int filter_x,  const int filter_y, cldnn::format conv_format, std::ofstream& outfile) {
+    const auto& engine = get_test_engine();
+    if (!engine.get_info().supports_fp16)
+    {
+        std::cout << "[ SKIPPED ] The test is skipped (cl_khr_fp16 is not supported)." << std::endl;
+        EXPECT_EQ(1, 1);
+        return;
+    }
+    std::string impl_name;
+    if (conv_format == format::b_fs_yx_fsv16)
+        impl_name = "convolution_gpu_bfyx_f16";
+    else
+        impl_name = "convolution_gpu_bfyx_os_iyx_osv16";
+
+    const auto batch_num = 1;
+    const auto groups = 1;
+    const auto stride = 1;
+    const auto output_padding = 0;
+    const auto input_offset_y = (filter_y - 1) / 2;
+    const auto input_offset_x = (filter_x - 1) / 2;
+
+    auto input_size = tensor(batch_num, input_f, input_x, input_y);
+    auto input_data = generate_random_4d<float>(batch_num, input_f, input_y, input_x, -1, 1);
+    auto input_data_bfyx = flatten_4d(format::bfyx, input_data);
+    auto input_mem = memory::allocate(engine, { data_types::f32, conv_format, input_size });
+    set_values(input_mem, input_data_bfyx);
+
+    auto weights_size = tensor(output_f, input_f, filter_y, filter_x, 1);
+
+    auto weights_data = generate_random_4d<float>(output_f, input_f, filter_y, filter_x, -1, 1);
+    auto weights_data_bfyx = flatten_4d(format::bfyx, weights_data);
+    auto weights_mem = memory::allocate(engine, {data_types::f32, format::bfyx, weights_size});
+    set_values(weights_mem, weights_data_bfyx);
+
+    // Will be used to store reference values calculated in branches depending on bias
+    topology topology;
+
+    topology.add(input_layout("input", input_mem.get_layout()),
+            data("weights_fsv", weights_mem),
+            reorder("input_fsv", "input", {data_types::f32, conv_format, input_size}));
+
+    auto conv = convolution("conv",
+            "input_fsv",
+            {"weights_fsv"},
+            groups,
+            {1, 1, stride, stride},
+            {0, 0, input_offset_x, input_offset_y});
+    conv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
+    topology.add(conv);
+    build_options options;
+    options.set_option(build_option::optimize_data(true));
+    implementation_desc conv_impl = {conv_format, impl_name};
+    options.set_option(build_option::force_implementations({{"conv", conv_impl}}));
+    network network(engine, topology, options);
+
+    network.set_input_data("input", input_mem);
+    auto r = 10;
+    double exectime = 0.f;
+    for (int i = 0; i < r; ++i) {
+        const auto& outputs = network.execute();
+        exectime += get_exectime(outputs, "conv");
+    }
+    exectime /= r;
+
+    if (impl_name ==  "convolution_gpu_bfyx_f16") {
+        outfile << "fp16, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+    } else {
+        outfile << "fp16, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+    }
+
+    return;
+}
+
+void test_xy_var(const int input_f, const int output_f, const int filter_x) {
+    int min_x = 32;
+    int max_x = 640;
+    int interval = 8;
+    std::string platform = "gen9_";
+    std::cout << "############## For input_f = " << input_f << " & output_f = " << output_f << " & k_w = " << filter_x << std::endl;
+    std::ofstream out_file;
+    std::string filename = platform + "conv_perf_fp16_fsv_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    out_file.open(filename);
+    std::cout << "Profiling for FP16 && FSV " << std::endl;
+    out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
+    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
+        run_conv_tests_fp16(input_x, input_x, input_f, output_f, filter_x, filter_x, format::b_fs_yx_fsv16, out_file);
+    }
+    out_file.close();
+
+    std::cout << "Profiling for FP16 && BFYX " << std::endl;
+    filename = platform + "conv_perf_fp16_bfyx_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    out_file.open(filename);
+    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
+        run_conv_tests_fp16(input_x, input_x, input_f, output_f, filter_x, filter_x, format::bfyx, out_file);
+    }
+    out_file.close();
+
+    std::cout << "Profiling for FP32 && FSV " << std::endl;
+    filename = platform + "conv_perf_fp32_fsv_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    out_file.open(filename);
+    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
+        run_conv_tests_fp32(input_x, input_x, input_f, output_f, filter_x, filter_x, format::b_fs_yx_fsv16, out_file);
+    }
+    out_file.close();
+
+    std::cout << "Profiling for FP32 && BFYX " << std::endl;
+    filename = platform + "conv_perf_fp32_bfyx_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    out_file.open(filename);
+    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
+        run_conv_tests_fp32(input_x, input_x, input_f, output_f, filter_x, filter_x, format::bfyx, out_file);
+    }
+    out_file.close();
+}
+
+TEST(taylor_test, x_var) {
+    int output_f = 3;
+    int filter_x = 3;
+    for (int input_f = 64; input_f <= 128; input_f += 16) {
+        test_xy_var (input_f, output_f, filter_x);
+    }
+}
+

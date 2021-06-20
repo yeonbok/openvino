@@ -276,14 +276,13 @@ void kernels_cache::build_batch(const engine& build_engine, const batch_program&
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "KernelsCache::build_batch");
 
     auto& cl_build_engine = dynamic_cast<const ocl::ocl_engine&>(build_engine);
-
-    bool dump_sources = !_engine.configuration().sources_dumps_dir.empty() || batch.dump_custom_program;
+    bool dump_sources = 1;
 
     std::string err_log;  // accumulated build log from all program's parts (only contains messages from parts which
 
     std::string current_dump_file_name = "";
     if (dump_sources) {
-        current_dump_file_name = _engine.configuration().sources_dumps_dir;
+        current_dump_file_name = "/home/yblee/dump/conv_perf";
         if (!current_dump_file_name.empty() && current_dump_file_name.back() != '/')
             current_dump_file_name += '/';
 

@@ -104,7 +104,7 @@ KernelsData kernel_selector_base::GetNaiveBestKernel(const Params& params,
 
     // TODO: find a better place to located this assignment
     if (kernelsData.size()) {
-        std::cout << kernelName<< std::endl;
+        //std::cout << kernelName<< std::endl;
         kernelsData[0].kernelName = kernelName;
         kernelsData[0].kernels[0].params.layerID = params.layerID;
     }
