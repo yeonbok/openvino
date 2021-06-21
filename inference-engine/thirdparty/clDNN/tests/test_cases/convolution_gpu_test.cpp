@@ -8702,56 +8702,68 @@ void run_conv_tests_fp16(const int input_x, const int input_y, const int input_f
     const auto input_offset_x = (filter_x - 1) / 2;
 
     auto input_size = tensor(batch_num, input_f, input_x, input_y);
-    auto input_data = generate_random_4d<FLOAT16>(batch_num, input_f, input_y, input_x, -1, 1);
-    auto input_data_bfyx = flatten_4d(format::bfyx, input_data);
-    auto input_mem = memory::allocate(engine, { data_types::f16, conv_format, input_size });
-    set_values(input_mem, input_data_bfyx);
-
     auto weights_size = tensor(output_f, input_f, filter_y, filter_x, 1);
 
-    auto weights_data = generate_random_4d<FLOAT16>(output_f, input_f, filter_y, filter_x, -1, 1);
-    auto weights_data_bfyx = flatten_4d(format::bfyx, weights_data);
-    auto weights_mem = memory::allocate(engine, {data_types::f16, format::bfyx, weights_size});
-    set_values(weights_mem, weights_data_bfyx);
+    auto r = 10;
+    double exectime = 0.f;
 
-    // Will be used to store reference values calculated in branches depending on bias
-    topology topology;
-
-    topology.add(input_layout("input", input_mem.get_layout()),
-            data("weights_fsv", weights_mem),
-            reorder("input_fsv", "input", {data_types::f16, conv_format, input_size}));
-
-    auto conv = convolution("conv",
-            "input_fsv",
-            {"weights_fsv"},
-            groups,
-            {1, 1, stride, stride},
-            {0, 0, input_offset_x, input_offset_y});
-    conv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
-    topology.add(conv);
     build_options options;
     options.set_option(build_option::optimize_data(true));
     implementation_desc conv_impl = {conv_format, impl_name};
     options.set_option(build_option::force_implementations({{"conv", conv_impl}}));
-    network network(engine, topology, options);
 
-    network.set_input_data("input", input_mem);
-    auto r = 10;
-    double exectime = 0.f;
     for (int i = 0; i < r; ++i) {
+        auto input_mem = memory::allocate(engine, { data_types::f16, conv_format, input_size });
+        auto weights_mem = memory::allocate(engine, {data_types::f16, format::bfyx, weights_size});
+        topology topology;
+        topology.add(input_layout("input", input_mem.get_layout()),
+                    data("weights", weights_mem),
+                    reorder("input_conv", "input", {data_types::f16, conv_format, input_size}));
+
+        auto conv = convolution("conv",
+                    "input_conv",
+                    {"weights"},
+                    groups,
+                    {1, 1, stride, stride},
+                    {0, 0, input_offset_x, input_offset_y});
+
+        conv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
+        topology.add(conv);
+        network network(engine, topology, options);
+
+        auto input_data = generate_random_4d<FLOAT16>(batch_num, input_f, input_y, input_x, -10, 10);
+        auto input_data_bfyx = flatten_4d(format::bfyx, input_data);
+        set_values(input_mem, input_data_bfyx);
+
+        auto weights_data = generate_random_4d<FLOAT16>(output_f, input_f, filter_y, filter_x, -5, 5);
+        auto weights_data_bfyx = flatten_4d(format::bfyx, weights_data);
+        set_values(weights_mem, weights_data_bfyx);
+
+        network.set_input_data("input", input_mem);
         const auto& outputs = network.execute();
-        exectime += get_exectime(outputs, "conv");
+        double _exectime = get_exectime(outputs, "conv");
+//        std::cout << _exectime << std::endl;
+        exectime += _exectime;
+//        std::cout << "  executed: ";
+//        for (auto e : network.get_executed_primitive_ids()) {
+//            std::cout << e << ", ";
+//        }
+//        std::cout << std::endl;
+
     }
     exectime /= r;
 
-    if (impl_name ==  "convolution_gpu_bfyx_f16") {
+    if (conv_format == format::b_fs_yx_fsv16) {
         outfile << "fp16, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        std::cout << "fp16, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
     } else {
         outfile << "fp16, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        std::cout << "fp16, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
     }
 
     return;
 }
+
 
 void run_conv_tests_fp32(const int input_x, const int input_y, const int input_f, const int output_f, const int filter_x,  const int filter_y, cldnn::format conv_format, std::ofstream& outfile) {
     const auto& engine = get_test_engine();
@@ -8775,52 +8787,63 @@ void run_conv_tests_fp32(const int input_x, const int input_y, const int input_f
     const auto input_offset_x = (filter_x - 1) / 2;
 
     auto input_size = tensor(batch_num, input_f, input_x, input_y);
-    auto input_data = generate_random_4d<float>(batch_num, input_f, input_y, input_x, -1, 1);
-    auto input_data_bfyx = flatten_4d(format::bfyx, input_data);
-    auto input_mem = memory::allocate(engine, { data_types::f32, conv_format, input_size });
-    set_values(input_mem, input_data_bfyx);
-
     auto weights_size = tensor(output_f, input_f, filter_y, filter_x, 1);
 
-    auto weights_data = generate_random_4d<float>(output_f, input_f, filter_y, filter_x, -1, 1);
-    auto weights_data_bfyx = flatten_4d(format::bfyx, weights_data);
-    auto weights_mem = memory::allocate(engine, {data_types::f32, format::bfyx, weights_size});
-    set_values(weights_mem, weights_data_bfyx);
+    auto r = 10;
+    double exectime = 0.f;
 
-    // Will be used to store reference values calculated in branches depending on bias
-    topology topology;
-
-    topology.add(input_layout("input", input_mem.get_layout()),
-            data("weights_fsv", weights_mem),
-            reorder("input_fsv", "input", {data_types::f32, conv_format, input_size}));
-
-    auto conv = convolution("conv",
-            "input_fsv",
-            {"weights_fsv"},
-            groups,
-            {1, 1, stride, stride},
-            {0, 0, input_offset_x, input_offset_y});
-    conv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
-    topology.add(conv);
     build_options options;
     options.set_option(build_option::optimize_data(true));
     implementation_desc conv_impl = {conv_format, impl_name};
     options.set_option(build_option::force_implementations({{"conv", conv_impl}}));
-    network network(engine, topology, options);
 
-    network.set_input_data("input", input_mem);
-    auto r = 10;
-    double exectime = 0.f;
     for (int i = 0; i < r; ++i) {
+        auto input_mem = memory::allocate(engine, { data_types::f32, conv_format, input_size });
+        auto weights_mem = memory::allocate(engine, {data_types::f32, format::bfyx, weights_size});
+        topology topology;
+        topology.add(input_layout("input", input_mem.get_layout()),
+                    data("weights", weights_mem),
+                    reorder("input_conv", "input", {data_types::f32, conv_format, input_size}));
+
+        auto conv = convolution("conv",
+                    "input_conv",
+                    {"weights"},
+                    groups,
+                    {1, 1, stride, stride},
+                    {0, 0, input_offset_x, input_offset_y});
+
+        conv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
+        topology.add(conv);
+        network network(engine, topology, options);
+
+        auto input_data = generate_random_4d<float>(batch_num, input_f, input_y, input_x, -10, 10);
+        auto input_data_bfyx = flatten_4d(format::bfyx, input_data);
+        set_values(input_mem, input_data_bfyx);
+
+        auto weights_data = generate_random_4d<float>(output_f, input_f, filter_y, filter_x, -5, 5);
+        auto weights_data_bfyx = flatten_4d(format::bfyx, weights_data);
+        set_values(weights_mem, weights_data_bfyx);
+
+        network.set_input_data("input", input_mem);
         const auto& outputs = network.execute();
-        exectime += get_exectime(outputs, "conv");
+        double _exectime = get_exectime(outputs, "conv");
+//        std::cout << _exectime << std::endl;
+        exectime += _exectime;
+//        std::cout << "  executed: ";
+//        for (auto e : network.get_executed_primitive_ids()) {
+//            std::cout << e << ", ";
+//        }
+//        std::cout << std::endl;
+
     }
     exectime /= r;
 
-    if (impl_name ==  "convolution_gpu_bfyx_f16") {
-        outfile << "fp16, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+    if (conv_format == format::b_fs_yx_fsv16) {
+        outfile << "fp32, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        std::cout << "fp32, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
     } else {
-        outfile << "fp16, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        outfile << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        std::cout << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
     }
 
     return;
@@ -8830,39 +8853,45 @@ void test_xy_var(const int input_f, const int output_f, const int filter_x) {
     int min_x = 32;
     int max_x = 640;
     int interval = 8;
-    std::string platform = "gen9_";
+    std::string platform = "DG1_";
     std::cout << "############## For input_f = " << input_f << " & output_f = " << output_f << " & k_w = " << filter_x << std::endl;
     std::ofstream out_file;
-    std::string filename = platform + "conv_perf_fp16_fsv_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    std::string filename;
+
+
+    std::cout << "Profiling for FP16 && BFYX " << std::endl;
+    filename = platform + "conv_perf_fp16_bfyx_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
     out_file.open(filename);
+    out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
+    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
+        run_conv_tests_fp16(input_x, input_x, input_f, output_f, filter_x, filter_x, format::bfyx, out_file);
+    }
+    out_file.close();
+
     std::cout << "Profiling for FP16 && FSV " << std::endl;
+    filename = platform + "conv_perf_fp16_fsv_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    out_file.open(filename);
     out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
     for (int input_x = min_x; input_x <= max_x; input_x += interval) {
         run_conv_tests_fp16(input_x, input_x, input_f, output_f, filter_x, filter_x, format::b_fs_yx_fsv16, out_file);
     }
     out_file.close();
 
-    std::cout << "Profiling for FP16 && BFYX " << std::endl;
-    filename = platform + "conv_perf_fp16_bfyx_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    std::cout << "Profiling for FP32 && BFYX " << std::endl;
+    filename = platform + "conv_perf_fp32_bfyx_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
     out_file.open(filename);
+    out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
     for (int input_x = min_x; input_x <= max_x; input_x += interval) {
-        run_conv_tests_fp16(input_x, input_x, input_f, output_f, filter_x, filter_x, format::bfyx, out_file);
+        run_conv_tests_fp32(input_x, input_x, input_f, output_f, filter_x, filter_x, format::bfyx, out_file);
     }
     out_file.close();
 
     std::cout << "Profiling for FP32 && FSV " << std::endl;
     filename = platform + "conv_perf_fp32_fsv_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
     out_file.open(filename);
+    out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
     for (int input_x = min_x; input_x <= max_x; input_x += interval) {
         run_conv_tests_fp32(input_x, input_x, input_f, output_f, filter_x, filter_x, format::b_fs_yx_fsv16, out_file);
-    }
-    out_file.close();
-
-    std::cout << "Profiling for FP32 && BFYX " << std::endl;
-    filename = platform + "conv_perf_fp32_bfyx_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
-    out_file.open(filename);
-    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
-        run_conv_tests_fp32(input_x, input_x, input_f, output_f, filter_x, filter_x, format::bfyx, out_file);
     }
     out_file.close();
 }
