@@ -8712,7 +8712,7 @@ void run_conv_tests_taylor(const int input_x, const int input_y, const int input
     const auto input_offset_y = (filter_y - 1) / 2;
     const auto input_offset_x = (filter_x - 1) / 2;
 
-    int interm_f = 10240;
+    int interm_f = 1024;
     auto input_size = tensor(batch_num, input_f, input_x + (filter_x - 1) * 2, input_y + (filter_y - 1) * 2);
     auto weights_size1 = tensor(interm_f, input_f, filter_y, filter_x, 1);
     auto weights_size2 = tensor(input_f, interm_f, filter_y, filter_x, 1);
@@ -8833,10 +8833,8 @@ void run_conv_tests_taylor(const int input_x, const int input_y, const int input
 }
 
 void test_xy_var(const int input_f, const int output_f, const int filter_x) {
-//    int min_x = 32;
-//    int max_x = 640;
-    int min_x = 128;
-    int max_x = 129;
+    int min_x = 32;
+    int max_x = 640;
     int interval = 8;
     int niter = 1;
     std::string platform = "DG1_";
@@ -8885,8 +8883,7 @@ void test_xy_var(const int input_f, const int output_f, const int filter_x) {
 TEST(taylor_test, x_var) {
     int output_f = 3;
     int filter_x = 3;
-//    for (int input_f = 64; input_f <= 128; input_f += 16) {
-    for (int input_f = 96; input_f <= 99; input_f += 16) {
+    for (int input_f = 64; input_f <= 128; input_f += 16) {
         test_xy_var (input_f, output_f, filter_x);
     }
 }
