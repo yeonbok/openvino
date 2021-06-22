@@ -8747,14 +8747,14 @@ void run_conv_tests_taylor(const int input_x, const int input_y, const int input
                 {"bias1"},
                 groups,
                 {1, 1, stride, stride},
-                {0, 0, input_offset_x, input_offset_y});
+                {0, 0, 0, 0});
 
         auto conv2 = convolution("conv2",
                 "conv1",
                 {"weights2"},
                 groups,
                 {1, 1, stride, stride},
-                {0, 0, input_offset_x, input_offset_y});
+                {0, 0, 0, 0});
 
         auto conv3 = convolution("conv3",
                 "conv2",
@@ -8762,7 +8762,7 @@ void run_conv_tests_taylor(const int input_x, const int input_y, const int input
                 {"bias3"},
                 groups,
                 {1, 1, stride, stride},
-                {0, 0, input_offset_x, input_offset_y});
+                {0, 0, -input_offset_x, -input_offset_y});
 
         conv1.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
         conv2.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
