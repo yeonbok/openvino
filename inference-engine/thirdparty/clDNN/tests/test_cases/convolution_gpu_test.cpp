@@ -8661,25 +8661,54 @@ INSTANTIATE_TEST_CASE_P(DISABLED_CONVOLUTION,
                         ::testing::ValuesIn(convolution_test::generate_all_test_params()),
                         tests::generic_test::custom_param_name_functor());
 
-double get_exectime(const std::map<cldnn::primitive_id, cldnn::network_output>& outputs,
-                            const std::string& primitive_id)
+double get_exectime(const std::map<cldnn::primitive_id, cldnn::network_output>& outputs, cldnn::network& network,
+                    const std::string& output_id, const std::string& target_id = "")
 {
     using namespace std::chrono;
-    cldnn::event e = outputs.at(primitive_id).get_event();
+    cldnn::event e = outputs.at("output").get_event();
+    e.wait(); // should ensure execution completion, if not segfault will occur
+
+#if 0
+    cldnn::event e = outputs.at(output_id).get_event();
     e.wait(); // should ensure execution completion, if not segfault will occur
     double avg_time = 0.0;
     auto intervals = e.get_profiling_info();
     for (auto& q : intervals)
     {
+        avg_time = duration_cast<duration<double, microseconds::period>>(q.value->value()).count();
+        std::cout << q.name << ":" << avg_time << "mcs" << std::endl;
         if (q.name.find("executing") == std::string::npos) {
             continue;
         }
-        avg_time = duration_cast<duration<double, microseconds::period>>(q.value->value()).count();
-        break;
     }
     return avg_time;
-}
+#endif
 
+//    for (auto i : network.get_primitives_info()) {
+//        std::cout << "  " << i.original_id << " " << i.kernel_id << std::endl;
+//    }
+
+ //   std::cout << "==================" << std::endl;
+    for (auto& p : network.get_executed_primitives()) {
+        if (p.first != target_id) continue;
+        double total_time = 0.0;
+        for (auto pi: p.second.get_profiling_info()) {
+            double mcs_time = duration_cast<duration<double, microseconds::period>>(pi.value->value()).count();
+//            if (pi.name.find("submission") == std::string::npos) {
+//                total_time += mcs_time;
+//            }
+//            if (pi.name.find("starting") == std::string::npos) {
+//                total_time += mcs_time;
+//            }
+            if (pi.name.find("executing") != std::string::npos) {
+                total_time +=  mcs_time;
+            }
+        }
+        return total_time;
+    }
+    return 0.f;
+}
+#if 0
 void run_conv_tests_fp16(const int input_x, const int input_y, const int input_f, const int output_f, const int filter_x,  const int filter_y, cldnn::format conv_format, std::ofstream& outfile) {
     const auto& engine = get_test_engine();
     if (!engine.get_info().supports_fp16)
@@ -8718,10 +8747,10 @@ void run_conv_tests_fp16(const int input_x, const int input_y, const int input_f
         topology topology;
         topology.add(input_layout("input", input_mem.get_layout()),
                     data("weights", weights_mem),
-                    reorder("input_conv", "input", {data_types::f16, conv_format, input_size}));
+                    reorder("conv_input_reordered", "input", {data_types::f16, conv_format, input_size}));
 
         auto conv = convolution("conv",
-                    "input_conv",
+                    "conv_input_reordered",
                     {"weights"},
                     groups,
                     {1, 1, stride, stride},
@@ -8763,6 +8792,104 @@ void run_conv_tests_fp16(const int input_x, const int input_y, const int input_f
 
     return;
 }
+#endif
+void run_conv_tests_fp16(const int input_x, const int input_y, const int input_f, const int output_f, const int filter_x,  const int filter_y, cldnn::format conv_format, std::ofstream& outfile) {
+    const auto& engine = get_test_engine();
+    if (!engine.get_info().supports_fp16)
+    {
+        std::cout << "[ SKIPPED ] The test is skipped (cl_khr_fp16 is not supported)." << std::endl;
+        EXPECT_EQ(1, 1);
+        return;
+    }
+    std::string impl_name;
+    if (conv_format == format::b_fs_yx_fsv16)
+        impl_name = "convolution_gpu_bfyx_f16";
+    else
+        impl_name = "convolution_gpu_bfyx_os_iyx_osv16";
+
+    const auto batch_num = 1;
+    const auto groups = 1;
+    const auto stride = 1;
+    const auto output_padding = 0;
+    const auto input_offset_y = (filter_y - 1) / 2;
+    const auto input_offset_x = (filter_x - 1) / 2;
+
+    auto input_size = tensor(batch_num, input_f, input_x, input_y);
+    auto weights_size = tensor(output_f, input_f, filter_y, filter_x, 1);
+
+    auto r = 10;
+    double exectime = 0.f;
+
+    build_options options;
+    options.set_option(build_option::optimize_data(true));
+    implementation_desc conv_impl = {conv_format, impl_name};
+    options.set_option(build_option::force_implementations({{"conv", conv_impl}}));
+
+    for (int i = 0; i < r; ++i) {
+        auto input_mem = memory::allocate(engine, { data_types::f16, conv_format, input_size });
+        auto weights_mem = memory::allocate(engine, {data_types::f16, format::bfyx, weights_size});
+        auto bias_mem = memory::allocate(engine, {data_types::f16, format::bfyx, {1, output_f ,1,1}});
+        topology topology;
+        topology.add(input_layout("input", input_mem.get_layout()),
+                    data("weights", weights_mem),
+                    reorder("input_conv", "input", {data_types::f16, conv_format, input_size}),
+                    data("bias", bias_mem));
+
+        auto conv = convolution("conv",
+                    "input_conv",
+                    {"weights"},
+                    {"bias"},
+                    groups,
+                    {1, 1, stride, stride},
+                    {0, 0, input_offset_x, input_offset_y});
+
+        conv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
+        topology.add(conv);
+        topology.add(activation("tanh", "conv", activation_func::hyperbolic_tan));
+        topology.add(reorder("output", "tanh", format::bfyx, data_types::f16));
+
+        network network(engine, topology, options);
+
+        auto input_data = generate_random_4d<FLOAT16>(batch_num, input_f, input_y, input_x, -10, 10);
+        auto input_data_bfyx = flatten_4d(format::bfyx, input_data);
+        set_values(input_mem, input_data_bfyx);
+
+        auto weights_data = generate_random_4d<FLOAT16>(output_f, input_f, filter_y, filter_x, -5, 5);
+        auto weights_data_bfyx = flatten_4d(format::bfyx, weights_data);
+        set_values(weights_mem, weights_data_bfyx);
+
+        auto bias_data = generate_random_4d<FLOAT16>(batch_num, output_f, 1, 1, -5, 5);
+        auto bias_data_bfyx = flatten_4d(format::bfyx, bias_data);
+        set_values(bias_mem, bias_data_bfyx);
+
+        network.set_input_data("input", input_mem);
+        const auto& outputs = network.execute();
+        double _exectime;
+        if (conv_format == format::bfyx)
+            _exectime = get_exectime(outputs, network, "output", "output");
+        else
+            _exectime = get_exectime(outputs, network, "output", "conv");
+//        std::cout << _exectime << std::endl;
+        exectime += _exectime;
+        std::cout << "  executed: ";
+        for (auto e : network.get_executed_primitive_ids()) {
+            std::cout << e << ", ";
+        }
+        std::cout << std::endl;
+
+    }
+    exectime /= r;
+
+    if (conv_format == format::b_fs_yx_fsv16) {
+        outfile << "fp32, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        std::cout << "fp32, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+    } else {
+        outfile << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        std::cout << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+    }
+
+    return;
+}
 
 
 void run_conv_tests_fp32(const int input_x, const int input_y, const int input_f, const int output_f, const int filter_x,  const int filter_y, cldnn::format conv_format, std::ofstream& outfile) {
@@ -8800,20 +8927,26 @@ void run_conv_tests_fp32(const int input_x, const int input_y, const int input_f
     for (int i = 0; i < r; ++i) {
         auto input_mem = memory::allocate(engine, { data_types::f32, conv_format, input_size });
         auto weights_mem = memory::allocate(engine, {data_types::f32, format::bfyx, weights_size});
+        auto bias_mem = memory::allocate(engine, {data_types::f32, format::bfyx, {1, output_f ,1,1}});
         topology topology;
         topology.add(input_layout("input", input_mem.get_layout()),
                     data("weights", weights_mem),
-                    reorder("input_conv", "input", {data_types::f32, conv_format, input_size}));
+                    reorder("input_conv", "input", {data_types::f32, conv_format, input_size}),
+                    data("bias", bias_mem));
 
         auto conv = convolution("conv",
                     "input_conv",
                     {"weights"},
+                    {"bias"},
                     groups,
                     {1, 1, stride, stride},
                     {0, 0, input_offset_x, input_offset_y});
 
         conv.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
         topology.add(conv);
+        topology.add(activation("tanh", "conv", activation_func::hyperbolic_tan));
+        topology.add(reorder("output", "tanh", format::bfyx, data_types::f32));
+
         network network(engine, topology, options);
 
         auto input_data = generate_random_4d<float>(batch_num, input_f, input_y, input_x, -10, 10);
@@ -8824,16 +8957,24 @@ void run_conv_tests_fp32(const int input_x, const int input_y, const int input_f
         auto weights_data_bfyx = flatten_4d(format::bfyx, weights_data);
         set_values(weights_mem, weights_data_bfyx);
 
+        auto bias_data = generate_random_4d<float>(batch_num, output_f, 1, 1, -5, 5);
+        auto bias_data_bfyx = flatten_4d(format::bfyx, bias_data);
+        set_values(bias_mem, bias_data_bfyx);
+
         network.set_input_data("input", input_mem);
         const auto& outputs = network.execute();
-        double _exectime = get_exectime(outputs, "conv");
+        double _exectime;
+        if (conv_format == format::bfyx)
+            _exectime = get_exectime(outputs, network, "output", "output");
+        else
+            _exectime = get_exectime(outputs, network, "output", "conv");
 //        std::cout << _exectime << std::endl;
         exectime += _exectime;
 //        std::cout << "  executed: ";
 //        for (auto e : network.get_executed_primitive_ids()) {
 //            std::cout << e << ", ";
 //        }
-//        std::cout << std::endl;
+        std::cout << std::endl;
 
     }
     exectime /= r;
@@ -8850,14 +8991,15 @@ void run_conv_tests_fp32(const int input_x, const int input_y, const int input_f
 }
 
 void test_xy_var(const int input_f, const int output_f, const int filter_x) {
-    int min_x = 32;
-    int max_x = 640;
+//    int min_x = 32;
+//    int max_x = 640;
+    int min_x = 128;
+    int max_x = 129;
     int interval = 8;
     std::string platform = "DG1_";
     std::cout << "############## For input_f = " << input_f << " & output_f = " << output_f << " & k_w = " << filter_x << std::endl;
     std::ofstream out_file;
     std::string filename;
-
 
     std::cout << "Profiling for FP16 && BFYX " << std::endl;
     filename = platform + "conv_perf_fp16_bfyx_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
@@ -8899,7 +9041,8 @@ void test_xy_var(const int input_f, const int output_f, const int filter_x) {
 TEST(taylor_test, x_var) {
     int output_f = 3;
     int filter_x = 3;
-    for (int input_f = 64; input_f <= 128; input_f += 16) {
+//    for (int input_f = 64; input_f <= 128; input_f += 16) {
+    for (int input_f = 96; input_f <= 128; input_f += 16) {
         test_xy_var (input_f, output_f, filter_x);
     }
 }
