@@ -8687,8 +8687,10 @@ void run_conv_tests_taylor(const int input_x, const int input_y, const int input
     const auto groups = 1;
     const auto stride = 1;
     const auto output_padding = 0;
-    const auto input_offset_y = (filter_y - 1) / 2;
-    const auto input_offset_x = (filter_x - 1) / 2;
+//    const auto input_offset_y = (filter_y - 1) / 2;
+//    const auto input_offset_x = (filter_x - 1) / 2;
+    const auto input_offset_y = 0;
+    const auto input_offset_x = 0;
 
     int interm_f = 10240;
     auto input_size = tensor(batch_num, input_f, input_x + (filter_x - 1) * 2, input_y + (filter_y - 1) * 2);
@@ -8738,9 +8740,11 @@ void run_conv_tests_taylor(const int input_x, const int input_y, const int input
                 "conv2",
                 {"weights3"},
                 {"bias3"},
-                groups,
                 {1, 1, stride, stride},
-                {0, 0, -input_offset_x, -input_offset_y});
+                {0, 0, input_offset_x, input_offset_y},
+                {1, 1, 1, 1},
+                {0, 0, 1, 1},
+                {0, 0, 1, 1});
 
         conv1.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
         conv2.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
