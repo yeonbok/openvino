@@ -8790,9 +8790,9 @@ void run_conv_tests_taylor(const int input_x, const int input_y, const int input
             _exectime = get_exectime(outputs, network, "output", "output");
         else
             _exectime = get_exectime(outputs, network, "output", "conv3");
-        std::cout << _exectime << std::endl;
         exectime += _exectime;
 #ifdef PRINT_EXECUTED
+        std::cout << _exectime << std::endl;
         std::cout << "  executed: ";
         for (auto e : network.get_executed_primitive_ids()) {
             std::cout << e << ", ";
@@ -8807,25 +8807,30 @@ void run_conv_tests_taylor(const int input_x, const int input_y, const int input
         outfile << "fp32, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
         std::cout << "fp32, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
     } else {
-        outfile << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
-        std::cout << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        if (is_fp32) {
+            outfile << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+            std::cout << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        } else {
+            outfile << "fp16, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+            std::cout << "fp16, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        }
     }
 
     return;
 }
 
 void test_xy_var(const int input_f, const int output_f, const int filter_x) {
-    int min_x = 32;
-    int max_x = 640;
-    int interval = 8;
-    int niter = 1;
-    std::string platform = "DG1_";
+    int min_x = 64;
+    int max_x = 256;
+    int interval = 2;
+    int niter = 5;
+
+    std::string platform = "TGL_FIX_";
     std::cout << "############## For input_f = " << input_f << " & output_f = " << output_f << " & k_w = " << filter_x << std::endl;
     std::ofstream out_file;
     std::string filename;
-#if 1
     std::cout << "Profiling for FP16 && BFYX " << std::endl;
-    filename = platform + "conv_perf_fp16_bfyx_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    filename = platform + "conv_perf_fp16_bfyx_INf_" + std::to_string(input_f) + "_OUTf_" + std::to_string(output_f) + "_Kw_" + std::to_string(filter_x) + ".csv";
     out_file.open(filename);
     out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
     for (int input_x = min_x; input_x <= max_x; input_x += interval) {
@@ -8833,6 +8838,7 @@ void test_xy_var(const int input_f, const int output_f, const int filter_x) {
     }
     out_file.close();
 
+#if 0
     std::cout << "Profiling for FP16 && FSV " << std::endl;
     filename = platform + "conv_perf_fp16_fsv_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
     out_file.open(filename);
@@ -8850,7 +8856,7 @@ void test_xy_var(const int input_f, const int output_f, const int filter_x) {
         run_conv_tests_taylor<float>(input_x, input_x, input_f, output_f, filter_x, filter_x, format::bfyx, out_file, niter, true);
     }
     out_file.close();
-#if 1
+#if 0
     std::cout << "Profiling for FP32 && FSV " << std::endl;
     filename = platform + "conv_perf_fp32_fsv_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
     out_file.open(filename);
@@ -8863,10 +8869,11 @@ void test_xy_var(const int input_f, const int output_f, const int filter_x) {
 }
 
 TEST(taylor_test, x_var) {
-    int output_f = 3;
     int filter_x = 3;
     for (int input_f = 64; input_f <= 128; input_f += 16) {
-        test_xy_var (input_f, output_f, filter_x);
+        for (int output_f = 3; output_f < 16; output_f += 5) {
+            test_xy_var (input_f, output_f, filter_x);
+        }
     }
 }
 
