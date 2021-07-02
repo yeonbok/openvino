@@ -286,7 +286,7 @@ std::vector<std::shared_ptr<test_params>> generic_test::generate_generic_test_pa
 }
 
 cldnn::engine_configuration get_test_engine_config() {
-    const bool enable_profiling = false;
+    const bool enable_profiling = true;
     const cldnn::queue_types queue_type = cldnn::queue_types::out_of_order;
     std::string sources_dumps_dir = "";
     priority_mode_types priority_mode = priority_mode_types::disabled;
