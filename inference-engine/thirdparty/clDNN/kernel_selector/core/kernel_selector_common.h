@@ -54,7 +54,10 @@ struct KernelString {
 
     KernelString() : str(""), jit(""), undefs(""), options(""), entry_point(""), batch_compilation(false) {}
 
-    std::string get_hash() { return str + jit + undefs + options + entry_point; }
+    std::string get_str() const { return str + jit + undefs + options + entry_point; }
+    size_t get_hash() const { return std::hash<std::string>()(get_str()); }
+
+//    std::string get_hash() { return str + jit + undefs + options + entry_point; }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
