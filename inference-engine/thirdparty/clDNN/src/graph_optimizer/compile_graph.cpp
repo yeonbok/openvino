@@ -9,19 +9,26 @@
 #include "data_inst.h"
 #include "mutable_data_inst.h"
 #include "program_node.h"
-#include "engine_impl.h"
 #include "cldnn_itt.h"
+#include <iostream>
+#include <cmath>
+#include <iomanip>
 
 using namespace cldnn;
 
 void compile_graph::run(program_impl& p) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "CLDNN::pass::CompileGraph");
+    size_t order_idx = 0;
     for (auto& node : p.get_processing_order()) {
-        if (!node->is_type<internal_primitive>() && !node->is_type<data>()) {
+        node->set_unique_id(std::to_string(order_idx++));
+        if (!node->is_type<data>()) {
             node->get_output_layout();
-            if (!node->is_type<data>() && !(node->is_type<mutable_data>() && node->get_dependencies().empty())) {
-                node->selected_impl = node->type()->choose_impl(p.get_engine(), *node);
-            }
+        }
+    }
+
+    for (auto& node : p.get_processing_order()) {
+        if (!node->is_type<data>() && !(node->is_type<mutable_data>() && node->get_dependencies().empty())) {
+            node->selected_impl = node->type()->choose_impl(p.get_engine(), *node);
         }
     }
 }

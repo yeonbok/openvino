@@ -189,7 +189,7 @@ void kernels_cache::get_program_source(const kernels_code& kernels_source_code, 
         if (one_time_kernel) {
             key += " __ONE_TIME__";
         }
-        std::cout << key << std::endl;
+//        std::cout << key << std::endl;
         auto& current_bucket = program_buckets[key];
         if (current_bucket.empty()) { // new bucket
             const auto& bucket_id = program_buckets.size() - 1;
@@ -233,11 +233,11 @@ void kernels_cache::get_program_source(const kernels_code& kernels_source_code, 
                 full_code += ss;
             b.hash_value = std::hash<std::string>()(full_code);
             all_batches->push_back(b);
-	    std::ofstream dump_file;
-	    dump_file.open("full_code_" + std::to_string(b.bucket_id) + "_part_" + std::to_string(b.batch_id) + ".cl");
-	    if (dump_file.good()) {
-	        dump_file << full_code;
-	    }
+            std::ofstream dump_file;
+            dump_file.open("full_code_" + std::to_string(b.bucket_id) + "_part_" + std::to_string(b.batch_id) + ".cl");
+            if (dump_file.good()) {
+                dump_file << full_code;
+            }
         }
     }
 }
