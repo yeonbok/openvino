@@ -144,6 +144,26 @@ inline int FUNC(get_final_detections)(__global int* buffer2)
     return final_detections;
 }
 
+inline UNIT_TYPE FUNC(jaccardOverlapLocal)(__local UNIT_TYPE* bbox1, __local UNIT_TYPE* bbox2)
+{
+    UNIT_TYPE overlap = 0.0;
+    bool intersecting = (bbox1[0] < bbox2[2]) & (bbox2[0] < bbox1[2]) & (bbox1[1] < bbox2[3]) & (bbox2[1] < bbox1[3]);
+
+    if (intersecting)
+    {
+        const UNIT_TYPE intersect_width = min(bbox1[2], bbox2[2]) - max(bbox1[0], bbox2[0]);
+        const UNIT_TYPE intersect_height = min(bbox1[3], bbox2[3]) - max(bbox1[1], bbox2[1]);
+        if (intersect_width > 0 && intersect_height > 0) {
+            const UNIT_TYPE intersect_size = intersect_width * intersect_height;
+            const UNIT_TYPE bbox1_size = (bbox1[2] - bbox1[0]) * (bbox1[3]- bbox1[1]);
+            const UNIT_TYPE bbox2_size = (bbox2[2] - bbox2[0]) * (bbox2[3]- bbox2[1]);
+            overlap = intersect_size / (bbox1_size + bbox2_size - intersect_size);
+        }
+    }
+    return overlap;
+}
+
+
 inline UNIT_TYPE FUNC(jaccardOverlap)(UNIT_TYPE* bbox1, UNIT_TYPE* bbox2)
 {
     UNIT_TYPE overlap = 0.0;
@@ -541,6 +561,207 @@ KERNEL (detection_output_ref_stage_2_caffe)(
     buffer2[scoresInfoIdx] = selectedBoxNum;
 }
 #endif /* DO_STAGE_2_CAFFE */
+
+#ifdef DO_STAGE_2_CAFFE_PARALLEL
+#define N_BLOCKS 16
+#if 1
+#define BITS_PER_BITVECTOR 8
+#define BITS_ALL_ONES 0xff
+#define BIT_SHIFT 3
+#define BITVECTOR_TYPE uchar
+#else
+#define BITS_PER_BITVECTOR 32
+#define BITS_ALL_ONES 0xffffffff
+#define BIT_SHIFT 5
+#define BITVECTOR_TYPE uint
+#endif
+#define MAX_ITEMS_PER_BLOCK (400 + N_BLOCKS - 1)/N_BLOCKS
+#define MAX_N_BITVECTORS ((MAX_ITEMS_PER_BLOCK + BITS_PER_BITVECTOR - 1)/BITS_PER_BITVECTOR) * N_BLOCKS
+
+KERNEL (detection_output_ref_stage_2_caffe)(
+    __global UNIT_TYPE* input_location,
+    __global UNIT_TYPE* input_prior_box,
+    __global uchar *buffer0,
+    __global uchar *buffer1,
+    volatile __global int *buffer2)
+{
+    const int block_id_w = get_local_id(0);
+    const int block_id_h = get_local_id(1);
+    const int batchId = get_global_id(2) / NUM_CLASSES;
+    const int classId = get_global_id(2) % NUM_CLASSES;
+    __local BITVECTOR_TYPE compare_table[400][MAX_N_BITVECTORS];
+    __local ushort result_vector[400]; // each bit of ushort presents AND of compares within each blocks
+    __local UNIT_TYPE decoded_bboxes[400 * 4];
+
+    buffer2[batchId * NUM_CLASSES_ACC + NUM_CLASSES] = 0;
+    // ------------------- first stage ---------------------------//
+    const int scoresInfoIdx = batchId * NUM_CLASSES_ACC + classId;
+    const int scoresInfoNum = buffer2[scoresInfoIdx];
+    const int items_per_block = (scoresInfoNum + N_BLOCKS - 1)/N_BLOCKS; // actual # of items
+    const int bitvectors_per_block = (items_per_block + BITS_PER_BITVECTOR - 1) >> BIT_SHIFT;
+    const int last_bitvector_effective_bits = (items_per_block - (items_per_block >> BIT_SHIFT) << BIT_SHIFT);
+    const int first_bitvector_of_this_block = bitvectors_per_block * block_id_w;
+
+    __global SCORES_INFO *scoresList = (__global SCORES_INFO*)&buffer0[(batchId * NUM_CLASSES + classId) * BUFFER_STRIDE];
+    __global SCORES_INFO *selectedScoresList = (__global SCORES_INFO*)&buffer1[(batchId * NUM_CLASSES + classId) * BUFFER_STRIDE];
+    const int loc_label = ((SHARE_LOCATION)? 0 : classId);
+
+    if (block_id_w == 0 && block_id_h == 0) {
+
+        for (int h = 0; h < scoresInfoNum; ++h) {
+            decoded_bboxes[h * 4 + 0] = 0xdeadcafe;
+            result_vector[h] = 0xffff;
+            for (int w = 0; w < bitvectors_per_block * N_BLOCKS; ++w) {
+                compare_table[h][w] = BITS_ALL_ONES;
+            }
+        }
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    // process each items in block
+    for (int h_offset = 0; h_offset < items_per_block; ++h_offset) {
+        int orig_h = block_id_h * items_per_block + h_offset;
+        if (orig_h >= scoresInfoNum) break;
+        if (decoded_bboxes[orig_h * 4] == 0xdeadcafe) {
+            UNIT_TYPE bbox_h[4];
+            FUNC_CALL(get_decoded_bbox)(bbox_h, input_location, input_prior_box, scoresList[orig_h].boxId, loc_label, batchId);
+            decoded_bboxes[orig_h * 4] = bbox_h[0];
+            decoded_bboxes[orig_h * 4 + 1] = bbox_h[1];
+            decoded_bboxes[orig_h * 4 + 2] = bbox_h[2];
+            decoded_bboxes[orig_h * 4 + 3] = bbox_h[3];
+        }
+        for (int w_offset = 0; w_offset < items_per_block; ++w_offset) {
+            int orig_w = block_id_w * items_per_block + w_offset;
+            if (orig_w >= scoresInfoNum) break;
+            if (orig_w >= orig_h) break;
+
+            const int bitvector = first_bitvector_of_this_block + (w_offset >> BIT_SHIFT);
+            const int bitpos = w_offset - ((w_offset >> BIT_SHIFT) << BIT_SHIFT);
+            if (decoded_bboxes[orig_w * 4] == 0xdeadcafe) {
+                UNIT_TYPE bbox_w[4];
+                FUNC_CALL(get_decoded_bbox)(bbox_w, input_location, input_prior_box, scoresList[orig_w].boxId, loc_label, batchId);
+                decoded_bboxes[orig_w * 4]     = bbox_w[0];
+                decoded_bboxes[orig_w * 4 + 1] = bbox_w[1];
+                decoded_bboxes[orig_w * 4 + 2] = bbox_w[2];
+                decoded_bboxes[orig_w * 4 + 3] = bbox_w[3];
+            }
+            UNIT_TYPE overlap = FUNC_CALL(jaccardOverlapLocal)(decoded_bboxes + orig_h * 4, decoded_bboxes + orig_w * 4);
+            bool is_overlap = (overlap > NMS_THRESHOLD);
+            // if overlap, set corrseponding bit as 0
+            if (is_overlap) {
+                // set bit @ bitpos to 0
+                compare_table[orig_h][bitvector] = compare_table[orig_h][bitvector] & ~(1 << bitpos);
+//                printf("[b:%d][c:%d], scoresInfoNum = %d orig_h = %d, orig_w = %d, h_box=[%f, %f, %f, %f], w_box=[%f, %f, %f, %f] , is_overlap= %d, compare_table[%d][%d]=%x\n", batchId, classId, scoresInfoNum, orig_h, orig_w,
+//                    decoded_bboxes[orig_h * 4], decoded_bboxes[orig_h*4 + 1], decoded_bboxes[orig_h*4 + 2], decoded_bboxes[orig_h*4 + 3],
+//                    decoded_bboxes[orig_w * 4], decoded_bboxes[orig_w*4 + 1], decoded_bboxes[orig_w*4 + 2], decoded_bboxes[orig_w*4 + 3],
+//                    is_overlap, orig_h, bitvector, compare_table[orig_h][bitvector]
+//                );
+            }
+        }
+    }
+#if 0
+    barrier(CLK_LOCAL_MEM_FENCE);
+    if (block_id_h == 0 && block_id_w == 0 && batchId == 1 && classId == 1) {
+        printf("scoresInfoNum = %d\n", scoresInfoNum);
+        printf("bitvectos_per_block = %d\n", bitvectors_per_block);
+        for (int h = 0; h < scoresInfoNum; h++) {
+            for (int b = 0; b < N_BLOCKS; ++b) {
+                for (int j = 0; j < bitvectors_per_block; j++) {
+                    printf("%x ", compare_table[h][b * bitvectors_per_block + j]);
+                }
+            }
+            printf("\n");
+        }
+    }
+#endif
+    // Reduce
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int h_offset = 0; h_offset < items_per_block; ++h_offset) {
+        int orig_h = block_id_h * items_per_block + h_offset;
+        if (orig_h >= scoresInfoNum) break;
+        for (int bv = 0; bv < bitvectors_per_block; ++bv) {
+            if (bv == bitvectors_per_block - 1) {
+                bool res = 1;
+                for (int b = 0; b < (items_per_block - ((items_per_block >> BIT_SHIFT) << BIT_SHIFT)); ++b) {
+                    res &= (compare_table[orig_h][bv] & (1 << b));
+                }
+                // set 'block_id_h'th bit of result_vector[orig_h] if res is 0
+                if (!res)
+                    result_vector[orig_h] = result_vector[orig_h] & ~(1 << block_id_w);
+            } else {
+                bool res = ((compare_table[orig_h][bv] == BITS_ALL_ONES) << block_id_w);
+                if (!res)
+                    result_vector[orig_h] = result_vector[orig_h] & ~(1 << block_id_w);
+            }
+        }
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+#if 0
+    if (block_id_h == 0 && block_id_w == 0 && batchId == 1 && classId == 1) {
+        for (int h = 0; h < scoresInfoNum; h++) {
+            printf("[%d] %x \n", h, result_vector[h]);
+        }
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+#endif
+
+    // ------------------- second stage ---------------------------//
+    if (block_id_h == 0) {
+        for (int orig_h = 1; orig_h < scoresInfoNum; ++orig_h) {
+            // do for assigned block_id_w
+            bool res_h_block_w = 1;
+            unroll_for (int bv = 0; bv  < bitvectors_per_block; ++bv) {
+                int orig_w_start = items_per_block * block_id_w + bv * BITS_PER_BITVECTOR;
+                if (orig_w_start >= orig_h) break;
+                if (orig_w_start >= scoresInfoNum) break;
+                BITVECTOR_TYPE bit_vector = compare_table[orig_h][first_bitvector_of_this_block + bv];
+                // if ith bit is 0 and the dependent res is also 0, check and reset
+                int effective_bits = (bv == (bitvectors_per_block - 1)) ? last_bitvector_effective_bits : BITS_PER_BITVECTOR;
+                int dep_idx = items_per_block * block_id_w + bv * BITS_PER_BITVECTOR;
+                unroll_for (int b = 0; b < BITS_PER_BITVECTOR; ++b) {
+                    if (b > effective_bits) break;
+                    if (dep_idx >= orig_h) break;
+                    if (!(bit_vector & (1 << b)) && (result_vector[dep_idx] != 0xffff)) {
+                        bit_vector |= 1 << b; // reset
+                    }
+                    dep_idx++;
+                }
+                if (bit_vector != BITS_ALL_ONES) {
+                    res_h_block_w = 0;
+                    break;
+                }
+            }
+            if (!res_h_block_w)
+                result_vector[orig_h] = result_vector[orig_h] & ~(1 << block_id_w);
+        }
+#if 0
+        if (block_id_h == 0 && block_id_w == 0 && batchId == 1 && classId == 1) {
+            for (int h = 0; h < scoresInfoNum; h++) {
+                printf("[%d] %x \n", h, result_vector[h]);
+            }
+        }
+#endif
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    // ------------------- output stage ---------------------------//
+    if (block_id_w == 0 && block_id_h == 0) {
+        int selectedBoxNum = 0;
+        for (int orig_h = 0; orig_h < scoresInfoNum; ++orig_h) {
+            if (result_vector[orig_h] ==0xffff) {
+                SCORES_INFO score_info;
+                score_info.batchId = scoresList[orig_h].batchId;
+                score_info.classId = scoresList[orig_h].classId;
+                score_info.boxId = scoresList[orig_h].boxId;
+                score_info.score = scoresList[orig_h].score;
+                selectedScoresList[selectedBoxNum] = score_info;
+                ++selectedBoxNum;
+            }
+        }
+//        printf("selected %d\n", selectedBoxNum);
+        buffer2[scoresInfoIdx] = selectedBoxNum;
+        atomic_add(&buffer2[batchId * NUM_CLASSES_ACC + NUM_CLASSES], selectedBoxNum);
+    }
+}
+#endif /* DO_STAGE_2_CAFFE_PARALLEL */
 
 #ifdef DO_STAGE_2_CAFFE_OPT
 KERNEL (detection_output_ref_stage_2_caffe)(

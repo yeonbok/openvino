@@ -113,6 +113,10 @@ DetectionOutputKernelRef::DispatchData SetDefault(const detection_output_params&
         if (detectOutParams.decrease_label_id) {
             dispatchData.gws = {input.Batch().v, 1, 1};
             dispatchData.lws = {1, 1, 1};
+        } else if (detectOutParams.top_k > 0) {
+            // NMS_PARALLEL
+            dispatchData.gws = {16, 16, input.Batch().v * num_classes};
+            dispatchData.lws = {16, 16, 1};
         } else {
             dispatchData.gws = {input.Batch().v, num_classes, 1};
             dispatchData.lws = {1, 1, 1};
@@ -217,8 +221,9 @@ KernelsData DetectionOutputKernelRef::GetKernelsData(const Params& params, const
             if (detectOutParams.detectOutParams.decrease_label_id) {
                 cldnnJit.AddConstant(MakeJitConstant("DO_STAGE_" + std::to_string(i) + "_MXNET", "true"));
             } else {
+                printf("detectOutParams.detectOutParams.top_k = %d\n", detectOutParams.detectOutParams.top_k);
                 if (detectOutParams.detectOutParams.top_k > 0) {
-                    cldnnJit.AddConstant(MakeJitConstant("DO_STAGE_" + std::to_string(i) + "_CAFFE_OPT", "true"));
+                    cldnnJit.AddConstant(MakeJitConstant("DO_STAGE_" + std::to_string(i) + "_CAFFE_PARALLEL", "true"));
                 } else {
                     cldnnJit.AddConstant(MakeJitConstant("DO_STAGE_" + std::to_string(i) + "_CAFFE", "true"));
                 }

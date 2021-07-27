@@ -241,10 +241,12 @@ struct detection_output_impl : typed_primitive_impl<detection_output> {
             std::stable_sort(scores.begin(), scores.end(), comp_score_descend<int>);
         }
         // NMS
+        int num_cmps = 0;
         for (const auto& s : scores) {
             const int idx = s.second;
             bool keep = true;
             for (int k = 0; k < static_cast<int>(indices.size()); ++k) {
+                num_cmps++;
                 const int kept_idx = indices[k];
                 float overlap = jaccard_overlap(bboxes[idx], bboxes[kept_idx]);
                 if (overlap > nms_threshold) {
@@ -256,6 +258,7 @@ struct detection_output_impl : typed_primitive_impl<detection_output> {
                 indices.push_back(idx);
             }
         }
+        printf("%d comp happend\n", num_cmps);
     }
 
     template <typename dtype>
