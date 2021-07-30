@@ -31,7 +31,6 @@ struct OpenCL
             static constexpr auto INTEL_PLATFORM_VENDOR = "Intel(R) Corporation";
             const uint32_t device_type = CL_DEVICE_TYPE_GPU;  // only gpu devices
             const uint32_t device_vendor = 0x8086;  // Intel vendor
-
             cl_uint n = 0;
             cl_int err = clGetPlatformIDs(0, NULL, &n);
             checkStatus(err, "clGetPlatformIDs");
@@ -44,12 +43,17 @@ struct OpenCL
             for (auto& id : platform_ids) {
                 cl::Platform platform = cl::Platform(id);
 
+                auto platform_name = platform.getInfo<CL_PLATFORM_NAME>();
+                std::cout << "pltform" << platform_name << std::endl;
                 auto vendor_id = platform.getInfo<CL_PLATFORM_VENDOR>();
                 if (vendor_id != INTEL_PLATFORM_VENDOR)
                     continue;
 
                 std::vector<cl::Device> devices;
                 platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
+                for (auto& d : devices) {
+                    std::cout << "device " << d.getInfo<CL_DEVICE_NAME>() << std::endl;
+                }
                 for (auto& d : devices) {
                     if (d.getInfo<CL_DEVICE_TYPE>() == device_type &&
                         d.getInfo<CL_DEVICE_VENDOR_ID>() == device_vendor) {
@@ -354,6 +358,120 @@ TEST(mem_perf_test, usm_device_copy) {
     enqueue_memcpy(fn, queue,
                             output_buffer_host.get(),
                             output_buffer.get(),
+                            sizeof(float) * img_size * img_size,
+                            true,
+                            nullptr,
+                            nullptr);
+    validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
+}
+
+// measure device_mem input => host_mem output
+TEST(mem_perf_test, usm_from_device_to_host) {
+    auto ocl_instance = std::make_shared<OpenCL>();
+    auto& ctx = ocl_instance->_context;
+    auto& device = ocl_instance->_device;
+    cl::Program program(ctx, kernel_code);
+    checkStatus(program.build({device}, ""), "build");
+    cl::UsmMemory input_buffer(ctx);
+    input_buffer.allocateHost(sizeof(uint8_t) * img_size * img_size);
+    cl::UsmMemory input_buffer_device(ctx);
+    input_buffer_device.allocateDevice(device, sizeof(uint8_t) * img_size * img_size);
+    cl::UsmMemory output_buffer_host(ctx);
+    output_buffer_host.allocateHost(sizeof(float) * img_size * img_size);
+    cl::Kernel kernel1(program, "simple_reorder");
+    cl::KernelIntel kernel(kernel1, true);
+
+    cl::CommandQueue queue(ctx, device);
+
+    using Time = std::chrono::high_resolution_clock;
+    int64_t max_time = 0;
+    double avg_time = 0.0;
+    for (size_t iter = 0; iter < max_iter; iter++) {
+        cl::Event copy_ev;
+        fill_input(static_cast<uint8_t*>(input_buffer.get()), img_size * img_size);
+        cl::usm::enqueue_memcpy(queue,
+                                input_buffer_device.get(),
+                                input_buffer.get(),
+                                sizeof(uint8_t) * img_size * img_size,
+                                false,
+                                nullptr,
+                                &copy_ev);
+        cl::WaitForEvents({copy_ev});
+
+        auto start = Time::now();
+        kernel.setArgUsm(0, input_buffer_device);
+        kernel.setArgUsm(1, output_buffer_host);
+        cl::Event ev;
+        std::vector<cl::Event> dep_ev = {copy_ev};
+        queue.enqueueNDRangeKernel(kernel, cl::NDRange(), cl::NDRange(img_size*img_size), cl::NDRange(16), &dep_ev, &ev);
+        cl::WaitForEvents({ev});
+        auto stop = Time::now();
+        std::chrono::duration<float> fs = stop - start;
+        time_interval d = std::chrono::duration_cast<time_interval>(fs);
+        max_time = std::max(max_time, d.count());
+        avg_time += static_cast<double>(d.count());
+    }
+    avg_time /= max_iter;
+    printTimings(avg_time, max_time);
+
+    validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
+}
+
+// measure device_mem input => device_mem output
+TEST(mem_perf_test, usm_from_device_to_device) {
+    auto ocl_instance = std::make_shared<OpenCL>();
+    auto& ctx = ocl_instance->_context;
+    auto& device = ocl_instance->_device;
+    cl::Program program(ctx, kernel_code);
+    checkStatus(program.build({device}, ""), "build");
+    cl::UsmMemory input_buffer(ctx);
+    input_buffer.allocateHost(sizeof(uint8_t) * img_size * img_size);
+    cl::UsmMemory input_buffer_device(ctx);
+    input_buffer_device.allocateDevice(device, sizeof(uint8_t) * img_size * img_size);
+    cl::UsmMemory output_buffer_device(ctx);
+    output_buffer_device.allocateDevice(device, sizeof(float) * img_size * img_size);
+    cl::UsmMemory output_buffer_host(ctx);
+    output_buffer_host.allocateHost(sizeof(float) * img_size * img_size);
+    cl::Kernel kernel1(program, "simple_reorder");
+    cl::KernelIntel kernel(kernel1, true);
+
+    cl::CommandQueue queue(ctx, device);
+    clEnqueueMemcpyINTEL_fn fn = load_entrypoint<clEnqueueMemcpyINTEL_fn>(queue.get(), "clEnqueueMemcpyINTEL");
+
+    using Time = std::chrono::high_resolution_clock;
+    int64_t max_time = 0;
+    double avg_time = 0.0;
+    for (size_t iter = 0; iter < max_iter; iter++) {
+        cl::Event copy_ev;
+        fill_input(static_cast<uint8_t*>(input_buffer.get()), img_size * img_size);
+        cl::usm::enqueue_memcpy(queue,
+                                input_buffer_device.get(),
+                                input_buffer.get(),
+                                sizeof(uint8_t) * img_size * img_size,
+                                false,
+                                nullptr,
+                                &copy_ev);
+        cl::WaitForEvents({copy_ev});
+
+        auto start = Time::now();
+        kernel.setArgUsm(0, input_buffer_device);
+        kernel.setArgUsm(1, output_buffer_device);
+        cl::Event ev;
+        std::vector<cl::Event> dep_ev = {copy_ev};
+        queue.enqueueNDRangeKernel(kernel, cl::NDRange(), cl::NDRange(img_size*img_size), cl::NDRange(16), &dep_ev, &ev);
+        cl::WaitForEvents({ev});
+        auto stop = Time::now();
+        std::chrono::duration<float> fs = stop - start;
+        time_interval d = std::chrono::duration_cast<time_interval>(fs);
+        max_time = std::max(max_time, d.count());
+        avg_time += static_cast<double>(d.count());
+    }
+    avg_time /= max_iter;
+    printTimings(avg_time, max_time);
+
+    enqueue_memcpy(fn, queue,
+                            output_buffer_host.get(),
+                            output_buffer_device.get(),
                             sizeof(float) * img_size * img_size,
                             true,
                             nullptr,
