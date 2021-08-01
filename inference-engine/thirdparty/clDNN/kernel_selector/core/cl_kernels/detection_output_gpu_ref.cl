@@ -499,7 +499,7 @@ KERNEL (detection_output_ref_stage_2_caffe)(
     const int scoresInfoIdx = batchId * NUM_CLASSES_ACC + classId;
 
     __global SCORES_INFO *scoresList = (__global SCORES_INFO*)&buffer0[(batchId * NUM_CLASSES + classId) * BUFFER_STRIDE];
-    __global SCORES_INFO *selectedScoresList = (__global SCORES_INFO*)&buffer1[(batchId * NUM_CLASSES + classId) * BUFFER_STRIDE];
+//    __global SCORES_INFO *selectedScoresList = (__global SCORES_INFO*)&buffer1[(batchId * NUM_CLASSES + classId) * BUFFER_STRIDE];
 
     const int scoresInfoNum = buffer2[scoresInfoIdx];
 
@@ -510,7 +510,8 @@ KERNEL (detection_output_ref_stage_2_caffe)(
         int idx = scoresList[idx_score].boxId;
         for (uint idx_indice = 0; idx_indice < selectedBoxNum; idx_indice++)
         {
-            int kept_idx = selectedScoresList[idx_indice].boxId;
+//            int kept_idx = selectedScoresList[idx_indice].boxId;
+            int kept_idx = scoresList[idx_indice].boxId;
             UNIT_TYPE decoded_bbox1[4];
             FUNC_CALL(get_decoded_bbox)(decoded_bbox1, input_location, input_prior_box, idx, loc_label, batchId);
             UNIT_TYPE decoded_bbox2[4];
@@ -528,7 +529,8 @@ KERNEL (detection_output_ref_stage_2_caffe)(
             score_info.classId = scoresList[idx_score].classId;
             score_info.boxId = scoresList[idx_score].boxId;
             score_info.score = scoresList[idx_score].score;
-            selectedScoresList[selectedBoxNum] = score_info;
+//            selectedScoresList[selectedBoxNum] = score_info;
+            scoresList[selectedBoxNum] = score_info;
             ++selectedBoxNum;
         }
     }
@@ -551,7 +553,7 @@ KERNEL (detection_output_ref_stage_2_caffe)(
     UNIT_TYPE decoded_bboxes[TOP_K * 4];
 
     __global SCORES_INFO *scoresList = (__global SCORES_INFO*)&buffer0[(batchId * NUM_CLASSES + classId) * BUFFER_STRIDE];
-    __global SCORES_INFO *selectedScoresList = (__global SCORES_INFO*)&buffer1[(batchId * NUM_CLASSES + classId) * BUFFER_STRIDE];
+//    __global SCORES_INFO *selectedScoresList = (__global SCORES_INFO*)&buffer1[(batchId * NUM_CLASSES + classId) * BUFFER_STRIDE];
 
     const int scoresInfoNum = buffer2[scoresInfoIdx];
 
@@ -583,7 +585,8 @@ KERNEL (detection_output_ref_stage_2_caffe)(
             score_info.classId = scoresList[idx_score].classId;
             score_info.boxId = scoresList[idx_score].boxId;
             score_info.score = scoresList[idx_score].score;
-            selectedScoresList[selectedBoxNum] = score_info;
+//            selectedScoresList[selectedBoxNum] = score_info;
+            scoresList[selectedBoxNum] = score_info;
             decoded_bboxes[4 * selectedBoxNum]     = decoded_bbox_cur[0];
             decoded_bboxes[4 * selectedBoxNum + 1] = decoded_bbox_cur[1];
             decoded_bboxes[4 * selectedBoxNum + 2] = decoded_bbox_cur[2];
@@ -665,8 +668,8 @@ KERNEL (detection_output_ref_stage_final_caffe)(
 {
     const int batchId = get_global_id(0);
 
-    __global SCORES_INFO *scoresList = (__global SCORES_INFO*)&buffer0[batchId * NUM_CLASSES * BUFFER_STRIDE];
-    __global SCORES_INFO *selectedScoresList = (__global SCORES_INFO*)&buffer1[0];
+    __global SCORES_INFO *scoresList = (__global SCORES_INFO*)&buffer1[batchId * NUM_CLASSES * BUFFER_STRIDE];
+    __global SCORES_INFO *selectedScoresList = (__global SCORES_INFO*)&buffer0[0];
 
     const int total_det = FUNC_CALL(get_accumulated_detections)(buffer2, batchId);
     buffer2[batchId * NUM_CLASSES_ACC + NUM_CLASSES] = total_det;
