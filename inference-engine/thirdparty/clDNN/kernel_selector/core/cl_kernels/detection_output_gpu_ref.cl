@@ -1,7 +1,6 @@
 // Copyright (C) 2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
-
 #include "include/data_types.cl"
 #include "include/fetch_data.cl"
 #include "include/common.cl"
@@ -12,7 +11,6 @@
 #define NUM_CLASSES_ACC (NUM_CLASSES + 1)
 
 typedef struct {
-    int batchId;
     int classId;
     int boxId;
     UNIT_TYPE score;
@@ -257,7 +255,6 @@ KERNEL (detection_output_ref_stage_0_caffe_opt)(
                     if ((bit_mask[mask_id][c] & bitset) == 0) continue;
                     __global SCORES_INFO *scoresList = (__global SCORES_INFO*)&buffer0[(batchId * NUM_CLASSES + classId + c) * BUFFER_STRIDE];
                     SCORES_INFO score_info;
-                    score_info.batchId = batchId;
                     score_info.classId = classId + c;
                     score_info.boxId = i + bi;
                     score_info.score = score4[c];
@@ -331,7 +328,6 @@ KERNEL (detection_output_ref_stage_0_caffe)(
                     UNIT_TYPE score = FUNC_CALL(get_score)(input_confidence, (i + bi), classId, batchId);
                     __global SCORES_INFO *scoresList = (__global SCORES_INFO*)&buffer0[(batchId * NUM_CLASSES + classId) * BUFFER_STRIDE];
                     SCORES_INFO score_info;
-                    score_info.batchId = batchId;
                     score_info.classId = classId;
                     score_info.boxId = i + bi;
                     score_info.score = score;
@@ -366,7 +362,6 @@ KERNEL (detection_output_ref_stage_0_mxnet)(
     int idx_max_score = FUNC_CALL(get_largest_score)(input_confidence, priorId, batchId);
     UNIT_TYPE score = FUNC_CALL(get_score)(input_confidence, priorId, idx_max_score, batchId);
     SCORES_INFO score_info;
-    score_info.batchId = batchId;
     score_info.classId = idx_max_score;
     score_info.boxId = priorId;
     score_info.score = score;
@@ -530,7 +525,6 @@ KERNEL (detection_output_ref_stage_2_caffe)(
         if (keep)
         {
             SCORES_INFO score_info;
-            score_info.batchId = scoresList[idx_score].batchId;
             score_info.classId = scoresList[idx_score].classId;
             score_info.boxId = scoresList[idx_score].boxId;
             score_info.score = scoresList[idx_score].score;
@@ -586,7 +580,6 @@ KERNEL (detection_output_ref_stage_2_caffe)(
         if (keep)
         {
             SCORES_INFO score_info;
-            score_info.batchId = scoresList[idx_score].batchId;
             score_info.classId = scoresList[idx_score].classId;
             score_info.boxId = scoresList[idx_score].boxId;
             score_info.score = scoresList[idx_score].score;
@@ -649,7 +642,6 @@ KERNEL (detection_output_ref_stage_2_mxnet)(
         if (keep)
         {
             SCORES_INFO score_info;
-            score_info.batchId = scoresList[idx_score].batchId;
             score_info.classId = scoresList[idx_score].classId;
             score_info.boxId = scoresList[idx_score].boxId;
             score_info.score = scoresList[idx_score].score;
@@ -727,12 +719,12 @@ KERNEL (detection_output_ref_stage_final_caffe)(
             score_info = selectedScoresList[scores_offset + idx_score];
             const int idx = startIdx + outputIdx;
 
-            output[idx * OUTPUT_ROW_SIZE] = TO_UNIT_TYPE(score_info.batchId);
+            output[idx * OUTPUT_ROW_SIZE] = TO_UNIT_TYPE(batchId);
             output[idx * OUTPUT_ROW_SIZE + 1] = TO_UNIT_TYPE((DECREASE_LABEL_ID) ? score_info.classId - 1 : score_info.classId);
             output[idx * OUTPUT_ROW_SIZE + 2] = TO_UNIT_TYPE(score_info.score);
             UNIT_TYPE decoded_bbox[4];
             const uint loc_label = ((SHARE_LOCATION)? 0 : score_info.classId);
-            FUNC_CALL(get_decoded_bbox)(decoded_bbox, input_location, input_prior_box, score_info.boxId, loc_label, score_info.batchId);
+            FUNC_CALL(get_decoded_bbox)(decoded_bbox, input_location, input_prior_box, score_info.boxId, loc_label, batchId);
             UNIT_TYPE xmin = decoded_bbox[0];
             UNIT_TYPE ymin = decoded_bbox[1];
             UNIT_TYPE xmax = decoded_bbox[2];
@@ -825,7 +817,7 @@ KERNEL (detection_output_ref_stage_final_mxnet)(
             {
                 SCORES_INFO score_info;
                 score_info = selectedScoresList[scores_offset + idx_score];
-                output[count * OUTPUT_ROW_SIZE] = TO_UNIT_TYPE(score_info.batchId);
+                output[count * OUTPUT_ROW_SIZE] = TO_UNIT_TYPE(idx_image);
                 output[count * OUTPUT_ROW_SIZE + 1] = TO_UNIT_TYPE((DECREASE_LABEL_ID) ? score_info.classId - 1 : score_info.classId);
                 output[count * OUTPUT_ROW_SIZE + 2] = TO_UNIT_TYPE(score_info.score);
                 UNIT_TYPE decoded_bbox[4];
