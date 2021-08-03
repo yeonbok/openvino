@@ -225,8 +225,7 @@ struct detection_output_impl : typed_primitive_impl<detection_output> {
             scoreIndexPairs.erase(scoreIndexPairs.begin());
         }
     }
-
-    static void caffe_nms(const std::vector<bounding_box>& bboxes,
+    static void caffe_nms_orig(const std::vector<bounding_box>& bboxes,
                           std::vector<std::pair<float, int>>& scores,
                           const float nms_threshold,
                           const int top_k,
@@ -241,10 +240,12 @@ struct detection_output_impl : typed_primitive_impl<detection_output> {
             std::stable_sort(scores.begin(), scores.end(), comp_score_descend<int>);
         }
         // NMS
+        int n_cmp = 0;
         for (const auto& s : scores) {
             const int idx = s.second;
             bool keep = true;
             for (int k = 0; k < static_cast<int>(indices.size()); ++k) {
+                n_cmp++;
                 const int kept_idx = indices[k];
                 float overlap = jaccard_overlap(bboxes[idx], bboxes[kept_idx]);
                 if (overlap > nms_threshold) {
@@ -255,6 +256,127 @@ struct detection_output_impl : typed_primitive_impl<detection_output> {
             if (keep) {
                 indices.push_back(idx);
             }
+        }
+        printf("%d compares\n", n_cmp);
+    }
+#if 0
+    static void caffe_nms(const std::vector<bounding_box>& bboxes,
+                          std::vector<std::pair<float, int>>& scores,
+                          const float nms_threshold,
+                          const int top_k,
+                          std::vector<int>& indices) {
+        int n_rois;
+        if (top_k > -1) {
+            if (static_cast<size_t>(top_k) < static_cast<size_t>(scores.size())) {
+                std::partial_sort(scores.begin(),
+                        scores.begin() + top_k,
+                        scores.end(),
+                        comp_score_descend<int>);
+                scores.resize(top_k);
+            } else {
+                std::stable_sort(scores.begin(), scores.end(), comp_score_descend<int>);
+            }
+            n_rois = std::min(top_k, static_cast<int>(scores.size()));
+        } else {
+            printf("no top_k...\n");
+            return caffe_nms_orig(bboxes, scores, nms_threshold, top_k, indices);
+        }
+
+        // NMS
+#if 0
+        for (int i = 0; i < top_k; ++i) {
+            std::cout << "s[" << i << "] = " << scores[i] << std::endl;
+        }
+#endif
+        bool record[n_rois][n_rois];
+        for (int i = 0; i < n_rois; ++i) {
+            for (int j = 0; j < n_rois; ++j) {
+                float overlap = jaccard_overlap(bboxes[scores[i].second], bboxes[scores[j].second]);
+//                if (overlap > nms_threshold && (scores[i] < scores[j])) {
+                if (overlap > nms_threshold && i > j) {
+                    record[i][j] = false;
+                } else {
+                    record[i][j] = true;
+                }
+            }
+        }
+        for (int i = 0; i < n_rois; ++i) {
+            bool keep = true;
+            for (int j = 0; j < n_rois; ++j) {
+                keep &= record[i][j];
+            }
+            if (keep) {
+                indices.push_back(scores[i].second);
+            }
+        }
+    }
+#endif
+    static void caffe_nms(const std::vector<bounding_box>& bboxes,
+                          std::vector<std::pair<float, int>>& scores,
+                          const float nms_threshold,
+                          const int top_k,
+                          std::vector<int>& indices) {
+        int n_rois;
+        return caffe_nms_orig(bboxes, scores, nms_threshold, top_k, indices);
+        if (top_k > -1) {
+            if (static_cast<size_t>(top_k) < static_cast<size_t>(scores.size())) {
+                std::partial_sort(scores.begin(),
+                        scores.begin() + top_k,
+                        scores.end(),
+                        comp_score_descend<int>);
+                scores.resize(top_k);
+            } else {
+                std::stable_sort(scores.begin(), scores.end(), comp_score_descend<int>);
+            }
+            n_rois = std::min(top_k, static_cast<int>(scores.size()));
+        } else {
+            printf("no top_k...\n");
+            return caffe_nms_orig(bboxes, scores, nms_threshold, top_k, indices);
+        }
+
+        // NMS
+        bool record[n_rois][n_rois];
+        std::vector<bool> keep(n_rois);
+        for (int i = 0; i < n_rois; ++i) {
+//            for (int j = 0; j < n_rois; ++j) {
+            for (int j = 0; j < i; ++j) {
+                float overlap = jaccard_overlap(bboxes[scores[i].second], bboxes[scores[j].second]);
+                if (overlap > nms_threshold && i > j) {
+                    record[i][j] = false;
+                } else {
+                    record[i][j] = true;
+                }
+            }
+        }
+        for (int i = 0; i < n_rois; ++i) {
+            keep[i] = true;
+            for (int j = 0; j < i; ++j) {
+                keep[i] = keep[i] & record[i][j];
+            }
+        }
+        // this should be sequential..
+        // but can we optimize this using bit operation to be done quickly?
+        for (int i = 0; i < n_rois; ++i) {
+            if (keep[i])
+                continue;
+            for (int j = 0; j < i; ++j) {
+                if (!keep[j])
+                    record[i][j] = true; // reset
+            }
+            // recalc keep[i]
+            keep[i] = true;
+            for (int j = 0; j < i; ++j) {
+                keep[i] = keep[i] &  record[i][j];
+            }
+        }
+        // get keep table again
+        for (int i = 0; i < n_rois; ++i) {
+            keep[i] = true;
+            for (int j = 0; j < i; ++j) {
+                keep[i] = keep[i] &  record[i][j];
+            }
+            if (keep[i])
+                indices.push_back(scores[i].second);
         }
     }
 
@@ -285,6 +407,7 @@ struct detection_output_impl : typed_primitive_impl<detection_output> {
 #endif
 #endif
             if (nms_type == CAFFE) {
+                printf("%d classes\n", static_cast<int>(args.num_classes));
                 for (int cls = 0; cls < static_cast<int>(args.num_classes); ++cls) {
                     if (static_cast<int>(cls) == args.background_label_id) {
                         conf_per_image[cls].clear();
