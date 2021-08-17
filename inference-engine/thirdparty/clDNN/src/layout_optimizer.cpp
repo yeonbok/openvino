@@ -835,6 +835,7 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node) {
         else
             preferred_impl = impl_types::cpu;
     }
+
     return preferred_impl;
 }
 
