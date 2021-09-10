@@ -60,7 +60,6 @@ endif()
 target_link_libraries("${CLDNN_BUILD__PROJ}" PRIVATE
     OpenCL
     openvino::itt
-    cldnn_kernel_selector
   )
 
 if(WIN32)
