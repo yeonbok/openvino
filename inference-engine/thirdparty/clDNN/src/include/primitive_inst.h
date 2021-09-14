@@ -140,6 +140,8 @@ public:
         return _node.is_output();
     }
 
+    void allocate_memories();
+
 protected:
     primitive_inst(network& network, program_node const& node, bool allocate_memory);
 
@@ -167,6 +169,8 @@ protected:
     memory::ptr _output;
 
     bool _output_changed;  // todo: implement output reuse if neither of inputs has changed
+    bool _allocate_memory;
+
     bool _has_valid_input =
         true;  // by default all primitives has valid inputs, exception is input_layout (see input_layout_inst)
     bool _has_mutable_input = false;

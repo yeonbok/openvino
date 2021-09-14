@@ -127,7 +127,9 @@ void primitive_inst::build_deps() {
 }
 
 primitive_inst::primitive_inst(network& network, program_node const& node, bool allocate_memory)
-    : _network(network), _node(node), _impl(node.get_selected_impl() ? node.get_selected_impl()->clone() : nullptr), _output(), _output_changed(false) {
+    : _network(network), _node(node), _impl(node.get_selected_impl() ? node.get_selected_impl()->clone() : nullptr), _output(),
+      _output_changed(false), _allocate_memory(allocate_memory) {
+#if 0
     if (allocate_memory) {
         // In case when output is mutable_data primitive, and other users dependencies are only used for
         // suychronization, The output memory of such primitive will be fused with mutable_data
@@ -153,6 +155,41 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
         // but kernels always write both outputs to the same memory object which leads to wrong result.
         if (user_count == 1 && mutable_data_count == 1 && !node.is_type<arg_max_min>()) {
             for (auto& user : node.get_users())
+                if (user->is_type<mutable_data>())
+                    _output = user->as<mutable_data>().get_attached_memory_ptr();
+        } else {
+            _output = allocate_output();
+        }
+    }
+#endif
+}
+
+void primitive_inst::allocate_memories() {
+    if (_allocate_memory) {
+        // In case when output is mutable_data primitive, and other users dependencies are only used for
+        // suychronization, The output memory of such primitive will be fused with mutable_data
+        auto users = _node.get_users();
+        auto user_count = users.size();
+        uint32_t mutable_data_count = 0;
+        for (auto& user : users) {
+            // Get mutable_data nodes count from nodes users
+            if (user->is_type<mutable_data>()) {
+                mutable_data_count++;
+            } else if (user->is_type<fused_conv_eltwise>()) {
+                if (!user->as<fused_conv_eltwise>().get_users().empty() &&
+                    (*user->as<fused_conv_eltwise>().get_users().begin())->is_type<mutable_data>()) {
+                    if (user->as<fused_conv_eltwise>().get_dependency(1).id() == _node.id()) {
+                        user_count--;
+                    }
+                }
+            }
+        }
+
+        // TODO: Remove WA for arg_max_min node.
+        // For now it's required to handle the case when only second output of TopK primitive is used in plugin,
+        // but kernels always write both outputs to the same memory object which leads to wrong result.
+        if (user_count == 1 && mutable_data_count == 1 && !_node.is_type<arg_max_min>()) {
+            for (auto& user : _node.get_users())
                 if (user->is_type<mutable_data>())
                     _output = user->as<mutable_data>().get_attached_memory_ptr();
         } else {

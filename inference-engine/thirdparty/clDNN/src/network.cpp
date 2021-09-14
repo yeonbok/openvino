@@ -213,10 +213,12 @@ network::network(program::ptr program, stream::ptr stream, bool is_internal, boo
         net_id = ++id_gen;
     }
 
-    allocate_primitives();
+    //allocate_primitives();
+    create_primitives();
     check_names();
     build_insts_deps();
     build_exec_order();
+    allocate_memories();
     validate_primitives();
     add_default_output_chains();
 }
@@ -465,6 +467,7 @@ memory::ptr network::get_output_memory(const primitive_id& output_id) {
     return get_primitive(output_id)->output_memory_ptr();
 }
 
+#if 0
 void network::allocate_primitives() {
     std::vector<std::shared_ptr<program_node>> nodes_to_allocate{};
     for (auto node : _program->get_processing_order()) {
@@ -478,6 +481,30 @@ void network::allocate_primitives() {
 
     for (auto const& node : nodes_to_allocate) {
         allocate_primitive_instance(*node);
+    }
+}
+#endif
+void network::create_primitives() {
+    std::vector<std::shared_ptr<program_node>> nodes_to_allocate{};
+    for (auto node : _program->get_processing_order()) {
+        nodes_to_allocate.push_back(_program->get_node_ptr(node->id()));
+    }
+    std::sort(nodes_to_allocate.begin(),
+              nodes_to_allocate.end(),
+              [](std::shared_ptr<program_node> const& lhs, std::shared_ptr<program_node> const& rhs) {
+                  return (lhs->get_output_layout().bytes_count() > rhs->get_output_layout().bytes_count());
+              });
+
+    for (auto const& node : nodes_to_allocate) {
+        create_primitive_instance(*node);
+    }
+}
+
+void network::allocate_memories() {
+    for (auto& inst : _primitives) {
+        inst.second->allocate_memories();
+        if (inst.second->get_node().is_constant())
+            transfer_memory_to_device(inst.second, inst.second->get_node());
     }
 }
 
@@ -664,7 +691,8 @@ const program::graph_optimizer_info& network::get_optimizer_passes_info() const 
 
 std::shared_ptr<primitive_inst> network::get_primitive(const primitive_id& id) {
     if (!_primitives.count(id))
-        allocate_primitive_instance(_program->get_node(id));
+        create_primitive_instance(_program->get_node(id));
+        // TODO: memory alloc
 
     return _primitives.at(id);
 }
@@ -698,7 +726,7 @@ void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive
     event::ptr ev = primitive->execute(events);
     _events.insert({id, ev});
 }
-
+#if 0
 void network::allocate_primitive_instance(program_node const& node) {
     if (_primitives.count(node.id()))
         return;
@@ -721,6 +749,31 @@ void network::allocate_primitive_instance(program_node const& node) {
     }
     if (node.is_constant())
         transfer_memory_to_device(inst, node);
+}
+#endif
+void network::create_primitive_instance(program_node const& node) {
+    if (_primitives.count(node.id()))
+        return;
+
+    auto inst = node.type()->create_instance(*this, node);
+    for (auto& dep : node.get_dependencies()) {
+        if (dep->is_type<input_layout>() || dep->is_type<mutable_data>() || dep->can_be_optimized()) {
+            inst->set_mutable_input(true);
+            break;
+        }
+    }
+
+    _primitives[node.id()] = inst;
+    if (node.is_input())
+        _inputs.push_back(inst);
+    if (node.is_output()) {
+        _outputs.push_back(inst);
+        if (node.is_type<data>())
+            _data_outputs.push_back(inst);
+    }
+// TODO
+//    if (node.is_constant())
+//        transfer_memory_to_device(inst, node);
 }
 
 void network::transfer_memory_to_device(std::shared_ptr<primitive_inst> instance, program_node const& node) {

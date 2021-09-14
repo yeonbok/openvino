@@ -164,8 +164,10 @@ public:
     std::vector<std::shared_ptr<primitive_inst>> get_primitives(const std::vector<program_node*>& nodes);
     void execute_primitive(const std::shared_ptr<primitive_inst>& primitive,
                            const std::vector<event::ptr>& events);
-    void allocate_primitives();
+    //void allocate_primitives();
+    void create_primitives();
     void build_insts_deps();
+    void allocate_memories();
     uint32_t get_id() const { return net_id; }
     stream& get_stream() const { return *_stream; }
     stream::ptr get_stream_ptr() const { return _stream; }
@@ -200,7 +202,8 @@ private:
     output_chains_map _output_chains;
 
     void build_exec_order();
-    void allocate_primitive_instance(program_node const& node);
+//    void allocate_primitive_instance(program_node const& node);
+    void create_primitive_instance(program_node const& node);
     void transfer_memory_to_device(std::shared_ptr<primitive_inst> instance, program_node const& node);
     void add_to_exec_order(const primitive_id& id);
     std::shared_ptr<primitive_inst> find_in_internal_networks(const primitive_id& id);
