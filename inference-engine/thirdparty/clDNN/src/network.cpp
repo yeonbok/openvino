@@ -214,12 +214,18 @@ network::network(program::ptr program, stream::ptr stream, bool is_internal, boo
     }
 
     //allocate_primitives();
+    std::cout << "####################### create primitives" << std::endl;
     create_primitives();
     check_names();
+    std::cout << "####################### build_insts_deps" << std::endl;
     build_insts_deps();
+    std::cout << "####################### build_exec_order" << std::endl;
     build_exec_order();
+    std::cout << "####################### allocate memories" << std::endl;
     allocate_memories();
+    std::cout << "####################### validate primtitives" << std::endl;
     validate_primitives();
+    std::cout << "####################### add default output chains" << std::endl;
     add_default_output_chains();
 }
 
@@ -496,15 +502,26 @@ void network::create_primitives() {
               });
 
     for (auto const& node : nodes_to_allocate) {
+        std::cout << "--- created " << node->id() << std::endl;
         create_primitive_instance(*node);
     }
 }
 
 void network::allocate_memories() {
     for (auto& inst : _primitives) {
-        inst.second->allocate_memories();
-        if (inst.second->get_node().is_constant())
-            transfer_memory_to_device(inst.second, inst.second->get_node());
+        std::cout << "network:: allocate_memories  for " << inst.first << std::endl;
+        //inst.second->allocate_memories();
+        const auto& node = inst.second->get_node();
+        node.type()->allocate_memories(*inst.second);
+        if (node.is_input())
+            _inputs.push_back(inst.second);
+        if (node.is_output()) {
+            _outputs.push_back(inst.second);
+            if (node.is_type<data>())
+                _data_outputs.push_back(inst.second);
+        }
+        if (node.is_constant())
+            transfer_memory_to_device(inst.second, node);
     }
 }
 
@@ -690,10 +707,11 @@ const program::graph_optimizer_info& network::get_optimizer_passes_info() const 
 }
 
 std::shared_ptr<primitive_inst> network::get_primitive(const primitive_id& id) {
-    if (!_primitives.count(id))
+    if (!_primitives.count(id)) {
         create_primitive_instance(_program->get_node(id));
+        std::cout << "No primitive !!!!!! " << _program->get_node(id).id() << std::endl;
         // TODO: memory alloc
-
+    }
     return _primitives.at(id);
 }
 
@@ -764,13 +782,13 @@ void network::create_primitive_instance(program_node const& node) {
     }
 
     _primitives[node.id()] = inst;
-    if (node.is_input())
-        _inputs.push_back(inst);
-    if (node.is_output()) {
-        _outputs.push_back(inst);
-        if (node.is_type<data>())
-            _data_outputs.push_back(inst);
-    }
+//    if (node.is_input())
+//        _inputs.push_back(inst);
+//    if (node.is_output()) {
+//        _outputs.push_back(inst);
+//        if (node.is_type<data>())
+//            _data_outputs.push_back(inst);
+//    }
 // TODO
 //    if (node.is_constant())
 //        transfer_memory_to_device(inst, node);

@@ -64,6 +64,7 @@ std::string reshape_inst::to_string(reshape_node const& node) {
 }
 
 reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) : parent(network, node, false) {
+    std::cout << "reshape inst created!!!!!!!!!!!!!!" << std::endl;
     auto input_layout = node.input().get_output_layout();
     auto output_layout = node.get_output_layout();
     CLDNN_ERROR_DATA_TYPES_MISMATCH(node.id(),
@@ -78,16 +79,28 @@ reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) :
                           "input layout count",
                           input_layout.count(),
                           "Output layout of reshape primitive changes size of input buffer");
+}
 
+void reshape_inst::allocate_memories() {
+    allocate_output();
+}
+
+memory::ptr reshape_inst::allocate_output() {
     // if reshape operated in-place, postpone creation of the output until network run,
     // then create new memory object as the reinterpreted output of the previous primitive
-    if (!node.can_be_optimized())
-        _output = allocate_output();
-    else
+    if (!node.can_be_optimized()) {
+        std::cout << "allocate reshape output!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        _output = primitive_inst::allocate_output();
+        return _output;
+    } else {
+        std::cout << " reusing reshape memory!" << std::endl;
         reuse_input();
+        return _output;
+    }
 }
 
 void reshape_inst::on_execute() {
+    std::cout << "reshape => on_execute()" << std::endl;
     if (!node.can_be_optimized())
         return;
 

@@ -26,6 +26,7 @@ struct primitive_type {
                                                       const std::shared_ptr<primitive> prim) const = 0;
     virtual std::shared_ptr<primitive_inst> create_instance(network& network,
                                                             const program_node& node) const = 0;
+    virtual void allocate_memories(primitive_inst& inst) const = 0;
     virtual std::unique_ptr<primitive_impl> choose_impl(const program_node& node) const = 0;
     virtual bool does_an_implementation_exist(const program_node& node) const = 0;
     virtual bool does_possible_implementation_exist(const program_node& node) const = 0;

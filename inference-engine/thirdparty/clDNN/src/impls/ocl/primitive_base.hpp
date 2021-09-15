@@ -132,7 +132,7 @@ protected:
         if (optimized_out(instance) || is_cpu()) {
             return;
         }
-
+        std::cout << instance.get_node().id() << std::endl;
         auto split = get_split();
 
         stream& stream = instance.get_network().get_stream();

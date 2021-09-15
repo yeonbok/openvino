@@ -35,7 +35,11 @@ struct primitive_type_base : primitive_type {
 
         return std::make_shared<typed_primitive_inst<PType>>(network, node);
     }
-
+    void allocate_memories(primitive_inst& inst) const override {
+        //reinterpret_cast<typed_primitive_inst<PType>>(inst).allocate_memories();
+//        static_cast<typed_primitive_inst<PType>>(inst).allocate_memories();
+        reinterpret_cast<typed_primitive_inst<PType>&>(inst).allocate_memories();
+    }
     // TODO: Should we get rid of engine type in impl map? Or we must pass internal build engine to get real ocl type?
     std::unique_ptr<primitive_impl> choose_impl(const cldnn::program_node& node) const override {
         if (node.type() != this)

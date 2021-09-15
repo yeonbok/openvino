@@ -14,6 +14,7 @@
 #include "meta_utils.h"
 #include "program_node.h"
 #include "primitive_type.h"
+#include "cldnn/primitives/reshape.hpp"
 
 #include <memory>
 #include <vector>
@@ -140,7 +141,7 @@ public:
         return _node.is_output();
     }
 
-    void allocate_memories();
+    virtual void allocate_memories();
 
 protected:
     primitive_inst(network& network, program_node const& node, bool allocate_memory);
@@ -175,7 +176,7 @@ protected:
         true;  // by default all primitives has valid inputs, exception is input_layout (see input_layout_inst)
     bool _has_mutable_input = false;
 
-    memory::ptr allocate_output();
+    virtual memory::ptr allocate_output();
     static std::vector<std::shared_ptr<primitive_inst>> build_exec_deps(
         std::vector<std::shared_ptr<primitive_inst>> const& mem_deps);
 
@@ -249,6 +250,10 @@ public:
     typed_primitive_inst_base(network& network, typed_node const& node)
         : typed_primitive_inst_base(network, node, do_allocate_memory(node)) {}
 
+    void allocate_memories() override {
+        return primitive_inst::allocate_memories();
+    }
+
 protected:
     typed_primitive_inst_base(network& network, typed_node const& node, bool allocate_memory)
         : primitive_inst(network, node, allocate_memory), node(_node), argument(*node.get_primitive()) {}
@@ -256,6 +261,11 @@ protected:
     typed_primitive_inst_base(network& network, typed_node const& node, memory::ptr buffer)
         : typed_primitive_inst_base(network, node, false) {
         _output = buffer;
+    }
+
+    memory::ptr allocate_output() override {
+        std::cout << "allocate_output at typed_primitive_inst_base" << std::endl;
+        return primitive_inst::allocate_output();
     }
 
 private:

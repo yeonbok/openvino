@@ -195,10 +195,13 @@ void primitive_inst::allocate_memories() {
         } else {
             _output = allocate_output();
         }
+    } else {
+        std::cout << _node.id() << " is not expected to allocate memory" << std::endl;
     }
 }
 
 memory::ptr primitive_inst::allocate_output() {
+    std::cout << "primitive_inst :: allocate_output called for " << _node.id() << std::endl;
     auto layout = _node.get_output_layout();
     auto& engine = get_network().get_engine();
 

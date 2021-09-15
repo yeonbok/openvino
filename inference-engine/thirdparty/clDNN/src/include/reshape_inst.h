@@ -47,10 +47,11 @@ public:
 
 public:
     typed_primitive_inst(network& network, reshape_node const& node);
+    void allocate_memories() override;
 
 private:
+    memory::ptr allocate_output() override;
     void on_execute() override;
-
     void reuse_input();
 };
 
