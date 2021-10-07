@@ -971,6 +971,27 @@ static float GetGOPS(cldnn::device_info info, cldnn::data_types dt) {
 }
 
 static unsigned int GetMaxBatchSize(const InferenceEngine::CNNNetwork* network) {
+    const auto& function = network->getFunction();
+    auto ops = function->get_ordered_ops();
+
+    std::cout << ops.size() << std::endl;
+//    const auto &data_type = data.get_element_type();$
+//    const auto &data_shape = data.get_shape();$
+//    const auto &data_shape_size = ngraph::shape_size(data_shape);$
+//    auto ngPrc = data.get_element_type();
+//    size_t C   = data.get_shape().at(1);
+    int32_t max_batch = -1;
+    for (auto&& node : ops) {
+        int32_t max_host_batch, max_device_batch, host_weight_tensor_sum, host_data_tensor_sum,
+            device_weight_tensor_sum, device_data_tensor_sum;
+        max_host_batch = max_device_batch = -1;
+        host_weight_tensor_sum = host_data_tensor_sum = 0;
+        device_weight_tensor_sum = device_data_tensor_sum = 0;
+//        const auto &data_type = node->get_element_type();
+        for (size_t i = 0; i < node->get_input_size(); ++i) {
+            std::cout << ov::shape_size(node->get_input_shape(i)) * node->get_input_element_type(i).size() << std::endl;
+        }
+    }
     return 9999;
 }
 
