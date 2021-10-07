@@ -970,12 +970,15 @@ static float GetGOPS(cldnn::device_info info, cldnn::data_types dt) {
     return freqGHz * opsPerComputeBlock * computeBlockIPC * numEUs;
 }
 
+static unsigned int GetMaxBatchSize(const InferenceEngine::CNNNetwork* network) {
+    return 9999;
+}
+
 Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::string, Parameter>& options) const {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNNPlugin, "clDNNEngine::GetMetric");
     auto device_id = GetConfig(CONFIG_KEY(DEVICE_ID), {});
     if (options.find(CONFIG_KEY(DEVICE_ID)) != options.end())
         device_id = options.at(CONFIG_KEY(DEVICE_ID)).as<std::string>();
-
     auto iter = device_map.find(device_id);
     auto device_info = iter != device_map.end() ?
         iter->second->get_info() :
@@ -992,10 +995,10 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         metrics.push_back(METRIC_KEY(RANGE_FOR_STREAMS));
         metrics.push_back(METRIC_KEY(DEVICE_TYPE));
         metrics.push_back(METRIC_KEY(DEVICE_GOPS));
+        metrics.push_back(METRIC_KEY(MAX_BATCH_SIZE));
         metrics.push_back(GPU_METRIC_KEY(DEVICE_TOTAL_MEM_SIZE));
         metrics.push_back(GPU_METRIC_KEY(UARCH_VERSION));
         metrics.push_back(GPU_METRIC_KEY(EXECUTION_UNITS_COUNT));
-
         IE_SET_METRIC_RETURN(SUPPORTED_METRICS, metrics);
     } else if (name == METRIC_KEY(AVAILABLE_DEVICES)) {
         std::vector<std::string> availableDevices = { };
@@ -1055,11 +1058,17 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
     } else if (name == METRIC_KEY(RANGE_FOR_STREAMS)) {
         std::tuple<unsigned int, unsigned int> range = std::make_tuple(1, 2);
         IE_SET_METRIC_RETURN(RANGE_FOR_STREAMS, range);
+    } else if (name == METRIC_KEY(MAX_BATCH_SIZE)) {
+        if (options.find("CNN_NETWORK") == options.end()) {
+            throw std::runtime_error("No CNN_NETWORK option given!");
+        }
+        auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();
+        std::cout << network->getName() << std::endl;
+        IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, GetMaxBatchSize(network));
     } else {
         IE_THROW() << "Unsupported metric key " << name;
     }
 }
-
 };  // namespace CLDNNPlugin
 
 static const Version version = { {2, 1}, CI_BUILD_NUMBER, "clDNNPlugin" };
