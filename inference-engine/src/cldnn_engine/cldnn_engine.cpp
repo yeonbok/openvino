@@ -595,13 +595,14 @@ static unsigned int GetMaxBatchSize(const InferenceEngine::CNNNetwork* network, 
             return false;
     };
     int32_t max_batch = INT_MAX;
+    int64_t const_tensor_sum, data_tensor_sum;
+    const_tensor_sum = data_tensor_sum = 0;
+
     for (auto&& node : ops) {
-        int32_t const_tensor_sum, data_tensor_sum;
-        const_tensor_sum = data_tensor_sum = 0;
         std::cout << "===========================================" << std::endl;
         std::cout << node->get_friendly_name() << std::endl;
         for (size_t i = 0; i < node->get_input_size(); ++i) {
-            auto tensor_size = ov::shape_size(node->get_input_shape(i)) * node->get_input_element_type(i).size() * 1.1;
+            auto tensor_size = ov::shape_size(node->get_input_shape(i)) * node->get_input_element_type(i).size() * 1.05;
             // add 10% compensation for padding or alignment impact
             if (tensor_size > device_info.max_alloc_mem_size) {
                 if (is_discrete_gpu) {
@@ -616,11 +617,11 @@ static unsigned int GetMaxBatchSize(const InferenceEngine::CNNNetwork* network, 
                 const_tensor_sum += tensor_size;
             } else { // general data
                 std::cout << "[input" << i << "] data tensor " << tensor_size << std::endl;
-                data_tensor_sum += tensor_size;
+           //     data_tensor_sum += tensor_size;
             }
         }
         for (size_t i = 0; i < node->get_output_size(); ++i) {
-            auto tensor_size = ov::shape_size(node->get_output_shape(i)) * node->get_output_element_type(i).size() * 1.1;
+            auto tensor_size = ov::shape_size(node->get_output_shape(i)) * node->get_output_element_type(i).size() * 1.05;
             std::cout << "[out" << i << "] data tensor " << tensor_size << std::endl;
             if (tensor_size > device_info.max_alloc_mem_size) {
                 if (is_discrete_gpu) {
@@ -628,12 +629,17 @@ static unsigned int GetMaxBatchSize(const InferenceEngine::CNNNetwork* network, 
                 } else {
                     throw std::runtime_error("Allocation exceeds limits");
                 }
+            } else {
+                data_tensor_sum += tensor_size;
             }
-            data_tensor_sum += tensor_size;
         }
-        int32_t max_batch_for_this_op = (device_info.max_global_mem_size - const_tensor_sum) / std::max(1, data_tensor_sum);
-        max_batch = std::min(max_batch, max_batch_for_this_op);
+        std::cout << "current mem usage: " << data_tensor_sum + const_tensor_sum << std::endl;
     }
+    int32_t max_batch_for_this_op = (device_info.max_global_mem_size - const_tensor_sum) / std::max(1L, data_tensor_sum);
+    max_batch = std::min(max_batch, max_batch_for_this_op);
+    std::cout << "const tensor sum = " << const_tensor_sum << std::endl;
+    std::cout << "data tensor sum = " << data_tensor_sum << std::endl;
+    std::cout << "maximum batch size = " << max_batch << std::endl;
     return max_batch;
 }
 
