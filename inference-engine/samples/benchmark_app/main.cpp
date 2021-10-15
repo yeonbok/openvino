@@ -407,7 +407,7 @@ int main(int argc, char* argv[]) {
             auto startTime = Time::now();
             CNNNetwork cnnNetwork = ie.ReadNetwork(FLAGS_m);
             std::map<std::string, Parameter> options = {{"CNN_NETWORK", &cnnNetwork}};
-            auto max_batch_size = ie.GetMetric("GPU", METRIC_KEY(MAX_BATCH_SIZE), options).as<unsigned int>();
+            auto max_batch_size = ie.GetMetric("GPU.1", METRIC_KEY(MAX_BATCH_SIZE), options).as<unsigned int>();
             std::cout << "max batch size is " << max_batch_size << std::endl;
             auto duration_ms = double_to_string(get_total_ms_time(startTime));
             slog::info << "Read network took " << duration_ms << " ms" << slog::endl;
