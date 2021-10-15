@@ -577,67 +577,6 @@ static float GetGOPS(cldnn::device_info info, cldnn::data_types dt) {
     return freqGHz * opsPerComputeBlock * computeBlockIPC * numEUs;
 }
 
-static unsigned int GetMaxBatchSize(const InferenceEngine::CNNNetwork* network, const cldnn::device_info& device_info) {
-    const auto& function = network->getFunction();
-    auto ops = function->get_ordered_ops();
-    bool is_discrete_gpu = device_info.dev_type == cldnn::device_type::discrete_gpu ? true : false;
-    std::cout << ops.size() << std::endl;
-    std::cout << "max global mem size : " << device_info.max_global_mem_size << std::endl;
-    auto is_const_node = [&](ov::Node* node) {
-        if (ov::is_type<ngraph::opset1::Constant>(node))
-            return true;
-        else
-            return false;
-    };
-    int32_t max_batch = INT_MAX;
-    int64_t const_tensor_sum, data_tensor_sum;
-    const_tensor_sum = data_tensor_sum = 0;
-
-    for (auto&& node : ops) {
-        std::cout << "===========================================" << std::endl;
-        std::cout << node->get_friendly_name() << std::endl;
-        for (size_t i = 0; i < node->get_input_size(); ++i) {
-            auto tensor_size = ov::shape_size(node->get_input_shape(i)) * node->get_input_element_type(i).size() * 1.05;
-            // add 10% compensation for padding or alignment impact
-            if (tensor_size > device_info.max_alloc_mem_size) {
-                if (is_discrete_gpu) {
-                   // TODO can we get max host memory size for discrete gpu and use it to compute batch size?
-                } else {
-                    throw std::runtime_error("Allocation exceeds limits");
-                }
-            }
-            std::cout << node->get_input_node_ptr(i)->get_friendly_name() << std::endl;
-            if (ngraph::op::is_constant(node->get_input_node_ptr(i))) {
-                std::cout << "[input" << i << "] const tensor " << tensor_size << std::endl;
-                const_tensor_sum += tensor_size;
-            } else { // general data
-                std::cout << "[input" << i << "] data tensor " << tensor_size << std::endl;
-           //     data_tensor_sum += tensor_size;
-            }
-        }
-        for (size_t i = 0; i < node->get_output_size(); ++i) {
-            auto tensor_size = ov::shape_size(node->get_output_shape(i)) * node->get_output_element_type(i).size() * 1.05;
-            std::cout << "[out" << i << "] data tensor " << tensor_size << std::endl;
-            if (tensor_size > device_info.max_alloc_mem_size) {
-                if (is_discrete_gpu) {
-                   // TODO can we get max host memory size for discrete gpu and use it to compute batch size?
-                } else {
-                    throw std::runtime_error("Allocation exceeds limits");
-                }
-            } else {
-                data_tensor_sum += tensor_size;
-            }
-        }
-        std::cout << "current mem usage: " << data_tensor_sum + const_tensor_sum << std::endl;
-    }
-    int32_t max_batch_for_this_op = (device_info.max_global_mem_size - const_tensor_sum) / std::max(1L, data_tensor_sum);
-    max_batch = std::min(max_batch, max_batch_for_this_op);
-    std::cout << "const tensor sum = " << const_tensor_sum << std::endl;
-    std::cout << "data tensor sum = " << data_tensor_sum << std::endl;
-    std::cout << "maximum batch size = " << max_batch << std::endl;
-    return max_batch;
-}
-
 Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::string, Parameter>& options) const {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNNPlugin, "clDNNEngine::GetMetric");
     auto device_id = GetConfig(CONFIG_KEY(DEVICE_ID), {});
@@ -723,12 +662,20 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         std::tuple<unsigned int, unsigned int> range = std::make_tuple(1, 2);
         IE_SET_METRIC_RETURN(RANGE_FOR_STREAMS, range);
     } else if (name == METRIC_KEY(MAX_BATCH_SIZE)) {
+        auto n_streams = _impl->m_config.throughput_streams;
         if (options.find("CNN_NETWORK") == options.end()) {
             throw std::runtime_error("No CNN_NETWORK option given!");
         }
+        if (options.find("GPU_THROUGHPUT_STREAMS") != options.end()) {
+            n_streams = options.find("GPU_THROUGHPUT_STREAMS")->second.as<uint16_t>();
+        }
         auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();
         std::cout << network->getName() << std::endl;
-        IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, GetMaxBatchSize(network, device_info));
+        auto transformedNetwork = CloneAndTransformNetwork(*network, _impl->m_config);
+        auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
+        auto program = std::make_shared<Program>(transformedNetwork, engine, _impl->m_config, false, true);
+        auto bsize =  program->GetCompiledProgram(0)->get_approx_max_batch_size(n_streams);
+        IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, bsize);
     } else {
         IE_THROW() << "Unsupported metric key " << name;
     }
