@@ -3,7 +3,6 @@
 //
 
 #include <limits>
-#include <climits>
 #include <algorithm>
 #include <string>
 #include <map>
@@ -587,6 +586,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
     auto device_id = GetConfig(CONFIG_KEY(DEVICE_ID), {});
     if (options.find(CONFIG_KEY(DEVICE_ID)) != options.end())
         device_id = options.at(CONFIG_KEY(DEVICE_ID)).as<std::string>();
+
     auto iter = device_map.find(device_id);
     auto device_info = iter != device_map.end() ?
         iter->second->get_info() :
@@ -675,7 +675,6 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             n_streams = options.find("GPU_THROUGHPUT_STREAMS")->second.as<uint16_t>();
         }
         auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();
-        std::cout << network->getName() << std::endl;
         auto transformedNetwork = CloneAndTransformNetwork(*network, _impl->m_config);
         auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
         auto program = std::make_shared<Program>(transformedNetwork, engine, _impl->m_config, false, true);

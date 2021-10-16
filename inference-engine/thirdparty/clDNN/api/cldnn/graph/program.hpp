@@ -233,7 +233,7 @@ public:
     void load_tuning_cache();
     std::shared_ptr<kernel_selector::TuningCache> get_tuning_cache() const { return tuning_cache; }
 
-    int32_t get_approx_max_batch_size();
+    int32_t get_approx_max_batch_size(size_t n_streams = 1);
 
 private:
     uint32_t prog_id = 0;
@@ -283,7 +283,7 @@ private:
 
     void run_graph_compilation();
     void pre_optimize_graph(bool is_internal);
-    void post_optimize_graph(bool is_internal, bool early_exit = false);
+    void post_optimize_graph(bool is_internal);
     void cleanup();
     void transfer_memory_to_device();
 
@@ -325,4 +325,5 @@ private:
     // new_node - node which will replace the old one
     void replace(program_node& old_node, program_node& new_node);
 };
+
 }  // namespace cldnn
