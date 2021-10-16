@@ -196,7 +196,6 @@ std::shared_ptr<cldnn::program> Program::BuildProgram(const std::vector<std::sha
         return {};
     } else {
         OV_ITT_SCOPED_TASK(itt::domains::CLDNNPlugin, "Program::CreateProgram");
-        std::cout << "Program::BuildProgram build_program" << std::endl;
         auto program = cldnn::program::build_program(*m_engine, *m_topology, options);
         CleanupBuild();
 

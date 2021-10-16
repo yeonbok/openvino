@@ -83,8 +83,6 @@
 #include <utility>
 #include <vector>
 #include <stdexcept>
-#include <chrono>
-#include <climits>
 
 program::program(engine& engine_ref,
                  topology const& topology,
@@ -423,37 +421,10 @@ void program::set_options() {
 }
 
 void program::build_program(bool is_internal) {
-    using ms = std::chrono::milliseconds;
-    using Time = std::chrono::high_resolution_clock;
-    auto start = Time::now();
     init_graph();
     { pre_optimize_graph(is_internal); }
-    auto stop = Time::now();
-    std::chrono::duration<float> fs = stop - start;
-    if (is_internal) {
-        std::cout << "[build_program internal] init_graph & pre_optimize_graph took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-    } else {
-        std::cout << "[build_program] init_graph & pre_optimize_graph took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-    }
-    start = Time::now();
     run_graph_compilation();
-    stop = Time::now();
-    fs = stop - start;
-    if (is_internal)  {
-        std::cout << "[build_program internal] run_graph_compilation took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-    } else {
-        std::cout << "[build_program] run_graph_compilation took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-    }
-    start = Time::now();
-    { post_optimize_graph(is_internal, options.get<build_option_type::partial_build_program>()->enabled()); }
-
-    stop = Time::now();
-    fs = stop - start;
-    if (is_internal) {
-        std::cout << "[build_program internal] post_optimize_graph took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-    } else {
-        std::cout << "[build_program] post_optimize_graph took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-    }
+    { post_optimize_graph(is_internal); }
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
 #ifdef GPU_DEBUG_CONFIG
@@ -461,30 +432,13 @@ void program::build_program(bool is_internal) {
 #else
     {
 #endif
-        start = Time::now();
         prepare_memory_dependencies();
         if (options.get<build_option_type::partial_build_program>()->enabled()) {
-            //exit(0);
             return;
         }
 
-        stop = Time::now();
-        fs = stop - start;
-        if (is_internal) {
-            std::cout << "[build_program internal] prepare_memory_dep took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-        } else {
-            std::cout << "[build_program] prepare_memory_dep took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-        }
-        start = Time::now();
         compile();
         init_kernels();
-        stop = Time::now();
-        fs = stop - start;
-        if (is_internal) {
-            std::cout << "[build_program internal] compile and init_kernels took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-        } else {
-            std::cout << "[build_program] compile and init_kernels took " << std::chrono::duration_cast<ms>(fs).count() << " msec" << std::endl;
-        }
     }
 
     if (!is_internal) {
@@ -593,7 +547,7 @@ void program::pre_optimize_graph(bool is_internal) {
     apply_opt_pass<add_required_reorders>();
 }
 
-void program::post_optimize_graph(bool is_internal, bool partial_build) {
+void program::post_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PostOptimizeGraph");
     // input reorder for fully connected if necessary
     apply_opt_pass<post_input_reorder>();
@@ -604,9 +558,8 @@ void program::post_optimize_graph(bool is_internal, bool partial_build) {
 
     apply_opt_pass<remove_redundant_reorders>(lo, false, true);  // TODO: do we need it at this place also?
 
-    if (!is_internal && !partial_build) {
+    if (!is_internal && !options.get<build_option_type::partial_build_program>()->enabled()) {
         // ToDo remove hidden dependencies from propagate_constants pass
-        std::cout << "constant propagation executed!" << std::endl;
         apply_opt_pass<propagate_constants>();
     }
 
@@ -1445,36 +1398,35 @@ void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
 #endif
 }
 
-int32_t program::get_approx_max_batch_size() {
+int32_t program::get_approx_max_batch_size(size_t n_streams) {
     auto max_alloc_size = get_engine().get_device_info().max_alloc_mem_size;
     auto global_device_mem_size = get_engine().get_device_info().max_global_mem_size;
-    std::cout << "max mem size : " << global_device_mem_size << std::endl;
     int64_t const_sum = 0;
     int64_t tensor_sum = 0;
+    const auto magic_weight = 1.5; // (1.5x additional buffer considering the unaligned layout and internal buffer)
     for (const auto& node : processing_order) {
         // single allocation constraint
         auto out_size = node->get_output_layout().get_linear_size();
         if (out_size > max_alloc_size) {
-            std::cout << node->id() << " : usm_host" << std::endl;
             continue; // to be allocated to host
         }
         if (node->can_be_optimized())
             continue;
         if (node->is_type<data>()) {
-            std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
+            //std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
             if (node->get_users().size() == 1 && node->have_user_with_type<generic_layer>()) { // reordered weights
                 continue;
             } else {
                 const_sum += out_size;
             }
-            std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
+            //std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
         } else if (node->is_type<generic_layer>() && node->get_dependency(0).is_type<data>()) {
             const_sum += out_size;
         } else {
             tensor_sum += out_size;
-            std::cout << "[normal node]" << node->id() << ", " << out_size << std::endl;
+            //std::cout << "[normal node]" << node->id() << ", " << out_size << std::endl;
         }
     }
-    std::cout << "total device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
-    return (global_device_mem_size - const_sum) / std::max(1.0, tensor_sum * 1.5);
+    //std::cout << "total device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
+    return (global_device_mem_size - const_sum) / std::max(1.0, tensor_sum * n_streams * magic_weight);
 }
