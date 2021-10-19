@@ -1401,9 +1401,12 @@ void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
 int32_t program::get_approx_max_batch_size(size_t n_streams) {
     auto max_alloc_size = get_engine().get_device_info().max_alloc_mem_size;
     auto global_device_mem_size = get_engine().get_device_info().max_global_mem_size;
+    std::shared_ptr<memory_pool> pool(new memory_pool(get_engine()));
     int64_t const_sum = 0;
     int64_t tensor_sum = 0;
     const auto magic_weight = 1.5; // (1.5x additional buffer considering the unaligned layout and internal buffer)
+    std::cout << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
+    std::cout << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
     for (const auto& node : processing_order) {
         // single allocation constraint
         auto out_size = node->get_output_layout().get_linear_size();
@@ -1412,21 +1415,20 @@ int32_t program::get_approx_max_batch_size(size_t n_streams) {
         }
         if (node->can_be_optimized())
             continue;
-        if (node->is_type<data>()) {
+        if (node->is_type<data>() && node->get_users().size() == 1 && node->have_user_with_type<generic_layer>())  {
             //std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
-            if (node->get_users().size() == 1 && node->have_user_with_type<generic_layer>()) { // reordered weights
-                continue;
-            } else {
-                const_sum += out_size;
-            }
-            //std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
-        } else if (node->is_type<generic_layer>() && node->get_dependency(0).is_type<data>()) {
+            continue;
+        }            //std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
+        if (node->is_type<data>() || node->is_type<generic_layer>() && node->get_dependency(0).is_type<data>()) {
             const_sum += out_size;
         } else {
+            primitive_inst::allocate_output(get_engine(), *node, pool);
             tensor_sum += out_size;
             //std::cout << "[normal node]" << node->id() << ", " << out_size << std::endl;
         }
     }
-    //std::cout << "total device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
+    std::cout << "total device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
+    std::cout << "total allocated device mem : " << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
+    std::cout << "total allocated host mem : " << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
     return (global_device_mem_size - const_sum) / std::max(1.0, tensor_sum * n_streams * magic_weight);
 }
