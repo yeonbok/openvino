@@ -83,6 +83,7 @@
 #include <utility>
 #include <vector>
 #include <stdexcept>
+#include <unordered_set>
 
 program::program(engine& engine_ref,
                  topology const& topology,
@@ -1407,6 +1408,7 @@ int64_t program::get_approx_max_batch_size(size_t n_streams) {
     std::shared_ptr<memory_pool> pool(new memory_pool(get_engine()));
     int64_t const_sum = 0;
     int64_t tensor_sum = 0;
+    std::unordered_set<memory::ptr> allocated_mem_ptrs;
 //    const auto magic_weight = 1.5; // (1.5x additional buffer considering the unaligned layout and internal buffer)
     std::cout << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
     std::cout << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
@@ -1426,10 +1428,10 @@ int64_t program::get_approx_max_batch_size(size_t n_streams) {
             if (std::getenv("DUMP_PRED")) {
                 std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
             }
-            primitive_inst::allocate_output(get_engine(), *node, pool);
+            allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
             const_sum += out_size;
         } else {
-            primitive_inst::allocate_output(get_engine(), *node, pool);
+            allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
             tensor_sum += out_size;
             //std::cout << "[normal node]" << node->id() << ", " << out_size << std::endl;
         }
