@@ -626,6 +626,9 @@ void program::transfer_memory_to_device() {
                 GPU_DEBUG_IF(debug_config->verbose >= 2) {
                     GPU_DEBUG_COUT << "[" << data_node.id() << ": constant]" << std::endl;
                 }
+                if (std::getenv("DUMP_TRANS")) {
+                    std::cout << "[const node]" << data_node.id() << ", " << data_node_layout.bytes_count() << std::endl;
+                }
                 // Allocate and transfer memory
                 auto device_mem = mem.get_engine()->allocate_memory(data_node_layout, allocation_type::usm_device, false);
                 device_mem->copy_from(get_stream(), mem);
@@ -1409,7 +1412,7 @@ int32_t program::get_approx_max_batch_size(size_t n_streams) {
     std::cout << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
     for (const auto& node : processing_order) {
         // single allocation constraint
-        auto out_size = node->get_output_layout().get_linear_size();
+        auto out_size = node->get_output_layout().bytes_count();
         if (out_size > max_alloc_size) {
             continue; // to be allocated to host
         }
@@ -1420,6 +1423,10 @@ int32_t program::get_approx_max_batch_size(size_t n_streams) {
             continue;
         }            //std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
         if (node->is_type<data>() || node->is_type<generic_layer>() && node->get_dependency(0).is_type<data>()) {
+            if (std::getenv("DUMP_PRED")) {
+                std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
+            }
+            primitive_inst::allocate_output(get_engine(), *node, pool);
             const_sum += out_size;
         } else {
             primitive_inst::allocate_output(get_engine(), *node, pool);

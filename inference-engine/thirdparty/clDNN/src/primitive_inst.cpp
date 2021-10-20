@@ -281,12 +281,15 @@ memory::ptr primitive_inst::allocate_output() {
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
             GPU_DEBUG_COUT << "[" << _node.id() << ": output]" << std::endl;
         }
+        if (std::getenv("DUMP_ACTUAL")) {
+            std::cout << "[const node]" << _node.id() << ", " << layout.bytes_count() << std::endl;
+        }
         return engine.allocate_memory(layout, allocation_type::usm_device, false);
     } else if (_network.is_internal() && !_node.is_output() && _node.is_type<input_layout>()) {
         // Skip memory reset for input_layout primitives, since data will be copied from cldnn::data primitive
         // or just reuse primitive's memory
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
-            GPU_DEBUG_COUT << "[" << _node.id() << ": constant]" << std::endl;
+            GPU_DEBUG_COUT << "[" << _node.id() << ": output]" << std::endl;
         }
         return engine.allocate_memory(layout, alloc_type, false);
     } else if (_network.is_internal() || (!_node.can_share_buffer()) || _node.can_be_optimized() || _node.is_output()) {
@@ -330,7 +333,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, const program_node&
 
     // For outputs, cpu prim we want to have lockable alloc type
     // Also if the successor of a node is an cpu, then memory needs to be lockable.
-    auto use_lockable_memory = _node.is_output() || _node.get_selected_impl()->is_cpu()
+    auto use_lockable_memory = _node.is_output() || _node.get_preferred_impl_type() == impl_types::cpu
                                || std::any_of(_node.get_users().begin(), _node.get_users().end(),
                                               [](const program_node* n) {
                                      return n->get_selected_impl()->is_cpu() || is_any_user_cpu(n->get_users());
