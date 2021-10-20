@@ -675,11 +675,67 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             n_streams = options.find("GPU_THROUGHPUT_STREAMS")->second.as<uint16_t>();
         }
         auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();
+#if 0
         auto transformedNetwork = CloneAndTransformNetwork(*network, _impl->m_config);
+#endif
+        auto input_shapes = network->getInputShapes();
+        std::string input_name;
+        SizeVector input_shape;
+        std::tie(input_name, input_shape) = *input_shapes.begin();
+        input_shape[0] = 16;
+        input_shapes[input_name] = input_shape;
+
+        auto network_b16 = InferenceEngine::details::cloneNetwork(*network);
+        network_b16.reshape(input_shapes);
+        if (network_b16.getFunction()) {
+            auto nGraphFunc = network_b16.getFunction();
+            auto transformation_config = CLDNNPlugin::Config(_impl->m_config);
+#ifdef ENABLE_ONEDNN_FOR_GPU
+            if (GetDeviceInfo(_impl->m_config.key_config_map).supports_immad)
+                transformation_config.enable_fp16_for_quantized_models = false;
+#endif
+            TransformationsPipeline transformations(transformation_config);
+            transformations.apply(nGraphFunc);
+        }
+
+        std::tie(input_name, input_shape) = *input_shapes.begin();
+        input_shape[0] = 32;
+        input_shapes[input_name] = input_shape;
+
+        auto network_b32 = InferenceEngine::details::cloneNetwork(*network);
+        network_b32.reshape(input_shapes);
+        if (network_b32.getFunction()) {
+            auto nGraphFunc = network_b32.getFunction();
+            auto transformation_config = CLDNNPlugin::Config(_impl->m_config);
+#ifdef ENABLE_ONEDNN_FOR_GPU
+            if (GetDeviceInfo(_impl->m_config.key_config_map).supports_immad)
+                transformation_config.enable_fp16_for_quantized_models = false;
+#endif
+            TransformationsPipeline transformations(transformation_config);
+            transformations.apply(nGraphFunc);
+        }
+
+#if 0
         auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
         auto program = std::make_shared<Program>(transformedNetwork, engine, _impl->m_config, false, true);
         auto bsize =  program->GetCompiledProgram(0)->get_approx_max_batch_size(n_streams);
         IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, bsize);
+#endif
+        auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
+        auto program_16 = std::make_shared<Program>(network_b16, engine, _impl->m_config, false, true);
+        auto device_memory_usage_16 =  program_16->GetCompiledProgram(0)->get_approx_max_batch_size(n_streams);
+
+        auto program_32 = std::make_shared<Program>(network_b32, engine, _impl->m_config, false, true);
+        auto device_memory_usage_32 =  program_32->GetCompiledProgram(0)->get_approx_max_batch_size(n_streams);
+
+        size_t normal_tensor_size = static_cast<size_t>((device_memory_usage_32 - device_memory_usage_16) / 16.0);
+        size_t constant_size = device_memory_usage_16 - (normal_tensor_size * 16);
+        size_t max_batch_size = static_cast<size_t>((device_info.max_global_mem_size - constant_size) / normal_tensor_size);
+        std::cout << "device_memory_usage_16: " << device_memory_usage_16 << std::endl;
+        std::cout << "normal_tensor_size: " << normal_tensor_size << std::endl;
+        std::cout << "constant_size: " << constant_size << std::endl;
+
+        IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, static_cast<int32_t>(max_batch_size));
     } else {
         IE_THROW() << "Unsupported metric key " << name;
     }

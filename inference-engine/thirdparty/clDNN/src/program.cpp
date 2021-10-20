@@ -1401,13 +1401,13 @@ void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
 #endif
 }
 
-int32_t program::get_approx_max_batch_size(size_t n_streams) {
+int64_t program::get_approx_max_batch_size(size_t n_streams) {
     auto max_alloc_size = get_engine().get_device_info().max_alloc_mem_size;
-    auto global_device_mem_size = get_engine().get_device_info().max_global_mem_size;
+//    auto global_device_mem_size = get_engine().get_device_info().max_global_mem_size;
     std::shared_ptr<memory_pool> pool(new memory_pool(get_engine()));
     int64_t const_sum = 0;
     int64_t tensor_sum = 0;
-    const auto magic_weight = 1.5; // (1.5x additional buffer considering the unaligned layout and internal buffer)
+//    const auto magic_weight = 1.5; // (1.5x additional buffer considering the unaligned layout and internal buffer)
     std::cout << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
     std::cout << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
     for (const auto& node : processing_order) {
@@ -1437,5 +1437,6 @@ int32_t program::get_approx_max_batch_size(size_t n_streams) {
     std::cout << "total device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
     std::cout << "total allocated device mem : " << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
     std::cout << "total allocated host mem : " << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
-    return (global_device_mem_size - const_sum) / std::max(1.0, tensor_sum * n_streams * magic_weight);
+//    return (global_device_mem_size - const_sum) / std::max(1.0, tensor_sum * n_streams * magic_weight);
+    return static_cast<int32_t>(get_engine().get_used_device_memory(allocation_type::usm_device));
 }

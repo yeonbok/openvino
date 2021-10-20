@@ -233,7 +233,7 @@ public:
     void load_tuning_cache();
     std::shared_ptr<kernel_selector::TuningCache> get_tuning_cache() const { return tuning_cache; }
 
-    int32_t get_approx_max_batch_size(size_t n_streams = 1);
+    int64_t get_approx_max_batch_size(size_t n_streams = 1);
 
 private:
     uint32_t prog_id = 0;
