@@ -371,7 +371,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, const program_node&
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
             GPU_DEBUG_COUT << "[" << _node.id() << ": output]" << std::endl;
         }
-        return _engine.allocate_memory(layout, alloc_type);
+        return _engine.allocate_memory(layout, alloc_type, false);
     } else {
         return get_memory_from_pool(_engine, layout,
                                    _node.id(),

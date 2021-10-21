@@ -536,7 +536,9 @@ void program::pre_optimize_graph(bool is_internal) {
 
     if (!is_internal) {
         // ToDo remove hidden dependencies from propagate_constants pass
+//        std::cout << "############### [Pre Opt] Start Propagate_constants!!!!! #########" << std::endl;
         apply_opt_pass<propagate_constants>();
+//        std::cout << "############### [Pre Opt] Finished Propagate_constants!!!!! #########" << std::endl;
     }
 
     // try to fuse buffers (i.e. depth_concat in bfyx format) after padding calculations
@@ -560,8 +562,10 @@ void program::post_optimize_graph(bool is_internal) {
     apply_opt_pass<remove_redundant_reorders>(lo, false, true);  // TODO: do we need it at this place also?
 
     if (!is_internal && !options.get<build_option_type::partial_build_program>()->enabled()) {
+//        std::cout << "############### [Post Opt] Start Propagate_constants!!!!! #########" << std::endl;
         // ToDo remove hidden dependencies from propagate_constants pass
         apply_opt_pass<propagate_constants>();
+//        std::cout << "############### [Post Opt ] Finished Propagate_constants!!!!! #########" << std::endl;
     }
 
     if (options.get<build_option_type::optimize_data>()->enabled())
@@ -1402,7 +1406,7 @@ void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
 #endif
 }
 
-int64_t program::get_approx_max_batch_size(size_t n_streams) {
+int64_t program::get_estimated_device_mem_usage(size_t n_streams) {
     auto max_alloc_size = get_engine().get_device_info().max_alloc_mem_size;
 //    auto global_device_mem_size = get_engine().get_device_info().max_global_mem_size;
     std::shared_ptr<memory_pool> pool(new memory_pool(get_engine()));
@@ -1412,6 +1416,7 @@ int64_t program::get_approx_max_batch_size(size_t n_streams) {
 //    const auto magic_weight = 1.5; // (1.5x additional buffer considering the unaligned layout and internal buffer)
     std::cout << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
     std::cout << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
+//    std::cout << "############### [Estimation] start allocation!  #########" << std::endl;
     for (const auto& node : processing_order) {
         // single allocation constraint
         auto out_size = node->get_output_layout().bytes_count();
@@ -1430,15 +1435,24 @@ int64_t program::get_approx_max_batch_size(size_t n_streams) {
             }
             allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
             const_sum += out_size;
-        } else {
-            allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
-            tensor_sum += out_size;
-            //std::cout << "[normal node]" << node->id() << ", " << out_size << std::endl;
         }
     }
+    for (const auto& node : processing_order) {
+        // single allocation constraint
+        auto out_size = node->get_output_layout().bytes_count();
+        if (out_size > max_alloc_size) {
+            continue; // to be allocated to host
+        }
+        if (node->can_be_optimized() || node->is_type<data>())
+            continue;
+        allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
+        tensor_sum += out_size;
+            //std::cout << "[normal node]" << node->id() << ", " << out_size << std::endl;
+    }
+
     std::cout << "total device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
     std::cout << "total allocated device mem : " << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
     std::cout << "total allocated host mem : " << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
 //    return (global_device_mem_size - const_sum) / std::max(1.0, tensor_sum * n_streams * magic_weight);
-    return static_cast<int32_t>(get_engine().get_used_device_memory(allocation_type::usm_device));
+    return static_cast<int64_t>(get_engine().get_used_device_memory(allocation_type::usm_device));
 }

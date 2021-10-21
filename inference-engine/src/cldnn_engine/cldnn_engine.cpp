@@ -11,7 +11,7 @@
 #include <tuple>
 #include <cctype>
 #include <memory>
-
+#include <iomanip>
 #include "ie_metric_helpers.hpp"
 #include "ie_plugin_config.hpp"
 #include <ie_ngraph_utils.hpp>
@@ -28,7 +28,7 @@
 
 #include "cldnn/runtime/device_query.hpp"
 #include "cldnn/runtime/debug_configuration.hpp"
-
+#include <chrono>
 #ifdef __linux__
 # include <dlfcn.h>
 #endif
@@ -681,56 +681,85 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         auto input_shapes = network->getInputShapes();
         std::string input_name;
         SizeVector input_shape;
-        std::tie(input_name, input_shape) = *input_shapes.begin();
-        input_shape[0] = 16;
-        input_shapes[input_name] = input_shape;
+        using Time = std::chrono::high_resolution_clock;
+        using ns = std::chrono::nanoseconds;
+        auto get_total_ms_time = [](Time::time_point& startTime) {
+            return std::chrono::duration_cast<ns>(Time::now() - startTime).count() * 0.000001;
+        };
+        auto double_to_string = [](const double number) {
+            std::stringstream ss;
+            ss << std::fixed << std::setprecision(2) << number;
+            return ss.str();
+        };
 
-        auto network_b16 = InferenceEngine::details::cloneNetwork(*network);
-        network_b16.reshape(input_shapes);
-        if (network_b16.getFunction()) {
-            auto nGraphFunc = network_b16.getFunction();
-            auto transformation_config = CLDNNPlugin::Config(_impl->m_config);
+        auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
+        int64_t device_memory_usage_16 = 0;
+        {
+            auto startTime = Time::now();
+            std::tie(input_name, input_shape) = *input_shapes.begin();
+            input_shape[0] = 16;
+//            input_shape[0] = 1;
+            input_shapes[input_name] = input_shape;
+
+            auto network_b16 = InferenceEngine::details::cloneNetwork(*network);
+            auto reshapeTime = Time::now();
+            network_b16.reshape(input_shapes);
+            auto reshape_duration_ms = double_to_string(get_total_ms_time(reshapeTime));
+            std::cout << "reshape to b16 took " << reshape_duration_ms << " ms" << std::endl;
+
+            if (network_b16.getFunction()) {
+                auto nGraphFunc = network_b16.getFunction();
+                auto transformation_config = CLDNNPlugin::Config(_impl->m_config);
 #ifdef ENABLE_ONEDNN_FOR_GPU
-            if (GetDeviceInfo(_impl->m_config.key_config_map).supports_immad)
-                transformation_config.enable_fp16_for_quantized_models = false;
+                if (GetDeviceInfo(_impl->m_config.key_config_map).supports_immad)
+                    transformation_config.enable_fp16_for_quantized_models = false;
 #endif
-            TransformationsPipeline transformations(transformation_config);
-            transformations.apply(nGraphFunc);
+                TransformationsPipeline transformations(transformation_config);
+                transformations.apply(nGraphFunc);
+            }
+            auto program_16 = std::make_shared<Program>(network_b16, engine, _impl->m_config, false, true);
+            device_memory_usage_16 =  program_16->GetCompiledProgram(0)->get_estimated_device_mem_usage(n_streams);
+            auto duration_ms = double_to_string(get_total_ms_time(startTime));
+            std::cout << "Batch16 took " << duration_ms << " ms" << std::endl;
         }
+        int64_t device_memory_usage_32 = 0;
+        {
+            auto startTime = Time::now();
+            std::tie(input_name, input_shape) = *input_shapes.begin();
+            input_shape[0] = 32;
+            input_shapes[input_name] = input_shape;
 
-        std::tie(input_name, input_shape) = *input_shapes.begin();
-        input_shape[0] = 32;
-        input_shapes[input_name] = input_shape;
-
-        auto network_b32 = InferenceEngine::details::cloneNetwork(*network);
-        network_b32.reshape(input_shapes);
-        if (network_b32.getFunction()) {
-            auto nGraphFunc = network_b32.getFunction();
-            auto transformation_config = CLDNNPlugin::Config(_impl->m_config);
+            auto network_b32 = InferenceEngine::details::cloneNetwork(*network);
+            network_b32.reshape(input_shapes);
+            if (network_b32.getFunction()) {
+                auto nGraphFunc = network_b32.getFunction();
+                auto transformation_config = CLDNNPlugin::Config(_impl->m_config);
 #ifdef ENABLE_ONEDNN_FOR_GPU
-            if (GetDeviceInfo(_impl->m_config.key_config_map).supports_immad)
-                transformation_config.enable_fp16_for_quantized_models = false;
+                if (GetDeviceInfo(_impl->m_config.key_config_map).supports_immad)
+                    transformation_config.enable_fp16_for_quantized_models = false;
 #endif
-            TransformationsPipeline transformations(transformation_config);
-            transformations.apply(nGraphFunc);
+                TransformationsPipeline transformations(transformation_config);
+                transformations.apply(nGraphFunc);
+            }
+            auto program_32 = std::make_shared<Program>(network_b32, engine, _impl->m_config, false, true);
+            device_memory_usage_32 =  program_32->GetCompiledProgram(0)->get_estimated_device_mem_usage(n_streams);
+            auto duration_ms = double_to_string(get_total_ms_time(startTime));
+            std::cout << "Batch32 took " << duration_ms << " ms" << std::endl;
         }
-
 #if 0
         auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
         auto program = std::make_shared<Program>(transformedNetwork, engine, _impl->m_config, false, true);
         auto bsize =  program->GetCompiledProgram(0)->get_approx_max_batch_size(n_streams);
         IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, bsize);
 #endif
-        auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
-        auto program_16 = std::make_shared<Program>(network_b16, engine, _impl->m_config, false, true);
-        auto device_memory_usage_16 =  program_16->GetCompiledProgram(0)->get_approx_max_batch_size(n_streams);
 
-        auto program_32 = std::make_shared<Program>(network_b32, engine, _impl->m_config, false, true);
-        auto device_memory_usage_32 =  program_32->GetCompiledProgram(0)->get_approx_max_batch_size(n_streams);
+
 
         size_t normal_tensor_size = static_cast<size_t>((device_memory_usage_32 - device_memory_usage_16) / 16.0);
         size_t constant_size = device_memory_usage_16 - (normal_tensor_size * 16);
         size_t max_batch_size = static_cast<size_t>((device_info.max_global_mem_size - constant_size) / normal_tensor_size);
+        std::cout << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
+        std::cout << "device_memory_usage_32: " << device_memory_usage_32 << std::endl;
         std::cout << "device_memory_usage_16: " << device_memory_usage_16 << std::endl;
         std::cout << "normal_tensor_size: " << normal_tensor_size << std::endl;
         std::cout << "constant_size: " << constant_size << std::endl;
