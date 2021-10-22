@@ -248,7 +248,9 @@ memory::ptr primitive_inst::allocate_output() {
         else
             return a;
     };
-
+    if (!_network.is_internal()) {
+        std::cout << _node.id() << std::endl;
+    }
     bool usm_device_allocatable = true;
     const auto& total_device_input_mem_size = std::accumulate(inst_deps.begin(), inst_deps.end(), 0, device_mem_acc);
     if (total_device_input_mem_size > engine.get_device_info().max_global_mem_size)

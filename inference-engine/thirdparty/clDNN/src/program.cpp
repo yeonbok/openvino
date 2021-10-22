@@ -446,7 +446,9 @@ void program::build_program(bool is_internal) {
         prim_info = get_current_stage_info();
         transfer_memory_to_device();
     }
-
+//    if (!is_internal) {
+//      std::cout << "##################### build program finished" << std::endl;
+//' }
     cleanup();
 }
 
@@ -1433,7 +1435,9 @@ int64_t program::get_estimated_device_mem_usage(size_t n_streams) {
             if (std::getenv("DUMP_PRED")) {
                 std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
             }
-            allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
+            if (std::getenv("ALLOC_BOTH")) {
+                allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
+            }
             const_sum += out_size;
         }
     }
@@ -1445,12 +1449,16 @@ int64_t program::get_estimated_device_mem_usage(size_t n_streams) {
         }
         if (node->can_be_optimized() || node->is_type<data>())
             continue;
-        allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
+        if (node->have_user_with_type<concatenation>() && node->get_users().size() ==1 && node->get_users().front()->can_be_optimized())
+            continue;
+        if (std::getenv("ALLOC_BOTH") || std::getenv("ALLOC_ONLY_TENSOR")) {
+            allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
+        }
         tensor_sum += out_size;
             //std::cout << "[normal node]" << node->id() << ", " << out_size << std::endl;
     }
 
-    std::cout << "total device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
+    std::cout << "calculated device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
     std::cout << "total allocated device mem : " << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
     std::cout << "total allocated host mem : " << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
 //    return (global_device_mem_size - const_sum) / std::max(1.0, tensor_sum * n_streams * magic_weight);

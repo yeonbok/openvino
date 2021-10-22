@@ -697,15 +697,19 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         {
             auto startTime = Time::now();
             std::tie(input_name, input_shape) = *input_shapes.begin();
-            input_shape[0] = 16;
-//            input_shape[0] = 1;
+            int32_t first_batch = 16;
+            if (std::getenv("TEST_BATCH")) {
+                first_batch = std::stoi(std::getenv("TEST_BATCH"));
+            }
+            std::cout << "===========first batch : " << first_batch << std::endl;
+            input_shape[0] = first_batch;
             input_shapes[input_name] = input_shape;
 
             auto network_b16 = InferenceEngine::details::cloneNetwork(*network);
             auto reshapeTime = Time::now();
             network_b16.reshape(input_shapes);
             auto reshape_duration_ms = double_to_string(get_total_ms_time(reshapeTime));
-            std::cout << "reshape to b16 took " << reshape_duration_ms << " ms" << std::endl;
+            std::cout << "reshape to b" << first_batch << " took " << reshape_duration_ms << " ms" << std::endl;
 
             if (network_b16.getFunction()) {
                 auto nGraphFunc = network_b16.getFunction();
@@ -720,7 +724,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             auto program_16 = std::make_shared<Program>(network_b16, engine, _impl->m_config, false, true);
             device_memory_usage_16 =  program_16->GetCompiledProgram(0)->get_estimated_device_mem_usage(n_streams);
             auto duration_ms = double_to_string(get_total_ms_time(startTime));
-            std::cout << "Batch16 took " << duration_ms << " ms" << std::endl;
+            std::cout << "b" << first_batch << " processing took " << duration_ms << " ms" << std::endl;
         }
         int64_t device_memory_usage_32 = 0;
         {
