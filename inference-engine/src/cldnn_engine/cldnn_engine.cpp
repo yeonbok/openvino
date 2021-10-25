@@ -681,6 +681,9 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         auto input_shapes = network->getInputShapes();
         std::string input_name;
         SizeVector input_shape;
+        std::tie(input_name, input_shape) = *input_shapes.begin();
+        size_t batch_size = input_shape[0];
+
         using Time = std::chrono::high_resolution_clock;
         using ns = std::chrono::nanoseconds;
         auto get_total_ms_time = [](Time::time_point& startTime) {
@@ -693,6 +696,18 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         };
 
         auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
+        {
+            std::cout << "=========== batch : " << batch_size << std::endl;
+            auto startTime = Time::now();
+            auto transformedNetwork = CloneAndTransformNetwork(*network, _impl->m_config);
+            auto program = std::make_shared<Program>(transformedNetwork, engine, _impl->m_config, false, true);
+            int64_t  device_memory_usage =  program->GetCompiledProgram(0)->get_estimated_device_mem_usage(n_streams);
+            auto duration_ms = double_to_string(get_total_ms_time(startTime));
+            std::cout << "b" << batch_size << " processing took " << duration_ms << " ms (including reshape)" << std::endl;
+            std::cout << "returned device mem usage: " << device_memory_usage << std::endl;
+        }
+
+#if 0
         int64_t device_memory_usage_16 = 0;
         {
             auto startTime = Time::now();
@@ -701,7 +716,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             if (std::getenv("TEST_BATCH")) {
                 first_batch = std::stoi(std::getenv("TEST_BATCH"));
             }
-            std::cout << "===========first batch : " << first_batch << std::endl;
+            std::cout << "=========== batch : " << first_batch << std::endl;
             input_shape[0] = first_batch;
             input_shapes[input_name] = input_shape;
 
@@ -724,7 +739,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             auto program_16 = std::make_shared<Program>(network_b16, engine, _impl->m_config, false, true);
             device_memory_usage_16 =  program_16->GetCompiledProgram(0)->get_estimated_device_mem_usage(n_streams);
             auto duration_ms = double_to_string(get_total_ms_time(startTime));
-            std::cout << "b" << first_batch << " processing took " << duration_ms << " ms" << std::endl;
+            std::cout << "b" << first_batch << " processing took " << duration_ms << " ms (including reshape)" << std::endl;
         }
         int64_t device_memory_usage_32 = 0;
         {
@@ -750,15 +765,6 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             auto duration_ms = double_to_string(get_total_ms_time(startTime));
             std::cout << "Batch32 took " << duration_ms << " ms" << std::endl;
         }
-#if 0
-        auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
-        auto program = std::make_shared<Program>(transformedNetwork, engine, _impl->m_config, false, true);
-        auto bsize =  program->GetCompiledProgram(0)->get_approx_max_batch_size(n_streams);
-        IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, bsize);
-#endif
-
-
-
         size_t normal_tensor_size = static_cast<size_t>((device_memory_usage_32 - device_memory_usage_16) / 16.0);
         size_t constant_size = device_memory_usage_16 - (normal_tensor_size * 16);
         size_t max_batch_size = static_cast<size_t>((device_info.max_global_mem_size - constant_size) / normal_tensor_size);
@@ -767,8 +773,9 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         std::cout << "device_memory_usage_16: " << device_memory_usage_16 << std::endl;
         std::cout << "normal_tensor_size: " << normal_tensor_size << std::endl;
         std::cout << "constant_size: " << constant_size << std::endl;
-
         IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, static_cast<int32_t>(max_batch_size));
+#endif
+        IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, static_cast<int32_t>(0xdeadcafe));
     } else {
         IE_THROW() << "Unsupported metric key " << name;
     }
