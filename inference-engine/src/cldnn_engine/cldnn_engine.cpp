@@ -695,7 +695,8 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             return ss.str();
         };
 
-        auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
+//        auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
+        auto engine = cldnn::engine::create(cldnn::engine_types::fake, cldnn::runtime_types::ocl, iter->second, {});
         {
             std::cout << "=========== batch : " << batch_size << std::endl;
             auto startTime = Time::now();
