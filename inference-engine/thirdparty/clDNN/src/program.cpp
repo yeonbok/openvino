@@ -1408,7 +1408,8 @@ void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
 #endif
 }
 
-int64_t program::get_estimated_device_mem_usage(size_t n_streams) {
+std::pair<int64_t, int64_t> program::get_estimated_device_mem_usage() {
+//    auto available_device_mem = get_engine().get_device_info().max_global_mem_size - occupied_mem;
     auto max_alloc_size = get_engine().get_device_info().max_alloc_mem_size;
 //    auto global_device_mem_size = get_engine().get_device_info().max_global_mem_size;
     std::shared_ptr<memory_pool> pool(new memory_pool(get_engine()));
@@ -1416,8 +1417,9 @@ int64_t program::get_estimated_device_mem_usage(size_t n_streams) {
     int64_t tensor_sum = 0;
     std::unordered_set<memory::ptr> allocated_mem_ptrs;
 //    const auto magic_weight = 1.5; // (1.5x additional buffer considering the unaligned layout and internal buffer)
-    std::cout << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
-    std::cout << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
+    std::cout << "###### get_estimated_device_mem_usage" << std::endl;
+    std::cout << "device mem before estimation: " << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
+    std::cout << "host mem before estimation: " << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
 //    std::cout << "############### [Estimation] start allocation!  #########" << std::endl;
     for (const auto& node : processing_order) {
         // single allocation constraint
@@ -1432,35 +1434,25 @@ int64_t program::get_estimated_device_mem_usage(size_t n_streams) {
             continue;
         }            //std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
         if (node->is_type<data>() || node->is_type<generic_layer>() && node->get_dependency(0).is_type<data>()) {
-            if (std::getenv("DUMP_PRED")) {
-                std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
-            }
-            if (std::getenv("ALLOC_BOTH")) {
-                allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
-            }
+//            if (std::getenv("DUMP_PRED")) {
+//                std::cout << "[const node]" << node->id() << ", " << out_size << std::endl;
+//            }
+//            if (std::getenv("ALLOC_BOTH")) {
+//                allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
+//            }
             const_sum += out_size;
-        }
-    }
-    for (const auto& node : processing_order) {
-        // single allocation constraint
-        auto out_size = node->get_output_layout().bytes_count();
-        if (out_size > max_alloc_size) {
-            continue; // to be allocated to host
-        }
-        if (node->can_be_optimized() || node->is_type<data>())
+        } else if (node->have_user_with_type<concatenation>() && node->get_users().size() == 1 && node->get_users().front()->can_be_optimized()) {
             continue;
-        if (node->have_user_with_type<concatenation>() && node->get_users().size() ==1 && node->get_users().front()->can_be_optimized())
-            continue;
-        if (std::getenv("ALLOC_BOTH") || std::getenv("ALLOC_ONLY_TENSOR")) {
+        } else {
             allocated_mem_ptrs.insert(primitive_inst::allocate_output(get_engine(), *node, pool));
+            tensor_sum += out_size;
         }
-        tensor_sum += out_size;
-            //std::cout << "[normal node]" << node->id() << ", " << out_size << std::endl;
     }
 
-    std::cout << "calculated device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
-    std::cout << "total allocated device mem : " << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
-    std::cout << "total allocated host mem : " << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
+//    std::cout << "calculated device mem usage: " << const_sum + tensor_sum << " (const :" << const_sum << ", data : " << tensor_sum << std::endl;
+//    std::cout << "total allocated device mem : " << get_engine().get_used_device_memory(allocation_type::usm_device) << std::endl;
+//    std::cout << "total allocated host mem : " << get_engine().get_used_device_memory(allocation_type::usm_host) << std::endl;
 //    return (global_device_mem_size - const_sum) / std::max(1.0, tensor_sum * n_streams * magic_weight);
-    return static_cast<int64_t>(get_engine().get_used_device_memory(allocation_type::usm_device));
+//    return static_cast<int64_t>(get_engine().get_used_device_memory(allocation_type::usm_device));
+    return std::make_pair(const_sum, get_engine().get_used_device_memory(allocation_type::usm_device));
 }

@@ -479,6 +479,8 @@ int main(int argc, char* argv[]) {
             exeNetwork = ie.LoadNetwork(cnnNetwork, device_name);
             duration_ms = double_to_string(get_total_ms_time(startTime));
             slog::info << "Load network took " << duration_ms << " ms" << slog::endl;
+
+            exit(1);
             if (statistics)
                 statistics->addParameters(StatisticsReport::Category::EXECUTION_RESULTS,
                                           {{"load network time (ms)", duration_ms}});

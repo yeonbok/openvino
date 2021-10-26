@@ -668,16 +668,17 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         IE_SET_METRIC_RETURN(RANGE_FOR_STREAMS, range);
     } else if (name == METRIC_KEY(MAX_BATCH_SIZE)) {
         auto n_streams = _impl->m_config.throughput_streams;
+        uint64_t occupied_device_mem = 0;
         if (options.find("CNN_NETWORK") == options.end()) {
             throw std::runtime_error("No CNN_NETWORK option given!");
         }
         if (options.find("GPU_THROUGHPUT_STREAMS") != options.end()) {
             n_streams = options.find("GPU_THROUGHPUT_STREAMS")->second.as<uint16_t>();
         }
+        if (options.find("OCCUPIED_DEVICE_MEM") != options.end()) {
+            occupied_device_mem = options.find("OCCUPIED_DEVICE_MEM")->second.as<uint64_t>();
+        }
         auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();
-#if 0
-        auto transformedNetwork = CloneAndTransformNetwork(*network, _impl->m_config);
-#endif
         auto input_shapes = network->getInputShapes();
         std::string input_name;
         SizeVector input_shape;
@@ -695,87 +696,22 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             return ss.str();
         };
 
+        size_t max_batch_size = 0;
         auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
         {
             std::cout << "=========== batch : " << batch_size << std::endl;
             auto startTime = Time::now();
             auto transformedNetwork = CloneAndTransformNetwork(*network, _impl->m_config);
             auto program = std::make_shared<Program>(transformedNetwork, engine, _impl->m_config, false, true);
-            int64_t  device_memory_usage =  program->GetCompiledProgram(0)->get_estimated_device_mem_usage(n_streams);
+            std::pair<int64_t, int64_t> device_memory_usage =  program->GetCompiledProgram(0)->get_estimated_device_mem_usage();
             auto duration_ms = double_to_string(get_total_ms_time(startTime));
             std::cout << "b" << batch_size << " processing took " << duration_ms << " ms (including reshape)" << std::endl;
-            std::cout << "returned device mem usage: " << device_memory_usage << std::endl;
+            std::cout << "estimated device mem usage for batch " << batch_size << ": " << device_memory_usage.first + device_memory_usage.second << std::endl;
+            max_batch_size = static_cast<size_t>((device_info.max_global_mem_size - device_memory_usage.first)
+                                / (n_streams * (device_memory_usage.second / batch_size)));
         }
 
-#if 0
-        int64_t device_memory_usage_16 = 0;
-        {
-            auto startTime = Time::now();
-            std::tie(input_name, input_shape) = *input_shapes.begin();
-            int32_t first_batch = 16;
-            if (std::getenv("TEST_BATCH")) {
-                first_batch = std::stoi(std::getenv("TEST_BATCH"));
-            }
-            std::cout << "=========== batch : " << first_batch << std::endl;
-            input_shape[0] = first_batch;
-            input_shapes[input_name] = input_shape;
-
-            auto network_b16 = InferenceEngine::details::cloneNetwork(*network);
-            auto reshapeTime = Time::now();
-            network_b16.reshape(input_shapes);
-            auto reshape_duration_ms = double_to_string(get_total_ms_time(reshapeTime));
-            std::cout << "reshape to b" << first_batch << " took " << reshape_duration_ms << " ms" << std::endl;
-
-            if (network_b16.getFunction()) {
-                auto nGraphFunc = network_b16.getFunction();
-                auto transformation_config = CLDNNPlugin::Config(_impl->m_config);
-#ifdef ENABLE_ONEDNN_FOR_GPU
-                if (GetDeviceInfo(_impl->m_config.key_config_map).supports_immad)
-                    transformation_config.enable_fp16_for_quantized_models = false;
-#endif
-                TransformationsPipeline transformations(transformation_config);
-                transformations.apply(nGraphFunc);
-            }
-            auto program_16 = std::make_shared<Program>(network_b16, engine, _impl->m_config, false, true);
-            device_memory_usage_16 =  program_16->GetCompiledProgram(0)->get_estimated_device_mem_usage(n_streams);
-            auto duration_ms = double_to_string(get_total_ms_time(startTime));
-            std::cout << "b" << first_batch << " processing took " << duration_ms << " ms (including reshape)" << std::endl;
-        }
-        int64_t device_memory_usage_32 = 0;
-        {
-            auto startTime = Time::now();
-            std::tie(input_name, input_shape) = *input_shapes.begin();
-            input_shape[0] = 32;
-            input_shapes[input_name] = input_shape;
-
-            auto network_b32 = InferenceEngine::details::cloneNetwork(*network);
-            network_b32.reshape(input_shapes);
-            if (network_b32.getFunction()) {
-                auto nGraphFunc = network_b32.getFunction();
-                auto transformation_config = CLDNNPlugin::Config(_impl->m_config);
-#ifdef ENABLE_ONEDNN_FOR_GPU
-                if (GetDeviceInfo(_impl->m_config.key_config_map).supports_immad)
-                    transformation_config.enable_fp16_for_quantized_models = false;
-#endif
-                TransformationsPipeline transformations(transformation_config);
-                transformations.apply(nGraphFunc);
-            }
-            auto program_32 = std::make_shared<Program>(network_b32, engine, _impl->m_config, false, true);
-            device_memory_usage_32 =  program_32->GetCompiledProgram(0)->get_estimated_device_mem_usage(n_streams);
-            auto duration_ms = double_to_string(get_total_ms_time(startTime));
-            std::cout << "Batch32 took " << duration_ms << " ms" << std::endl;
-        }
-        size_t normal_tensor_size = static_cast<size_t>((device_memory_usage_32 - device_memory_usage_16) / 16.0);
-        size_t constant_size = device_memory_usage_16 - (normal_tensor_size * 16);
-        size_t max_batch_size = static_cast<size_t>((device_info.max_global_mem_size - constant_size) / normal_tensor_size);
-        std::cout << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
-        std::cout << "device_memory_usage_32: " << device_memory_usage_32 << std::endl;
-        std::cout << "device_memory_usage_16: " << device_memory_usage_16 << std::endl;
-        std::cout << "normal_tensor_size: " << normal_tensor_size << std::endl;
-        std::cout << "constant_size: " << constant_size << std::endl;
         IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, static_cast<int32_t>(max_batch_size));
-#endif
-        IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, static_cast<int32_t>(0xdeadcafe));
     } else {
         IE_THROW() << "Unsupported metric key " << name;
     }
