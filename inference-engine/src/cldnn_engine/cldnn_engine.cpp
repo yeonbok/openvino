@@ -668,7 +668,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         IE_SET_METRIC_RETURN(RANGE_FOR_STREAMS, range);
     } else if (name == METRIC_KEY(MAX_BATCH_SIZE)) {
         auto n_streams = _impl->m_config.throughput_streams;
-        uint64_t occupied_device_mem = 0;
+        int64_t available_device_mem = device_info.max_global_mem_size;
         if (options.find("CNN_NETWORK") == options.end()) {
             throw std::runtime_error("No CNN_NETWORK option given!");
         }
@@ -676,7 +676,10 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             n_streams = options.find("GPU_THROUGHPUT_STREAMS")->second.as<uint16_t>();
         }
         if (options.find("OCCUPIED_DEVICE_MEM") != options.end()) {
-            occupied_device_mem = options.find("OCCUPIED_DEVICE_MEM")->second.as<uint64_t>();
+            auto occupied_device_mem = options.find("OCCUPIED_DEVICE_MEM")->second.as<int64_t>();
+            available_device_mem -= occupied_device_mem;
+            if (auvailable_device_mem < 0)
+                throw std::runtime_error("No available device mem");
         }
         auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();
         auto input_shapes = network->getInputShapes();
@@ -695,7 +698,6 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             ss << std::fixed << std::setprecision(2) << number;
             return ss.str();
         };
-
         size_t max_batch_size = 0;
         auto engine = cldnn::engine::create(cldnn::engine_types::ocl, cldnn::runtime_types::ocl, iter->second, {});
         {
@@ -707,7 +709,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             auto duration_ms = double_to_string(get_total_ms_time(startTime));
             std::cout << "b" << batch_size << " processing took " << duration_ms << " ms (including reshape)" << std::endl;
             std::cout << "estimated device mem usage for batch " << batch_size << ": " << device_memory_usage.first + device_memory_usage.second << std::endl;
-            max_batch_size = static_cast<size_t>((device_info.max_global_mem_size - device_memory_usage.first)
+            max_batch_size = static_cast<size_t>((available_device_mem - device_memory_usage.first)
                                 / (n_streams * (device_memory_usage.second / batch_size)));
         }
 
