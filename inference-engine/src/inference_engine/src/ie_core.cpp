@@ -668,7 +668,9 @@ public:
         return res;
     }
 
-    ie::Parameter GetMetric(const std::string& deviceName, const std::string& name, const ie::ParamMap& options = {}) const override {
+    ie::Parameter GetMetric(const std::string& deviceName,
+                            const std::string& name,
+                            const ie::ParamMap& options = {}) const override {
         // HETERO case
         {
             if (deviceName.find("HETERO:") == 0) {
