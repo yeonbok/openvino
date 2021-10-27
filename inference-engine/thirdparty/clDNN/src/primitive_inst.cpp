@@ -233,9 +233,7 @@ memory::ptr primitive_inst::allocate_output() {
     auto device_mem_acc = [&](size_t a, program_node* b) {
         return a + b->get_output_layout().bytes_count();
     };
-    if (!_network.is_internal()) {
-        std::cout << _node.id() << std::endl;
-    }
+
     bool usm_device_allocatable = true;
     const auto& total_device_input_mem_size = std::accumulate(node_deps.begin(), node_deps.end(), 0, device_mem_acc);
     if (total_device_input_mem_size > engine.get_device_info().max_global_mem_size)
@@ -268,9 +266,6 @@ memory::ptr primitive_inst::allocate_output() {
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
             GPU_DEBUG_COUT << "[" << _node.id() << ": output]" << std::endl;
         }
-        if (std::getenv("DUMP_ACTUAL")) {
-            std::cout << "[const node]" << _node.id() << ", " << layout.bytes_count() << std::endl;
-        }
         return engine.allocate_memory(layout, allocation_type::usm_device, false);
     } else if (_network.is_internal() && !_node.is_output() && _node.is_type<input_layout>()) {
         // Skip memory reset for input_layout primitives, since data will be copied from cldnn::data primitive
@@ -301,23 +296,6 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, const program_node&
         return pool->get_memory(layout, type);
     };
     auto layout = _node.get_output_layout();
-#if 0
-    auto& engine = get_network().get_engine();
-    const auto& inst_deps = _network.get_primitives(_node.get_dependencies());
-    auto device_mem_acc = [&](size_t a, std::shared_ptr<primitive_inst> b) {
-        if (!b->mem_allocated()) return a;
-        if (b->output_memory().get_allocation_type() == allocation_type::usm_device
-            || b->output_memory().get_allocation_type() == allocation_type::cl_mem)
-            return a + b->output_memory().size();
-        else
-            return a;
-    };
-    bool usm_device_allocatable = true;
-    const auto& total_device_input_mem_size = std::accumulate(inst_deps.begin(), inst_deps.end(), 0, device_mem_acc);
-    if (total_device_input_mem_size > engine.get_device_info().max_global_mem_size)
-        usm_device_allocatable = false;
-#endif
-
     // For outputs, cpu prim we want to have lockable alloc type
     // Also if the successor of a node is an cpu, then memory needs to be lockable.
     auto use_lockable_memory = _node.is_output() || _node.get_preferred_impl_type() == impl_types::cpu
@@ -329,7 +307,6 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, const program_node&
     GPU_DEBUG_GET_INSTANCE(debug_config);
     const auto& lockable_mem_type = _engine.get_lockable_preffered_memory_allocation_type(layout.format.is_image_2d());
     const auto& alloc_type = use_lockable_memory ? lockable_mem_type : allocation_type::usm_device;
-//                             : usm_device_allocatable ? allocation_type::usm_device : lockable_mem_type;
 
     if ((_node.can_be_optimized() || _node.is_type<generic_layer>())) {
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
@@ -341,7 +318,6 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, const program_node&
                                     alloc_type,
                                     false);
     } else if (_node.is_output() && _node.is_type<generic_layer>() &&
-//               _engine.supports_allocation(allocation_type::usm_device) && usm_device_allocatable) {
                _engine.supports_allocation(allocation_type::usm_device)) {
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
             GPU_DEBUG_COUT << "[" << _node.id() << ": output]" << std::endl;
@@ -367,6 +343,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, const program_node&
                                    true);
     }
 }
+
 std::vector<std::shared_ptr<primitive_inst>> primitive_inst::build_exec_deps(
     std::vector<std::shared_ptr<primitive_inst>> const& deps) {
     std::vector<std::shared_ptr<primitive_inst>> exec_deps;
