@@ -678,7 +678,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         if (options.find("OCCUPIED_DEVICE_MEM") != options.end()) {
             auto occupied_device_mem = options.find("OCCUPIED_DEVICE_MEM")->second.as<int64_t>();
             available_device_mem -= occupied_device_mem;
-            if (auvailable_device_mem < 0)
+            if (available_device_mem < 0)
                 throw std::runtime_error("No available device mem");
         }
         auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();

@@ -446,7 +446,7 @@ int main(int argc, char* argv[]) {
                     statistics->addParameters(StatisticsReport::Category::EXECUTION_RESULTS,
                                               {{"reshape network time (ms)", duration_ms}});
             }
-            auto max_batch_size = ie.GetMetric("GPU.1", METRIC_KEY(MAX_BATCH_SIZE), options).as<unsigned int>();
+            auto max_batch_size = ie.GetMetric("GPU", METRIC_KEY(MAX_BATCH_SIZE), options).as<unsigned int>();
             std::cout << "max batch size is " << max_batch_size << std::endl;
             // use batch size according to provided layout and shapes
             batchSize = (!FLAGS_layout.empty()) ? getBatchSize(app_inputs_info) : cnnNetwork.getBatchSize();
