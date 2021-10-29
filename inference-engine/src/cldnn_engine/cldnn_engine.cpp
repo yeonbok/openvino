@@ -757,7 +757,8 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         std::pair<int64_t, int64_t> device_memory_usage =  program->GetCompiledProgram(0)->get_estimated_device_mem_usage();
         max_batch_size = std::max(1L, static_cast<int64_t>((available_device_mem - device_memory_usage.first)
                                 / (n_streams * (device_memory_usage.second / base_batch_size))));
-
+        std::cout << "estimated_device_mem_usage: " << device_memory_usage.first + device_memory_usage.second <<
+                " (const: " << device_memory_usage.first << " , general: " << device_memory_usage.second << std::endl;
         IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, static_cast<int32_t>(max_batch_size));
     } else {
         IE_THROW() << "Unsupported metric key " << name;
