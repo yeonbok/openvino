@@ -719,7 +719,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
                 throw std::runtime_error("No available device mem");
         }
 
-        auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();
+        auto network = options.find("CNN_NETWORK")->second.as<const InferenceEngine::CNNNetwork*>();
 
         auto input_shapes = network->getInputShapes();
         std::string input_name;
