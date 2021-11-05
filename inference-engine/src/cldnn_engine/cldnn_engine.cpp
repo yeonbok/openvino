@@ -639,7 +639,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         metrics.push_back(METRIC_KEY(RANGE_FOR_STREAMS));
         metrics.push_back(METRIC_KEY(DEVICE_TYPE));
         metrics.push_back(METRIC_KEY(DEVICE_GOPS));
-        metrics.push_back(METRIC_KEY(MAX_BATCH_SIZE));
+        metrics.push_back(GPU_METRIC_KEY(MAX_BATCH_SIZE));
         metrics.push_back(GPU_METRIC_KEY(DEVICE_TOTAL_MEM_SIZE));
         metrics.push_back(GPU_METRIC_KEY(UARCH_VERSION));
         metrics.push_back(GPU_METRIC_KEY(EXECUTION_UNITS_COUNT));
@@ -702,7 +702,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
     } else if (name == METRIC_KEY(RANGE_FOR_STREAMS)) {
         std::tuple<unsigned int, unsigned int> range = std::make_tuple(1, 2);
         IE_SET_METRIC_RETURN(RANGE_FOR_STREAMS, range);
-    } else if (name == METRIC_KEY(MAX_BATCH_SIZE)) {
+    } else if (name == GPU_METRIC_KEY(MAX_BATCH_SIZE)) {
         const auto& config = _impl->m_configs.GetConfig(device_id);
         auto n_streams = config.throughput_streams;
         auto available_device_mem = device_info.max_global_mem_size;
@@ -758,9 +758,9 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
 
         std::pair<int64_t, int64_t> device_memory_usage =  program->GetCompiledProgram(0)->get_estimated_device_mem_usage();
         max_batch_size = std::max(1L, static_cast<int64_t>((available_device_mem - device_memory_usage.first)
-                                / (n_streams * (device_memory_usage.second / base_batch_size))));
+                                / (n_streams * std::max(1UL, (device_memory_usage.second / base_batch_size)))));
 
-        IE_SET_METRIC_RETURN(MAX_BATCH_SIZE, static_cast<int32_t>(max_batch_size));
+        IE_SET_METRIC_RETURN(GPU_MAX_BATCH_SIZE, static_cast<int32_t>(max_batch_size));
     } else {
         IE_THROW() << "Unsupported metric key " << name;
     }
