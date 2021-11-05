@@ -123,11 +123,9 @@ When specifying key values as raw strings (that is, when using Python API), omit
 | `KEY_TUNING_FILE`     | `"<filename>"`                  | `""`              | Tuning file to create / use. **Deprecated**. Will be removed in the next release |
 
 ## Quering GPU specific metric keys
-For common metric keys, see [Plugin.md](Plugin.md)
-
 * MAX_BATCH_SIZE : returns maximum batch size for a given network which is not only executable but also does not lose performance due to the memory swap impact. The example code to set the required and optional configs for this metic is available in the following snippet:
 
-@snippet snippets/GPU_Metric1.cpp
+@snippet snippets/GPU_Metric1.cpp part0
 
 
 ## GPU Context and Video Memory Sharing RemoteBlob API
