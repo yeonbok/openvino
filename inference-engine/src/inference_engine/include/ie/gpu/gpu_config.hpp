@@ -51,6 +51,8 @@ DECLARE_GPU_METRIC_KEY(EXECUTION_UNITS_COUNT, int);
  */
 DECLARE_GPU_METRIC_KEY(MEMORY_STATISTICS, std::map<std::string, uint64_t>);
 
+
+DECLARE_GPU_METRIC_KEY(MAX_BATCH_SIZE, unsigned int);
 /**
  * @brief Possible return value for OPTIMIZATION_CAPABILITIES metric
  *  - "HW_MATMUL" - Defines if device has hardware block for matrix multiplication
