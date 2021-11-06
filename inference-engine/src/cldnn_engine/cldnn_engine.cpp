@@ -726,14 +726,16 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         std::string input_name;
         SizeVector input_shape;
         std::tie(input_name, input_shape) = *input_shapes.begin();
-        size_t base_batch_size = input_shape[0];
+        size_t base_batch_size = 16; // empirically decided for DG1
 
         auto engine = clDNNEngineFactory::create(config, iter->second, nullptr, true);
         std::shared_ptr<Program> program;
 
-        if (options.find("BASE_BATCH_SIZE") != options.end()) {
+        if (options.find("BASE_BATCH_SIZE") != options.end() && base_batch_size != options.find("BASE_BATCH_SIZE")->second.as<int32_t>()) {
             base_batch_size = options.find("BASE_BATCH_SIZE")->second.as<int32_t>();
-            //reshape the network to user-specified batchsize
+        }
+
+        if (base_batch_size != input_shape[0]) {
             auto cloned_network = InferenceEngine::details::cloneNetwork(*network);
             auto input_shapes = cloned_network.getInputShapes();
             std::string input_name;

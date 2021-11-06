@@ -109,7 +109,6 @@ DECLARE_METRIC_VALUE(BIN);
 DECLARE_METRIC_VALUE(WINOGRAD);
 DECLARE_METRIC_VALUE(BATCHED_BLOB);
 
-
 /**
  * @brief Metric to provide information about a range for streams on platforms where streams are supported.
  *
