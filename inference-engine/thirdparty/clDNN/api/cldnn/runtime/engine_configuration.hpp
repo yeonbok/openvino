@@ -22,6 +22,7 @@ namespace cldnn {
 /// @brief Defines available engine types
 enum class engine_types : int32_t {
     ocl,
+    fake
 };
 
 /// @brief Defines available runtime types

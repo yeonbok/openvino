@@ -11,7 +11,7 @@ class clDNNEngineFactory {
 public:
     static std::shared_ptr<cldnn::engine> create(const Config& config, const cldnn::device::ptr& dev,
                                         InferenceEngine::gpu_handle_param external_queue = nullptr, bool is_dummy = false) {
-        auto engine_type = cldnn::engine_types::ocl;
+        auto engine_type = !is_dummy ? cldnn::engine_types::ocl : cldnn::engine_types::fake;
         auto runtime_type = cldnn::runtime_types::ocl;
         bool enable_profiling = (config.useProfiling ||
                 (config.tuningConfig.mode == cldnn::tuning_mode::tuning_tune_and_cache) ||
