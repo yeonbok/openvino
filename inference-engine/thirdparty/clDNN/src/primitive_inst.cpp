@@ -59,6 +59,7 @@ bool is_output_buffer(const program_node& node) {
 namespace cldnn {
 
 bool is_user_cpu(const program_node* user) {
+    if (user->is_type<quantize>()) return false;
     if (user->can_be_optimized()) {
         auto users = user->get_users();
         for (const auto& u : users) {
@@ -281,8 +282,9 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
 
     // For outputs, cpu prim we want to have lockable alloc type
     // Also if the successor of a node is an cpu, then memory needs to be lockable.
-    auto use_lockable_memory = is_output_buffer(_node) || _node.get_selected_impl()->is_cpu() || is_any_user_cpu(_node.get_users()) ||
-                               !_engine.supports_allocation(allocation_type::usm_device);
+    auto use_lockable_memory = !_node.is_type<quantize>()
+                                && (is_output_buffer(_node) || _node.get_selected_impl()->is_cpu() || is_any_user_cpu(_node.get_users()) ||
+                                !_engine.supports_allocation(allocation_type::usm_device));
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
     const auto& lockable_mem_type = _engine.get_lockable_preffered_memory_allocation_type(layout.format.is_image_2d());

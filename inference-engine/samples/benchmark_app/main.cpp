@@ -467,7 +467,10 @@ int main(int argc, char* argv[]) {
             //            options.insert(std::make_pair("GPU_THROGHPUT_STREAMS", 2));
             //            options.insert(std::make_pair("BASE_BATCH_SIZE", 32));
             //            options.insert(std::make_pair("AVAILABLE_DEVICE_MEM_SIZE", 3221225472));
+            auto start = Time::now();
             auto max_batch_size = ie.GetMetric(device_name, GPU_METRIC_KEY(MAX_BATCH_SIZE), options).as<unsigned int>();
+            auto duration_batch = double_to_string(get_total_ms_time(start));
+            std::cout << "getMaxBatchSize took " << duration_batch << " ms" << std::endl;
             std::cout << "max batch size is " << max_batch_size << std::endl;
             // use batch size according to provided layout and shapes
             batchSize = (!FLAGS_layout.empty()) ? getBatchSize(app_inputs_info) : cnnNetwork.getBatchSize();

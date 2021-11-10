@@ -490,7 +490,7 @@ void program::pre_optimize_graph(bool is_internal) {
     }
 
     if (options.get<build_option_type::optimize_data>()->enabled()) {
-        apply_opt_pass<prepare_quantization>();
+//        apply_opt_pass<prepare_quantization>();
     }
 
     layout_optimizer lo(output_size_handling_enabled);

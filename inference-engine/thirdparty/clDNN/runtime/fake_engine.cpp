@@ -89,6 +89,7 @@ memory::ptr fake_engine::allocate_memory(const layout& layout, allocation_type t
     if (layout.bytes_count() > get_device_info().max_alloc_mem_size) {
         throw std::runtime_error("exceeded max size of memory object allocation");
     }
+    add_memory_used(layout.bytes_count(), type);
     return std::make_shared<simple_attached_memory>(layout, nullptr);
 #if 0
     if (type != allocation_type::cl_mem && !supports_allocation(type)) {
