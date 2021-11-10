@@ -712,12 +712,13 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             throw std::runtime_error("No CNN_NETWORK option given!");
         }
         if (options.find("GPU_THROUGHPUT_STREAMS") != options.end()) {
-            n_streams = options.find("GPU_THROUGHPUT_STREAMS")->second.as<uint16_t>();
+            n_streams = options.find("GPU_THROUGHPUT_STREAMS")->second.as<uint32_t>();
         }
         if (options.find("AVAILABLE_DEVICE_MEM_SIZE") != options.end()) {
             available_device_mem = options.find("AVAILABLE_DEVICE_MEM_SIZE")->second.as<int64_t>();
-            if (available_device_mem < 0)
-                throw std::runtime_error("No available device mem");
+            if (available_device_mem < 0) {
+                IE_THROW() << "[GPU] AVAILABLE_DEVICE_MEM_SIZE value should be greater than 0 for max batch size calculation";
+            }
         }
 
         auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();
