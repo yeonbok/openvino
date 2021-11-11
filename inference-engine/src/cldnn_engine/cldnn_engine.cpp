@@ -747,13 +747,9 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         auto engine = clDNNEngineFactory::create(config, iter->second, nullptr, true);
         std::shared_ptr<Program> program;
 
-        if (options.find("BASE_BATCH_SIZE") != options.end()) {
-            uint32_t user_specified_base_batch_size = base_batch_size;
-            try {
-                user_specified_base_batch_size = options.find("BASE_BATCH_SIZE")->second.as<uint32_t>();
-            } catch (...) {
-                IE_THROW() << "[GPU] bad casting: BASE_BATCH_SIZE should be uint32_t type";
-            }
+        GPU_DEBUG_GET_INSTANCE(debug_config);
+        GPU_DEBUG_IF(debug_config->base_batch_for_memory_estimation > 0) {
+            int32_t user_specified_base_batch_size = debug_config->base_batch_for_memory_estimation;
             base_batch_size = (user_specified_base_batch_size != base_batch_size) ? user_specified_base_batch_size : base_batch_size;
         }
 
