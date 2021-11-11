@@ -708,22 +708,37 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         auto available_device_mem = device_info.max_global_mem_size;
         int64_t max_batch_size = 0;
 
-        if (options.find("CNN_NETWORK") == options.end()) {
-            throw std::runtime_error("No CNN_NETWORK option given!");
+        if (options.find("MODEL_PTR") == options.end()) {
+            IE_THROW() << "[GPU] MODEL_PTR option is not given!";
         }
         if (options.find("GPU_THROUGHPUT_STREAMS") != options.end()) {
-            n_streams = options.find("GPU_THROUGHPUT_STREAMS")->second.as<uint32_t>();
+            try {
+                n_streams = options.find("GPU_THROUGHPUT_STREAMS")->second.as<uint32_t>();
+            } catch (...) {
+                IE_THROW() << "[GPU] bad casting: GPU_THROUGHPUT_STREAMS should be uint32_t type";
+            }
         }
         if (options.find("AVAILABLE_DEVICE_MEM_SIZE") != options.end()) {
-            available_device_mem = options.find("AVAILABLE_DEVICE_MEM_SIZE")->second.as<int64_t>();
+            try {
+                available_device_mem = options.find("AVAILABLE_DEVICE_MEM_SIZE")->second.as<int64_t>();
+            } catch (...) {
+                IE_THROW() << "[GPU] bad casting: AVAILABLE_DEVICE_MEM_SIZE should be int64_t type";
+            }
             if (available_device_mem < 0) {
                 IE_THROW() << "[GPU] AVAILABLE_DEVICE_MEM_SIZE value should be greater than 0 for max batch size calculation";
             }
         }
 
-        auto network = options.find("CNN_NETWORK")->second.as<InferenceEngine::CNNNetwork*>();
+        std::shared_ptr<ngraph::Function> model;
+        auto model_param = options.find("MODEL_PTR")->second;
+        try {
+            model = model_param.as<std::shared_ptr<ngraph::Function>>();
+        } catch (...) {
+            IE_THROW() << "[GPU] MODEL_PTR should be std::shared_ptr<ngraph::Function> type";
+        }
 
-        auto input_shapes = network->getInputShapes();
+        InferenceEngine::CNNNetwork network(model);
+        auto input_shapes = network.getInputShapes();
         std::string input_name;
         SizeVector input_shape;
         std::tie(input_name, input_shape) = *input_shapes.begin();
@@ -732,12 +747,18 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         auto engine = clDNNEngineFactory::create(config, iter->second, nullptr, true);
         std::shared_ptr<Program> program;
 
-        if (options.find("BASE_BATCH_SIZE") != options.end() && base_batch_size != options.find("BASE_BATCH_SIZE")->second.as<int32_t>()) {
-            base_batch_size = options.find("BASE_BATCH_SIZE")->second.as<int32_t>();
+        if (options.find("BASE_BATCH_SIZE") != options.end()) {
+            uint32_t user_specified_base_batch_size = base_batch_size;
+            try {
+                user_specified_base_batch_size = options.find("BASE_BATCH_SIZE")->second.as<uint32_t>();
+            } catch (...) {
+                IE_THROW() << "[GPU] bad casting: BASE_BATCH_SIZE should be uint32_t type";
+            }
+            base_batch_size = (user_specified_base_batch_size != base_batch_size) ? user_specified_base_batch_size : base_batch_size;
         }
 
         if (base_batch_size != input_shape[0]) {
-            auto cloned_network = InferenceEngine::details::cloneNetwork(*network);
+            auto cloned_network = InferenceEngine::details::cloneNetwork(network);
             auto input_shapes = cloned_network.getInputShapes();
             std::string input_name;
             SizeVector input_shape;
@@ -755,7 +776,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             transformations.apply(nGraphFunc);
             program = std::make_shared<Program>(cloned_network, engine, config, false, true);
         } else {
-            auto transformedNetwork = CloneAndTransformNetwork(*network, config);
+            auto transformedNetwork = CloneAndTransformNetwork(network, config);
             program = std::make_shared<Program>(transformedNetwork, engine, config, false, true);
         }
 
