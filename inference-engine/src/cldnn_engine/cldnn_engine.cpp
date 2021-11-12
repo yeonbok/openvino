@@ -738,12 +738,7 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
         }
 
         InferenceEngine::CNNNetwork network(model);
-        auto input_shapes = network.getInputShapes();
-        std::string input_name;
-        SizeVector input_shape;
-        std::tie(input_name, input_shape) = *input_shapes.begin();
         size_t base_batch_size = 16; // empirically decided for DG1
-
         auto engine = clDNNEngineFactory::create(config, iter->second, nullptr, true);
         std::shared_ptr<Program> program;
 
@@ -753,33 +748,66 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             base_batch_size = (user_specified_base_batch_size != base_batch_size) ? user_specified_base_batch_size : base_batch_size;
         }
 
-        if (base_batch_size != input_shape[0]) {
-            auto cloned_network = InferenceEngine::details::cloneNetwork(network);
-            auto input_shapes = cloned_network.getInputShapes();
-            std::string input_name;
-            SizeVector input_shape;
-            std::tie(input_name, input_shape) = *input_shapes.begin();
-            input_shape[0] = base_batch_size;
-            input_shapes[input_name] = input_shape;
-            cloned_network.reshape(input_shapes);
-            auto t_config = Config(config);
-            auto nGraphFunc = cloned_network.getFunction();
-#ifdef ENABLE_ONEDNN_FOR_GPU
-            if (GetDeviceInfo(config.key_config_map).supports_immad)
-                t_config.enable_fp16_for_quantized_models = false;
-#endif
-            TransformationsPipeline transformations(t_config, device_info);
-            transformations.apply(nGraphFunc);
-            program = std::make_shared<Program>(cloned_network, engine, config, false, true);
+        auto cloned_network = InferenceEngine::details::cloneNetwork(network);
+        auto inputs_info = cloned_network.getInputsInfo();
+        ICNNNetwork::InputShapes new_shapes;
+
+        bool batch_detected = false;
+        for (auto& info : inputs_info) {
+            if (!info.second)
+                continue;
+            Layout layout = info.second->getLayout();
+            auto data = info.second->getInputData();
+            std::string name;
+            if (!data) continue;
+            name = info.second->getInputData()->getName();
+            if (layout == InferenceEngine::Layout::NCHW ||
+                layout == InferenceEngine::Layout::NHWC ||
+                layout == InferenceEngine::Layout::NCDHW ||
+                layout == InferenceEngine::Layout::NDHWC ||
+                layout == InferenceEngine::Layout::NC)  {
+                auto shape = data->getTensorDesc().getDims();
+                shape[0] = base_batch_size;
+                batch_detected = true;
+            } else if (layout == InferenceEngine::Layout::CN) {
+                auto shape = data->getTensorDesc().getDims();
+                shape[1] = base_batch_size;
+                batch_detected = true;
+                new_shapes[name] = shape;
+            } else {
+                auto& shape = data->getTensorDesc().getDims();
+                new_shapes[name] = shape;
+            }
+        }
+        if (batch_detected) { // reshape only for batched layout
+            cloned_network.reshape(cloned_network.getInputShapes());
+            GPU_DEBUG_IF(debug_config->verbose >= 1) {
+                GPU_DEBUG_COUT << "Reshaped base batch size to " << base_batch_size << std::endl;
+            }
         } else {
-            auto transformedNetwork = CloneAndTransformNetwork(network, config);
-            program = std::make_shared<Program>(transformedNetwork, engine, config, false, true);
+            base_batch_size = 1;
+            GPU_DEBUG_IF(debug_config->verbose >= 1) {
+                GPU_DEBUG_COUT << "Batch dimension is not used in inputs." << std::endl;
+            }
         }
 
+        auto t_config = Config(config);
+        auto nGraphFunc = cloned_network.getFunction();
+#ifdef ENABLE_ONEDNN_FOR_GPU
+        if (GetDeviceInfo(config.key_config_map).supports_immad)
+            t_config.enable_fp16_for_quantized_models = false;
+#endif
+        TransformationsPipeline transformations(t_config, device_info);
+        transformations.apply(nGraphFunc);
+        program = std::make_shared<Program>(cloned_network, engine, config, false, true);
         std::pair<int64_t, int64_t> device_memory_usage =  program->GetCompiledProgram(0)->get_estimated_device_mem_usage();
         max_batch_size = std::max(1L, static_cast<int64_t>((available_device_mem - device_memory_usage.first)
                                 / (n_streams * std::max(1UL, (device_memory_usage.second / base_batch_size)))));
-
+        GPU_DEBUG_IF(debug_config->verbose >= 1) {
+            GPU_DEBUG_COUT << "Base batch size: " << base_batch_size  << std::endl;
+            GPU_DEBUG_COUT << "Const mem usage: " << device_memory_usage.first  << std::endl;
+            GPU_DEBUG_COUT << "General mem usage: " << device_memory_usage.second  << std::endl;
+        }
         IE_SET_METRIC_RETURN(GPU_MAX_BATCH_SIZE, static_cast<int32_t>(max_batch_size));
     } else {
         IE_THROW() << "Unsupported metric key " << name;
