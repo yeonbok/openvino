@@ -17,7 +17,6 @@
 #include <ie_algorithm.hpp>
 
 #include "cldnn_engine.h"
-#include "cldnn_engine_factory.h"
 #include "cldnn_executable_network.h"
 #include "cldnn_transformations_pipeline.h"
 #include "cldnn_custom_layer.h"
@@ -739,7 +738,13 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
 
         InferenceEngine::CNNNetwork network(model);
         size_t base_batch_size = 16; // empirically decided for DG1
-        auto engine = clDNNEngineFactory::create(config, iter->second, nullptr, true);
+        auto engine_params = clDNNEngine::GetEngineParams(config, iter->second, nullptr);
+        auto engine = cldnn::engine::create(engine_params.engine_type, engine_params.runtime_type, iter->second,
+                                cldnn::engine_configuration(false, engine_params.queue_type, std::string(),
+                                config.queuePriority, config.queueThrottle, config.memory_pool_on,
+                                engine_params.use_unified_shared_memory, std::string(), config.throughput_streams),
+                                engine_params.task_executor);
+
         std::shared_ptr<Program> program;
 
         GPU_DEBUG_GET_INSTANCE(debug_config);
