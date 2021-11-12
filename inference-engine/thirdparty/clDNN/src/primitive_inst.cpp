@@ -363,6 +363,5 @@ std::string primitive_inst::generic_to_string(program_node const& node, const ch
     node_info->dump(primitive_description);
 
     return primitive_description.str();
-
 }
 }  // namespace cldnn

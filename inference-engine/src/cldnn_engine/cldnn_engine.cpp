@@ -763,29 +763,27 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
                 continue;
             Layout layout = info.second->getLayout();
             auto data = info.second->getInputData();
-            std::string name;
-            if (!data) continue;
-            name = info.second->getInputData()->getName();
+            if (!data)
+                continue;
+            std::string name = info.second->getInputData()->getName();
+            auto shape = data->getTensorDesc().getDims();
             if (layout == InferenceEngine::Layout::NCHW ||
                 layout == InferenceEngine::Layout::NHWC ||
                 layout == InferenceEngine::Layout::NCDHW ||
                 layout == InferenceEngine::Layout::NDHWC ||
                 layout == InferenceEngine::Layout::NC)  {
-                auto shape = data->getTensorDesc().getDims();
                 shape[0] = base_batch_size;
                 batch_detected = true;
             } else if (layout == InferenceEngine::Layout::CN) {
-                auto shape = data->getTensorDesc().getDims();
                 shape[1] = base_batch_size;
                 batch_detected = true;
                 new_shapes[name] = shape;
             } else {
-                auto& shape = data->getTensorDesc().getDims();
                 new_shapes[name] = shape;
             }
         }
         if (batch_detected) { // reshape only for batched layout
-            cloned_network.reshape(cloned_network.getInputShapes());
+            cloned_network.reshape(new_shapes);
             GPU_DEBUG_IF(debug_config->verbose >= 1) {
                 GPU_DEBUG_COUT << "Reshaped base batch size to " << base_batch_size << std::endl;
             }
@@ -796,13 +794,8 @@ Parameter clDNNEngine::GetMetric(const std::string& name, const std::map<std::st
             }
         }
 
-        auto t_config = Config(config);
         auto nGraphFunc = cloned_network.getFunction();
-#ifdef ENABLE_ONEDNN_FOR_GPU
-        if (GetDeviceInfo(config.key_config_map).supports_immad)
-            t_config.enable_fp16_for_quantized_models = false;
-#endif
-        TransformationsPipeline transformations(t_config, device_info);
+        TransformationsPipeline transformations(config, device_info);
         transformations.apply(nGraphFunc);
         program = std::make_shared<Program>(cloned_network, engine, config, false, true);
         std::pair<int64_t, int64_t> device_memory_usage =  program->GetCompiledProgram(0)->get_estimated_device_mem_usage();
