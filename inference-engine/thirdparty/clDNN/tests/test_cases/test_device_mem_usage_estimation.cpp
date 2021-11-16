@@ -37,5 +37,5 @@ TEST(test_device_mem_usage_estimation, basic) {
     network network(*engine2, topology);
     network.set_input_data("input1", input3);
     network.set_input_data("input2", input4);
-    ASSERT_NEAR(estimated_mem_usage.first + estimated_mem_usage.second, engine2->get_used_device_memory(allocation_type::usm_device), 1e-5f);
+    ASSERT_EQ(estimated_mem_usage.first + estimated_mem_usage.second, engine2->get_used_device_memory(allocation_type::usm_device));
 }
