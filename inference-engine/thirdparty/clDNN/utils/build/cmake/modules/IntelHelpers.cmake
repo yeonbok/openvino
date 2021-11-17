@@ -3,7 +3,7 @@
 #
 
 #cmake_policy(PUSH) # Not needed... CMake manages policy scope.
-cmake_minimum_required(VERSION 2.8.4 FATAL_ERROR)
+#cmake_minimum_required(VERSION 2.8.4 FATAL_ERROR)
 
 
 # TODO: Check get_property() with CMake cache interference. According to doc it should return empty value, but it may unset variable in some conditions.

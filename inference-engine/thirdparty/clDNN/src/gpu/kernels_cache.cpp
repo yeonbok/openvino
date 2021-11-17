@@ -189,6 +189,7 @@ void kernels_cache::get_program_source(const kernels_code& kernels_source_code, 
         if (one_time_kernel) {
             key += " __ONE_TIME__";
         }
+        std::cout << key << std::endl;
         auto& current_bucket = program_buckets[key];
         if (current_bucket.empty()) { // new bucket
             const auto& bucket_id = program_buckets.size() - 1;
@@ -232,6 +233,11 @@ void kernels_cache::get_program_source(const kernels_code& kernels_source_code, 
                 full_code += ss;
             b.hash_value = std::hash<std::string>()(full_code);
             all_batches->push_back(b);
+	    std::ofstream dump_file;
+	    dump_file.open("full_code_" + std::to_string(b.bucket_id) + "_part_" + std::to_string(b.batch_id) + ".cl");
+	    if (dump_file.good()) {
+	        dump_file << full_code;
+	    }
         }
     }
 }
@@ -250,7 +256,13 @@ kernels_cache::kernel_id kernels_cache::set_kernel_source(
     kernels_cache::kernel_id id = kernel_string->entry_point + "_" + std::to_string(kernel_num);
 
     auto res = _kernels_code.emplace(kernel_string, id, dump_custom_program, one_time_kernel);
-
+#if 0
+    std::ofstream dump_file;
+    dump_file.open("set_kernel_source_" + id + ".cl");
+    if (dump_file.good()) {
+        dump_file << kernel_string->undefs;
+    }
+#endif
     assert(_kernels.find(id) == _kernels.end());
     if (res.second) {
         _pending_compilation = true;
@@ -277,15 +289,16 @@ static std::vector<unsigned char> getProgramBinaries(cl::Program program) {
 void kernels_cache::build_batch(const batch_program& batch) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "KernelsCache::BuildProgram");
 
-    bool dump_sources = !_context.get_configuration().ocl_sources_dumps_dir.empty() || batch.dump_custom_program;
-
+    //bool dump_sources = !_context.get_configuration().ocl_sources_dumps_dir.empty() || batch.dump_custom_program;
+    bool dump_sources = true;
     std::string err_log;  // accumulated build log from all program's parts (only contains messages from parts which
 
     std::string current_dump_file_name = "";
     if (dump_sources) {
-        current_dump_file_name = _context.get_configuration().ocl_sources_dumps_dir;
-        if (!current_dump_file_name.empty() && current_dump_file_name.back() != '/')
-            current_dump_file_name += '/';
+        //current_dump_file_name = _context.get_configuration().ocl_sources_dumps_dir;
+        current_dump_file_name = "cl_dumps/";
+        //if (!current_dump_file_name.empty() && current_dump_file_name.back() != '/')
+        //    current_dump_file_name += '/';
 
         current_dump_file_name += "clDNN_program_" + std::to_string(batch.bucket_id) + "_part_" + std::to_string(batch.batch_id) + ".cl";
     }
@@ -312,6 +325,7 @@ void kernels_cache::build_batch(const batch_program& batch) {
     }
     try {
         cl::vector<cl::Kernel> kernels;
+    //    std::cout << "compiling " << current_dump_file_name << std::endl;
 
         // Run compilation
         if (precompiled_kernels.empty()) {
@@ -345,6 +359,8 @@ void kernels_cache::build_batch(const batch_program& batch) {
         }
         {
             std::lock_guard<std::mutex> lock(_context.get_cache_mutex());
+
+ //           std::cout << "-- add kernel entries for " << current_dump_file_name << std::endl;
             for (auto& k : kernels) {
                 const auto& entry_point = k.getInfo<CL_KERNEL_FUNCTION_NAME>();
                 const auto& k_id = batch.entry_point_to_id.find(entry_point);
