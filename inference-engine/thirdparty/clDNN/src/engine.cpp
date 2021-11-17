@@ -248,6 +248,7 @@ void* engine_impl::get_user_context() const { return static_cast<void*>(_context
 
 void engine_impl::compile_program(program_impl& program) {
     auto& cache = _context->get_kernels_cache(program.get_id());
+    std::cout << "compile_program for " << program.get_id() << " " << &cache << std::endl;
     if (!program.get_options().get<build_option_type::serialize_network>()->serialization_network_name.empty())
         cache.get_context().set_serialization_flag(true);
     // TODO: better compilation logic instead of a simple 'compile all'?

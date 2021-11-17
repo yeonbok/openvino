@@ -114,6 +114,7 @@ program_impl::program_impl(engine_impl& engine_ref,
     : engine(&engine_ref),
       options(options),
       processing_order() {
+    std::cout << "#### is internal : " << is_internal << std::endl;
     set_options();
     pm = std::unique_ptr<pass_manager>(new pass_manager(*this));
     prepare_nodes(nodes);

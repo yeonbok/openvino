@@ -111,6 +111,7 @@ gpu_program_state& gpu_toolkit::get_program_state(uint32_t id) {
 
 void gpu_toolkit::add_program(uint32_t prog_id) {
     std::lock_guard<std::mutex> lock(toolkit_mutex);
+    std::cout << "add_program " << prog_id << std::endl;
     _program_states.emplace(std::make_pair(prog_id, std::make_shared<gpu_program_state>(*this, prog_id)));
 }
 

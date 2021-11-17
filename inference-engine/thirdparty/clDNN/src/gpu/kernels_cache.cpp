@@ -471,7 +471,8 @@ void kernels_cache::build_all() {
     }
 }
 
-void kernels_cache::reset() {
+void kernels_cache::reset___() {
+    std::cout << "kernels cache reset! " << std::endl;
     _kernels.clear();
     _one_time_kernels.clear();
     _kernels_code.clear();
