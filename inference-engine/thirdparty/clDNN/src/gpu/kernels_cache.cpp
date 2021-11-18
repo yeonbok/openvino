@@ -305,7 +305,8 @@ void kernels_cache::build_batch(const batch_program& batch) {
         //if (!current_dump_file_name.empty() && current_dump_file_name.back() != '/')
         //    current_dump_file_name += '/';
 
-        current_dump_file_name += "clDNN_program_" + std::to_string(_prog_id) + "_part_" + std::to_string(batch.batch_id) + ".cl";
+        current_dump_file_name += "clDNN_program_" + std::to_string(_prog_id) + "_bucket_"
+                                + std::to_string(batch.bucket_id) +  "_part_" + std::to_string(batch.batch_id) + ".cl";
     }
 
     std::ofstream dump_file;
@@ -418,12 +419,15 @@ void kernels_cache::build_all() {
     {
         std::lock_guard<std::mutex> lock(_context.get_cache_mutex());
         get_program_source(_kernels_code, &batches);
-#if 0
-        for (auto b : batches) {
+#if 1
+        for (unsigned int i = 0; i < batches.size() ; ++i) {
             std::ofstream dump_file;
-            dump_file.open("full_code_" + std::to_string(b.bucket_id) + "_part_" + std::to_string(b.batch_id) + ".cl");
+            auto b = batches[i];
+            dump_file.open("collected_code_program_" + std::to_string(_prog_id) + "_bucket_"
+                                        + std::to_string(b.bucket_id) + "_part_" + std::to_string(b.batch_id) + ".cl");
             if (dump_file.good()) {
-                dump_file << b.source[0];
+                for (auto s : *b.source)
+                    dump_file << s;
             }
         }
 #endif
