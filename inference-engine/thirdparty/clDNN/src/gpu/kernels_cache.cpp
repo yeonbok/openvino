@@ -415,6 +415,7 @@ void kernels_cache::build_all() {
     {
         std::lock_guard<std::mutex> lock(_context.get_cache_mutex());
         get_program_source(_kernels_code, &batches);
+#if 0
         for (auto b : batches) {
             std::ofstream dump_file;
             dump_file.open("full_code_" + std::to_string(b.bucket_id) + "_part_" + std::to_string(b.batch_id) + ".cl");
@@ -422,6 +423,7 @@ void kernels_cache::build_all() {
                 dump_file << b.source[0];
             }
         }
+#endif
         _one_time_kernels.clear();
 #if (CLDNN_THREADING == CLDNN_THREADING_TBB)
         const auto core_type = _context.get_configuration().core_type;
@@ -446,6 +448,13 @@ void kernels_cache::build_all() {
     std::vector<std::future<void>> builds;
     for (size_t i = 0; i < batches.size(); ++i) {
         builds.push_back(pool->enqueue([this, &batches, i] () {
+#if 1
+            std::ofstream dump_file;
+            dump_file.open("full_code_" + std::to_string(batches[i].bucket_id) + "_part_" + std::to_string(batches[i].batch_id) + ".cl");
+            if (dump_file.good()) {
+               dump_file << batches[i].source[0];
+            }
+#endif
             build_batch(batches[i]);
         }));
     }
