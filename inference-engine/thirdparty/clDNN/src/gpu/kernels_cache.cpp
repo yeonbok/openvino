@@ -332,7 +332,7 @@ void kernels_cache::build_batch(const batch_program& batch) {
     try {
         cl::vector<cl::Kernel> kernels;
     //    std::cout << "compiling " << current_dump_file_name << std::endl;
-
+        if (_prog_id == 1) return;
         // Run compilation
         if (precompiled_kernels.empty()) {
             cl::Program program(_context.context(), *batch.source);
@@ -350,7 +350,6 @@ void kernels_cache::build_batch(const batch_program& batch) {
             }
 
             program.createKernels(&kernels);
-
             if (is_cache_enabled()) {
                 // If kernels caching is enabled, then we save compiled bucket to binary file with name ${code_hash_value}.cl_cache
                 // Note: Bin file contains full bucket, not separate kernels, so kernels reuse across different models is quite limited
