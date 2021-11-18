@@ -99,8 +99,11 @@ private:
 #endif
 class kernels_cache {
 public:
-    using source_code = std::vector<std::string>;
+    using source_code = std::shared_ptr<std::vector<std::string>>;
     struct batch_program {
+        batch_program() {
+            source = std::make_shared<std::vector<std::string>>();
+        }
         int32_t bucket_id = 0;
         int32_t batch_id = 0;
         source_code source;
@@ -176,7 +179,7 @@ public:
     gpu_toolkit& get_context() { return _context; }
     // forces compilation of all pending kernels/programs
     void build_all();
-    void reset___();
+    void reset();
 };
 
 }  // namespace gpu

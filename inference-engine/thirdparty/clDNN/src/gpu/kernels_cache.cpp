@@ -163,7 +163,7 @@ void kernels_cache::get_program_source(const kernels_code& kernels_source_code, 
 
     for (const auto& code : kernels_source_code) {
         std::string full_code = code.kernel_strings->jit + code.kernel_strings->str + code.kernel_strings->undefs;
-        const source_code org_source_code = { full_code };
+//        const source_code org_source_code = { full_code };
         std::string entry_point = code.kernel_strings->entry_point;
         std::string options = code.kernel_strings->options;
         bool batch_compilation = code.kernel_strings->batch_compilation;
@@ -213,9 +213,9 @@ void kernels_cache::get_program_source(const kernels_code& kernels_source_code, 
         current_batch.one_time = one_time_kernel;
         current_batch.entry_point_to_id[entry_point] = code.id;
 
-        assert(org_source_code.size() == 1);
+//        assert(org_source_code.size() == 1);
 
-        current_batch.source.push_back(std::move(org_source_code.front()));
+        current_batch.source->push_back(std::move(full_code));
         current_batch.kernels_counter++;
     }
 
@@ -227,12 +227,15 @@ void kernels_cache::get_program_source(const kernels_code& kernels_source_code, 
     for (auto& c : program_buckets) {
         auto options = c.first;
         auto& batches = c.second;
-        for (auto& b : batches) {
+//        for (auto& b : batches) {
+        for (std::vector<batch_program>::iterator b = batches.begin(); b != batches.end(); ++b) {
             std::string full_code = options + " " + _context.get_device_info().driver_version;
-            for (auto& ss : b.source)
+            for (auto& ss : *b->source)
                 full_code += ss;
-            b.hash_value = std::hash<std::string>()(full_code);
-            all_batches->push_back(b);
+            b->hash_value = std::hash<std::string>()(full_code);
+//            all_batches->push_back(std::move(b));
+            all_batches->push_back(std::move(*b));
+//            std::cout << "Pushed " << (&*b) << std::endl;
 #if 0
             std::ofstream dump_file;
             dump_file.open("full_code_" + std::to_string(b.bucket_id) + "_part_" + std::to_string(b.batch_id) + ".cl");
@@ -309,7 +312,7 @@ void kernels_cache::build_batch(const batch_program& batch) {
     if (dump_sources) {
         dump_file.open(current_dump_file_name);
         if (dump_file.good()) {
-            for (auto& s : batch.source)
+            for (auto& s : *batch.source)
                 dump_file << s;
         }
     }
@@ -331,7 +334,7 @@ void kernels_cache::build_batch(const batch_program& batch) {
 
         // Run compilation
         if (precompiled_kernels.empty()) {
-            cl::Program program(_context.context(), batch.source);
+            cl::Program program(_context.context(), *batch.source);
             {
                 OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "KernelsCache::BuildProgram::RunCompilation");
                 program.build(_context.device(), batch.options.c_str());
@@ -424,6 +427,14 @@ void kernels_cache::build_all() {
             }
         }
 #endif
+
+#if 0
+        int i = 0;
+        for (std::vector<batch_program>::iterator b = batches.begin(); b != batches.end(); ++b) {
+            std::cout << "b" << i++ << " addr : " << (&*b) << std::endl;
+        }
+
+#endif
         _one_time_kernels.clear();
 #if (CLDNN_THREADING == CLDNN_THREADING_TBB)
         const auto core_type = _context.get_configuration().core_type;
@@ -452,8 +463,11 @@ void kernels_cache::build_all() {
             std::ofstream dump_file;
             dump_file.open("full_code_" + std::to_string(batches[i].bucket_id) + "_part_" + std::to_string(batches[i].batch_id) + ".cl");
             if (dump_file.good()) {
-               dump_file << batches[i].source[0];
+               dump_file << (*batches[i].source)[0];
             }
+#endif
+#if 0
+            std::cout << "B" << i << " addr : " << (&batches[i]) << std::endl;
 #endif
             build_batch(batches[i]);
         }));
@@ -489,8 +503,7 @@ void kernels_cache::build_all() {
     }
 }
 
-void kernels_cache::reset___() {
-    std::cout << "kernels cache reset! " << std::endl;
+void kernels_cache::reset() {
     _kernels.clear();
     _one_time_kernels.clear();
     _kernels_code.clear();
