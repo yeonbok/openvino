@@ -44,7 +44,7 @@
         <model path="public/mtcnn/mtcnn-r/FP16/mtcnn-r.xml" precision="FP16" test="inference_with_streams" device="CPU" vmsize="1008113" vmpeak="1088786" vmrss="44028" vmhwm="44028" />
         <model path="public/mtcnn/mtcnn-r/FP16/mtcnn-r.xml" precision="FP16" test="inference_with_streams" device="GPU" vmsize="2203697" vmpeak="2222500" vmrss="193143" vmhwm="279931" />
         <model path="public/mtcnn/mtcnn-r/FP16/mtcnn-r.xml" precision="FP16" test="infer_request_inference" device="CPU" vmsize="908700" vmpeak="908700" vmrss="43227" vmhwm="43227" />
-        <model path="public/mtcnn/mtcnn-r/FP16/mtcnn-r.xml" precision="FP16" test="infer_request_inference" device="GPU" vmsize="2107846" vmpeak="2145161" vmrss="194516" vmhwm="281372" />
+        <model path="public/mtcnn/mtcnn-r/FP16/mtcnn-r.xml" precision="FP16" test="infer_request_inference" device="GPU" vmsize="2107846" vmpeak="2145161" vmrss="196248" vmhwm="281372" />
 
         <model path="public/ssd300/FP16/ssd300.xml" precision="FP16" test="create_exenetwork" device="CPU" vmsize="1120184" vmpeak="1120184" vmrss="359200" vmhwm="359200" />
         <model path="public/ssd300/FP16/ssd300.xml" precision="FP16" test="create_exenetwork" device="GPU" vmsize="1630569" vmpeak="1752530" vmrss="546364" vmhwm="874426" />
