@@ -101,6 +101,7 @@ source_group("${__CLDNN_Label__gtest}"        FILES ${__CLDNN_Sources__gtest})
 include_directories(
     "${CLDNN__MAIN_DIR}"
     "${CLDNN__MAIN_DIR}/src"
+    "${CLDNN__MAIN_DIR}/src/include"
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${__CLDNN_Directory__test_utils}"
     "${__CLDNN_Directory__ks_core}"
@@ -122,16 +123,32 @@ set_property(TARGET "${CLDNN_BUILD__PROJ}" PROPERTY PROJECT_LABEL "${CLDNN_BUILD
 set_property(TARGET "${CLDNN_BUILD__PROJ}" PROPERTY OUTPUT_NAME   "${CLDNN_BUILD__PROJ_OUTPUT_NAME}")
 
 # Set library dependencies
-target_link_libraries("${CLDNN_BUILD__PROJ}"
+target_link_libraries("${CLDNN_BUILD__PROJ}" PRIVATE
     "${CLDNN_BUILD__PROJ__clDNN}"
   )
 
+set_ie_threading_interface_for("${CLDNN_BUILD__PROJ}")
 if(WIN32)
-  target_link_libraries("${CLDNN_BUILD__PROJ}" setupapi)
+  target_link_libraries("${CLDNN_BUILD__PROJ}" PRIVATE setupapi)
 elseif((NOT ANDROID) AND (UNIX))
-  target_link_libraries("${CLDNN_BUILD__PROJ}" pthread)
+  target_link_libraries("${CLDNN_BUILD__PROJ}" PRIVATE pthread)
 endif()
-target_link_libraries("${CLDNN_BUILD__PROJ}" ${CLDNN__SYSTEM_LINK_LIBRARIES})
+target_link_libraries("${CLDNN_BUILD__PROJ}" PRIVATE ${CLDNN__SYSTEM_LINK_LIBRARIES} ${TBBBIND_2_4_IMPORTED_TARGETS})
+
+if(CLDNN_THREADING STREQUAL "TBB")
+  find_package(TBBBIND_2_4 QUIET)
+  if (TBBBIND_2_4_FOUND)
+      message(STATUS "Static tbbbind_2_4 package was found")
+  endif()
+endif()
+target_compile_definitions("${CLDNN_BUILD__PROJ}" PRIVATE -DTBBBIND_2_4_AVAILABLE)
+#target_link_libraries("${CLDNN_BUILD__PROJ}" PRIVATE ${TBBBIND_2_4_IMPORTED_TARGETS})
+
+#if(COMMAND set_ie_threading_interface_for)
+#  #set_ie_threading_interface_for("${CLDNN_BUILD__PROJ}")
+#  if (TBBBIND_2_4_FOUND)
+#  endif()
+#endif()
 
 # =================================== Custom pre- and post-steps =======================================
 
