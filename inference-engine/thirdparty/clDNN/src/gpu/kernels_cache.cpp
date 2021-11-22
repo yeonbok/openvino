@@ -232,11 +232,6 @@ void kernels_cache::get_program_source(const kernels_code& kernels_source_code, 
                 full_code += ss;
             b.hash_value = std::hash<std::string>()(full_code);
             all_batches->push_back(b);
-            std::ofstream dump_file;
-            dump_file.open("full_code_" + std::to_string(b.bucket_id) + "_part_" + std::to_string(b.batch_id) + ".cl");
-            if (dump_file.good()) {
-                dump_file << full_code;
-            }
         }
     }
 }
@@ -286,23 +281,27 @@ void kernels_cache::build_batch(const batch_program& batch) {
 
     std::string err_log;  // accumulated build log from all program's parts (only contains messages from parts which
 
-    std::string current_dump_file_name = "";
-    if (dump_sources) {
-        current_dump_file_name = _context.get_configuration().ocl_sources_dumps_dir;
-        if (!current_dump_file_name.empty() && current_dump_file_name.back() != '/')
-            current_dump_file_name += '/';
-
-        current_dump_file_name += "clDNN_program_" + std::to_string(batch.bucket_id) + "_part_" + std::to_string(batch.batch_id) + ".cl";
+    std::string current_dump_file_name = "cl_dump_at_build_batch/";
+    if (std::getenv("DUMP_AT_BUILD_DIR")) {
+        current_dump_file_name = std::getenv("DUMP_AT_BUILD_DIR");
     }
+    //    if (dump_sources) {
+    //current_dump_file_name = _context.get_configuration().ocl_sources_dumps_dir;
+    if (!current_dump_file_name.empty() && current_dump_file_name.back() != '/')
+        current_dump_file_name += '/';
+
+    current_dump_file_name += "clDNN_program_" + std::to_string(_prog_id) + "_bucket_" + std::to_string(batch.bucket_id)
+                            + "_part_" + std::to_string(batch.batch_id) + ".cl";
+    //    }
 
     std::ofstream dump_file;
-    if (dump_sources) {
-        dump_file.open(current_dump_file_name);
-        if (dump_file.good()) {
-            for (auto& s : batch.source)
-                dump_file << s;
-        }
+//    if (dump_sources) {
+    dump_file.open(current_dump_file_name);
+    if (dump_file.good()) {
+        for (auto& s : batch.source)
+            dump_file << s;
     }
+//    }
 
     std::string cached_bin_name = get_cache_path() + std::to_string(batch.hash_value) + ".cl_cache";
     cl::Program::Binaries precompiled_kernels = {};
@@ -414,6 +413,24 @@ void kernels_cache::build_all() {
 #endif
     }
 
+    for (auto b : batches) {
+        std::string dump_file_name = "cl_dump_before_build_batch/";
+        if (std::getenv("DUMP_BEFORE_BUILD_DIR")) {
+            dump_file_name = std::getenv("DUMP_BEFORE_BUILD_DIR");
+        }
+
+        if (!dump_file_name.empty() && dump_file_name.back() != '/')
+            dump_file_name += '/';
+
+        dump_file_name += ("before_build_clDNN_program_" + std::to_string(_prog_id) + "_bucket_" +  std::to_string(b.bucket_id)
+                + "_part_" + std::to_string(b.batch_id) + ".cl");
+
+        std::ofstream dump_file;
+        dump_file.open(dump_file_name);
+        if (dump_file.good()) {
+            dump_file << b.source[0];
+        }
+    }
 #if (CLDNN_THREADING == CLDNN_THREADING_TBB)
     arena->execute([this, &batches] {
         tbb::parallel_for(tbb::blocked_range<size_t>(0, batches.size()), [this, &batches](const tbb::blocked_range<size_t>& r) {
