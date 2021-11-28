@@ -9139,5 +9139,262 @@ TEST(convolution_gpu_onednn, padding_for_cldnn_kernel_after_onednn) {
         ASSERT_EQ(output_ptr_ref.data()[i], output_ptr_test.data()[i]);
     }
 }
+double get_exectime(const std::map<cldnn::primitive_id, cldnn::network_output>& outputs, cldnn::network& network,
+                    const std::string& output_id, const std::string& target_id = "")
+{
+    using namespace std::chrono;
+    auto& stream = network.get_stream();
+    stream.finish();
+#ifdef PRINT_PRIMITIVES
+    for (auto i : network.get_primitives_info()) {
+        std::cout << "  " << i.original_id << " " << i.kernel_id << std::endl;
+    }
+#endif
+
+    for (auto& p : network.get_executed_primitives()) {
+        if (p.first != target_id) continue;
+        double total_time = 0.0;
+        for (auto pi: p.second->get_profiling_info()) {
+            double mcs_time = duration_cast<duration<double, microseconds::period>>(pi.value->value()).count();
+            if (pi.stage == instrumentation::profiling_stage::executing) {
+                total_time +=  mcs_time;
+            }
+        }
+        return total_time;
+    }
+#if 0
+214             for (auto& event : events) {$
+215                 if (event.get() != NULL) {$
+216                     auto profiling_intervals = event->get_profiling_info();$
+217                     for (auto const& profiling_interval : profiling_intervals) {$
+218                         if (profiling_interval.stage == instrumentation::profiling_stage::executing) {$
+219                             kernel_run_time = std::min(profiling_interval.value->value(), kernel_run_time);$
+220                             num_of_runs++;$
+221                             break;$
+222                         }$
+223                     }$
+224                 }$
+225             }$
+226 $
+#endif
+    return 0.f;
+}
+
+template<typename T>
+void run_conv_tests_taylor(const int input_x, const int input_y, const int input_f, const int output_f, const int filter_x,  const int filter_y, cldnn::format conv_format, std::ofstream& outfile, int niter, bool is_fp32) {
+    auto& engine = get_test_engine();
+    if (!engine.get_device_info().supports_fp16)
+    {
+        std::cout << "[ SKIPPED ] The test is skipped (cl_khr_fp16 is not supported)." << std::endl;
+        EXPECT_EQ(1, 1);
+        return;
+    }
+    std::string impl_name;
+    if (conv_format == format::b_fs_yx_fsv16)
+        impl_name = "convolution_gpu_bfyx_f16";
+    else
+        impl_name = "convolution_gpu_bfyx_os_iyx_osv16";
+
+
+    const auto batch_num = 1;
+    const auto groups = 1;
+    const auto stride = 1;
+    const auto output_padding = 0;
+//    const auto input_offset_y = (filter_y - 1) / 2;
+//    const auto input_offset_x = (filter_x - 1) / 2;
+    const auto input_offset_y = 0;
+    const auto input_offset_x = 0;
+
+    int interm_f = 1024;
+    auto input_size = tensor(batch_num, input_f, input_x + (filter_x - 1) * 2, input_y + (filter_y - 1) * 2);
+    auto weights_size1 = tensor(interm_f, input_f, filter_y, filter_x, 1);
+    auto weights_size2 = tensor(input_f, interm_f, filter_y, filter_x, 1);
+    auto weights_size3 = tensor(output_f, input_f, filter_y, filter_x, 1);
+
+    double exectime = 0.f;
+
+    build_options options;
+    options.set_option(build_option::optimize_data(true));
+    implementation_desc conv_impl = {conv_format, impl_name};
+    options.set_option(build_option::force_implementations({{"conv3", conv_impl}}));
+
+    auto dtype = (is_fp32 == true) ? data_types::f32 : data_types::f16;
+
+    for (int i = 0; i < niter; ++i) {
+        auto input_mem = engine.allocate_memory({dtype, conv_format, input_size});
+        auto weights_mem1 = engine.allocate_memory({ dtype, format::bfyx, weights_size1});
+        auto weights_mem2 = engine.allocate_memory({ dtype, format::bfyx, weights_size2});
+        auto weights_mem3 = engine.allocate_memory({ dtype, format::bfyx, weights_size3});
+        auto bias_mem1 = engine.allocate_memory({ dtype, format::bfyx, {1, interm_f,1,1}});
+        auto bias_mem3 = engine.allocate_memory({ dtype, format::bfyx, {1, output_f ,1,1}});
+        topology topology;
+        topology.add(input_layout("input", input_mem->get_layout()),
+                data("weights1", weights_mem1),
+                reorder("input_conv", "input", {dtype, conv_format, input_size}),
+                data("bias1", bias_mem1),
+                data("bias3", bias_mem3));
+
+        auto conv1 = convolution("conv1",
+                "input_conv",
+                {"weights1"},
+                {"bias1"},
+                groups,
+                {1, 1, stride, stride},
+                {0, 0, 0, 0});
+
+        auto conv2 = convolution("conv2",
+                "conv1",
+                {"weights2"},
+                groups,
+                {1, 1, stride, stride},
+                {0, 0, 0, 0});
+
+        auto conv3 = convolution("conv3",
+                "conv2",
+                {"weights3"},
+                {"bias3"},
+                tensor{1, 1, stride, stride}, // stride
+                tensor{0, 0, input_offset_x, input_offset_y}); // pad
+//                tensor{1, 1, 1, 1}, // dilation
+//                tensor{0, 0, 1, 1}, // padding_above
+//                tensor{0, 0, 1, 1}); // padding_below
+
+        conv1.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
+        conv2.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
+        conv3.output_padding = padding({0, 0, output_padding, output_padding}, 0.f);
+        topology.add(conv1);
+        topology.add(data("weights2", weights_mem2));
+        topology.add(conv2);
+        topology.add(data("weights3", weights_mem3));
+        topology.add(conv3);
+        topology.add(activation("tanh", "conv3", activation_func::hyperbolic_tan));
+        topology.add(reorder("output", "tanh", format::bfyx, dtype));
+
+        network network(engine, topology, options);
+
+        auto input_data = generate_random_4d<T>(batch_num, input_f, input_y + (filter_x - 1) * 2 , input_x + (filter_x -1 ) * 2, -10, 10);
+        auto input_data_bfyx = flatten_4d(format::bfyx, input_data);
+        set_values(input_mem, input_data_bfyx);
+
+        auto weights_data1 = generate_random_4d<T>(interm_f, input_f, filter_y, filter_x, -5, 5);
+        auto weights_data1_bfyx = flatten_4d(format::bfyx, weights_data1);
+        set_values(weights_mem1, weights_data1_bfyx);
+
+        auto weights_data2 = generate_random_4d<T>(input_f, interm_f, filter_y, filter_x, -5, 5);
+        auto weights_data2_bfyx = flatten_4d(format::bfyx, weights_data2);
+        set_values(weights_mem2, weights_data2_bfyx);
+
+        auto weights_data3 = generate_random_4d<T>(output_f, input_f, filter_y, filter_x, -5, 5);
+        auto weights_data3_bfyx = flatten_4d(format::bfyx, weights_data3);
+        set_values(weights_mem3, weights_data3_bfyx);
+
+        auto bias_data1 = generate_random_4d<T>(batch_num, interm_f, 1, 1, -5, 5);
+        auto bias_data1_bfyx = flatten_4d(format::bfyx, bias_data1);
+        set_values(bias_mem1, bias_data1_bfyx);
+
+        auto bias_data3 = generate_random_4d<T>(batch_num, output_f, 1, 1, -5, 5);
+        auto bias_data3_bfyx = flatten_4d(format::bfyx, bias_data3);
+        set_values(bias_mem3, bias_data3_bfyx);
+
+        network.set_input_data("input", input_mem);
+        const auto& outputs = network.execute();
+        double _exectime;
+        if (conv_format == format::bfyx) {
+            auto output_memory = outputs.at("output");
+            _exectime = get_exectime(outputs, network, "output", "output");
+        } else {
+            _exectime = get_exectime(outputs, network, "output", "conv3");
+        }
+        exectime += _exectime;
+#ifdef PRINT_EXECUTED
+        std::cout << _exectime << std::endl;
+        std::cout << "  executed: ";
+        for (auto e : network.get_executed_primitive_ids()) {
+            std::cout << e << ", ";
+        }
+        std::cout << std::endl;
+#endif
+
+    }
+    exectime /= niter;
+
+    if (conv_format == format::b_fs_yx_fsv16) {
+        outfile << "fp32, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        std::cout << "fp32, fsv16," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+    } else {
+        if (is_fp32) {
+            outfile << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+            std::cout << "fp32, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        } else {
+            outfile << "fp16, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+            std::cout << "fp16, bfyx," << input_f << "," << input_x << "," << input_y << ","  << output_f << ","  << filter_x << ","  << exectime << std::endl;
+        }
+    }
+
+    return;
+}
+
+void test_xy_var(const int input_f, const int output_f, const int filter_x) {
+    std::string platform = "NEW_Gen9_FIX_";
+//    int min_x = 7;
+//    int max_x = 64;
+    int min_x = 7;
+    int max_x = 64;
+
+    int interval = 1;
+    int niter = 3;
+    std::cout << "############## For input_f = " << input_f << " & output_f = " << output_f << " & k_w = " << filter_x << std::endl;
+    std::ofstream out_file;
+    std::string filename;
+#if 1
+    std::cout << "Profiling for FP16 && BFYX " << std::endl;
+    filename = platform + "conv_perf_fp16_bfyx_INf_" + std::to_string(input_f) + "_OUTf_" + std::to_string(output_f) + "_Kw_" + std::to_string(filter_x) + ".csv";
+    out_file.open(filename);
+    out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
+    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
+        run_conv_tests_taylor<FLOAT16>(input_x, input_x, input_f, output_f, filter_x, filter_x, format::bfyx, out_file, niter, false);
+    }
+    out_file.close();
+#endif
+#if 0
+    std::cout << "Profiling for FP16 && FSV " << std::endl;
+    filename = platform + "conv_perf_fp16_fsv_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    out_file.open(filename);
+    out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
+    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
+        run_conv_tests_taylor<FLOAT16>(input_x, input_x, input_f, output_f, filter_x, filter_x, format::b_fs_yx_fsv16, out_file, niter, false);
+    }
+    out_file.close();
+#endif
+    std::cout << "Profiling for FP32 && BFYX " << std::endl;
+    filename = platform + "conv_perf_fp32_bfyx_INf_" + std::to_string(input_f) + "_OUTf_" + std::to_string(output_f) + "_Kw_" + std::to_string(filter_x) + ".csv";
+    out_file.open(filename);
+    out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
+    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
+        run_conv_tests_taylor<float>(input_x, input_x, input_f, output_f, filter_x, filter_x, format::bfyx, out_file, niter, true);
+    }
+    out_file.close();
+#if 0
+    std::cout << "Profiling for FP32 && FSV " << std::endl;
+    filename = platform + "conv_perf_fp32_fsv_INf_" + std::to_string(input_f) + "_OUTf_3_Kw_" + std::to_string(filter_x) + ".csv";
+    out_file.open(filename);
+    out_file << "Prec, Format," << "input_f, input_x, input_y, output_f, filter_x, exectime(mcs)" << std::endl;
+    for (int input_x = min_x; input_x <= max_x; input_x += interval) {
+        run_conv_tests_taylor<float>(input_x, input_x, input_f, output_f, filter_x, filter_x, format::b_fs_yx_fsv16, out_file, niter, true);
+    }
+    out_file.close();
+#endif
+}
+
+TEST(taylor_test, conv_perf) {
+    for (int input_f = 256; input_f <= 1024; input_f += 256) {
+//    for (int input_f = 256; inpiut_f <= 256; input_f += 256) {
+        for (int output_f = 3; output_f < 16; output_f += 5) {
+            for (int filter_x = 3; filter_x <= 5; filter_x++) {
+                test_xy_var (input_f, output_f, filter_x);
+            }
+        }
+    }
+}
 
 #endif   // ENABLE_ONEDNN_FOR_GPU
