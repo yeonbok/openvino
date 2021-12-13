@@ -239,7 +239,6 @@ ExecutionContextImpl::ExecutionContextImpl(const std::shared_ptr<IInferencePlugi
     lock.clear(std::memory_order_relaxed);
     gpu_handle_param _context_id = nullptr;
     gpu_handle_param _va_device = nullptr;
-    int ctx_device_id = 0;
     int target_tile_id = -1;
 
     if (params.size()) {
@@ -249,11 +248,6 @@ ExecutionContextImpl::ExecutionContextImpl(const std::shared_ptr<IInferencePlugi
         if (GPU_PARAM_VALUE(OCL) == contextTypeStr) {
             _context_id = _ObjFromParamSimple<gpu_handle_param>(params, GPU_PARAM_KEY(OCL_CONTEXT));
 
-            if (params.find(GPU_PARAM_KEY(OCL_QUEUE)) != params.end())
-                m_external_queue = _ObjFromParamSimple<gpu_handle_param>(params, GPU_PARAM_KEY(OCL_QUEUE));
-
-            if (params.find(GPU_PARAM_KEY(OCL_CONTEXT_DEVICE_ID)) != params.end())
-                ctx_device_id = _ObjFromParamSimple<int>(params, GPU_PARAM_KEY(OCL_CONTEXT_DEVICE_ID));
         } else if (GPU_PARAM_VALUE(VA_SHARED) == contextTypeStr) {
             m_va_display = _va_device = _ObjFromParamSimple<gpu_handle_param>(params, GPU_PARAM_KEY(VA_DEVICE));
             m_type = ContextType::DEV_SHARED;
@@ -264,13 +258,15 @@ ExecutionContextImpl::ExecutionContextImpl(const std::shared_ptr<IInferencePlugi
         if (tile_id_itr != params.end()) {
             target_tile_id = tile_id_itr->second.as<int>();
         }
+        if (params.find(GPU_PARAM_KEY(OCL_QUEUE)) != params.end())
+            m_external_queue = _ObjFromParamSimple<gpu_handle_param>(params, GPU_PARAM_KEY(OCL_QUEUE));
     }
 
     // TODO: Parameterize this based on plugin config and compilation options
     auto engine_type = cldnn::engine_types::ocl;
     auto runtime_type = cldnn::runtime_types::ocl;
     // Use actual runtime and engine types
-    cldnn::device_query device_query(engine_type, runtime_type, _context_id, _va_device, ctx_device_id, target_tile_id);
+    cldnn::device_query device_query(engine_type, runtime_type, _context_id, _va_device, target_tile_id);
     auto device_map = device_query.get_available_devices();
 
     auto iter = device_map.find(m_config.device_id);
@@ -301,7 +297,6 @@ ParamMap ExecutionContextImpl::getParams() const {
     switch (m_type) {
     case OCL:
         ret[GPU_PARAM_KEY(CONTEXT_TYPE)] = GPU_PARAM_VALUE(OCL);
-        ret[GPU_PARAM_KEY(OCL_QUEUE)] = static_cast<gpu_handle_param>(m_external_queue);
         break;
     case DEV_SHARED:
         ret[GPU_PARAM_KEY(CONTEXT_TYPE)] = GPU_PARAM_VALUE(VA_SHARED);
@@ -316,20 +311,6 @@ ParamMap ExecutionContextImpl::getParams() const {
 
 std::string ExecutionContextImpl::getDeviceName() const noexcept {
     auto devName = m_plugin.lock()->GetName();
-
-    auto engine_type = cldnn::engine_types::ocl;
-    auto runtime_type = cldnn::runtime_types::ocl;
-    try {
-        // Use actual runtime and engine types
-        cldnn::device_query device_query(engine_type, runtime_type);
-        auto all_devices = device_query.get_available_devices();
-        auto current_device = m_engine->get_device();
-
-        for (auto& kv : all_devices) {
-            if (current_device->is_same(kv.second))
-                return devName + "." + kv.first;
-        }
-    } catch (...) { }
 
     if (!m_config.device_id.empty())
         devName += "." + m_config.device_id;

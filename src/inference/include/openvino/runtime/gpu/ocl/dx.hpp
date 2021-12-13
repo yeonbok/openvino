@@ -131,12 +131,11 @@ public:
      * @param target_tile_id Desired tile id within given context for multi-tile system. Default value (-1) means
      * that root device should be used
      */
-    D3DContext(Core& core, ID3D11Device* device, int target_tile_id = -1) : ClContext(core, (cl_context) nullptr) {
+    D3DContext(Core& core, ID3D11Device* device) : ClContext(core, (cl_context) nullptr) {
         // clang-format off
         ParamMap context_params = {
             {GPU_PARAM_KEY(CONTEXT_TYPE), GPU_PARAM_VALUE(VA_SHARED)},
-            {GPU_PARAM_KEY(VA_DEVICE), static_cast<gpu_handle_param>(device)},
-            {GPU_PARAM_KEY(TILE_ID), target_tile_id}
+            {GPU_PARAM_KEY(VA_DEVICE), static_cast<gpu_handle_param>(device)}
         };
         *this = core.create_context(device_name, context_params);
     }
@@ -192,7 +191,6 @@ public:
         return create_tensor(type, shape, params);
     }
 };
-}  // namespace ocl
 }  // namespace gpu
 }  // namespace runtime
 }  // namespace ov

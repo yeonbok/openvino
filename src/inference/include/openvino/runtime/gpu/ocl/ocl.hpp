@@ -179,10 +179,9 @@ public:
      * @param ctx A OpenCL context to be used to create shared remote context
      * @param ctx_device_id An ID of device to be used from ctx
      */
-    ClContext(Core& core, cl_context ctx, int ctx_device_id = 0) {
+    ClContext(Core& core, cl_context ctx) {
         ParamMap context_params = {{GPU_PARAM_KEY(CONTEXT_TYPE), GPU_PARAM_VALUE(OCL)},
-                                   {GPU_PARAM_KEY(OCL_CONTEXT), static_cast<gpu_handle_param>(ctx)},
-                                   {GPU_PARAM_KEY(OCL_CONTEXT_DEVICE_ID), ctx_device_id}};
+                                   {GPU_PARAM_KEY(OCL_CONTEXT), static_cast<gpu_handle_param>(ctx)}};
         *this = core.create_context(device_name, context_params);
     }
 
@@ -319,7 +318,6 @@ public:
     }
 };
 
-}  // namespace ocl
 }  // namespace gpu
 }  // namespace runtime
 }  // namespace ov

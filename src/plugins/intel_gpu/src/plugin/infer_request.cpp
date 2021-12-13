@@ -813,13 +813,11 @@ void InferRequest::allocate_inputs() {
                 desc_fp32.setPrecision(Precision::FP32);
                 auto blobPtr = create_device_blob(desc_fp32, litr->second);
                 _deviceInputs[name] = blobPtr;
-                Blob::Ptr inputBlob = create_host_blob(desc);
-                inputBlob->allocate();
-                _inputs[name] = inputBlob;
+                _inputs[name] = blobPtr;
             } else {
                 auto blobPtr = create_device_blob(desc, litr->second);
                 _deviceInputs[name] = blobPtr;
-                _inputs[name] = host_blob_from_device_blob(blobPtr);
+                _inputs[name] = blobPtr;
             }
         }
     }
