@@ -286,8 +286,8 @@ private:
     }
 
     void run_graph_compilation();
-    void pre_optimize_graph(bool is_internal);
-    void post_optimize_graph(bool is_internal);
+//    void pre_optimize_graph(bool is_internal);
+//    void post_optimize_graph(bool is_internal);
     void cleanup();
     void transfer_memory_to_device();
 

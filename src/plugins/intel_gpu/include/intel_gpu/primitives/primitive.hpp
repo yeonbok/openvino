@@ -40,7 +40,8 @@ public:
               const std::vector<primitive_id>& input,
               const primitive_id& ext_prim_id = "",
               const padding& output_padding = padding(),
-              const optional_data_type output_data_type = optional_data_type())
+              const optional_data_type output_data_type = optional_data_type(),
+              const std::vector<int>& dep_idxes = {})
         : type(type),
           id(id),
           ext_prim_id(ext_prim_id),
@@ -111,7 +112,8 @@ protected:
                             const std::vector<primitive_id>& input,
                             const primitive_id& ext_prim_id = "",
                             const padding& output_padding = padding(),
-                            optional_data_type output_data_type = optional_data_type())
+                            optional_data_type output_data_type = optional_data_type(),
+                            const std::vector<int>& dep_idxes = {})
         : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type) {}
 };
 

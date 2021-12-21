@@ -424,9 +424,9 @@ void program::set_options() {
 
 void program::build_program(bool is_internal) {
     init_graph();
-    { pre_optimize_graph(is_internal); }
+//    { pre_optimize_graph(is_internal); }
     run_graph_compilation();
-    { post_optimize_graph(is_internal); }
+//    { post_optimize_graph(is_internal); }
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
 #ifdef GPU_DEBUG_CONFIG
@@ -462,7 +462,7 @@ void program::init_graph() {
 }
 
 void program::run_graph_compilation() { apply_opt_pass<compile_graph>(); }
-
+#if 0
 void program::pre_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PreOptimizeGraph");
 
@@ -540,7 +540,6 @@ void program::pre_optimize_graph(bool is_internal) {
     // add optimization attributes for onednn primitives
     apply_opt_pass<add_onednn_optimization_attributes>();
 }
-
 void program::post_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PostOptimizeGraph");
     // input reorder for fully connected if necessary
@@ -563,6 +562,7 @@ void program::post_optimize_graph(bool is_internal) {
     // update loop input/output primitive mappings
     apply_opt_pass<update_loop_primitive_map>();
 }
+#endif
 
 // mark if the node is constant assuming that all dependencies are marked properly
 void program::mark_if_constant(program_node& node) {
@@ -577,7 +577,6 @@ void program::mark_if_constant(program_node& node) {
         }
     }
 }
-
 // mark if the node is in data flow assuming that all dependencies are marked properly
 void program::mark_if_data_flow(program_node& node) {
     if (node.is_type<mutable_data>() || node.is_type<input_layout>()) {
