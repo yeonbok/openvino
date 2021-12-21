@@ -59,7 +59,9 @@ struct custom_gpu_primitive_impl : typed_primitive_impl<custom_gpu_primitive> {
         for (auto& dep : instance.dependencies()) {
             args.inputs.push_back(dep->output_memory_ptr());
         }
-        args.output = instance.output_memory_ptr();
+        for (size_t i = 0; i < instance.outputs_memory_count(); ++i) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
         stream.set_arguments(*_kernels.front(), cl_kernel.get()->params, args);
     }
 
@@ -70,7 +72,10 @@ struct custom_gpu_primitive_impl : typed_primitive_impl<custom_gpu_primitive> {
         for (auto& dep : instance.dependencies()) {
             args.inputs.push_back(dep->output_memory_ptr());
         }
-        args.output = instance.output_memory_ptr();
+
+        for (size_t i = 0; i < instance.outputs_memory_count(); ++i) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
         return stream.enqueue_kernel(*_kernels.front(), cl_kernel.get()->params, args, events, instance.node.is_output());
     }
 };

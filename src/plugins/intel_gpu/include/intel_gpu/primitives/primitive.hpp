@@ -40,13 +40,17 @@ public:
               const std::vector<primitive_id>& input,
               const primitive_id& ext_prim_id = "",
               const padding& output_padding = padding(),
-              const optional_data_type output_data_type = optional_data_type())
+              const optional_data_type output_data_type = optional_data_type(),
+              const std::vector<std::pair<primitive_id, int>>& input_new = {},
+              const int num_outputs = 1)
         : type(type),
           id(id),
           ext_prim_id(ext_prim_id),
           output_padding(output_padding),
           output_data_type(output_data_type),
-          input(input) {}
+          input(input),
+          num_outputs(num_outputs),
+          input_new(input_new) {}
 
     virtual ~primitive() = default;
 
@@ -64,9 +68,19 @@ public:
 
     /// @brief Returns copy of all primitive ids on which this primitive depends - inputs, weights, biases, etc.
     std::vector<primitive_id> dependencies() const {
+        std::cout << "[primitive::dependencies()] " << id << " has " << input.size() << " inputs" << std::endl;
         auto result = input;
         auto deps = get_dependencies();
         result.insert(result.end(), deps.begin(), deps.end());
+        return result;
+    }
+
+    std::vector<std::pair<primitive_id, int>> dependencies_new() const {
+        std::cout << "[primitive::dependencies_new()] " << id << " has " << input_new.size() << " inputs" << std::endl;
+        auto result = input_new;
+        // TODO: implement get_dependencies w/ mutliple output
+//        auto deps = get_dependencies();
+ //       result.insert(result.end(), deps.begin(), deps.end());
         return result;
     }
 
@@ -92,13 +106,24 @@ public:
 
     size_t input_size() const { return input.size(); }
 
+    size_t output_size() const { return num_outputs; }
+
     using primitive_id_arr = std::vector<primitive_id>;
 
     /// @brief List of ids of input primitives.
     primitive_id_arr input;
 
+    std::vector<std::pair<primitive_id, int>> input_new;
+
+    int num_outputs;
+
 protected:
     virtual std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const { return {}; }
+    virtual std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies_new() const {
+        // TODO fix from each primitive
+        return {};
+    }
+
     class condition;
     friend struct primitive_info;
 };
@@ -111,8 +136,10 @@ protected:
                             const std::vector<primitive_id>& input,
                             const primitive_id& ext_prim_id = "",
                             const padding& output_padding = padding(),
-                            optional_data_type output_data_type = optional_data_type())
-        : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type) {}
+                            optional_data_type output_data_type = optional_data_type(),
+                            const std::vector<std::pair<primitive_id, int>>& input_new = {},
+                            const int num_outputs = 1)
+        : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type, input_new, num_outputs) {}
 };
 
 struct primitive_info {

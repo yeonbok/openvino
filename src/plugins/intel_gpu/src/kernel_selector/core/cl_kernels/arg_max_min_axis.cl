@@ -73,7 +73,8 @@ inline uint FUNC(get_output_offset)(uint b, uint f, uint z, uint y, uint x)
 KERNEL(arg_max_min_modified)(const __global INPUT0_TYPE* input
                                   ,__global OUTPUT_TYPE* output
 #ifdef SECOND_OUTPUT_EXIST
-                                  ,__global INPUT1_TYPE* second_output
+//                                  ,__global INPUT1_TYPE* second_output
+                                  ,__global OUTPUT1_TYPE* second_output
 #endif
                             )
 {
@@ -438,12 +439,15 @@ KERNEL(arg_max_min_modified)(const __global INPUT0_TYPE* input
     output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result.value);
 #else
     output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result.index);
+    printf("first [not top_k_order] %d, %d, %d, %d %d : %f\n", indices[0], indices[1], indices[2], indices[3], indices[4], TO_OUTPUT1_TYPE(result.index));
 #endif
 #ifdef SECOND_OUTPUT_EXIST
     #ifdef TOP_K_ORDER
-    second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_INPUT1_TYPE(result.index);
+    second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT1_TYPE(result.index);
+    printf("second [top_k_order] %d, %d, %d, %d %d : %f\n", indices[0], indices[1], indices[2], indices[3], indices[4], TO_OUTPUT1_TYPE(result.index));
     #else
-    second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_INPUT1_TYPE(result.value);
+    second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT1_TYPE(result.value);
+    printf("second [not top_k_order] %d, %d, %d, %d %d : %f\n", indices[0], indices[1], indices[2], indices[3], indices[4], TO_OUTPUT1_TYPE(result.value));
     #endif
 #endif
 
@@ -466,9 +470,11 @@ KERNEL(arg_max_min_modified)(const __global INPUT0_TYPE* input
 #endif
 #ifdef SECOND_OUTPUT_EXIST
     #ifdef TOP_K_ORDER
-        second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_INPUT1_TYPE(result[top_k].index);
+       // second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_INPUT1_TYPE(result[top_k].index);
+        second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT1_TYPE(result[top_k].index);
     #else
-        second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_INPUT1_TYPE(result[top_k].value);
+       // second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_INPUT1_TYPE(result[top_k].value);
+        second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT1_TYPE(result[top_k].value);
     #endif
 #endif
     }

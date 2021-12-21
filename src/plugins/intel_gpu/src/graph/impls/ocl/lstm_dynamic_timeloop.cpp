@@ -31,7 +31,9 @@ protected:
             args.inputs.push_back(instance.last_hidden_output_memory());
         if (instance.last_cell_output_term())
             args.inputs.push_back(instance.last_cell_output_memory());
-        args.output = instance.output_memory_ptr();
+        for (size_t i = 0; i < instance.outputs_memory_count(); ++i) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
         args.recurrent = instance.recurrent_memory();
         args.hidden = instance.initial_hidden_term() ? instance.initial_hidden_memory() : nullptr;
         args.cell = instance.initial_cell_term() ? instance.initial_cell_memory() : nullptr;

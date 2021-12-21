@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include "arg_max_min_inst.h"
 #include "program_node.h"
 #include "intel_gpu/graph/program.hpp"
 #include "primitive_inst.h"
@@ -25,8 +26,14 @@ using namespace cldnn;
 
 program_node::program_node(std::shared_ptr<primitive> prim, program& prog)
     : desc(prim), myprog(prog), org_id(prim->id) {
-    if (prim)
+    if (prim) {
         output_layout.data_padding = prim->output_padding;
+        num_outputs = prim->num_outputs;
+        for (int i = 0 ; i < num_outputs; ++i) {
+            output_layouts.push_back(output_layout);
+        }
+        std::cout << "creating program_node of " << prim->id << "output_layouts: " << output_layouts.size() << " outputs" << std::endl;
+    }
 }
 
 void program_node::replace_dependency(size_t idx, program_node& new_dep) {
@@ -203,13 +210,30 @@ layout program_node::calc_output_layout() const {
     return type()->calc_output_layout(*this);
 }
 
+std::vector<layout> program_node::calc_output_layouts() const {
+    if (is_type<arg_max_min>())
+        return type()->calc_output_layouts(*this);
+//        return {};
+    return {type()->calc_output_layout(*this)};
+}
+
 layout program_node::get_output_layout(bool invalidate_users_if_changed) {
     if (valid_output_layout)
         return output_layout;
+    std::cout <<"[" <<  __FILE__ << "] get_output_layout called for " << id() << std::endl;
 
     auto new_layout = calc_output_layout();
     set_output_layout(new_layout, invalidate_users_if_changed);
     return output_layout;
+}
+
+std::vector<layout> program_node::get_output_layouts(bool invalidate_users_if_changed) {
+    if (valid_output_layouts)
+        return output_layouts;
+    std::cout << "get_output_layouts for " << id() << std::endl;
+    auto new_layouts = calc_output_layouts();
+    set_output_layouts(new_layouts, invalidate_users_if_changed);
+    return output_layouts;
 }
 
 layout program_node::get_output_layout() const {
@@ -219,10 +243,35 @@ layout program_node::get_output_layout() const {
     return output_layout;
 }
 
+std::vector<layout> program_node::get_output_layouts() const {
+    if (!valid_output_layouts && is_type<arg_max_min>()) {
+        std::cout << "id:" << id() << std::endl;
+        throw std::runtime_error("Output layouts not calculated");
+    }
+
+    return output_layouts;
+}
+
 layout program_node::get_non_padded_output_layout(bool invalidate_users_if_changed) {
     auto out_layout = get_output_layout(invalidate_users_if_changed);
     auto result = layout({out_layout.data_type, out_layout.format, out_layout.size});
     return result;
+}
+
+bool program_node::set_output_layouts(std::vector<layout>& new_layouts, bool invalidate_users_if_changed) {
+    bool changed = false;
+    for (auto i = 0; i < new_layouts.size(); ++i) {
+        auto new_layout = new_layouts[i];
+        merge_output_padding(new_layout.data_padding);
+        new_layout.data_padding = output_layout.data_padding;
+        changed |= (new_layout != output_layout);
+        if (changed && invalidate_users_if_changed)  // output_layout has changed! invalidate users
+            invalidate_users();
+
+        output_layouts[i] = new_layout;
+        valid_output_layouts = true;
+    }
+    return changed;
 }
 
 bool program_node::set_output_layout(layout& new_layout, bool invalidate_users_if_changed) {
