@@ -270,6 +270,7 @@ private:
     /* build nodes internal structure based on the subset of nodes of other program  (used in propagate_constants) */
     void prepare_nodes(std::set<std::shared_ptr<program_node>> const& nodes);
     void add_node_dependencies(program_node* node_ptr);
+    void add_node_dependencies_new(program_node* node_ptr);
     void copy_node_dependencies(program_node* dest, program_node* src);
     void build_program(bool is_internal);
     void init_graph();
@@ -287,8 +288,9 @@ private:
     }
 
     void run_graph_compilation();
-    void pre_optimize_graph(bool is_internal);
-    void post_optimize_graph(bool is_internal);
+//  temporally removed for multiple output PoC to reduce scope
+//    void pre_optimize_graph(bool is_internal);
+//    void post_optimize_graph(bool is_internal);
     void cleanup();
     void transfer_memory_to_device();
 

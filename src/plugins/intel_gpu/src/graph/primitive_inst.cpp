@@ -180,12 +180,17 @@ void primitive_inst::build_deps() {
         _deps = _network.get_primitives(_node.get_dependencies());
         _exec_deps = build_exec_deps(_deps);
     }
+    if (_deps_new.empty() && !_node.get_dependencies_new().empty()) {
+        _deps_new = _network.get_primitives(_node.get_dependencies_new());
+        _exec_deps = build_exec_deps(_deps);
+    }
 }
 
 primitive_inst::primitive_inst(network& network, program_node const& node, bool allocate_memory)
     : _network(network), _node(node), _impl(node.get_selected_impl() ? node.get_selected_impl()->clone() : nullptr),
       _output(), _output_changed(false), _mem_allocated(allocate_memory) {
     if (allocate_memory) {
+        std::cout << "primitive_inst::primitive_inst()::" << node.id() << std::endl;
         // In case when output is mutable_data primitive, and other users dependencies are only used for
         // suychronization, The output memory of such primitive will be fused with mutable_data
         auto users = node.get_users();
@@ -208,6 +213,7 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
                     _output = user->as<mutable_data>().get_attached_memory_ptr();
         } else {
             _output = allocate_output();
+            _outputs = allocate_outputs();
         }
     }
 }
@@ -260,6 +266,16 @@ void primitive_inst::allocate_internal_buffers(void) {
             _intermediates_memory.push_back(engine.allocate_memory(layout, allocation_type::usm_host));
     }
 }
+std::vector<memory::ptr> primitive_inst::allocate_outputs() {
+//    return allocate_outputs(get_network().get_engine(), _network.get_memory_pool(), _node, _network.is_internal());
+    std::vector<memory::ptr> outputs;
+    for (auto i = 0; i < get_node().get_outputs_count() ; ++i) {
+        // TODO : temporal solution for argmax. Future impl should take care of different layouts
+        outputs.push_back(allocate_output(get_network().get_engine(), _network.get_memory_pool(), _node, _network.is_internal()));
+    }
+    return outputs;
+}
+
 memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, const program_node& _node,
         bool is_internal) {
     auto get_memory_from_pool = [&](engine& _engine, const layout& layout, const primitive_id id, std::set<primitive_id> dependencies,

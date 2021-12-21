@@ -33,13 +33,15 @@ struct permute : public primitive_base<permute> {
     permute(const primitive_id& id,
             const primitive_id& input,
             const std::vector<uint16_t>& permute_order = {},
+            const std::vector<std::pair<primitive_id, int>>& inputs = {},
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding), permute_order(permute_order) {}
+        : primitive_base(id, {input}, ext_prim_id, output_padding, {}, inputs, 1),  permute_order(permute_order) {}
 
     /// @brief Array of permuted output order in bfyx format.
     std::vector<uint16_t> permute_order;
 };
+
 /// @}
 /// @}
 /// @}

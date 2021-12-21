@@ -38,7 +38,9 @@ protected:
                 args.inputs.push_back(instance.dep_memory_ptr(8));
             }
         }
-        args.output = instance.output_memory_ptr();
+        for (size_t i = 0; i < instance.outputs_memory_count(); ++i) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
         return args;
     }
 
@@ -78,7 +80,7 @@ public:
             quantize_params.inputs.push_back(convert_data_tensor(arg.input(i).get_output_layout()));
         }
         const auto& output_layout = arg.get_output_layout();
-        quantize_params.output = convert_data_tensor(output_layout);
+        quantize_params.outputs[0] = convert_data_tensor(output_layout);
 
         auto& kernel_selector = kernel_selector::quantize_kernel_selector::Instance();
         auto best_kernels = kernel_selector.GetBestKernels(quantize_params, quantize_optional_params);

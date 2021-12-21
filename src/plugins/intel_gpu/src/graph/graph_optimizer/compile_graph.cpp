@@ -6,6 +6,7 @@
 
 #include "pass_manager.h"
 #include "data_inst.h"
+#include "arg_max_min_inst.h"
 #include "mutable_data_inst.h"
 #include "program_node.h"
 #include "intel_gpu/runtime/engine.hpp"
@@ -24,6 +25,9 @@ void compile_graph::run(program& p) {
         node->set_unique_id();
         if (!node->is_type<data>()) {
             node->get_output_layout();
+            if (node->is_type<arg_max_min>()) {
+                node->get_output_layouts();
+            }
         }
     }
 

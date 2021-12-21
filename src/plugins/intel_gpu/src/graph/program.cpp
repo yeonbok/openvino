@@ -318,6 +318,7 @@ bool program::analyze_output_size_handling_need() {
 // create new nodes for a program based on the set of nodes
 // method created to be used by propagate_constants to build sub program from constant nodes
 void program::prepare_nodes(std::set<std::shared_ptr<program_node>> const& nodes) {
+    //TODO
     for (const auto& itr : nodes) {
         if (itr.get()->is_type<data>()) {
             get_or_create(std::make_shared<input_layout>(itr.get()->id(),
@@ -369,6 +370,10 @@ void program::prepare_nodes(topology const& topology) {
 
 // add node's dependecies from its primitive dependencies
 void program::add_node_dependencies(program_node* node) {
+    std::cout << "add_node_dependencies" << std::endl;
+    if (node->is_type<permute>())
+        return add_node_dependencies_new(node);
+
     auto deps = node->get_primitive()->dependencies();
     // add pointers to node's dependencies
     for (auto& dep : deps) {
@@ -379,6 +384,34 @@ void program::add_node_dependencies(program_node* node) {
         } catch (...) {
             throw std::runtime_error("Program doesn't contain primitive: " + dep +
                                      " that is input to: " + node->get_primitive()->id);
+        }
+    }
+}
+
+// add node's dependecies from its primitive dependencies
+void program::add_node_dependencies_new(program_node* node) {
+    auto deps = node->get_primitive()->dependencies();
+    // add pointers to node's dependencies
+    for (auto& dep : deps) {
+        try {
+            auto dep_node = nodes_map.at(dep);
+            node->dependencies.push_back(dep_node.get());
+            dep_node->users.push_back(node);
+        } catch (...) {
+            throw std::runtime_error("Program doesn't contain primitive: " + dep +
+                                     " that is input to: " + node->get_primitive()->id);
+        }
+    }
+    auto deps_new = node->get_primitive()->dependencies_new();
+    // add pointers to node's dependencies
+    for (auto& dep : deps_new) {
+        try {
+            auto dep_node = nodes_map.at(dep.first);
+            node->dependencies_new.push_back({dep_node.get(), dep.second});
+            dep_node->users_new[dep.second].push_back(node);
+        } catch (...) {
+            throw std::runtime_error("Program doesn't contain primitive: " + dep.first +
+                    " that is input to: " + node->get_primitive()->id);
         }
     }
 }
@@ -432,9 +465,9 @@ void program::set_options() {
 
 void program::build_program(bool is_internal) {
     init_graph();
-    { pre_optimize_graph(is_internal); }
+//    { pre_optimize_graph(is_internal); }
     run_graph_compilation();
-    { post_optimize_graph(is_internal); }
+//    { post_optimize_graph(is_internal); }
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
 #ifdef GPU_DEBUG_CONFIG
@@ -470,7 +503,7 @@ void program::init_graph() {
 }
 
 void program::run_graph_compilation() { apply_opt_pass<compile_graph>(); }
-
+#if 0
 void program::pre_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PreOptimizeGraph");
 
@@ -548,7 +581,6 @@ void program::pre_optimize_graph(bool is_internal) {
     // add optimization attributes for onednn primitives
     apply_opt_pass<add_onednn_optimization_attributes>();
 }
-
 void program::post_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PostOptimizeGraph");
     // input reorder for fully connected if necessary
@@ -571,6 +603,7 @@ void program::post_optimize_graph(bool is_internal) {
     // update loop input/output primitive mappings
     apply_opt_pass<update_loop_primitive_map>();
 }
+#endif
 
 // mark if the node is constant assuming that all dependencies are marked properly
 void program::mark_if_constant(program_node& node) {
@@ -585,7 +618,6 @@ void program::mark_if_constant(program_node& node) {
         }
     }
 }
-
 // mark if the node is in data flow assuming that all dependencies are marked properly
 void program::mark_if_data_flow(program_node& node) {
     if (node.is_type<mutable_data>() || node.is_type<input_layout>()) {
