@@ -35,7 +35,7 @@ struct mutable_data : public primitive_base<mutable_data> {
                  memory::ptr mem,
                  const primitive_id& ext_prim_id = "",
                  filler_type fill_type = filler_type::no_fill)
-        : primitive_base(id, {}, ext_prim_id, padding()), mem(mem), fill_type(fill_type) {}
+        : primitive_base(id, {}, ext_prim_id, padding()), taylor_mem(mem), fill_type(fill_type) {}
 
     /// @brief Constructs mutable_data primitive with inputs.
     /// @param id This primitive id.
@@ -48,11 +48,11 @@ struct mutable_data : public primitive_base<mutable_data> {
                  memory::ptr mem,
                  const primitive_id& ext_prim_id = "",
                  filler_type fill_type = filler_type::no_fill)
-        : primitive_base(id, {input}, ext_prim_id, padding()), mem(mem), fill_type(fill_type) {}
+        : primitive_base(id, {input}, ext_prim_id, padding()), taylor_mem(mem), fill_type(fill_type) {}
 
     /// @brief @ref memory object which contains data.
     /// @note If memory is attached by memory::attach(), the attached buffer should be valid till network build.
-    memory::ptr mem;
+    memory::ptr taylor_mem;
 
     /// @brief Specifies function which will be used to fill weights.
     filler_type fill_type;

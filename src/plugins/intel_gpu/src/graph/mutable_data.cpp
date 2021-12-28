@@ -12,6 +12,7 @@
 #include <string>
 #include <memory>
 #include <algorithm>
+#include <iostream>
 
 namespace cldnn {
 primitive_type_id mutable_data::type_id() {
@@ -25,6 +26,8 @@ memory::ptr attach_or_copy_data(network& network, memory::ptr mem, bool reuse) {
     auto& stream = network.get_stream();
 
     if (mem->is_allocated_by(engine) && reuse) {
+        std::cout << " --- mem is allocated already" << std::endl;
+        std::cout << mem << std::endl;
         return mem;
     }
 
@@ -38,13 +41,13 @@ memory::ptr attach_or_copy_data(network& network, memory::ptr mem, bool reuse) {
 }  // namespace
 
 mutable_data_node::typed_program_node(const std::shared_ptr<mutable_data> dprim, program& prog)
-    : parent(dprim, prog), mem(dprim->mem) {
+    : parent(dprim, prog), taylor_mem(dprim->taylor_mem) {
     recalc_output_layout(false);
     can_share_buffer(false);
 }
 
 void mutable_data_node::attach_memory(memory::ptr new_mem, bool invalidate_users_if_changed) {
-    mem = new_mem;
+    taylor_mem = new_mem;
     recalc_output_layout(invalidate_users_if_changed);
 }
 
@@ -77,6 +80,7 @@ void mutable_data_inst::set_output_memory(memory::ptr mem_new, bool check) {
 }
 
 mutable_data_inst::typed_primitive_inst(network& network, mutable_data_node const& node)
-    : parent(network, node, attach_or_copy_data(network, node.get_attached_memory_ptr(), network.is_primary_stream())) {}
-
+    : parent(network, node, attach_or_copy_data(network, node.get_attached_memory_ptr(), network.is_primary_stream())) {
+        std::cout << "create muetable data " << node.id() << std::endl;
+    }
 }  // namespace cldnn

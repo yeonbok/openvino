@@ -674,7 +674,7 @@ TEST(arg_max_gpu_min_axis_y_yxfb_topk_2, f32) {
 }
 #endif
 
-TEST(top_k_layer_tests, second_output) {
+TEST(top_k_layer_tests, second_output_taylor) {
     static const int32_t x_size = 2, y_size = 2, feature_num = 4, batch_num = 2;
     auto& engine = get_test_engine();
     const int top_k = 2;
@@ -688,7 +688,7 @@ TEST(top_k_layer_tests, second_output) {
     topology.add(arg_max_min("arg_max", { "input", "const", "second_output" }, {{"input", 0}, {"const", 0}, {"second_output", 0}}, arg_max_min::min, top_k, arg_max_min::batch));
     topology.add(permute("permute_1", {"arg_max"}, {0, 1, 2, 3}, {{"arg_max", 0}}));
     topology.add(permute("permute_2", {"arg_max"}, {0, 1, 2, 3}, {{"arg_max", 1}}));
-    topology.add(concatenation("output", { "permute_1", "permute_2" }, concatenation::along_b));
+    topology.add(concatenation("output", { "permute_2", "permute_1" }, concatenation::along_b));
 
     std::vector<float> input_vec = {
             //y0x0 y0x1 y1x0 y1x1
