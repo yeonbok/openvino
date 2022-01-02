@@ -41,7 +41,8 @@ public:
               const primitive_id& ext_prim_id = "",
               const padding& output_padding = padding(),
               const optional_data_type output_data_type = optional_data_type(),
-              const std::vector<int>& dep_idxes = {})
+              const std::vector<std::pair<primitive_id, int>>& inputs = {},
+              const int num_outputs = 1)
         : type(type),
           id(id),
           ext_prim_id(ext_prim_id),
@@ -98,6 +99,8 @@ public:
     /// @brief List of ids of input primitives.
     primitive_id_arr input;
 
+    std::vector<std::pair<primitive_id, int>> inputs;
+
 protected:
     virtual std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const { return {}; }
     class condition;
@@ -113,8 +116,9 @@ protected:
                             const primitive_id& ext_prim_id = "",
                             const padding& output_padding = padding(),
                             optional_data_type output_data_type = optional_data_type(),
-                            const std::vector<int>& dep_idxes = {})
-        : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type) {}
+                            const std::vector<std::pair<primitive_id, int>>& inputs = {},
+                            const int num_outputs = 1)
+        : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type, inputs, num_outputs) {}
 };
 
 struct primitive_info {
