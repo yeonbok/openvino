@@ -185,7 +185,7 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
     : _network(network), _node(node), _impl(node.get_selected_impl() ? node.get_selected_impl()->clone() : nullptr),
       _output(), _output_changed(false), _mem_allocated(allocate_memory) {
     if (allocate_memory) {
-        std::cout << node.id() << std::endl;
+        std::cout << "primitive_inst::primitive_inst()::" << node.id() << std::endl;
         // In case when output is mutable_data primitive, and other users dependencies are only used for
         // suychronization, The output memory of such primitive will be fused with mutable_data
         auto users = node.get_users();

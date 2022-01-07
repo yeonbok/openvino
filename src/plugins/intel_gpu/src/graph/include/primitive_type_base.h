@@ -11,6 +11,7 @@
 #include "primitive_type.h"
 #include "program_node.h"
 #include "primitive_inst.h"
+#include "arg_max_min_inst.h"
 #include "intel_gpu/graph/network.hpp"
 #include "impls/implementation_map.hpp"
 
@@ -64,6 +65,18 @@ struct primitive_type_base : primitive_type {
 
         return typed_primitive_inst<PType>::calc_output_layout(node);
     }
+
+    std::vector<cldnn::layout> calc_output_layouts(const cldnn::program_node& node) const override {
+        std::cout << "[" << __FILE__ << "] calc_output_layouts called for " << node.id() << std::endl;
+        if (node.type() != this)
+            throw std::invalid_argument("primitive_type_base::calc_output_layout: primitive type mismatch");
+        // TODO : for now only limited types are updated with new dtype
+        if (node.is_type<arg_max_min>())
+            return typed_primitive_inst<arg_max_min>::calc_output_layouts(node);
+        else
+            return {typed_primitive_inst<PType>::calc_output_layout(node)};
+    }
+
 
     std::string to_string(const cldnn::program_node& node) const override {
         if (node.type() != this)

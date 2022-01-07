@@ -834,6 +834,9 @@ void network::allocate_primitive_instance(program_node const& node) {
     if (_primitives.count(node.id()))
         return;
 
+    std::cout << "[" << node.id() << "] allocate primitive instance" << std::endl;
+    std::cout << node.get_dependencies_new().size() << std::endl;
+
     auto inst = node.type()->create_instance(*this, node);
     for (auto& dep : node.get_dependencies()) {
         if (dep->is_type<input_layout>() || dep->is_type<mutable_data>() || dep->can_be_optimized()) {

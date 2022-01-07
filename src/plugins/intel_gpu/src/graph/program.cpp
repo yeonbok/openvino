@@ -310,6 +310,7 @@ bool program::analyze_output_size_handling_need() {
 // create new nodes for a program based on the set of nodes
 // method created to be used by propagate_constants to build sub program from constant nodes
 void program::prepare_nodes(std::set<std::shared_ptr<program_node>> const& nodes) {
+    //TODO
     for (const auto& itr : nodes) {
         if (itr.get()->is_type<data>()) {
             get_or_create(std::make_shared<input_layout>(itr.get()->id(),
@@ -361,6 +362,7 @@ void program::prepare_nodes(topology const& topology) {
 
 // add node's dependecies from its primitive dependencies
 void program::add_node_dependencies(program_node* node) {
+    std::cout << "add_node_dependencies" << std::endl;
     auto deps = node->get_primitive()->dependencies();
     // add pointers to node's dependencies
     for (auto& dep : deps) {
@@ -371,6 +373,37 @@ void program::add_node_dependencies(program_node* node) {
         } catch (...) {
             throw std::runtime_error("Program doesn't contain primitive: " + dep +
                                      " that is input to: " + node->get_primitive()->id);
+        }
+    }
+}
+
+// add node's dependecies from its primitive dependencies
+void program::add_node_dependencies_new(program_node* node) {
+    std::cout << "[" << node->id() << "] add_node_dependencies" << std::endl;
+    auto deps = node->get_primitive()->dependencies();
+    // add pointers to node's dependencies
+    for (auto& dep : deps) {
+        try {
+            auto dep_node = nodes_map.at(dep);
+            node->dependencies.push_back(dep_node.get());
+            dep_node->users.push_back(node);
+        } catch (...) {
+            throw std::runtime_error("Program doesn't contain primitive: " + dep +
+                                     " that is input to: " + node->get_primitive()->id);
+        }
+    }
+    if (node->is_type<permute>()) {
+        auto deps_new = node->get_primitive()->dependencies_new();
+        // add pointers to node's dependencies
+        for (auto& dep : deps_new) {
+            try {
+                auto dep_node = nodes_map.at(dep.first);
+                node->dependencies_new.push_back({dep_node.get(), dep.second});
+                dep_node->users_new[dep.second].push_back(node);
+            } catch (...) {
+                throw std::runtime_error("Program doesn't contain primitive: " + dep.first +
+                        " that is input to: " + node->get_primitive()->id);
+            }
         }
     }
 }

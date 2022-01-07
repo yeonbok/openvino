@@ -52,6 +52,7 @@ inline cl::NDRange toNDRange(const std::vector<size_t>& v) {
 void set_arguments_impl(ocl_kernel_type& kernel,
                         const arguments_desc& args,
                         const kernel_arguments_data& data) {
+    std::cout << "set_arguments_impl " << std::endl;
     using args_t = argument_desc::Types;
     using scalar_t = scalar_desc::Types;
     for (uint32_t i = 0; i < static_cast<uint32_t>(args.size()); i++) {

@@ -161,7 +161,7 @@ void kernel_runner::prepare_kernel_args(const kernel_selector::KernelsData& kern
 
 std::vector<std::chrono::nanoseconds> kernel_runner::run_kernels(const kernel_selector::KernelsData& kernels_data) {
     std::vector<std::chrono::nanoseconds> run_times;
-
+    std::cout << "run kernels!!!" << std::endl;
     stream::ptr stream = _engine.create_stream();
 
     int num_of_kernels_to_run = static_cast<int>(kernels_data.size());

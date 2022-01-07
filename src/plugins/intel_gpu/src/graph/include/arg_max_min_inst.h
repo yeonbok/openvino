@@ -29,6 +29,10 @@ class typed_primitive_inst<arg_max_min> : public typed_primitive_inst_base<arg_m
 
 public:
     static layout calc_output_layout(arg_max_min_node const& node);
+    static std::vector<layout> calc_output_layouts(arg_max_min_node const& node) {
+        std::cout << "[" << __FILE__ << "] not implemented yet!!!" << std::endl;
+        return {};
+    }
     static std::string to_string(arg_max_min_node const& node);
 
 public:
