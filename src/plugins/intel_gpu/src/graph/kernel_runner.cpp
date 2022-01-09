@@ -54,7 +54,8 @@ void kernel_runner::prepare_kernel_args(const kernel_selector::KernelsData& kern
             {from_data_type(base_params.output.GetDType()), format::bfyx, tensor(1, 1, num_of_output_elements, 1)}));
     }
 
-    args.output = output_buffers[0];
+    // TODO for multiple output
+    args.outputs.push_back(output_buffers[0]);
 
     if (weights_and_bias_exist) {
         // Prepare weight buffer

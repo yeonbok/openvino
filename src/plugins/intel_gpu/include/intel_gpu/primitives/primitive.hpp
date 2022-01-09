@@ -107,6 +107,8 @@ public:
 
     size_t input_size() const { return input.size(); }
 
+    size_t output_size() const { return num_outputs; }
+
     using primitive_id_arr = std::vector<primitive_id>;
 
     /// @brief List of ids of input primitives.

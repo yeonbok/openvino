@@ -74,8 +74,11 @@ public:
     memory& dep_memory(size_t index) const { return dependencies().at(index)->output_memory(); }
     memory::ptr dep_memory_ptr(size_t index) const { return dependencies().at(index)->output_memory_ptr(); }
     memory& output_memory() const { return *_output; }
-    memory::ptr output_memory_ptr() const { return _output; }
+//    memory::ptr output_memory_ptr() const { return _output; }
+    //TODO: output should be _outputs[index]
+    memory::ptr output_memory_ptr(size_t index = 0) const { return _output; }
     size_t inputs_memory_count() const { return _node.get_primitive()->input_size(); }
+    size_t outputs_memory_count() const { return _node.get_primitive()->output_size(); }
     primitive_type_id type() const { return _node.type(); }
     primitive_id id() const { return _node.id(); }
     primitive_id org_id() const { return _node.get_org_primitive_id(); }

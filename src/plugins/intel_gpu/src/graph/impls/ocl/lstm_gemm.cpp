@@ -27,7 +27,9 @@ protected:
     kernel_arguments_data get_arguments(typed_primitive_inst<lstm_gemm>& instance, int32_t) const override {
         kernel_arguments_data args = parent::get_arguments(instance, 0);
 
-        args.output = instance.output_memory_ptr();
+        for (size_t i = 0; i < instance.outputs_memory_count(); ++i) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
         args.weights = instance.weights_memory();
         args.recurrent = instance.recurrent_memory();
         args.bias = instance.bias_term() ? instance.bias_memory() : nullptr;

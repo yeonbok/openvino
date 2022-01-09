@@ -36,7 +36,9 @@ protected:
     kernel_arguments_data get_arguments(typed_primitive_inst<roi_align>& instance, int32_t) const override {
         kernel_arguments_data args;
         args.inputs = { instance.input_memory_ptr(), instance.rois_memory(), instance.batches_memory() };
-        args.output = instance.output_memory_ptr();
+        for (size_t i = 0; i < instance.outputs_memory_count(); ++i) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
 
         return args;
     }

@@ -96,7 +96,8 @@ struct kernel_arguments_desc {
 struct kernel_arguments_data {
     std::vector<memory::cptr> inputs;
     std::vector<memory::cptr> intermediates;
-    memory::cptr output;
+//    memory::cptr output;
+    std::vector<memory::cptr> outputs;
     memory::cptr weights;
     memory::cptr recurrent;
     memory::cptr hidden;

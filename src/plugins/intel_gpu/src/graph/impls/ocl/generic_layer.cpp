@@ -52,7 +52,9 @@ struct generic_layer_impl : typed_primitive_impl<generic_layer> {
         for (size_t i = 0; i < instance.inputs_memory_count(); i++) {
             args.inputs.push_back(instance.input_memory_ptr(i));
         }
-        args.output = instance.output_memory_ptr();
+        for (size_t i = 0; i < instance.outputs_memory_count(); ++i) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
         stream.set_arguments(*_kernels.front(), _cl_kernel_data.params, args);
     }
 
@@ -64,7 +66,9 @@ struct generic_layer_impl : typed_primitive_impl<generic_layer> {
         for (size_t i = 0; i < instance.inputs_memory_count(); i++) {
             args.inputs.push_back(instance.input_memory_ptr(i));
         }
-        args.output = instance.output_memory_ptr();
+        for (size_t i = 0; i < instance.outputs_memory_count(); ++i) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
         return stream.enqueue_kernel(*_kernels.front(), _cl_kernel_data.params, args, events, true);
     }
 };
