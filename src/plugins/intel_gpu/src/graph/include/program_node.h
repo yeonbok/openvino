@@ -200,6 +200,8 @@ public:
     bool set_output_layout(layout& new_layout, bool invalidate_users_if_changed = true);
     bool set_output_layouts(std::vector<layout>& new_layout, bool invalidate_users_if_changed = true);
 
+    size_t get_outputs_count() const { return num_outputs; }
+
     // forces recalculation of cached output layout, invalidates users if new layout is different than previous one and
     // @p invalidate_users_if_changed is set to true returns whether output layout has changed
     bool recalc_output_layout(bool invalidate_users_if_changed = true);

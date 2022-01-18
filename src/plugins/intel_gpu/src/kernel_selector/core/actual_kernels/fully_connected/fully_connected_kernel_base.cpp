@@ -26,7 +26,7 @@ FullyConnectedKernelBase::DispatchData FullyConnectedKernelBase::SetDefault(cons
     DispatchData dispatchData;
 
     // Determine global work sizes.
-    dispatchData.gws = { params.output.LogicalSize(), 1, 1 };
+    dispatchData.gws = { params.outputs[0].LogicalSize(), 1, 1 };
 
     // Find largest positive local work size that is divider for global work size.
     dispatchData.lws[0] = std::min(std::max(dispatchData.gws[0], static_cast<size_t>(1)), static_cast<size_t>(32));

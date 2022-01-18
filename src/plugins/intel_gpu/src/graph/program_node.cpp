@@ -230,22 +230,26 @@ layout program_node::get_output_layout(bool invalidate_users_if_changed) {
 std::vector<layout> program_node::get_output_layouts(bool invalidate_users_if_changed) {
     if (valid_output_layouts)
         return output_layouts;
-
+    std::cout << "get_output_layouts for " << id() << std::endl;
     auto new_layouts = calc_output_layouts();
     set_output_layouts(new_layouts, invalidate_users_if_changed);
     return output_layouts;
 }
 
 layout program_node::get_output_layout() const {
-    if (!valid_output_layout)
+    if (!valid_output_layout) {
+        std::cout << "id: " <<  id() << std::endl;
         throw std::runtime_error("Output layout not calculated");
+    }
 
     return output_layout;
 }
 
 std::vector<layout> program_node::get_output_layouts() const {
-    if (!valid_output_layouts)
-        throw std::runtime_error("Output layout not calculated");
+    if (!valid_output_layouts && is_type<arg_max_min>()) {
+        std::cout << "id:" << id() << std::endl;
+        throw std::runtime_error("Output layouts not calculated");
+    }
 
     return output_layouts;
 }

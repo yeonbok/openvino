@@ -115,11 +115,11 @@ JitConstants ReorderKernelBase::GetJitConstants(const reorder_params& params) co
     // Type JITs:
 
     // half->half without subtraction and activation (so plain reorder) can be done on shorts without explicit fp16 support
-    bool useUshort = (params.inputs[0].GetDType() == Datatype::F16 && params.output.GetDType() == Datatype::F16 &&
+    bool useUshort = (params.inputs[0].GetDType() == Datatype::F16 && params.outputs[0].GetDType() == Datatype::F16 &&
                       params.mode == MeanSubtractMode::NONE && params.activations.empty());
 
     Datatype calc_type = useUshort ? Datatype::UINT16 : params.inputs[0].GetDType();
-    Datatype output_reorder_type = useUshort ? Datatype::UINT16 : params.output.GetDType();
+    Datatype output_reorder_type = useUshort ? Datatype::UINT16 : params.outputs[0].GetDType();
     Datatype input_reorder_type = useUshort ? Datatype::UINT16 : params.inputs[0].GetDType();
 
     jit.Merge(MakeTypeJitConstants(calc_type, "CALC"));
@@ -132,7 +132,7 @@ JitConstants ReorderKernelBase::GetJitConstants(const reorder_params& params) co
     jit.Merge(MakeActivationJitConstants(params.activations, GetUnitType(params), "_TYPED", true));
 
     // TODO: Move to lower classes
-    jit.AddConstant(MakeJitConstant("SUB_GROUP_SIZE", SubGroupSize(params.output.GetLayout())));
+    jit.AddConstant(MakeJitConstant("SUB_GROUP_SIZE", SubGroupSize(params.outputs[0].GetLayout())));
 
     return jit;
 }
@@ -155,7 +155,7 @@ ReorderKernelBase::DispatchData ReorderKernelBase::SetDefault(const reorder_para
     DataTensor input_tensor = input;
     // Image formats reorders use read_image and write_image functions that operate on 4 channels at once, and support only single batch,
     // make sure that reorder size is equal to spatials sizes only
-    if (params.inputs[0].GetLayout() == DataLayout::image_2d_rgba || params.output.GetLayout() == DataLayout::image_2d_rgba) {
+    if (params.inputs[0].GetLayout() == DataLayout::image_2d_rgba || params.outputs[0].GetLayout() == DataLayout::image_2d_rgba) {
         std::vector<size_t> input_sizes(4, 1);
         input_sizes[0] = input.X().v;
         input_sizes[1] = input.Y().v;
@@ -177,10 +177,10 @@ ReorderKernelBase::DispatchData ReorderKernelBase::SetDefault(const reorder_para
         }
     }
 
-    if ((params.output.GetLayout() == DataLayout::bs_fs_yx_bsv16_fsv16 ||
-         params.output.GetLayout() == DataLayout::bs_fs_yx_bsv32_fsv32 ||
-         params.output.GetLayout() == DataLayout::b_fs_yx_fsv16 ||
-         params.output.GetLayout() == DataLayout::bs_fs_yx_bsv32_fsv16) &&
+    if ((params.outputs[0].GetLayout() == DataLayout::bs_fs_yx_bsv16_fsv16 ||
+         params.outputs[0].GetLayout() == DataLayout::bs_fs_yx_bsv32_fsv32 ||
+         params.outputs[0].GetLayout() == DataLayout::b_fs_yx_fsv16 ||
+         params.outputs[0].GetLayout() == DataLayout::bs_fs_yx_bsv32_fsv16) &&
         params.inputs[0].Feature().v % 16 == 0) {
         dispatchData.lws[0] = 1;
         dispatchData.lws[1] = 16;

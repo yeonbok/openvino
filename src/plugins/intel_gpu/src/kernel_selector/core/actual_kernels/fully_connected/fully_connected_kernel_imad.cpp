@@ -48,8 +48,8 @@ FullyConnectedKernelIMAD::Parent::DispatchData FullyConnectedKernelIMAD::SetDefa
 
     auto dispatchData = Parent::SetDefault(params);
 
-    dispatchData.gws[0] = RoundUp(params.output.Feature().v, simdSize);
-    dispatchData.gws[1] = params.output.Batch().v;
+    dispatchData.gws[0] = RoundUp(params.outputs[0].Feature().v, simdSize);
+    dispatchData.gws[1] = params.outputs[0].Batch().v;
     dispatchData.gws[2] = 1;
 
     dispatchData.lws[0] = simdSize;

@@ -680,15 +680,17 @@ TEST(top_k_layer_tests, second_output_taylor) {
     const int top_k = 2;
     auto input = engine.allocate_memory({ data_types::f32, format::bfyx,{ batch_num, feature_num, x_size , y_size } });
     auto top_k_input = engine.allocate_memory({ data_types::f32, format::bfyx,{ 1, 1, 1 , 1 } });
-    auto second_output = engine.allocate_memory({ data_types::f32, format::bfyx, { top_k, feature_num, x_size , y_size } });
+//    auto second_output = engine.allocate_memory({ data_types::f32, format::bfyx, { top_k, feature_num, x_size , y_size } });
     topology topology;
     topology.add(input_layout("input", input->get_layout()));
     topology.add(cldnn::data("const", top_k_input));
-    topology.add(mutable_data("second_output", second_output));
-    topology.add(arg_max_min("arg_max", { "input", "const", "second_output" }, {{"input", 0}, {"const", 0}, {"second_output", 0}}, arg_max_min::min, top_k, arg_max_min::batch));
+//    topology.add(mutable_data("second_output", second_output));
+//    topology.add(arg_max_min("arg_max", { "input", "const", "second_output" }, {{"input", 0}, {"const", 0}, {"second_output", 0}}, arg_max_min::min, top_k, arg_max_min::batch));
+    topology.add(arg_max_min("arg_max", { "input", "const"}, {{"input", 0}, {"const", 0}}, arg_max_min::min, top_k, arg_max_min::batch));
+
     topology.add(permute("permute_1", {"arg_max"}, {0, 1, 2, 3}, {{"arg_max", 0}}));
     topology.add(permute("permute_2", {"arg_max"}, {0, 1, 2, 3}, {{"arg_max", 1}}));
-    topology.add(concatenation("output", { "permute_2", "permute_1" }, concatenation::along_b));
+    topology.add(concatenation("concat", { "permute_2", "permute_1" }, concatenation::along_b));
 
     std::vector<float> input_vec = {
             //y0x0 y0x1 y1x0 y1x1
@@ -709,22 +711,26 @@ TEST(top_k_layer_tests, second_output_taylor) {
     network.set_input_data("input", input);
     auto outputs = network.execute();
 
+    for (auto i : network.get_primitives_info()) {
+        std::cout << i.original_id << " " << i.kernel_id << std::endl;
+    }
+
     EXPECT_EQ(outputs.size(), size_t(1));
-    EXPECT_EQ(outputs.begin()->first, "output");
+    EXPECT_EQ(outputs.begin()->first, "concat");
     const int out_size = y_size * feature_num * x_size * top_k;
-    auto output = outputs.at("output").get_memory();
+    auto output = outputs.at("concat").get_memory();
     cldnn::mem_lock<float> output_ptr(output, get_test_stream());
-    cldnn::mem_lock<float> second_output_ptr(second_output, get_test_stream());
+//    cldnn::mem_lock<float> second_output_ptr(second_output, get_test_stream());
 
     float out_buffer[out_size];
-    float second_out_buffer[out_size];
+    //float second_out_buffer[out_size];
     for (uint32_t i = 0; i < out_size; i++) {
         out_buffer[i] = get_value<float>(output_ptr.data(), i);
-        second_out_buffer[i] = get_value<float>(second_output_ptr.data(), i);
+//        second_out_buffer[i] = get_value<float>(second_output_ptr.data(), i);
     }
     for (int i = 0; i < out_size; i++) {
         EXPECT_EQ(out_buffer[i], i < (out_size / 2) ? 0 : 1);
-        EXPECT_EQ(second_out_buffer[i], input_vec[i]);
+//        EXPECT_EQ(second_out_buffer[i], input_vec[i]);
     }
 }
 #if 0

@@ -76,7 +76,13 @@ public:
     memory& output_memory() const { return *_output; }
 //    memory::ptr output_memory_ptr() const { return _output; }
     //TODO: output should be _outputs[index]
-    memory::ptr output_memory_ptr(size_t index = 0) const { return _output; }
+    memory::ptr output_memory_ptr(size_t index = 0) const {
+        if (index == 0)
+            return _output;
+        else
+            return _outputs[index];
+    }
+
     size_t inputs_memory_count() const { return _node.get_primitive()->input_size(); }
     size_t outputs_memory_count() const { return _node.get_primitive()->output_size(); }
     primitive_type_id type() const { return _node.type(); }
@@ -148,6 +154,8 @@ public:
     void allocate_internal_buffers();
     static memory::ptr allocate_output(engine& engine, memory_pool& pool,
                                         const program_node& _node, bool is_internal);
+    static std::vector<memory::ptr> allocate_outputs(engine& engine, memory_pool& pool,
+                                        const program_node& _node, bool is_internal);
 
     std::vector<memory::cptr> get_intermediates_memories() const { return _intermediates_memory; }
 
@@ -176,6 +184,7 @@ protected:
     // buffer or attach input as output
     // depending on reshape_node.is_in_place())
     memory::ptr _output;
+    std::vector<memory::ptr> _outputs;
 
     std::vector<memory::cptr> _intermediates_memory;
 
@@ -186,6 +195,7 @@ protected:
     bool _mem_allocated = false;
 
     memory::ptr allocate_output();
+    std::vector<memory::ptr> allocate_outputs();
     static std::vector<std::shared_ptr<primitive_inst>> build_exec_deps(
         std::vector<std::shared_ptr<primitive_inst>> const& mem_deps);
 

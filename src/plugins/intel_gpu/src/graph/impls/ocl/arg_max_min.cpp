@@ -26,7 +26,8 @@ protected:
     kernel_arguments_data get_arguments(typed_primitive_inst<arg_max_min>& instance, int32_t) const override {
         kernel_arguments_data args = parent::get_arguments(instance, 0);
 
-        if (args.inputs.size() == 3) {
+//        if (args.inputs.size() == 3) {
+        if (args.outputs.size() == 2) {
             args.inputs.erase(args.inputs.begin() + 1);  // erase constant input in case of TOP_K
         }
 
@@ -43,7 +44,9 @@ public:
         const auto& sort_type = primitive->sort;
         const auto& with_axis = primitive->with_axis;
         const auto& values_first = primitive->values_first;
-        const auto& outputs_num = primitive->input.size() == 3 ? 2 : 1;  // second output passed as input for TOP_K layer
+//        const auto& outputs_num = primitive->input.size() == 3 ? 2 : 1;  // second output passed as input for TOP_K layer
+        const auto& outputs_num = primitive->num_outputs;
+        std::cout << "argmaxmin typed_primitive_impl::create() : outputs_num : " << outputs_num << std::endl;
 
         auto argm_params = get_default_params<kernel_selector::arg_max_min_params>(arg);
         auto argm_optional_params =
@@ -83,9 +86,14 @@ public:
         else
             argm_params.argMaxMinSortType = kernel_selector::argm_sort::INDEX;
 
+        //if (outputs_num == 2) {
+        //    argm_params.inputs.push_back(convert_data_tensor(arg.get_dependency(2).get_output_layout()));
+        //}
+
         if (outputs_num == 2) {
-            argm_params.inputs.push_back(convert_data_tensor(arg.get_dependency(2).get_output_layout()));
+            argm_params.outputs.push_back(convert_data_tensor(arg.get_dependency(1).get_output_layout()));
         }
+
 
         argm_params.values_first = values_first;
 

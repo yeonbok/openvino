@@ -80,7 +80,7 @@ public:
             quantize_params.inputs.push_back(convert_data_tensor(arg.input(i).get_output_layout()));
         }
         const auto& output_layout = arg.get_output_layout();
-        quantize_params.output = convert_data_tensor(output_layout);
+        quantize_params.outputs[0] = convert_data_tensor(output_layout);
 
         auto& kernel_selector = kernel_selector::quantize_kernel_selector::Instance();
         auto best_kernels = kernel_selector.GetBestKernels(quantize_params, quantize_optional_params);

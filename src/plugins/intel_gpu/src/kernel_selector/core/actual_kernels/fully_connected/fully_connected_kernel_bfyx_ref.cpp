@@ -43,9 +43,9 @@ FullyConnected_bfyx_Ref::DispatchData FullyConnected_bfyx_Ref::SetDefault(const 
                                                                           int) const {
     auto dispatchData = Parent::SetDefault(params);
 
-    std::vector<size_t> global = {params.output.Feature().v, params.output.Batch().v, 1};
-    if (params.output.GetLayout() == DataLayout::bfyx)
-        global = {params.output.Feature().v * params.output.Y().v, params.output.Batch().v, 1};
+    std::vector<size_t> global = {params.outputs[0].Feature().v, params.outputs[0].Batch().v, 1};
+    if (params.outputs[0].GetLayout() == DataLayout::bfyx)
+        global = {params.outputs[0].Feature().v * params.outputs[0].Y().v, params.outputs[0].Batch().v, 1};
 
     dispatchData.gws = global;
     dispatchData.lws = GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo);
@@ -70,7 +70,7 @@ JitConstants FullyConnected_bfyx_Ref::GetJitConstants(const fully_connected_para
         accumulator_dt = Datatype::F32;
         activation_dt = Datatype::F32;
     }
-    if (params.output.GetLayout() == DataLayout::bfyx)
+    if (params.outputs[0].GetLayout() == DataLayout::bfyx)
         jit.AddConstant(MakeJitConstant("OUTPUT_3D", true));
     jit.Merge(MakeTypeJitConstants(activation_dt, "ACTIVATION"));
     jit.Merge(MakeTypeJitConstants(accumulator_dt, "ACCUMULATOR"));
@@ -107,7 +107,7 @@ bool FullyConnected_bfyx_Ref::Validate(const Params& params, const optional_para
     // int8 validation
     const auto& fc_params = static_cast<const fully_connected_params&>(params);
     auto input_type = fc_params.inputs[0].GetDType();
-    auto output_type = fc_params.output.GetDType();
+    auto output_type = fc_params.outputs[0].GetDType();
 
     // int8/uint8 inputs (quantization case) require additional checks
     // require some additional checks.
@@ -128,7 +128,7 @@ bool FullyConnected_bfyx_Ref::Validate(const Params& params, const optional_para
         return false;
 
     // We don't support 4d output
-    if (fc_params.output.GetLayout() == DataLayout::bfyx && fc_params.output.X().v > 1)
+    if (fc_params.outputs[0].GetLayout() == DataLayout::bfyx && fc_params.outputs[0].X().v > 1)
         return false;
 
     return true;
