@@ -179,6 +179,10 @@ void primitive_inst::build_deps() {
         _deps = _network.get_primitives(_node.get_dependencies());
         _exec_deps = build_exec_deps(_deps);
     }
+    if (_deps_new.empty() && !_node.get_dependencies_new().empty()) {
+        _deps_new = _network.get_primitives(_node.get_dependencies_new());
+        _exec_deps = build_exec_deps(_deps);
+    }
 }
 
 primitive_inst::primitive_inst(network& network, program_node const& node, bool allocate_memory)

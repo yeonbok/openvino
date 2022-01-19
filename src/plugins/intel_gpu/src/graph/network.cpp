@@ -816,6 +816,14 @@ std::vector<std::shared_ptr<primitive_inst>> network::get_primitives(const std::
     return result;
 }
 
+std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> network::get_primitives(const std::vector<std::pair<program_node*, int>>& nodes) {
+    std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> result(nodes.size());
+    std::transform(std::begin(nodes), std::end(nodes), std::begin(result), [&](const std::pair<program_node*, int>& node) {
+        return std::make_pair(get_primitive(node.first->id()), node.second);
+    });
+    return result;
+}
+
 void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive,
                                      const std::vector<event::ptr>& events) {
     auto id = primitive->id();
@@ -833,9 +841,11 @@ void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive
 void network::allocate_primitive_instance(program_node const& node) {
     if (_primitives.count(node.id()))
         return;
-
+    std::cout << "===============================================================" << std::endl;
     std::cout << "[" << node.id() << "] allocate primitive instance" << std::endl;
-    std::cout << node.get_dependencies_new().size() << std::endl;
+    std::cout << "dependencies_new : " << node.get_dependencies_new().size() << std::endl;
+    std::cout << "dependencies : " << node.get_dependencies().size() << std::endl;
+    std::cout << "===============================================================" << std::endl;
 
     auto inst = node.type()->create_instance(*this, node);
     for (auto& dep : node.get_dependencies()) {

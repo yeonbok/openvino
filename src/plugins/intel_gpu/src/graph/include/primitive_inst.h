@@ -71,8 +71,18 @@ public:
         return reinterpret_cast<std::vector<std::shared_ptr<const primitive_inst>> const&>(_deps);
     }
 
+    const std::vector<std::pair<std::shared_ptr<const primitive_inst>, int>>& dependencies_new() const {
+        return reinterpret_cast<std::vector<std::pair<std::shared_ptr<const primitive_inst>, int>> const&>(_deps_new);
+    }
+
     memory& dep_memory(size_t index) const { return dependencies().at(index)->output_memory(); }
-    memory::ptr dep_memory_ptr(size_t index) const { return dependencies().at(index)->output_memory_ptr(); }
+    memory::ptr dep_memory_ptr(size_t index) const {
+        if (dependencies_new().size() > 0) {
+            auto dep = dependencies_new().at(index);
+            return dep.first->output_memory_ptr(dep.second);
+        }
+        return dependencies().at(index)->output_memory_ptr();
+    }
     memory& output_memory() const { return *_output; }
 //    memory::ptr output_memory_ptr() const { return _output; }
     //TODO: output should be _outputs[index]
@@ -170,6 +180,7 @@ protected:
     // this is a set of dependencies in terms of memory, if execution of this primitive requires data from another one,
     // it should be added to this set
     std::vector<std::shared_ptr<primitive_inst>> _deps;
+    std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> _deps_new;
 
     // this is a set of dependencies in terms of execution
     // execution of all primitives from this set should be enough to guarantee that all memory deps (see _deps)

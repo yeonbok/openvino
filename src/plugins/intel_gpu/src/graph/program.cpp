@@ -363,6 +363,9 @@ void program::prepare_nodes(topology const& topology) {
 // add node's dependecies from its primitive dependencies
 void program::add_node_dependencies(program_node* node) {
     std::cout << "add_node_dependencies" << std::endl;
+    if (node->is_type<permute>())
+        return add_node_dependencies_new(node);
+
     auto deps = node->get_primitive()->dependencies();
     // add pointers to node's dependencies
     for (auto& dep : deps) {

@@ -439,14 +439,15 @@ KERNEL(arg_max_min_modified)(const __global INPUT0_TYPE* input
     output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result.value);
 #else
     output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result.index);
+    printf("first [not top_k_order] %d, %d, %d, %d %d : %f\n", indices[0], indices[1], indices[2], indices[3], indices[4], TO_OUTPUT1_TYPE(result.index));
 #endif
 #ifdef SECOND_OUTPUT_EXIST
     #ifdef TOP_K_ORDER
-//    second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_INPUT1_TYPE(result.index);
     second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT1_TYPE(result.index);
+    printf("second [top_k_order] %d, %d, %d, %d %d : %f\n", indices[0], indices[1], indices[2], indices[3], indices[4], TO_OUTPUT1_TYPE(result.index));
     #else
-//    second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_INPUT1_TYPiE(result.value);
     second_output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT1_TYPE(result.value);
+    printf("second [not top_k_order] %d, %d, %d, %d %d : %f\n", indices[0], indices[1], indices[2], indices[3], indices[4], TO_OUTPUT1_TYPE(result.value));
     #endif
 #endif
 
