@@ -63,12 +63,12 @@ TEST(permute_gpu_f32, output_ordering_test)
                 auto output = outputs.at("permute");
                 auto output_mem = output.get_memory();
                 EXPECT_EQ(outputs.size(), size_t(1));
-                auto ref_tensor = get_permutation(inp_t, perm);
-                auto dims = output_mem->get_layout().get_dims();
-                EXPECT_EQ(dims[0], ref_tensor[0]);
-                EXPECT_EQ(dims[1], ref_tensor[1]);
-                EXPECT_EQ(dims[2], ref_tensor[2]);
-                EXPECT_EQ(dims[3], ref_tensor[3]);
+                auto ref_tensor = get_permutation(input->get_layout().get_dims(), perm);
+                auto out_tensor = output_mem->get_layout().get_dims();
+                EXPECT_EQ(out_tensor[0], ref_tensor[0]);
+                EXPECT_EQ(out_tensor[1], ref_tensor[1]);
+                EXPECT_EQ(out_tensor[2], ref_tensor[2]);
+                EXPECT_EQ(out_tensor[3], ref_tensor[3]);
             }
         }
     }
