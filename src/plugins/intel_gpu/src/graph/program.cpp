@@ -406,11 +406,11 @@ void program::add_node_dependencies_new(program_node* node) {
     // add pointers to node's dependencies
     for (auto& dep : deps_new) {
         try {
-            auto dep_node = nodes_map.at(dep.first);
-            node->dependencies_new.push_back({dep_node.get(), dep.second});
-            dep_node->users_new[dep.second].push_back(node);
+            auto dep_node = nodes_map.at(dep.pid);
+            node->dependencies_new.push_back({dep_node.get(), dep.idx});
+            dep_node->users_new[dep.idx].push_back(node);
         } catch (...) {
-            throw std::runtime_error("Program doesn't contain primitive: " + dep.first +
+            throw std::runtime_error("Program doesn't contain primitive: " + dep.pid +
                     " that is input to: " + node->get_primitive()->id);
         }
     }
@@ -699,7 +699,7 @@ void program::add_split_outputs() {
 
         if (node->is_type<split>()) {
             auto split_prim = node->as<split>().typed_desc();
-            primitive_id input_id = split_prim->input[0];
+            input_info input_id(split_prim->input[0]);
             auto split_num = split_prim->output_offsets.size();
 
             // create crop for each split output provided

@@ -31,17 +31,23 @@ using primitive_id = std::string;
 
 struct primitive_info;
 
+struct input_info {
+    input_info(primitive_id pid) : pid(pid), idx(0) {}
+    input_info(primitive_id pid, int idx) : pid(pid), idx(idx) {}
+
+    primitive_id pid;
+    int32_t idx;
+};
 /// @brief Base class of network primitive description.
 struct primitive {
 public:
     /// @brief Initialize fields common for all primitives.
     primitive(const primitive_type_id& type,
               const primitive_id& id,
-              const std::vector<primitive_id>& input,
+              const std::vector<input_info>& input,
               const primitive_id& ext_prim_id = "",
               const padding& output_padding = padding(),
               const optional_data_type output_data_type = optional_data_type(),
-              const std::vector<std::pair<primitive_id, int>>& input_new = {},
               const int num_outputs = 1)
         : type(type),
           id(id),
@@ -49,19 +55,23 @@ public:
           output_padding(output_padding),
           output_data_type(output_data_type),
           input(input),
-          num_outputs(num_outputs),
-          input_new(input_new) {}
+          num_outputs(num_outputs) {}
 
     virtual ~primitive() = default;
 
     /// @brief Returns references to all primitive ids on which this primitive depends - inputs, weights, biases, etc.
-    std::vector<std::reference_wrapper<primitive_id>> dependencies() {
-        std::vector<std::reference_wrapper<primitive_id>> result;
+    std::vector<input_info> dependencies() {
+        std::vector<input_info> result;
         auto&& deps = get_dependencies();
 
         result.reserve(input.size() + deps.size());
-        for (auto& pid : input) result.push_back(std::ref(pid));
-        for (auto& pid : deps) result.push_back(std::ref(const_cast<primitive_id&>(pid.get())));
+        for (auto& pid : input) result.push_back(pid);
+        for (auto& pid : deps)  result.push_back({std::ref(const_cast<primitive_id&>(pid.get())), 0});
+
+
+        auto&& deps_new = get_dependencies_new();
+//        for (auto& pid : deps_new) result.push_back({std::ref(pid.first), pid.second});
+        for (auto& pid : deps_new) result.push_back({std::ref(const_cast<primitive_id&>(pid.first.get())), pid.second});
 
         return result;
     }
@@ -69,15 +79,16 @@ public:
     /// @brief Returns copy of all primitive ids on which this primitive depends - inputs, weights, biases, etc.
     std::vector<primitive_id> dependencies() const {
         std::cout << "[primitive::dependencies()] " << id << " has " << input.size() << " inputs" << std::endl;
-        auto result = input;
+        std::vector<primitive_id> result;
+        for (auto& i : input) result.push_back(i.pid);
         auto deps = get_dependencies();
         result.insert(result.end(), deps.begin(), deps.end());
         return result;
     }
 
-    std::vector<std::pair<primitive_id, int>> dependencies_new() const {
-        std::cout << "[primitive::dependencies_new()] " << id << " has " << input_new.size() << " inputs" << std::endl;
-        auto result = input_new;
+    std::vector<input_info> dependencies_new() const {
+//        std::cout << "[primitive::dependencies_new()] " << id << " has " << input_new.size() << " inputs" << std::endl;
+        auto result = input;
         // TODO: implement get_dependencies w/ mutliple output
 //        auto deps = get_dependencies();
  //       result.insert(result.end(), deps.begin(), deps.end());
@@ -111,9 +122,10 @@ public:
     using primitive_id_arr = std::vector<primitive_id>;
 
     /// @brief List of ids of input primitives.
-    primitive_id_arr input;
+//    primitive_id_arr input;
 
-    std::vector<std::pair<primitive_id, int>> input_new;
+    //std::vector<input_info> input;
+    std::vector<input_info> input;
 
     int num_outputs;
 
@@ -133,13 +145,12 @@ template <class PType>
 class primitive_base : public primitive {
 protected:
     explicit primitive_base(const primitive_id& id,
-                            const std::vector<primitive_id>& input,
+                            const std::vector<input_info>& input,
                             const primitive_id& ext_prim_id = "",
                             const padding& output_padding = padding(),
                             optional_data_type output_data_type = optional_data_type(),
-                            const std::vector<std::pair<primitive_id, int>>& input_new = {},
                             const int num_outputs = 1)
-        : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type, input_new, num_outputs) {}
+        : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type, num_outputs) {}
 };
 
 struct primitive_info {

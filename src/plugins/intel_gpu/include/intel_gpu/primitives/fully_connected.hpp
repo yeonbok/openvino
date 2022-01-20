@@ -46,7 +46,7 @@ struct fully_connected : public primitive_base<fully_connected> {
     /// @param weights Primitive id containing weights data.
     /// @param bias Primitive id containing bias data. Provide empty string if using Relu without bias.
     fully_connected(const primitive_id& id,
-                    const primitive_id& input,
+                    const input_info& input,
                     const primitive_id& weights,
                     const primitive_id& bias = "",
                     const primitive_id& ext_prim_id = "",
@@ -64,7 +64,7 @@ struct fully_connected : public primitive_base<fully_connected> {
     /// @param weights Primitive id containing weights data.
     /// @param bias Primitive id containing bias data. Provide empty string if using Relu without bias.
     fully_connected(const primitive_id& id,
-                    const primitive_id& input,
+                    const input_info& input,
                     const primitive_id& weights,
                     const primitive_id& bias,
                     const data_types data_type,

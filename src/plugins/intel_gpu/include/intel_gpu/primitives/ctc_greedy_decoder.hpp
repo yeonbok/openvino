@@ -24,7 +24,7 @@ struct ctc_greedy_decoder : public primitive_base<ctc_greedy_decoder> {
     /// @param blank_index Specifies the class index to use for the blank class.
     /// @param ctc_merge_repeated Flag for merging repeated labels during the CTC calculation
     ctc_greedy_decoder(const primitive_id& id,
-                       const std::vector<primitive_id>& input,
+                       const std::vector<input_info>& input,
                        const uint32_t blank_index,
                        const bool ctc_merge_repeated,
                        const tensor output_tensor,

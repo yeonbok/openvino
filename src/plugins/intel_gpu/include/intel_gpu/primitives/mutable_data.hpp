@@ -44,7 +44,7 @@ struct mutable_data : public primitive_base<mutable_data> {
     /// @note If memory is attached by memory::attach(), the attached buffer should be valid till network build.
     /// @param filler_type @ref data filling function, default is zero
     mutable_data(const primitive_id& id,
-                 const std::vector<primitive_id>& input,
+                 const std::vector<input_info>& input,
                  memory::ptr mem,
                  const primitive_id& ext_prim_id = "",
                  filler_type fill_type = filler_type::no_fill)

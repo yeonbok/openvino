@@ -217,7 +217,7 @@ void graph_initializations::handle_lstm_node(program& p, lstm_node& node) {
             primitive_id lstm_gemm_input_id = node.get_dependency(input_idx).get_org_primitive_id();
 
             auto lstm_gemm_node = std::make_shared<lstm_gemm>(lstm_gemm_id,
-                                                              lstm_gemm_input_id,
+                                                              input_info(lstm_gemm_input_id),
                                                               weights_id,
                                                               recurrent_id,
                                                               bias_id,
@@ -226,7 +226,7 @@ void graph_initializations::handle_lstm_node(program& p, lstm_node& node) {
             auto& n1 = p.get_or_create(lstm_gemm_node);
 
             auto lstm_elt_node = std::make_shared<lstm_elt>(lstm_elt_id,
-                                                            lstm_gemm_id,
+                                                            input_info(lstm_gemm_id),
                                                             cell_id,
                                                             lstm_prim->clip,
                                                             lstm_prim->input_forget,
@@ -293,7 +293,7 @@ void graph_initializations::handle_lstm_node(program& p, lstm_node& node) {
     }
     // if there is no next lstm, concatenation is created
     if (!has_lstm_children) {
-        std::vector<primitive_id> output_ids_offsets;
+        std::vector<input_info> output_ids_offsets;
         for (auto& e : output_map) {
             output_ids_offsets.push_back(e.second.first);
         }
@@ -342,7 +342,7 @@ void graph_initializations::handle_dynamic_lstm_node(program& p, lstm_dynamic_no
     // [1] Add lstm_dynamic_input
     auto lstm_dynamic_input_primitive =
         std::make_shared<lstm_dynamic_input>(node_id + suffix + "input",
-                                             input_id,
+                                             input_info(input_id),
                                              dyn_length_id,
                                              weights_id,
                                              bias_id,

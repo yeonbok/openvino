@@ -62,7 +62,7 @@ struct border : public primitive_base<border> {
     /// @param border_value       Value of elements which is used for paddings
     /// @param output_padding     Optional padding for output from primitive.
     border(const primitive_id& id,
-           const primitive_id& input,
+           const input_info& input,
            const tensor& left_top_sizes = {0, 0, 0, 0},
            const tensor& right_bottom_sizes = {0, 0, 0, 0},
            const border_type type = border_type::constant,
@@ -87,7 +87,7 @@ struct border : public primitive_base<border> {
     /// @param type               Type of added border.
     /// @param output_padding     Optional padding for output from primitive.
     border(const primitive_id& id,
-           const primitive_id& input,
+           const input_info& input,
            const tensor& x_y_sizes,
            const border_type type = border_type::constant,
            const padding& output_padding = padding())

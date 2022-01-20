@@ -48,7 +48,7 @@ struct crop : public primitive_base<crop> {
     /// @param reference_input Reference input tensor with the required dimensions.
     /// @param offsets Input offsets.
     crop(const primitive_id& id,
-         const primitive_id& input,
+         const input_info& input,
          const tensor& reference_input,
          const tensor& offsets,
          const primitive_id& ext_prim_id = "",
@@ -68,7 +68,7 @@ struct crop : public primitive_base<crop> {
     /// @param rb_borders Border sizes (spatial dimensions define right (X) and bottom (Y)
     ///                   borders, non-spatial dimensions - upper borders)
     crop(const primitive_id& id,
-         const primitive_id& input,
+         const input_info& input,
          const tensor& lt_borders,
          const tensor& rb_borders,
          const crop_borders_t,
@@ -87,7 +87,7 @@ struct crop : public primitive_base<crop> {
     /// @param xy_borders Border sizes (symmetric; spatial dimensions define left/right (X)
     ///                   and top/bottom (Y) borders, non-spatial dimensions - lower/upper borders).
     crop(const primitive_id& id,
-         const primitive_id& input,
+         const input_info& input,
          const tensor& xy_borders,
          const crop_borders_t,
          const primitive_id& ext_prim_id = "",

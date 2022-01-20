@@ -599,7 +599,7 @@ void prepare_quantization::prepare_asymmetric_quantization(program &p, convoluti
         return;
 
 
-    primitive_id input = old_conv_prim->input[0];
+    input_info input = old_conv_prim->input[0];
     std::vector<primitive_id> a_zero_points = {};
 
     cldnn::program_node* new_input = &in0;

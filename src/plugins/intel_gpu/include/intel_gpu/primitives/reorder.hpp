@@ -37,7 +37,7 @@ struct reorder : public primitive_base<reorder> {
     /// @param output_layout Requested memory layout.
     /// @param values_to_subtract Array of mean subtract values.
     reorder(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             const layout& output_layout,
             const std::vector<float>& values_to_subtract = {},
             const reorder_mean_mode mode = reorder_mean_mode::subtract,
@@ -54,7 +54,7 @@ struct reorder : public primitive_base<reorder> {
     /// @param output_layout Requested memory layout.
     /// @param mean Primitive id to get mean subtract values.
     reorder(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             const layout& output_layout,
             primitive_id const& mean,
             const reorder_mean_mode mode = reorder_mean_mode::subtract,
@@ -71,7 +71,7 @@ struct reorder : public primitive_base<reorder> {
     /// @param output_layout Requested memory layout.
     /// @param values_to_subtract Array of mean subtract values.
     reorder(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             format output_format,
             data_types output_data_type,
             const std::vector<float>& values_to_subtract = {},
@@ -90,7 +90,7 @@ struct reorder : public primitive_base<reorder> {
     /// @param output_layout Requested memory layout.
     /// @param mean Primitive id to get mean subtract values.
     reorder(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             format output_format,
             data_types output_data_type,
             primitive_id const& mean,
@@ -110,8 +110,8 @@ struct reorder : public primitive_base<reorder> {
     /// @param output_layout Requested memory layout.
     /// @param values_to_subtract Array of mean subtract values.
     reorder(const primitive_id& id,
-            const primitive_id& input,
-            const primitive_id& input2,
+            const input_info& input,
+            const input_info& input2,
             const layout& output_layout,
             const std::vector<float>& values_to_subtract = {},
             const reorder_mean_mode mode = reorder_mean_mode::subtract,
@@ -129,8 +129,8 @@ struct reorder : public primitive_base<reorder> {
     /// @param output_layout Requested memory layout.
     /// @param mean Primitive id to get mean subtract values.
     reorder(const primitive_id& id,
-            const primitive_id& input,
-            const primitive_id& input2,
+            const input_info& input,
+            const input_info& input2,
             const layout& output_layout,
             primitive_id const& mean,
             const reorder_mean_mode mode = reorder_mean_mode::subtract,

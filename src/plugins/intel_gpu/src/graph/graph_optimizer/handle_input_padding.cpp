@@ -89,8 +89,8 @@ void handle_input_padding::run(program& p) {
                 convolution_prim->padding_below = tensor(0, 0, 0, 0);
 
                 // create border primitive
-                primitive_id input_id = convolution_prim->input[0];
-                primitive_id border_id = input_id + "_border_" + convolution_prim->id;
+                input_info input_id = convolution_prim->input[0];
+                primitive_id border_id = input_id.pid + "_border_" + convolution_prim->id;
                 auto b_prim = std::make_shared<border>(border_id,
                                                        input_id,
                                                        padding_above,
