@@ -37,8 +37,8 @@ struct gather : public primitive_base<gather> {
     /// @param batch_dim Batch_dim
     /// @param support_neg_ind Support negative indexes
     gather(const primitive_id& id,
-           const primitive_id& dict,
-           const primitive_id& idx,
+           const input_info& dict,
+           const input_info& idx,
            const gather_axis axis,
            const format& output_format,
            const tensor& output_shape,

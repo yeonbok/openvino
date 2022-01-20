@@ -119,7 +119,7 @@ struct loop : public primitive_base<loop> {
     /// @param back_edges Output data primitive id.
     /// @param output_padding     Optional padding for output from primitive.
     loop(const primitive_id& id,
-         const std::vector<primitive_id>& inputs,
+         const std::vector<input_info>& inputs,
          const topology& body,
          const primitive_id& trip_count_id,
          const primitive_id& initial_condition_id,
@@ -179,7 +179,12 @@ protected:
         };
         // add external_id in dependencies if not exist
         for (const auto& mapping : input_primitive_maps) {
-            auto target = std::find(input.begin(), input.end(), mapping.external_id);
+//            auto target = std::find(input.begin(), input.end(), mapping.external_id);
+            auto target = input.begin();
+            for (; target != input.end(); ++target) {
+                if (target->pid  == mapping.external_id)
+                    break;
+            }
             if (target == input.end()) {
                 ret.push_back(std::ref(mapping.external_id));
             }

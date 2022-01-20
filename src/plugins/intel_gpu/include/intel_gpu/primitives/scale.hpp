@@ -36,8 +36,9 @@ struct scale : public primitive_base<scale> {
     /// @param input Input primitive id.
     /// @param scale_input Scale input primitive id with values needed for product computation.
     scale(const primitive_id& id,
-          const primitive_id& input,
-          const primitive_id& scale_input,  // should be bfyx or yxfb, where each dimension can be 1, if all dimensions
+          const input_info& input,
+          const input_info& scale_input,
+                                            // should be bfyx or yxfb, where each dimension can be 1, if all dimensions
                                             // are 1 then this is scalar
           const optional_data_type& output_dt = {},
           const primitive_id& ext_prim_id = "",
@@ -50,8 +51,9 @@ struct scale : public primitive_base<scale> {
     /// @param scale_input Scale input primitive id with values needed for product computation.
     /// @param bias Primitive id containing bias data.
     scale(const primitive_id& id,
-          const primitive_id& input,
-          const primitive_id& scale_input,  // should be bfyx or yxfb, where each dimension can be 1, if all dimensions
+          const input_info& input,
+          const input_info& scale_input,
+                                            // should be bfyx or yxfb, where each dimension can be 1, if all dimensions
                                             // are 1 then this is scalar
           const primitive_id& bias,  // should be same size as scale_input
           const optional_data_type& output_dt = {},

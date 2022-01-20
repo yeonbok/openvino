@@ -37,8 +37,8 @@ struct non_max_suppression : public primitive_base<non_max_suppression> {
     /// @param second_output Id of primitive specifying output for scores for each selected box.
     /// @param third_output Id of primitive specifying output for total number of selected boxes.
     non_max_suppression(const primitive_id& id,
-                        const primitive_id& boxes_positions,
-                        const primitive_id& boxes_score,
+                        const input_info& boxes_positions,
+                        const input_info& boxes_score,
                         int selected_indices_num,
                         bool center_point_box = false,
                         bool sort_result_descending = true,

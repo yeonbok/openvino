@@ -43,8 +43,8 @@ struct arg_max_min : public primitive_base<arg_max_min> {
     /// @param top_k Number of indices to output.
     /// @param axis Axis to maximize/minimize along.
     arg_max_min(const primitive_id& id,
-                const std::vector<primitive_id>& input,
-                const std::vector<std::pair<primitive_id, int>>& inputs,
+//                const std::vector<primitive_id>& input,
+                const std::vector<input_info>& input,
                 out_type output_type,
                 uint32_t top_k = 1,
                 axis_name axis = axis_name::xyf,
@@ -53,7 +53,7 @@ struct arg_max_min : public primitive_base<arg_max_min> {
                 const primitive_id& ext_prim_id = "",
                 const padding& output_padding = padding(),
                 data_types output_data_type = data_types::f32)
-        : primitive_base(id, {input}, ext_prim_id, output_padding, optional_data_type {output_data_type}, inputs, 2/*num_outputs*/),
+        : primitive_base(id, {input}, ext_prim_id, output_padding, optional_data_type {output_data_type}, 2/*num_outputs*/),
           top_k(top_k),
           output_type(output_type),
           axis(axis),

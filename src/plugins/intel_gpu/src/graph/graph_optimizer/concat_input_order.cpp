@@ -198,7 +198,7 @@ void concat_input_order::run(program& p) {
         for (size_t i = 0; i < new_dependencies.size(); ++i) {
             mutable_dependencies[i] = new_dependencies[i];
         }
-        std::vector<primitive_id> new_input_ids;
+        std::vector<input_info> new_input_ids;
         new_input_ids.reserve(inputs_count);
         for (auto& ord : new_order) {
             new_input_ids.push_back(prim->input[ord]);

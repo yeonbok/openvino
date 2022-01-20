@@ -20,8 +20,8 @@ struct roi_pooling : public primitive_base<roi_pooling> {
     CLDNN_DECLARE_PRIMITIVE(roi_pooling)
 
     roi_pooling(const primitive_id& id,
-                const primitive_id& input_data,
-                const primitive_id& input_rois,
+                const input_info& input_data,
+                const input_info& input_rois,
                 pooling_mode mode,
                 bool position_sensitive,
                 int pooled_width,
@@ -47,7 +47,7 @@ struct roi_pooling : public primitive_base<roi_pooling> {
           spatial_bins_y(spatial_bins_y) {}
 
     roi_pooling(const primitive_id& id,
-                const std::vector<primitive_id>& inputs,
+                const std::vector<input_info>& inputs,
                 pooling_mode mode,
                 bool position_sensitive,
                 int pooled_width,

@@ -35,7 +35,7 @@ struct roi_align : public primitive_base<roi_align> {
     /// @param mode Method to perform pooling to produce output feature map elements.
     /// @param shrink_axis_mask Array of bits, that provide shrinks the dimensionality by 1, taking on the value at index begin[i].
     roi_align(const primitive_id& id,
-              const std::vector<primitive_id>& inputs,
+              const std::vector<input_info>& inputs,
               int pooled_h,
               int pooled_w,
               int sampling_ratio,

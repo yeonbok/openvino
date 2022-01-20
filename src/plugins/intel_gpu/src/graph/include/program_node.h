@@ -382,7 +382,7 @@ protected:
 
     // list of primitives that can reuse same memory buffers due to execution order conflicts
     std::set<primitive_id> memory_dependencies;
-    std::set<std::pair<primitive_id, int>> memory_dependencies_new;
+    std::set<input_info> memory_dependencies_new;
 
     impl_types impl_type = impl_types::any;
     bool constant = false;

@@ -33,7 +33,7 @@ struct cum_sum : public primitive_base<cum_sum> {
     /// @param exclusive If set to true then the top element is not included in sum.
     /// @param reverse If set to true will perform the sums in reverse direction.
     cum_sum(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             const cum_sum_axis axis = along_b,
             const bool exclusive = false,
             const bool reverse = false,
