@@ -356,9 +356,9 @@ bool program_node::need_lockable_memory() const {
     return need_lockable_mem;
 }
 
-    /* ----------------------------------------- */
-    /* Onednn fused operations integration logic */
-    /* ----------------------------------------- */
+/* ----------------------------------------- */
+/* Onednn fused operations integration logic */
+/* ----------------------------------------- */
 
 #ifdef ENABLE_ONEDNN_FOR_GPU
 
