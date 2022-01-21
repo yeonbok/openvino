@@ -386,6 +386,8 @@ public:
         cur_id = 0;
     }
 
+    bool is_dynamic() const;
+
 protected:
     size_t unique_id = 0;
     static thread_local size_t cur_id;
