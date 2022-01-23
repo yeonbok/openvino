@@ -24,8 +24,8 @@ public:
     using parent::parent;
 
     program_node& input() const {
-        CLDNN_ERROR_LESS_THAN(id(), "the number of dependencies", dependencies.size(), "1", 1, "ERROR: the node has no input");
-        return get_dependency(0);
+        CLDNN_ERROR_LESS_THAN(id(), "the number of dependencies", dependencies_new.size(), "1", 1, "ERROR: the node has no input");
+        return *get_dependency_new(0).first;
     }
 
     bool is_in_place() const {

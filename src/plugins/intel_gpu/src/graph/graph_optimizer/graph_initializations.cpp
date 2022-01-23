@@ -131,7 +131,7 @@ void graph_initializations::handle_lstm_node(program& p, lstm_node& node) {
     auto hidden_size = tensor(input_size.batch[0], 1, recurrent_size.spatial[0], 1);
 
     size_t directions = recurrent_size.feature[0];
-    size_t num_input_dependencies = node.get_dependencies().size();
+    size_t num_input_dependencies = node.get_dependencies_new().size();
     size_t sequence_len = node.sequence_len();
 
     // Calculate the input sequence length for the lstm node
@@ -165,7 +165,7 @@ void graph_initializations::handle_lstm_node(program& p, lstm_node& node) {
             p.remove_connection(input, node);
 
             // Update the total no. of input dependecies
-            num_input_dependencies = node.get_dependencies().size();
+            num_input_dependencies = node.get_dependencies_new().size();
         }
     // if the sequence has a single element but it has multiple inputs then
     // the parent of this lstm is an lstm node. If this is a bidirectional lstm
@@ -214,7 +214,7 @@ void graph_initializations::handle_lstm_node(program& p, lstm_node& node) {
             // primitive_id lstm_gemm_input_id = node->get_dependency(input_idx).get_primitive()->id;
             // the line below requires an attention: get_org_primitive_id() might not be an actual id of a node
             // (see rename method) ToDO: ensure that get_org_primitive_id() is suitable here
-            primitive_id lstm_gemm_input_id = node.get_dependency(input_idx).get_org_primitive_id();
+            primitive_id lstm_gemm_input_id = node.get_dependency_new(input_idx).first->get_org_primitive_id();
 
             auto lstm_gemm_node = std::make_shared<lstm_gemm>(lstm_gemm_id,
                                                               input_info(lstm_gemm_input_id),
@@ -239,7 +239,7 @@ void graph_initializations::handle_lstm_node(program& p, lstm_node& node) {
             p.add_connection(n1, n2);
             // adding dependecy to lstm_gemm node
             // input
-            p.add_connection(node.get_dependency(input_idx), n1);
+            p.add_connection(*node.get_dependency_new(input_idx).first, n1);
             // adding weights and initial values to lstm_gemm
             p.add_connection(p.get_node(weights_id), n1);
             p.add_connection(p.get_node(recurrent_id), n1);

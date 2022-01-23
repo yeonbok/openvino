@@ -25,8 +25,9 @@ void eltwise_remove_stride::conv_stride_extend(program& p, program_node& node, c
     auto filter_size = weights_node_ptr->get_output_layout().size;
     // make sure this is conv 1x1
     if (filter_size.spatial[0] == 1 && filter_size.spatial[1] == 1) {
-        auto deps = node.get_dependencies();
-        for (auto dep : deps) {
+        auto deps = node.get_dependencies_new();
+        for (auto dep_info : deps) {
+            auto dep = dep_info.first;
             if (dep->is_type<convolution>()) {
                 conv_stride_extend(p, *dep, tensor);
                 dep->recalc_output_layout(true);
@@ -66,9 +67,10 @@ void eltwise_remove_stride::run(program& p) {
 
             const auto eltw = std::static_pointer_cast<const eltwise>(node->get_primitive());
             if (!eltw->stride.empty()) {
-                auto deps = node->get_dependencies();
+                auto deps = node->get_dependencies_new();
                 for (size_t i = 0; i < deps.size(); i++) {
-                    auto dep = deps[i];
+                    auto dep_info = deps[i];
+                    auto dep = dep_info.first;
                     // TODO: add other primitives beside convolution here
                     if (dep->is_type<convolution>()) {
                         auto e = const_cast<eltwise*>(&(*eltw));

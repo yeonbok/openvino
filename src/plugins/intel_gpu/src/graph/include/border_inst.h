@@ -22,7 +22,7 @@ public:
     typed_program_node(const std::shared_ptr<border> prim, program& prog) : parent(prim, prog) {
         support_padding_all(true);
     }
-    program_node& input() const { return get_dependency(0); }
+    program_node& input() const { return *get_dependency_new(0).first; }
 };
 
 using border_node = typed_program_node<border>;

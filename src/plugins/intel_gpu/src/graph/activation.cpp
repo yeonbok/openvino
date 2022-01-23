@@ -19,7 +19,7 @@ layout activation_inst::calc_output_layout(activation_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for activation_node!");
 
-    auto input_node_layout = node.input().get_non_padded_output_layout();
+    auto input_node_layout = node.get_dependency_new(0).first->get_non_padded_output_layout();
     auto func = node.get_primitive()->activation_function;
 
     std::vector<activation_func> activations_int8 = {
@@ -61,7 +61,8 @@ std::string activation_inst::to_string(activation_node const& node) {
 }
 
 activation_inst::typed_primitive_inst(network& network, activation_node const& node) : parent(network, node) {
-    auto input_arg = node.input().get_output_layout();
+    auto dep_info = node.get_dependency_new(0);
+    auto input_arg = dep_info.first->get_output_layout(true, dep_info.second);
     auto output_arg = node.get_output_layout();
 
     CLDNN_ERROR_NOT_EQUAL(node.id(),
@@ -73,7 +74,7 @@ activation_inst::typed_primitive_inst(network& network, activation_node const& n
 
     if (is_parameterized()) {
         /// Slope input x dimension should be equal to input feature size (one slope per channel).
-        auto slope_layout = node.slope_input().get_output_layout();
+        auto slope_layout = node.slope_input().first->get_output_layout(node.slope_input().second);
         auto slope_input_size = slope_layout.size;
         auto input_feature_size = slope_layout.size.feature[0];
 

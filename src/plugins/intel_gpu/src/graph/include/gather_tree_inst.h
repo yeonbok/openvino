@@ -18,7 +18,7 @@ public:
     using parent::parent;
     typed_program_node(const std::shared_ptr<gather_tree> prim, program& prog) : parent(prim, prog) {
     }
-    program_node& input() const { return get_dependency(0); }
+    program_node& input() const { return *get_dependency_new(0).first; }
 };
 
 using gather_tree_node = typed_program_node<gather_tree>;

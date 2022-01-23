@@ -47,7 +47,7 @@ public:
               const std::vector<input_info>& input,
               const primitive_id& ext_prim_id = "",
               const padding& output_padding = padding(),
-              const optional_data_type output_data_type = optional_data_type(),
+              const optional_data_type output_data_type = optional_data_type(), // TODO: change for multiple output
               const int num_outputs = 1)
         : type(type),
           id(id),

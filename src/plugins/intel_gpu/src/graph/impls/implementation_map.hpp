@@ -48,8 +48,9 @@ template <typename primitive_kind>
 struct implementation_key {
     typedef std::tuple<data_types, format::type> type;
     type operator()(const typed_program_node<primitive_kind>& primitive) {
-        return std::make_tuple(primitive.get_dependency(0).get_output_layout().data_type,
-                               primitive.get_dependency(0).get_output_layout().format);
+        // TODO for multiple output
+        return std::make_tuple(primitive.get_dependency_new(0).first->get_output_layout().data_type,
+                               primitive.get_dependency_new(0).first->get_output_layout().format);
     }
     type operator()(const layout& proposed_layout) {
         return std::make_tuple(proposed_layout.data_type, proposed_layout.format);

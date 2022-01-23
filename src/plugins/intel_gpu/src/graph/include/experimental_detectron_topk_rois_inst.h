@@ -16,7 +16,7 @@ struct typed_program_node<experimental_detectron_topk_rois> : public typed_progr
 public:
     using parent::parent;
 
-    const program_node &input(std::size_t index = 0) const { return get_dependency(index); }
+    const program_node &input(std::size_t index = 0) const { return *get_dependency_new(index).first; }
 };
 
 using experimental_detectron_topk_rois_node = typed_program_node<experimental_detectron_topk_rois>;

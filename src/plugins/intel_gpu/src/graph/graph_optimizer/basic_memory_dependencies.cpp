@@ -21,7 +21,7 @@ using namespace cldnn;
 void basic_memory_dependencies::run(program& p) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "CLDNN::pass::BasicMemoryDependencies");
     auto itr = p.get_processing_order().begin();
-    std::vector<primitive_id> past_outputs;
+    std::vector<std::pair<primitive_id, int32_t>> past_outputs;
     while (itr != p.get_processing_order().end()) {
         auto& node = *itr;
         itr++;
@@ -31,9 +31,9 @@ void basic_memory_dependencies::run(program& p) {
             continue;
 
         // add my dependencies to restriction list (can't share input.output buffers)
-        for (auto it : node->get_dependencies()) {
+        for (auto it : node->get_dependencies_new()) {
             add_memory_dependency(node, it);
-            add_memory_dependency(it, node);
+            add_memory_dependency(it.first, {node, 0}); // TODO(taylor): is this correct?
         }
 
         if (node->is_type<convolution>() && node->get_preferred_impl_type() == impl_types::onednn) {
@@ -43,7 +43,9 @@ void basic_memory_dependencies::run(program& p) {
 
             for (auto& fused_op : conv.get_fused_primitives()) {
                 if (fused_op.node->is_type<eltwise>() && fused_op.deps.size() == 1) {
-                    auto eltw_in_layout = conv.get_dependency(fused_op.dep_start_idx).get_output_layout();
+                    auto dep_info = conv.get_dependency_new(fused_op.dep_start_idx);
+                    auto& dep = *dep_info.first;
+                    auto eltw_in_layout = dep.get_output_layout(dep_info.second);
                     auto conv_out_layout = node->get_output_layout();
                     if (eltw_dep > 0) {
                         can_reuse_eltwise_mem = false;
@@ -61,12 +63,13 @@ void basic_memory_dependencies::run(program& p) {
             }
 
             if (can_reuse_eltwise_mem) {
-                auto& eltw_node = conv.get_dependency(eltw_dep);
+                auto eltw_node_info = conv.get_dependency_new(eltw_dep);
+                auto& eltw_node = *eltw_node_info.first;
                 eltw_node.can_share_buffer(false);
                 conv.can_share_buffer(false);
                 for (auto& user : conv.get_users()) {
-                    add_memory_dependency(user, &eltw_node);
-                    add_memory_dependency(user, &conv);
+                    add_memory_dependency(user, eltw_node_info);
+                    add_memory_dependency(user, {&conv, 0}); //TODO(taylor) : check afterwards
                 }
             }
         }
@@ -76,6 +79,6 @@ void basic_memory_dependencies::run(program& p) {
         node->add_memory_dependency(past_outputs);
         // if current node is an output add it to the outputs list after restriction.
         if (node->is_output())
-            past_outputs.push_back(node->id());
+            past_outputs.push_back({node->id(), 0}); // TODO(taylor) : multiple outpus
     }
 }

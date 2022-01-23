@@ -74,8 +74,8 @@ concatenation_inst::typed_primitive_inst(network& network, concatenation_node co
     tensor::value_type concat_count = 0;
     auto input_size = input_layout.size;
     auto output_size = output_layout.size;
-    for (const auto& i : node.get_dependencies()) {
-        auto input_i_layout = i->get_output_layout();
+    for (const auto& i : node.get_dependencies_new()) {
+        auto input_i_layout = i.first->get_output_layout();
         auto input_mem_size = input_i_layout.size;
         for (int dim = concatenation::along_b; dim <= concatenation::along_w; ++dim) {
             if (dim == node.get_primitive()->axis) {
@@ -111,16 +111,17 @@ concatenation_inst::typed_primitive_inst(network& network, concatenation_node co
 
     if (node.can_be_optimized()) {
         build_deps();
-        std::list<std::vector<std::shared_ptr<primitive_inst>>*> stack = {&_deps};
+        std::list<std::vector<std::pair<std::shared_ptr<primitive_inst>, int>>*> stack = {&_deps_new};
         while (!stack.empty()) {
             auto nodes_list = stack.front();
             stack.pop_front();
 
-            for (auto processed_node : *nodes_list) {
-                processed_node->_output = _output;
+            for (auto processed_node_info : *nodes_list) {
+                auto processed_node = processed_node_info.first;
+                processed_node->_outputs = _outputs;
                 if (processed_node->type() == concatenation::type_id() && processed_node->can_be_optimized()) {
-                    if (!processed_node->_deps.empty())
-                        stack.push_back(&processed_node->_deps);
+                    if (!processed_node->_deps_new.empty())
+                        stack.push_back(&processed_node->_deps_new);
                 }
             }
         }

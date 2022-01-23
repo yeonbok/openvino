@@ -18,7 +18,7 @@ struct typed_program_node<custom_gpu_primitive> : public typed_program_node_base
 public:
     using parent::parent;
 
-    program_node& input(size_t idx = 0) const { return get_dependency(idx); }
+    program_node& input(size_t idx = 0) const { return *get_dependency_new(idx).first; }
 };
 
 using custom_gpu_primitive_node = typed_program_node<custom_gpu_primitive>;
@@ -37,7 +37,7 @@ public:
         // if the output layout format was set to any, it means the layer output format will be the same as the first
         // input
         if (output_layout.format == format::any) {
-            output_layout.format = node.get_dependency(0).get_output_layout().format;
+            output_layout.format = node.get_dependency_new(0).first->get_output_layout().format;
         }
         return output_layout;
     }

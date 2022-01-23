@@ -15,8 +15,8 @@ struct typed_program_node<cum_sum> : public typed_program_node_base<cum_sum> {
 public:
     using parent::parent;
 
-    program_node& input(size_t index = 0) const { return get_dependency(index); }
-    size_t inputs_count() const { return get_dependencies().size(); }
+    program_node& input(size_t index = 0) const { return *get_dependency_new(index).first; }
+    size_t inputs_count() const { return get_dependencies_new().size(); }
 };
 
 using cum_sum_node = typed_program_node<cum_sum>;

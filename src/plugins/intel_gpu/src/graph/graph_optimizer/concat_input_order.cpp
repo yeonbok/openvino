@@ -42,7 +42,7 @@ bool can_shuffle_features(program_node& node, stream& stream) {
     pass_through |= node.is_type<activation>();
     pass_through |= node.is_type<pooling>();
     // General conditions for pass-through layers
-    pass_through &= !node.is_output() && node.get_dependencies().size() == 1 && !node.has_fused_primitives();
+    pass_through &= !node.is_output() && node.get_dependencies_new().size() == 1 && !node.has_fused_primitives();
     if (pass_through) {
         // Primitives that are feature order invariant, pass-through shuffled features to users
         for (auto& user : node.get_users()) {
@@ -128,7 +128,7 @@ void concat_input_order::run(program& p) {
 
         bool along_f = prim->axis == concatenation::along_f;
         size_t inputs_count = prim->input_size();
-        bool no_fusing = !concat_node.has_fused_primitives() && concat_node.get_dependencies().size() == inputs_count;
+        bool no_fusing = !concat_node.has_fused_primitives() && concat_node.get_dependencies_new().size() == inputs_count;
 
         auto out_format = concat_node.get_output_layout().format;
         bool correct_format = (out_format == format::b_fs_yx_fsv16) || (out_format == format::b_fs_yx_fsv32);
@@ -142,8 +142,8 @@ void concat_input_order::run(program& p) {
         std::vector<tensor::value_type> feature_sizes;
         feature_sizes.reserve(inputs_count);
         for (size_t input_idx = 0; input_idx < inputs_count; ++input_idx) {
-            auto& dep = concat_node.get_dependency(input_idx);
-            auto dep_layout = dep.get_output_layout();
+            auto dep_info = concat_node.get_dependency_new(input_idx);
+            auto dep_layout = dep_info.first->get_output_layout(dep_info.second);
             single_format &= dep_layout.format == out_format;
             feature_sizes.push_back(dep_layout.size.feature[0]);
         }
@@ -189,14 +189,14 @@ void concat_input_order::run(program& p) {
             shuffled_ranges.push_back(original_ranges[ord]);
         }
         // Change input order
-        std::vector<program_node*> new_dependencies = {};
+        std::vector<std::pair<program_node*, int32_t>> new_dependencies = {};
         new_dependencies.reserve(inputs_count);
         for (auto& ord : new_order) {
-            new_dependencies.push_back(&concat_node.get_dependency(ord));
+            new_dependencies.push_back({concat_node.get_dependency_new(ord).first, concat_node.get_dependency_new(ord).second});
         }
         // Update in place with const cast instead of replacing
-        auto& dependencies = concat_node.get_dependencies();
-        auto& mutable_dependencies = const_cast<std::vector<program_node*>&>(dependencies);
+        auto& dependencies = concat_node.get_dependencies_new();
+        auto& mutable_dependencies = const_cast<std::vector<std::pair<program_node*, int32_t>>&>(dependencies);
         for (size_t i = 0; i < new_dependencies.size(); ++i) {
             mutable_dependencies[i] = new_dependencies[i];
         }

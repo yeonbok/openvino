@@ -21,8 +21,8 @@ struct typed_program_node<resample> : public typed_program_node_base<resample> {
 public:
     using parent::parent;
 
-    program_node& input() const { return get_dependency(0); }
-    program_node& input2() const { return get_dependency(1); }
+    program_node& input() const { return *get_dependency_new(0).first; }
+    program_node& input2() const { return *get_dependency_new(1).first; }
 };
 
 using resample_node = typed_program_node<resample>;

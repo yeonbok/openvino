@@ -131,10 +131,10 @@ public:
     void set_preferred_impl_type(impl_types impl) { impl_type = impl; }
     impl_types get_preferred_impl_type() const { return impl_type; }
 
-    std::vector<program_node*> const& get_dependencies() const { return dependencies; }
+//    std::vector<program_node*> const& get_dependencies() const { return dependencies; }
     std::vector<std::pair<program_node*, int>> const& get_dependencies_new() const { return dependencies_new; }
 
-    program_node& get_dependency(size_t idx) const { return *dependencies.at(idx); }
+//    program_node& get_dependency(size_t idx) const { return *dependencies.at(idx); }
     std::pair<program_node*, int> get_dependency_new(size_t idx) const { return dependencies_new.at(idx); }
 
     // replaces idx-th dependency of 'this' with 'new_dep', calls program::remove_if_dangling(old_dep)
@@ -149,8 +149,8 @@ public:
     void remove_dependency(program_node& node);
 
     std::set<primitive_id> get_memory_dependencies() const;
-    void add_memory_dependency(primitive_id);
-    void add_memory_dependency(std::vector<primitive_id>);
+    void add_memory_dependency(std::pair<primitive_id, int32_t> dep);
+    void add_memory_dependency(std::vector<std::pair<primitive_id, int32_t>> deps);
 
     template <class PType>
     bool have_user_with_type() const {
@@ -173,14 +173,14 @@ public:
     // do not modify primitive directly to keep synchronisation with graph
     std::shared_ptr<const primitive> get_primitive() const { return desc; }
     // primitive modification functions
-    void set_output_padding(padding const& padd) {
+    void set_output_padding(padding const& padd, int32_t idx = 0) {
         // changing output padding shouldn't cause any changes to other primitives
         // so just change it
-        output_layout.data_padding = padd;
+        output_layouts[idx].data_padding = padd;
     }
 
-    void merge_output_padding(padding const& padd) {
-        set_output_padding(padding::max(padd, output_layout.data_padding));
+    void merge_output_padding(padding const& padd, int32_t idx = 0) {
+        set_output_padding(padding::max(padd, output_layouts[idx].data_padding));
     }
 
     // only calculated output layout (for external usage), does not modify/use cached output layout nor invalidate users
@@ -189,7 +189,7 @@ public:
 
     // uses cached output layout if valid, if not calls 'calc_output_layout' and stores its result + invalidate all
     // users if layout has changed and @p invalidate_users_if_changed is set to true
-    layout get_output_layout(bool invalidate_users_if_changed = true);
+    layout get_output_layout(bool invalidate_users_if_changed = true, int32_t idx = 0);
     std::vector<layout> get_output_layouts(bool invalidate_users_if_changed = true);
     // returns cached output layout if valid, otherwise throws an exception
     layout get_output_layout() const;
@@ -199,7 +199,7 @@ public:
 
     // sets cached output layout to an arbitrary value, invalidates users if new layout differs from previous one and @p
     // invalidate_users_if_changed is set to true returns whether output layout has changed
-    bool set_output_layout(layout& new_layout, bool invalidate_users_if_changed = true);
+    bool set_output_layout(layout& new_layout, bool invalidate_users_if_changed = true, int32_t idx = 0);
     bool set_output_layouts(std::vector<layout>& new_layout, bool invalidate_users_if_changed = true);
 
     size_t get_outputs_count() const { return num_outputs; }
@@ -214,7 +214,7 @@ public:
     bool has_padded_dependency();
     bool has_padded_dependency() const;
 
-    bool is_input() const { return dependencies.empty(); }
+    bool is_input() const { return dependencies_new.empty(); }
     bool is_endpoint() const { return users.empty(); }
     void set_output(bool out) { output = out; }
     bool is_output() const { return output; }
@@ -382,10 +382,10 @@ protected:
 
     bool valid_output_layout = false;
     bool valid_output_layouts = false;
-    layout output_layout = layout(data_types::f32, format::bfyx, tensor());
+//    layout output_layout = layout(data_types::f32, format::bfyx, tensor());
     std::vector<layout> output_layouts;
 
-    std::vector<program_node*> dependencies;
+//    std::vector<program_node*> dependencies;
     std::vector<std::pair<program_node*, int>> dependencies_new;
     std::list<program_node*> users;
     std::map<int, std::list<program_node*>> users_new;
@@ -484,7 +484,7 @@ template <class PType>
 struct typed_program_node : public typed_program_node_base<PType> {
     using typed_program_node_base<PType>::typed_program_node_base;
 
-    program_node& input() const { return program_node::get_dependency(0); }
+//    program_node& input() const { return program_node::get_dependency(0); }
 };
 
 }  // namespace cldnn

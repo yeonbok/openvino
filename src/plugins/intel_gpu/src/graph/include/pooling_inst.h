@@ -21,8 +21,8 @@ struct typed_program_node<pooling> : public typed_program_node_base<pooling> {
 
 public:
     using parent::parent;
-    program_node& input() const { return get_dependency(0); }
-    program_node& argmax() const { return get_dependency(1); }
+    program_node& input() const { return *get_dependency_new(0).first; }
+    program_node& argmax() const { return *get_dependency_new(1).first; }
 };
 
 using pooling_node = typed_program_node<pooling>;

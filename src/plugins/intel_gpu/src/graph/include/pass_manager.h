@@ -354,16 +354,16 @@ public:
 class memory_dependency_pass : public base_pass {
 public:
     explicit memory_dependency_pass(const std::string& pass_name) : base_pass(pass_name) {}
-    void add_memory_dependency(program_node* node, program_node* dep) {
-        if (node->can_be_optimized() || !dep->can_be_optimized()) {
-            node->add_memory_dependency(dep->id());
+    void add_memory_dependency(program_node* node, std::pair<program_node*, int32_t> dep) {
+        if (node->can_be_optimized() || !dep.first->can_be_optimized()) {
+            node->add_memory_dependency({dep.first->id(), dep.second});
         } else {
-            if (node->id() == dep->id()) {
+            if (node->id() == dep.first->id()) {
                 return;
             }
-            for (auto subdep : dep->get_dependencies()) {
+            for (auto subdep : dep.first->get_dependencies_new()) {
                 add_memory_dependency(node, subdep);
-                add_memory_dependency(subdep, node);
+                add_memory_dependency(subdep.first, {node, 0}); //TODO(taylor): is this correct?
             }
         }
     }

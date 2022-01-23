@@ -26,12 +26,18 @@ program_node& post_input_reorder::add_reorder(program& p,
     auto& new_reorder_node = p.get_or_create(new_reorder);
 
     // ToDo: add a method to program class which adds an intermediate node given a node and its user
-    auto it = std::find(usr->get_dependencies().begin(), usr->get_dependencies().end(), node);
-    if (it == usr->get_dependencies().end()) {
+    auto it = usr->get_dependencies_new().begin();
+    while (it != usr->get_dependencies_new().end()) {
+        if (it->first == node)
+            break;
+        ++it;
+    }
+
+    if (it == usr->get_dependencies_new().end()) {
         throw std::runtime_error("Inconcistency in topology description: user of a node is not present among its dependecies.");
     }
-    auto idx = it - usr->get_dependencies().begin();
-    if (idx < 0 || (size_t)idx >= usr->get_dependencies().size()) {
+    auto idx = it - usr->get_dependencies_new().begin();
+    if (idx < 0 || (size_t)idx >= usr->get_dependencies_new().size()) {
         throw std::runtime_error("Internal Error: container index out of range exception.");
     }
     p.add_intermediate(new_reorder_node, *usr, idx);
@@ -52,8 +58,9 @@ void post_input_reorder::run(program& p) {
                 *static_cast<kernel_selector::fully_connected_params*>(fc_impl->_kernel_data.params.get());
 
             auto layout_format = from_data_layout(fc_params.inputs[0].GetLayout());
-            auto& input = node->get_dependencies()[0];
-            auto input_layout = input->get_output_layout();
+            auto input_info = node->get_dependencies_new()[0];
+            auto& input = input_info.first;
+            auto input_layout = input->get_output_layout(input_info.second);
 
             if (input_layout.format != layout_format) {
                 auto previous_layout = node->get_output_layout();
