@@ -75,9 +75,9 @@ void program_node::remove_dependency(size_t idx) {
 
 std::set<primitive_id> program_node::get_memory_dependencies() const { return memory_dependencies; }
 
-void program_node::add_memory_dependency(primitive_id prim) { memory_dependencies.insert(prim); }
+void program_node::add_memory_dependency(std::pair<primitive_id, int32_t> prim) { memory_dependencies.insert(prim); }
 
-void program_node::add_memory_dependency(std::vector<primitive_id> prim_list) {
+void program_node::add_memory_dependency(std::vector<std::pair<primitive_id, int32_t>> prim_list) {
     memory_dependencies.insert(prim_list.begin(), prim_list.end());
 }
 
@@ -217,14 +217,14 @@ std::vector<layout> program_node::calc_output_layouts() const {
     return {type()->calc_output_layout(*this)};
 }
 
-layout program_node::get_output_layout(bool invalidate_users_if_changed) {
+layout program_node::get_output_layout(bool invalidate_users_if_changed, int32_t idx) {
     if (valid_output_layout)
-        return output_layout;
+        return output_layouts[idx];
     std::cout <<"[" <<  __FILE__ << "] get_output_layout called for " << id() << std::endl;
 
     auto new_layout = calc_output_layout();
-    set_output_layout(new_layout, invalidate_users_if_changed);
-    return output_layout;
+    set_output_layout(new_layout, invalidate_users_if_changed, idx);
+    return output_layouts[idx];
 }
 
 std::vector<layout> program_node::get_output_layouts(bool invalidate_users_if_changed) {

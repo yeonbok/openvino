@@ -19,9 +19,9 @@ public:
     typed_program_node(std::shared_ptr<primitive> prim, program& prog)
         : parent(prim, prog) {}
 
-    program_node& input() const { return get_dependency(0); }
-    program_node& weights() const { return get_dependency(1); }
-    program_node& bias() const { return get_dependency(2); }
+    program_node& input() const { return *get_dependency_new(0).first; }
+    program_node& weights() const { return *get_dependency_new(1).first; }
+    program_node& bias() const { return *get_dependency_new(2).first; }
     bool bias_term() const { return !get_primitive()->bias.empty(); }
 };
 

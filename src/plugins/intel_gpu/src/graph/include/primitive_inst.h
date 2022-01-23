@@ -67,34 +67,41 @@ class primitive_inst {
 public:
     virtual ~primitive_inst() = default;
 
-    const std::vector<std::shared_ptr<const primitive_inst>>& dependencies() const {
-        return reinterpret_cast<std::vector<std::shared_ptr<const primitive_inst>> const&>(_deps);
-    }
+//    const std::vector<std::shared_ptr<const primitive_inst>>& dependencies() const {
+//        return reinterpret_cast<std::vector<std::shared_ptr<const primitive_inst>> const&>(_deps);
+//    }
 
+//    const std::vector<std::pair<std::shared_ptr<const primitive_inst>, int>>& dependencies_new() const {
     const std::vector<std::pair<std::shared_ptr<const primitive_inst>, int>>& dependencies_new() const {
         return reinterpret_cast<std::vector<std::pair<std::shared_ptr<const primitive_inst>, int>> const&>(_deps_new);
     }
 
-    memory& dep_memory(size_t index) const { return dependencies().at(index)->output_memory(); }
-    memory::ptr dep_memory_ptr(size_t index) const {
-        if (dependencies_new().size() > 0) {
-            auto dep = dependencies_new().at(index);
-            return dep.first->output_memory_ptr(dep.second);
-        }
-        return dependencies().at(index)->output_memory_ptr();
+    memory& dep_memory(size_t index) const {
+        auto& dep_inst = dependencies_new().at(index).first;
+        auto& output_idx = dependencies_new().at(index).second;
+        return dep_inst->output_memory(output_idx);
     }
-    memory& output_memory() const { return *_output; }
-//    memory::ptr output_memory_ptr() const { return _output; }
-    //TODO: output should be _outputs[index]
+
+    memory::ptr dep_memory_ptr(size_t index) const {
+        auto& dep_inst = dependencies_new().at(index).first;
+        auto& output_idx = dependencies_new().at(index).second;
+        return dep_inst->output_memory_ptr(output_idx);
+    }
+
+    memory& output_memory(int32_t index = 0) const { return *_outputs[index]; }
+
     memory::ptr output_memory_ptr(size_t index = 0) const {
-        if (index == 0)
-            return _output;
-        else
-            return _outputs[index];
+        return _outputs[index];
     }
 
     size_t inputs_memory_count() const { return _node.get_primitive()->input_size(); }
     size_t outputs_memory_count() const { return _node.get_primitive()->output_size(); }
+    bool outputs_allocated() const {
+        for (auto& m : _outputs) {
+            if (!m) return false;
+        }
+        return true;
+    }
     primitive_type_id type() const { return _node.type(); }
     primitive_id id() const { return _node.id(); }
     primitive_id org_id() const { return _node.get_org_primitive_id(); }
@@ -179,7 +186,7 @@ protected:
 
     // this is a set of dependencies in terms of memory, if execution of this primitive requires data from another one,
     // it should be added to this set
-    std::vector<std::shared_ptr<primitive_inst>> _deps;
+//    std::vector<std::shared_ptr<primitive_inst>> _deps;
     std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> _deps_new;
 
     // this is a set of dependencies in terms of execution
@@ -194,7 +201,7 @@ protected:
     // _output is optional because its initialization might be postponed (reshape_inst may either allocate it's own
     // buffer or attach input as output
     // depending on reshape_node.is_in_place())
-    memory::ptr _output;
+//    memory::ptr _output;
     std::vector<memory::ptr> _outputs;
 
     std::vector<memory::cptr> _intermediates_memory;
@@ -291,9 +298,11 @@ protected:
     typed_primitive_inst_base(network& network, typed_node const& node, bool allocate_memory)
         : primitive_inst(network, node, allocate_memory), node(_node), argument(*node.get_primitive()) {}
 
-    typed_primitive_inst_base(network& network, typed_node const& node, memory::ptr buffer)
+    typed_primitive_inst_base(network& network, typed_node const& node, std::vector<memory::ptr> buffers)
         : typed_primitive_inst_base(network, node, false) {
-        _output = buffer;
+        for (size_t i = 0; i < _outputs.size() ; ++i) {
+            _outputs[i] = buffers[i];
+        }
     }
 
 private:

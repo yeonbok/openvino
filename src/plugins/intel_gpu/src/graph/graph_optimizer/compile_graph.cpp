@@ -34,7 +34,7 @@ void compile_graph::run(program& p) {
 
     if (p.get_engine().get_device_info().supports_immad) {
         for (auto& node : p.get_processing_order()) {
-            if (!node->is_type<data>() && !(node->is_type<mutable_data>() && node->get_dependencies().empty())) {
+            if (!node->is_type<data>() && !(node->is_type<mutable_data>() && node->get_dependencies_new().empty())) {
                 node->selected_impl = node->type()->choose_impl(*node);
             }
         }
@@ -45,7 +45,7 @@ void compile_graph::run(program& p) {
         std::exception_ptr exception;
         for (int idx = 0; idx < proc_order.size(); idx++) {
             auto& node = *(std::next(proc_order.begin(), idx));
-            if (!node->is_type<data>() && !(node->is_type<mutable_data>() && node->get_dependencies().empty())) {
+            if (!node->is_type<data>() && !(node->is_type<mutable_data>() && node->get_dependencies_new().empty())) {
                 tasks.push_back([node, &exception] {
                     try {
                         node->selected_impl = node->type()->choose_impl(*node);

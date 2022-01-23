@@ -20,7 +20,7 @@ layout detection_output_inst::calc_output_layout(detection_output_node const& no
            "detection_output_node!");
     CLDNN_ERROR_NOT_EQUAL(node.id(),
                           "Detection output layer input number",
-                          node.get_dependencies().size(),
+                          node.get_dependencies_new().size(),
                           "expected number of inputs",
                           static_cast<size_t>(3),
                           "");
@@ -178,7 +178,7 @@ detection_output_inst::typed_primitive_inst(network& network, detection_output_n
                      "Detection output layer doesn't support output padding.");
     CLDNN_ERROR_BOOL(node.id(),
                      "Detection output layer Prior-box input padding",
-                     node.get_dependency(2).is_padded(),
+                     node.get_dependency_new(2).first->is_padded(),
                      "Detection output layer doesn't support input padding in Prior-Box input");
 }
 

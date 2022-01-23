@@ -101,8 +101,8 @@ void oooq_memory_dependencies::run(program& p) {
         }
 
         size_t num_dep_nodes = 0;
-        for (const auto& dep : node.first->get_dependencies()) {
-            if (!dep->is_constant()) {
+        for (const auto& dep : node.first->get_dependencies_new()) {
+            if (!dep.first->is_constant()) {
                 ++num_dep_nodes;
             }
         }
@@ -139,8 +139,8 @@ void oooq_memory_dependencies::run(program& p) {
     while (itr_A != processing_order.end()) {
         if (suspect_nodes.is_set(A)) {
             std::vector<std::pair<program_node*, unsigned int>> deps;
-            for (const auto& dep : (*itr_A)->get_dependencies()) {
-                deps.emplace_back(dep, user_map.at(dep));
+            for (const auto& dep : (*itr_A)->get_dependencies_new()) {
+                deps.emplace_back(dep.first, user_map.at(dep.first));
             }
 
             std::sort(deps.begin(), deps.end(),
@@ -152,8 +152,8 @@ void oooq_memory_dependencies::run(program& p) {
                 for (size_t j = i + 1; j < deps.size(); ++j) {
                     if (are_connected(deps[i].second, deps[j].second)) {
                         for (const auto& user : deps[j].first->get_users()) {
-                            add_memory_dependency(deps[i].first, user);
-                            add_memory_dependency(user, deps[i].first);
+                            add_memory_dependency(deps[i].first, {user, 0}); // TODO(taylor) : to check
+                            add_memory_dependency(user, {deps[i].first, 0}); // TODO(taylor) : to check
                         }
                     }
                 }
@@ -163,8 +163,8 @@ void oooq_memory_dependencies::run(program& p) {
         auto itr_B = ++itr_A;
         while (itr_B != processing_order.end()) {
             if (!are_connected(A, B)) {
-                add_memory_dependency(*itr_A, *itr_B);
-                add_memory_dependency(*itr_B, *itr_A);
+                add_memory_dependency(*itr_A, {*itr_B, 0}); // TODO(taylor) : to check
+                add_memory_dependency(*itr_B, {*itr_A, 0}); // TODO(taylor) : to  check
             }
             itr_B++;
             B++;

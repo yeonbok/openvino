@@ -69,7 +69,7 @@ void handle_reshape::run(program& p) {
 
     for (const auto& node : p.get_processing_order()) {
         if (node->is_type<reshape>()) {
-            auto& input_node = node->get_dependency(0);
+            auto& input_node = *node->get_dependency_new(0).first;
 
             if (input_node.is_type<reorder>())
                 continue;
@@ -139,7 +139,7 @@ void handle_reshape::run(program& p) {
                     p.add_intermediate(reshape_input_node,
                                        *reorder_reshape_node,
                                        0,
-                                       reshape_input_node.get_dependencies().empty());
+                                       reshape_input_node.get_dependencies_new().empty());
                     reshape_reorder_id++;
                     reshape_input_node.recalc_output_layout();
                 }
@@ -156,7 +156,7 @@ void handle_reshape::run(program& p) {
                                                                    cldnn::format::bfyx,
                                                                    reshape_layout.data_type);
                     auto& reshape_input_node = p.get_or_create(reshape_input);
-                    p.add_intermediate(reshape_input_node, *node, 0, reshape_input_node.get_dependencies().empty());
+                    p.add_intermediate(reshape_input_node, *node, 0, reshape_input_node.get_dependencies_new().empty());
                     reshape_input_node.recalc_output_layout();
 
                     auto reshape_users = node->get_users();
@@ -169,7 +169,7 @@ void handle_reshape::run(program& p) {
                         p.add_intermediate(reshape_output_node,
                                            *user,
                                            *node,
-                                           reshape_output_node.get_dependencies().empty());
+                                           reshape_output_node.get_dependencies_new().empty());
                         reshape_output_node.recalc_output_layout();
                     }
                 }

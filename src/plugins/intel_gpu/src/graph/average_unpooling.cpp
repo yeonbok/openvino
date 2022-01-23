@@ -21,7 +21,7 @@ layout average_unpooling_inst::calc_output_layout(average_unpooling_node const& 
            "average_unpooling_node!");
     auto desc = node.get_primitive();
 
-    auto input_layout = node.input().get_output_layout();
+    auto input_layout = node.get_dependency_new(0).first->get_output_layout();
 
     auto stride = desc->stride;
     auto window_size = desc->size;
@@ -61,7 +61,7 @@ layout average_unpooling_inst::calc_output_layout(average_unpooling_node const& 
 std::string average_unpooling_inst::to_string(average_unpooling_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
-    auto& input = node.input();
+    auto& input = *node.get_dependency_new(0).first;
     auto& strd = desc->stride;
     auto& window_size = desc->size;
 

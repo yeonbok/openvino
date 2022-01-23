@@ -32,12 +32,17 @@ void add_required_reorders::add_reorder(program& p, program_node* node, program_
     auto& new_reorder_node = p.get_or_create(new_reorder);
 
     // ToDo: add a method to program class which adds an intermediate node given a node and its user
-    auto it = std::find(usr->get_dependencies().begin(), usr->get_dependencies().end(), node);
-    if (it == usr->get_dependencies().end()) {
+    auto it = usr->get_dependencies_new().begin();
+    while (it != usr->get_dependencies_new().end()) {
+        if (it->first == node)
+            break;
+        ++it;
+    }
+    if (it == usr->get_dependencies_new().end()) {
         throw std::runtime_error("Inconcistency in topology description: user of a node is not present among its dependecies.");
     }
-    auto idx = it - usr->get_dependencies().begin();
-    if (idx < 0 || (size_t)idx >= usr->get_dependencies().size()) {
+    auto idx = it - usr->get_dependencies_new().begin();
+    if (idx < 0 || (size_t)idx >= usr->get_dependencies_new().size()) {
         throw std::runtime_error("Internal Error: container index out of range exception.");
     }
     p.add_intermediate(new_reorder_node, *usr, idx);
@@ -47,7 +52,7 @@ void add_required_reorders::run(program& p) {
     auto usr_itr = p.get_processing_order().begin();
     while (usr_itr != p.get_processing_order().end()) {
         auto& usr = *usr_itr++;
-        if (usr->get_dependencies().size() == 0)
+        if (usr->get_dependencies_new().size() == 0)
             continue;  // only nodes with dependencies
         if (usr->is_type<data>())
             continue;
@@ -56,8 +61,8 @@ void add_required_reorders::run(program& p) {
                 continue;
             } else {
                 // oneDNN doesn't support padded memory, so add reorder directly if needed
-                for (size_t i = 0; i < usr->get_dependencies().size(); i++) {
-                    auto& input = usr->get_dependency(i);
+                for (size_t i = 0; i < usr->get_dependencies_new().size(); i++) {
+                    auto& input = *usr->get_dependency_new(i).first;
                     if (!input.is_in_data_flow() || input.is_constant())
                         continue;
 
@@ -101,15 +106,17 @@ void add_required_reorders::run(program& p) {
 
         layout original_layout = usr->get_output_layout();
 
-        for (auto& node : usr->get_dependencies()) {
-            if (!node->is_in_data_flow() && !weights_data) {
-                if (cldnn::format::dimension(original_layout.format) == cldnn::format::dimension(node->get_output_layout().format)) {
+        for (auto& node_info : usr->get_dependencies_new()) {
+            auto& dep_node = node_info.first;
+            auto& dep_output_idx = node_info.second;
+            if (!dep_node->is_in_data_flow() && !weights_data) {
+                if (cldnn::format::dimension(original_layout.format) == cldnn::format::dimension(dep_node->get_output_layout(dep_output_idx).format)) {
                     /*
                         ToDo: Here we should handle also the situation where primitive usr has data inputs in different
                        formats
                     */
                     layout current_layout(original_layout.data_type,
-                                          node->get_output_layout().format,
+                                          dep_node->get_output_layout(dep_output_idx).format,
                                           original_layout.size);
                     usr->set_output_layout(current_layout, false);
                     if (usr->type()->does_possible_implementation_exist(*usr)) {
@@ -126,7 +133,7 @@ void add_required_reorders::run(program& p) {
                         } else {
                             current_layout = original_layout;
                             current_layout.data_type = data_types::i32;
-                            current_layout.format = node->get_output_layout().format;
+                            current_layout.format = dep_node->get_output_layout(dep_output_idx).format;
                             usr->set_output_layout(current_layout, false);
                             if (usr->type()->does_possible_implementation_exist(*usr)) {
                                 correct_layout_selected = true;
@@ -158,9 +165,9 @@ void add_required_reorders::run(program& p) {
                     throw std::runtime_error("Internal Error: no layout format available for " + usr->id() +
                                                 " (format: " + std::to_string(original_layout.format.value) +
                                                 ", data_type: " + data_type_traits::name(original_layout.data_type) + ") "
-                                                "compatible with " + node->id() +
-                                                " (format: " + std::to_string(node->get_output_layout().format.value) +
-                                                ", data_type: " + data_type_traits::name(node->get_output_layout().data_type) + ")");
+                                                "compatible with " + dep_node->id() +
+                                                " (format: " + std::to_string(dep_node->get_output_layout(dep_output_idx).format.value) +
+                                                ", data_type: " + data_type_traits::name(dep_node->get_output_layout(dep_output_idx).data_type) + ")");
                 }
             }
         }
@@ -168,8 +175,10 @@ void add_required_reorders::run(program& p) {
         if (!correct_layout_selected) {
             std::vector<cldnn::format> preffered_layout_formats;
             size_t max_in_dims = std::max(cldnn::format::dimension(original_layout.format), static_cast<size_t>(4));
-            for (auto& node : usr->get_dependencies()) {
-                max_in_dims = std::max(cldnn::format::dimension(node->get_output_layout().format), max_in_dims);
+            for (auto& node : usr->get_dependencies_new()) {
+                auto& dep_node = node.first;
+                auto& dep_output_idx = node.second;
+                max_in_dims = std::max(cldnn::format::dimension(dep_node->get_output_layout(dep_output_idx).format), max_in_dims);
             }
             // This list of preffered layouts has been selected arbitrary due to developers' experience
             if (max_in_dims == 5) {
@@ -256,13 +265,15 @@ void add_required_reorders::run(program& p) {
         }
 
         // layout is selected now add required reorders
-        auto dep_itr = usr->get_dependencies().begin();
-        while (dep_itr != usr->get_dependencies().end()) {
-            auto node = *dep_itr++;
+        auto dep_itr = usr->get_dependencies_new().begin();
+        while (dep_itr != usr->get_dependencies_new().end()) {
+            auto node_info = *dep_itr++;
+            auto dep_node = node_info.first;
+            auto dep_out_idx = node_info.second;
             // do not add a reorder if usr or node are reorders or does not belong to data_flow
-            if (!usr->is_type<reorder>() && node->is_in_data_flow()) {
-                if ((usr->get_output_layout() != node->get_output_layout())) {
-                    add_reorder(p, node, usr);
+            if (!usr->is_type<reorder>() && dep_node->is_in_data_flow()) {
+                if ((usr->get_output_layout(dep_out_idx) != dep_node->get_output_layout(dep_out_idx))) {
+                    add_reorder(p, dep_node, usr);
                 }
             }
         }
