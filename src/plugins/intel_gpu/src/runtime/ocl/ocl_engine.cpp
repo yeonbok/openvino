@@ -94,10 +94,14 @@ memory::ptr ocl_engine::allocate_memory(const layout& layout, allocation_type ty
         IE_THROW() << ss.str();
     }
 
+    if (layout.is_dynamic()) {
+        throw std::runtime_error("[GPU] Can't allocate memory for dynamic layout");
+    }
+
     if (type != allocation_type::cl_mem && !supports_allocation(type)) {
         std::ostringstream type_str;
         type_str << type;
-        IE_THROW() << "Unsupported allocation type " + type_str.str();
+        IE_THROW() << "[GPU] Unsupported allocation type " + type_str.str();
     }
 
     try {
