@@ -103,7 +103,7 @@ layout program_helpers::get_weights_layout(typed_program_node<cldnn::data>& data
 
     return layout(mem_layout.data_type,
                   mem_layout.format,
-                  {split * mem_layout.batch(),
+                  tensor{split * mem_layout.batch(),
                    mem_layout.feature(),
                    mem_layout.spatial(0),
                    mem_layout.spatial(1)});
@@ -119,8 +119,8 @@ layout program_helpers::get_weights_layout(typed_program_node<cldnn::data>& data
 std::pair<bool, bool> program_helpers::are_layouts_identical(layout const& l1, layout const& l2) {
     const auto& l1_pad = l1.data_padding;
     const auto& l2_pad = l2.data_padding;
-    auto offset_last_element_l1 = l1.get_linear_offset(l1.size - tensor{1});
-    auto offset_last_element_l2 = l2.get_linear_offset(l2.size - tensor{1});
+    auto offset_last_element_l1 = l1.get_linear_offset(l1.get_tensor() - tensor{1});
+    auto offset_last_element_l2 = l2.get_linear_offset(l2.get_tensor() - tensor{1});
     if (l1 == l2)
         return {true, true};
     if (l1.data_type != l2.data_type)
@@ -177,10 +177,10 @@ std::pair<bool, bool> program_helpers::are_layouts_identical(layout const& l1, l
 
     // ignore pitches which will never be used (for dims with size == 1)
     for (size_t i = 0; i < tensor_dim_max; ++i)
-        if (l1.size.raw[i] == 1)
+        if (l1.get_tensor().raw[i] == 1)
             l1_pitch.raw[i] = 0;
     for (size_t i = 0; i < tensor_dim_max; ++i)
-        if (l2.size.raw[i] == 1)
+        if (l2.get_tensor().raw[i] == 1)
             l2_pitch.raw[i] = 0;
 
     auto l1_offset = l1.get_linear_offset();

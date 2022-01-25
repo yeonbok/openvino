@@ -26,7 +26,7 @@ TEST(experimental_detectron_roi_feature_extractor_gpu_fp32, one_level) {
     const int sampling_ratio = 2;
     const bool aligned = false;
     auto roi_input = engine.allocate_memory({data_types::f32, format::bfyx, tensor(batch(rois_num), feature(rois_feature_dim))});
-    auto level_1 = engine.allocate_memory({data_types::f32, format::bfyx, {1, 2, 3, 2}});
+    auto level_1 = engine.allocate_memory({data_types::f32, format::bfyx, tensor{1, 2, 3, 2}});
     auto second_output = engine.allocate_memory({ data_types::f32, format::bfyx, tensor(batch(rois_num), feature(rois_feature_dim))});
 
     std::vector<float> rois {0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f};
@@ -94,8 +94,8 @@ TEST(experimental_detectron_roi_feature_extractor_gpu_fp32, two_levels) {
     const int sampling_ratio = 2;
     const bool aligned = false;
     auto roi_input = engine.allocate_memory({data_types::f32, format::bfyx, tensor(batch(rois_num), feature(rois_feature_dim))});
-    auto level_1 = engine.allocate_memory({data_types::f32, format::bfyx, {1, 2, 3, 2}});
-    auto level_2 = engine.allocate_memory({data_types::f32, format::bfyx, {1, 2, 3, 2}});
+    auto level_1 = engine.allocate_memory({data_types::f32, format::bfyx, tensor{1, 2, 3, 2}});
+    auto level_2 = engine.allocate_memory({data_types::f32, format::bfyx, tensor{1, 2, 3, 2}});
     auto second_output = engine.allocate_memory({ data_types::f32, format::bfyx, tensor(batch(rois_num), feature(rois_feature_dim))});
 
     std::vector<float> rois {0.0f, 56.0f, 112.0f, 168.0f, 4.0f, 5.0f, 6.0f, 7.0f};

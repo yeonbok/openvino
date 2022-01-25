@@ -493,9 +493,9 @@ INSTANTIATE_TEST_SUITE_P(scatter_nd_update_gpu_random_test_i8_fsv16_5d_rank_4,
 TEST(scatter_nd_update_gpu_fp16_test15, data5_indice3_update5) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 2, 2, 4, 3 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx,  { 1, 2, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 1, 2, 2, 4, 3, 2 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 2, 2, 4, 3 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx,  tensor{ 1, 2, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 1, 2, 2, 4, 3, 2 } }); // updates
 
     set_values(input1, {
         // 0
@@ -588,9 +588,9 @@ TEST(scatter_nd_update_gpu_fp16_test15, data5_indice3_update5) {
 TEST(scatter_nd_update_gpu_fp16_test14, data5_indice2_update3) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 2, 2, 4, 3 } }); // data 2x2x3x4x2 (bfzyx)
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx,  { 3, 3, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 3, 4, 1, 1, 2 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 2, 2, 4, 3 } }); // data 2x2x3x4x2 (bfzyx)
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx,  tensor{ 3, 3, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 3, 4, 1, 1, 2 } }); // updates
 
     set_values(input1, {
         // 0
@@ -672,9 +672,9 @@ TEST(scatter_nd_update_gpu_fp16_test14, data5_indice2_update3) {
 TEST(scatter_nd_update_gpu_fp16_test13, data4_indice2_update2) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 4, 2 } }); // data 2x3x2x4 (bfyx)
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 3, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 4, 1, 1 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 3, 4, 2 } }); // data 2x3x2x4 (bfyx)
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 3, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 4, 1, 1 } }); // updates
 
     set_values(input1, {
         FLOAT16(1.0f), FLOAT16(2.0f),  FLOAT16(3.0f), FLOAT16(4.0f),       FLOAT16(1.0f), FLOAT16(2.0f),  FLOAT16(3.0f), FLOAT16(4.0f),
@@ -736,9 +736,9 @@ TEST(scatter_nd_update_gpu_fp16_test13, data4_indice2_update2) {
 TEST(scatter_nd_update_gpu_fp16_test12, data3_indice3_update1) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 3, 1, 4 } }); // data 3x3x4 (bfy)
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 4, 3, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 4, 1, 1, 1 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 3, 1, 4 } }); // data 3x3x4 (bfy)
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 4, 3, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 4, 1, 1, 1 } }); // updates
 
     set_values(input1, {
         FLOAT16(1.0f), FLOAT16(2.0f), FLOAT16(3.0f), FLOAT16(4.0f),
@@ -807,9 +807,9 @@ TEST(scatter_nd_update_gpu_fp16_test12, data3_indice3_update1) {
 TEST(scatter_nd_update_gpu_fp16_test11, data6_indice1_update6) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 2, 3, 4, 2 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 1, 1, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 1, 2, 2, 3, 4, 2 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 2, 3, 4, 2 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 1, 1, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 1, 2, 2, 3, 4, 2 } }); // updates
 
     set_values(input1, {
         // 0, 0, 0
@@ -937,9 +937,9 @@ TEST(scatter_nd_update_gpu_fp16_test11, data6_indice1_update6) {
 TEST(scatter_nd_update_gpu_fp16_test10, data5_indice1_update5) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 2, 3, 4, 2 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 2, 3, 4, 2 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 2, 3, 4, 2 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 1, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 2, 3, 4, 2 } }); // updates
 
     set_values(input1, {
         // 0
@@ -1033,9 +1033,9 @@ TEST(scatter_nd_update_gpu_fp16_test10, data5_indice1_update5) {
 TEST(scatter_nd_update_gpu_fp16_test9, data4_indice1_update4) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 3, 4, 2 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 4, 2 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 3, 4, 2 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 1, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 3, 4, 2 } }); // updates
 
     set_values(input1, {
         // 0
@@ -1111,9 +1111,9 @@ TEST(scatter_nd_update_gpu_fp16_test9, data4_indice1_update4) {
 TEST(scatter_nd_update_gpu_fp16_test8, data6_indice2_update5) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 1, 2, 2, 4, 3, 2 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx,   { 2, 2, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 1, 2, 4, 3 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 1, 2, 2, 3, 4, 2 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx,   tensor{ 2, 2, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 1, 3, 4, 2 } }); // updates
 
     set_values(input1, {
         //0,0
@@ -1209,9 +1209,9 @@ TEST(scatter_nd_update_gpu_fp16_test8, data6_indice2_update5) {
 TEST(scatter_nd_update_gpu_fp16_test7, data5_indice2_update4) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 1, 2, 3, 4, 2 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx,  { 2, 2, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx,  { 2, 2, 1, 3, 4 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 1, 2, 3, 4, 2 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx,  tensor{ 2, 2, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 2, 1, 3, 4 } }); // updates
 
 
     set_values(input1, {
@@ -1278,10 +1278,9 @@ TEST(scatter_nd_update_gpu_fp16_test7, data5_indice2_update4) {
 TEST(scatter_nd_update_gpu_fp16_test6, data4_indice2_update3) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 2, 4 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 4, 1, 2 } }); // updates
-
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 3, 4, 2 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 2, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 4, 1, 2 } }); // updates
 
     set_values(input1, {
         FLOAT16(1.0f), FLOAT16(2.0f),    FLOAT16(3.0f), FLOAT16(4.0f),      FLOAT16(1.0f), FLOAT16(2.0f),   FLOAT16(3.0f), FLOAT16(4.0f),
@@ -1343,9 +1342,9 @@ TEST(scatter_nd_update_gpu_fp16_test6, data4_indice2_update3) {
 TEST(scatter_nd_update_gpu_fp16_test5, data3_indice2_update2) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 1, 4 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 4, 1, 1 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 3, 1, 4 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 2, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 4, 1, 1 } }); // updates
 
 
     set_values(input1, {
@@ -1408,9 +1407,9 @@ TEST(scatter_nd_update_gpu_fp16_test5, data3_indice2_update2) {
 TEST(scatter_nd_update_gpu_fp16_test4, data2_indice2_update1) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 4, 1, 1 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 1, 1, 1 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 4, 1, 1 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 2, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 1, 1, 1 } }); // updates
 
 
     set_values(input1, {
@@ -1463,9 +1462,9 @@ TEST(scatter_nd_update_gpu_fp16_test4, data2_indice2_update1) {
 TEST(scatter_nd_update_gpu_fp16_test3, data3_indice1_update3) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 3, 4, 1 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 4, 1 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 3, 4, 1 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 1, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 3, 4, 1 } }); // updates
 
 
     set_values(input1, {
@@ -1539,9 +1538,9 @@ TEST(scatter_nd_update_gpu_fp16_test3, data3_indice1_update3) {
 TEST(scatter_nd_update_gpu_fp16_test2, data2_indice1_update2) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 4, 1, 1 } }); // data
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // indices
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 4, 1, 1 } }); // updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 4, 1, 1 } }); // data
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 1, 1, 1 } }); // indices
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 4, 1, 1 } }); // updates
 
 
     set_values(input1, {
@@ -1593,9 +1592,9 @@ TEST(scatter_nd_update_gpu_fp16_test2, data2_indice1_update2) {
 TEST(scatter_nd_update_gpu_fp16_test1, data1_indice1_update1) {
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 8, 1, 1, 1 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 4, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 4, 1, 1, 1 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 8, 1, 1, 1 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 4, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 4, 1, 1, 1 } }); // Updates
 
 
     set_values(input1, {
@@ -1651,9 +1650,9 @@ TEST(scatter_nd_update_gpu_fp16, d6661_i2311) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 6, 6, 1, 6 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 6, 6, 1, 6 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 3, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 1, 1, 1 } }); // Updates
 
     set_values(input1, {
         FLOAT16(100.f), FLOAT16(101.f), FLOAT16(102.f), FLOAT16(103.f), FLOAT16(104.f), FLOAT16(105.f),
@@ -1789,9 +1788,9 @@ TEST(scatter_nd_update_gpu_fp16, d6661_i2211) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 6, 6, 1, 6 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 2, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 6, 1, 1 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 6, 6, 1, 6 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 2, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 6, 1, 1 } }); // Updates
 
 
     set_values(input1, {
@@ -1928,9 +1927,9 @@ TEST(scatter_nd_update_gpu_fp16, d6661_i2111) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 6, 6, 1, 6 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 6, 1, 6 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 6, 6, 1, 6 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 6, 1, 6 } }); // Updates
 
 
     set_values(input1, {
@@ -2079,9 +2078,9 @@ TEST(scatter_nd_update_gpu_fp16, d3232_i2411) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 2, 3 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 4, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 2, 2, 3 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 4, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 1, 1, 1 } }); // Updates
 
 
     set_values(input1, {
@@ -2182,9 +2181,9 @@ TEST(scatter_nd_update_gpu_fp16, d3232_i2311) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 2, 3 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 2, 1, 1 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 2, 2, 3 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 3, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 2, 1, 1 } }); // Updates
 
 
     set_values(input1, {
@@ -2285,9 +2284,9 @@ TEST(scatter_nd_update_gpu_fp16, d3232_i2211) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 2, 3 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 2, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 1, 2 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 2, 2, 3 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 2, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 3, 1, 2 } }); // Updates
 
 
     set_values(input1, {
@@ -2394,9 +2393,9 @@ TEST(scatter_nd_update_gpu_fp16, d3232_i2111) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 2, 3 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 2, 2, 3 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 3, 2, 2, 3 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfyx, tensor{ 2, 2, 2, 3 } }); // Updates
 
 
     set_values(input1, {
@@ -2510,9 +2509,9 @@ TEST(scatter_nd_update_gpu_fp16, d32323_i25111) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 3, 2, 3, 2, 3 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 5, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 1, 1, 1, 1 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 3, 2, 3, 2, 3 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 5, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 1, 1, 1, 1 } }); // Updates
 
 
     set_values(input1, {
@@ -2677,9 +2676,9 @@ TEST(scatter_nd_update_gpu_fp16, d32323_i24111) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 3, 2, 3, 2, 3 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 4, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 3, 1, 1, 1 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 3, 2, 3, 2, 3 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 4, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 3, 1, 1, 1 } }); // Updates
 
 
     set_values(input1, {
@@ -2845,9 +2844,9 @@ TEST(scatter_nd_update_gpu_fp16, d32323_i23111) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 3, 2, 3, 2, 3 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 3, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 2, 1, 1, 3 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 3, 2, 3, 2, 3 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 3, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 2, 1, 1, 3 } }); // Updates
 
 
     set_values(input1, {
@@ -3016,9 +3015,9 @@ TEST(scatter_nd_update_gpu_fp16, d32323_i22111) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 3, 2, 3, 2, 3 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 2, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 3, 1, 3, 2 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 3, 2, 3, 2, 3 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 2, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 3, 1, 3, 2 } }); // Updates
 
 
     set_values(input1, {
@@ -3199,9 +3198,9 @@ TEST(scatter_nd_update_gpu_fp16, d32323_i21111) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 3, 2, 3, 2, 3 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 1, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 2, 3, 2, 3 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 3, 2, 3, 2, 3 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 1, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 2, 2, 3, 2, 3 } }); // Updates
 
 
     set_values(input1, {
@@ -3401,9 +3400,9 @@ TEST(scatter_nd_update_gpu_fp16, d222222_i261111) {
     auto& engine = get_test_engine();
 
     // memory order is bfxyzw
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 2, 2, 2, 2 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 6, 1, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 1, 1, 1, 1, 1 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 2, 2, 2, 2 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 6, 1, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 1, 1, 1, 1, 1 } }); // Updates
 
 
     set_values(input1, {
@@ -3553,9 +3552,9 @@ TEST(scatter_nd_update_gpu_fp16, d222222_i251111) {
     auto& engine = get_test_engine();
 
     // memory order is bfxyzw
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 2, 2, 2, 2 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 5, 1, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 1, 1, 1, 1 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 2, 2, 2, 2 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 5, 1, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 1, 1, 1, 1 } }); // Updates
 
 
     set_values(input1, {
@@ -3706,9 +3705,9 @@ TEST(scatter_nd_update_gpu_fp16, d222222_i241111) {
     auto& engine = get_test_engine();
 
     // memory order is bfxyzw
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 2, 2, 2, 2 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 4, 1, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 1, 1, 1, 2 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 2, 2, 2, 2 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 4, 1, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 1, 1, 1, 2 } }); // Updates
 
 
     set_values(input1, {
@@ -3863,9 +3862,9 @@ TEST(scatter_nd_update_gpu_fp16, d222222_i231111) {
     auto& engine = get_test_engine();
 
     // memory order is bfxyzw
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 2, 2, 2, 2 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 3, 1, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 1, 1, 2, 2 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 2, 2, 2, 2 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 3, 1, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 1, 1, 2, 2 } }); // Updates
 
 
     set_values(input1, {
@@ -4025,9 +4024,9 @@ TEST(scatter_nd_update_gpu_fp16, d222222_i221111) {
     auto& engine = get_test_engine();
 
     // memory order is bfxyzw
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 2, 2, 2, 2 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 1, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 1, 2, 2, 2 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 2, 2, 2, 2 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 1, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 1, 2, 2, 2 } }); // Updates
 
 
     set_values(input1, {
@@ -4198,9 +4197,9 @@ TEST(scatter_nd_update_gpu_fp16, d222222_i211111) {
     auto& engine = get_test_engine();
 
     // memory order is bfxyzw
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 2, 2, 2, 2 } }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 1, 1, 1, 1, 1 } }); // Indexes
-    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 2, 2, 2, 2, 2 } }); // Updates
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 2, 2, 2, 2 } }); // Dictionary
+    auto input2 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 1, 1, 1, 1, 1 } }); // Indexes
+    auto input3 = engine.allocate_memory({ data_types::f16, format::bfwzyx, tensor{ 2, 2, 2, 2, 2, 2 } }); // Updates
 
 
     set_values(input1, {

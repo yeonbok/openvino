@@ -104,9 +104,8 @@ void generic_fully_connected_test(cldnn::format test_input_fmt, cldnn::format te
     cldnn::mem_lock<T> output_ptr(output_memory, get_test_stream());
 
     //EXPECT_EQ(output_layout.format.value, test_input_fmt);
-    tensor output_tensor = output_layout.size;
-    int b_size = output_tensor.batch[0];
-    int x_size = output_tensor.feature[0];
+    int b_size = output_layout.batch();
+    int x_size = output_layout.feature();
     EXPECT_EQ(b_size, input_b);
     EXPECT_EQ(x_size, output_f);
     unsigned num_of_operations = f * x * y * 2;
@@ -1684,8 +1683,8 @@ TEST(fully_connected_onednn_gpu, no_biases_int8) {
     auto& engine = get_onednn_test_engine();
 
     // Change input data of fully-connected node from bx to bf
-    auto input_prim = engine.allocate_memory({ data_types::f32, format::bfyx, { input_b, 1, input_x, 1 } });
-    auto weights_prim = engine.allocate_memory({ data_types::i8, format::bfyx, { weight_b, weight_x, 1, 1 } });
+    auto input_prim = engine.allocate_memory({ data_types::f32, format::bfyx, tensor{ input_b, 1, input_x, 1 } });
+    auto weights_prim = engine.allocate_memory({ data_types::i8, format::bfyx, tensor{ weight_b, weight_x, 1, 1 } });
 
     set_values(input_prim, { 8.4f, 2.3f, -4.49f });
     set_values<char>(weights_prim, { 2, 1, 0, -3, -2, 1, 0, -2, -4, -5, 10, 8 });
@@ -1734,8 +1733,8 @@ TEST(fully_connected_3d_onednn_gpu, no_biases_int8) {
 
     auto& engine = get_onednn_test_engine();
 
-    auto input_prim = engine.allocate_memory({ data_types::f32, format::bfyx, { input_b, input_f, 1, input_y } });
-    auto weights_prim = engine.allocate_memory({ data_types::i8, format::bfyx, { weight_o, weight_i, 1, 1 } });
+    auto input_prim = engine.allocate_memory({ data_types::f32, format::bfyx, tensor{ input_b, input_f, 1, input_y } });
+    auto weights_prim = engine.allocate_memory({ data_types::i8, format::bfyx, tensor{ weight_o, weight_i, 1, 1 } });
 
     set_values(input_prim, { 8.4f, 2.3f, -4.49f, 8.4f, 2.3f, -4.49f });
     set_values<char>(weights_prim, { 2, 1, 0, -3, -2, 1, 0, -2, -4, -5, 10, 8 });
