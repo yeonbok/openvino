@@ -110,10 +110,14 @@ public:
     event::ptr execute(const std::vector<event::ptr>& events);
     void init_kernels();
     void set_arguments();
+    void realloc_if_needed();
 
     bool validate() const {
-        if (_impl == nullptr)
+        if (_impl == nullptr) {
+            if (is_dynamic())
+                return true;
             throw std::invalid_argument("[Internal cldnn error].  Validation method for nullptr impl is not allowed.");
+        }
         return _impl->validate(*this);
     }
     bool output_changed() const { return _output_changed; }

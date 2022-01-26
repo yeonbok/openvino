@@ -69,7 +69,9 @@ bool is_user_cpu(const program_node* user) {
         }
         return false;
     }
-    return user->get_selected_impl()->is_cpu();
+    if (auto impl = user->get_selected_impl())
+        return impl->is_cpu();
+    return false;
 }
 
 bool is_any_user_cpu(const std::list<const program_node*>& users) {
@@ -84,13 +86,22 @@ uint32_t primitive_inst::get_network_id() const { return _network.get_id(); }
 
 void primitive_inst::update_shape() {
     // Do nothing for static nodes
-    if (!_node.is_dynamic())
-        return;
+    // if (!_node.is_dynamic())
+    //     return;
 
     auto new_layout = _node.type()->calc_output_layout(_node, *_node.get_kernel_impl_params());
     // TODO: Get rid of this const_cast ASAP
     const_cast<program_node&>(_node).set_output_layout(new_layout);
     reset_shape_change();
+}
+
+void primitive_inst::realloc_if_needed() {
+    if (!_output  || _output->get_layout().count() < _node.get_output_layout().count()) {
+        std::cerr << "realloc memory for node: " << id() << std::endl;
+        _output = allocate_output();
+    } else {
+        _output = _network.get_engine().reinterpret_buffer(*_output, _node.get_output_layout());
+    }
 }
 
 void primitive_inst::update_impl() {
