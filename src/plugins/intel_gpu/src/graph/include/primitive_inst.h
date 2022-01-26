@@ -112,13 +112,15 @@ public:
     event::ptr execute(const std::vector<event::ptr>& events);
     void init_kernels();
     void set_arguments();
+    void realloc_if_needed();
 
     bool validate() const {
-        OPENVINO_ASSERT(_impl != nullptr || is_dynamic(), "[GPU] Invalid impl object for ", id(), " primitive");
-        if (_impl)
-            return _impl->validate(*this);
-
-        return true;
+        if (_impl == nullptr) {
+            if (is_dynamic())
+                return true;
+            throw std::invalid_argument("[Internal cldnn error].  Validation method for nullptr impl is not allowed.");
+        }
+        return _impl->validate(*this);
     }
     bool output_changed() const { return _output_changed; }
     void reset_output_change() { _output_changed = false; }
