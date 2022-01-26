@@ -138,6 +138,8 @@ void primitive_inst::set_output_memory(memory::ptr mem_new, bool check) {
 
 void primitive_inst::update_shape() {
     GPU_DEBUG_GET_INSTANCE(debug_config);
+    if (!_node.is_dynamic())
+        return;
 
     bool input_shape_changed = false;
     for (size_t i = 0; i < _deps.size(); i++) {

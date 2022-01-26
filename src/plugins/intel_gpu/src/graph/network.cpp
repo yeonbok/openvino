@@ -324,7 +324,8 @@ void network::set_arguments() {
         return;
 
     for (auto const& prim : _exec_order) {
-        prim->set_arguments();
+        if (!prim->is_dynamic())
+            prim->set_arguments();
     }
     _reset_arguments = false;
 }
@@ -687,6 +688,44 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
             }
         }
 
+        // if (inst->shape_changed())
+        {
+            GPU_DEBUG_IF(debug_config->verbose == 4) {
+                std::cerr << inst->id()  << " shape has changed!" << std::endl;
+            }
+
+            // Lock for program nodes
+            // To be removed once concurrency issue for program node is resolved
+            static std::mutex m;
+            std::lock_guard<std::mutex> lock(m);
+            inst->update_impl();
+            inst->realloc_if_needed();
+            inst->set_arguments();
+        }
+
+        GPU_DEBUG_IF(debug_config->verbose >= 1) {
+            std::ostringstream in_addr;
+            // buffer_ptr() only support usm_memory
+            for (size_t i = 0; i < get_primitive(inst->id())->dependencies().size(); i++) {
+                auto& in_mem = get_primitive(inst->id())->dep_memory(i);
+                in_addr << in_mem.buffer_ptr();
+                if (i < get_primitive(inst->id())->dependencies().size() - 1) {
+                    in_addr << ", ";
+                }
+            }
+            auto& out_mem = get_primitive(inst->id())->output_memory();
+
+            GPU_DEBUG_COUT << "Execute " << inst->id() << ", memory type: "
+                           << inst->output_memory().get_allocation_type() << ", in_usm("
+                           << in_addr.str() << "), out_usm("
+                           << out_mem.buffer_ptr() << ")" << std::endl;
+        }
+
+        // If a node has mutable input or it's an output, then the input/output buffers might be changed
+        // So we need to set arguments on each execution.
+        if (inst->has_mutable_input() || inst->is_output() || inst->is_dynamic()) {
+            inst->set_arguments();
+        }
         execute_primitive(inst, events);
 
         GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
