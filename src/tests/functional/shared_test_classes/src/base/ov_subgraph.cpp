@@ -242,6 +242,11 @@ void SubgraphBaseTest::generate_inputs(const std::vector<ov::Shape>& targetInput
 void SubgraphBaseTest::infer() {
     inferRequest = compiledModel.create_infer_request();
     for (const auto& input : inputs) {
+        std::cerr << "set_tensor: " << input.first << std::endl;
+        auto data = static_cast<float*>(input.second.data());
+        for (size_t i = 0; i < input.second.get_size(); i++) {
+            std::cerr << data[i] << " i=" << i << std::endl;
+        }
         inferRequest.set_tensor(input.first, input.second);
     }
     inferRequest.infer();
