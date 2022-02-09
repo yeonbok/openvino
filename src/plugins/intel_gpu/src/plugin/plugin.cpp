@@ -956,6 +956,7 @@ Parameter Plugin::GetMetric(const std::string& name, const std::map<std::string,
             TransformationsPipeline transformations(config, device_info);
             transformations.apply(nGraphFunc);
             program = std::make_shared<Program>(cloned_network, engine, config, false, true);
+            std::cout << "MAX_BATCH_SIZE start" << std::endl;
             std::pair<int64_t, int64_t> device_memory_usage = program->GetCompiledProgram(0)->get_estimated_device_mem_usage();
             if (device_memory_usage.first == static_cast<int64_t>(-1L) && device_memory_usage.second == static_cast<int64_t>(-1L)) {
                 return decltype(ov::max_batch_size)::value_type {static_cast<uint32_t>(max_batch_size)};
@@ -969,6 +970,7 @@ Parameter Plugin::GetMetric(const std::string& name, const std::map<std::string,
                 GPU_DEBUG_COUT << "[GPU_MAX_BATCH_SIZE] Const mem usage: " << device_memory_usage.first  << std::endl;
                 GPU_DEBUG_COUT << "[GPU_MAX_BATCH_SIZE] General mem usage: " << device_memory_usage.second  << std::endl;
             }
+            std::cout << "MAX_BATCH_SIZE finished : " << max_batch_size << std::endl;
         } catch (std::exception& e) {
             GPU_DEBUG_IF(debug_config->verbose >= 1) {
                 GPU_DEBUG_COUT << "[GPU_MAX_BATCH_SIZE] Failed in reshape or build program " << e.what() << std::endl;
