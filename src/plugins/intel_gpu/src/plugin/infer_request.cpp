@@ -834,7 +834,7 @@ void InferRequest::allocate_outputs() {
 
             auto host_blob = create_host_blob(desc);
             _outputs[no.first] = host_blob;
-            auto device_blob = create_device_blob(device_blob_desc, output_layout);
+            auto device_blob = create_device_blob(device_blob_desc);
             _deviceOutputs[no.first] = device_blob;
         } else {
             if (m_graph->GetEngine()->use_unified_shared_memory()) {
@@ -845,7 +845,7 @@ void InferRequest::allocate_outputs() {
                 _deviceOutputs[no.first] = create_shared_device_blob(desc, output_layout, host_blob->buffer().as<void*>());
             } else {
                 _outputs[no.first] = create_host_blob(desc);
-                _deviceOutputs[no.first] = create_device_blob(desc, output_layout);
+                _deviceOutputs[no.first] = create_device_blob(desc);
             }
         }
     }

@@ -273,6 +273,13 @@ TEST_P(resample_scale_concat, along_f) {
     execute(p);
 }
 
+
+ov::PartialShape get_partial_shape(tensor& t, format fmt) {
+    auto sizes = fmt == format::any ? t.sizes() : t.sizes(format::get_default_format(fmt.dimension()));
+    ov::Shape shape(sizes.begin(), sizes.end());
+    return ov::PartialShape(shape);
+}
+
 INSTANTIATE_TEST_SUITE_P(fusings_gpu, resample_scale_concat, ::testing::ValuesIn(std::vector<resample_test_params>{
     resample_test_params{ CASE_RESAMPLE_FP32_1, 3, 6 },
     resample_test_params{ CASE_RESAMPLE_FP32_2, 3, 6 },
@@ -314,9 +321,11 @@ INSTANTIATE_TEST_SUITE_P(fusings_gpu, resample_scale_concat, ::testing::ValuesIn
 class resample_scale_fusing_through : public ResamplePrimitiveFusingTest {};
 TEST_P(resample_scale_fusing_through, reshape) {
     auto p = GetParam();
-    auto reshape_shape = p.out_shape;
-    reshape_shape.feature[0] *= reshape_shape.spatial[0];
-    reshape_shape.spatial[0] = 1;
+    auto out_shape = p.out_shape;
+    out_shape.feature[0] *= out_shape.spatial[0];
+    out_shape.spatial[0] = 1;
+
+    auto reshape_shape = get_partial_shape(out_shape, p.default_format);
 
     create_topologies(
         input_layout("input", get_input_layout(p)),
@@ -361,12 +370,15 @@ INSTANTIATE_TEST_SUITE_P(fusings_gpu, resample_scale_fusing_through, ::testing::
     resample_test_params{ CASE_RESAMPLE_U8_4, 2, 4 },
 }));
 
+
 class resample_scale_fusing_through_not_allowed : public ResamplePrimitiveFusingTest {};
 TEST_P(resample_scale_fusing_through_not_allowed, reshape_two_users) {
     auto p = GetParam();
-    auto reshape_shape = p.out_shape;
-    reshape_shape.feature[0] *= reshape_shape.spatial[0];
-    reshape_shape.spatial[0] = 1;
+    auto out_shape = p.out_shape;
+    out_shape.feature[0] *= out_shape.spatial[0];
+    out_shape.spatial[0] = 1;
+
+    auto reshape_shape = get_partial_shape(out_shape, p.default_format);
 
     create_topologies(
         input_layout("input", get_input_layout(p)),

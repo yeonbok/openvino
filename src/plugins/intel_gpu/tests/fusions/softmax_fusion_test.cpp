@@ -44,14 +44,20 @@ public:
     }
 
     layout get_input_layout(softmax_test_params& p) {
-        return layout{ p.data_type, p.input_format, p.in_shape, padding{} };
+        return layout{ p.data_type, p.input_format, get_partial_shape(p.in_shape, p.input_format), padding{} };
     }
 
-    tensor get_reshape_shape(softmax_test_params& p) {
+    ov::PartialShape get_reshape_shape(softmax_test_params& p) {
         auto output_shape = p.in_shape;
         output_shape.feature[0] *= output_shape.spatial[0];
         output_shape.spatial[0] = 1;
-        return output_shape;
+        return get_partial_shape(output_shape, p.input_format);
+    }
+
+    ov::PartialShape get_partial_shape(tensor& t, cldnn::format fmt) {
+        auto sizes = fmt == format::any ? t.sizes() : t.sizes(format::get_default_format(fmt.dimension()));
+        ov::Shape shape(sizes.begin(), sizes.end());
+        return ov::PartialShape(shape);
     }
 
     layout get_output_layout(softmax_test_params& p) {
