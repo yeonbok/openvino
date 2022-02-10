@@ -46,11 +46,13 @@ void CreateGatherOpBase(Program& p, const std::shared_ptr<T>& op, const int64_t 
         }
     }
 
+    auto format = DefaultFormatForDims(op->get_output_partial_shape(0).rank().get_length());
     auto gatherPrim = cldnn::gather(layerName,
                                     reorderedInputs[0],
                                     reorderedInputs[1],
                                     axis,
-                                    op->get_output_shape(0),
+                                    format,
+                                    op->get_output_partial_shape(0),
                                     batch_dim,
                                     support_neg_ind,
                                     op->get_friendly_name());
