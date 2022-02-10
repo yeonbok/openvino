@@ -24,6 +24,8 @@
 #include <string>
 #include <set>
 
+#include "reshape_inst.h"
+
 using namespace cldnn;
 
 thread_local size_t program_node::cur_id = 0;
@@ -339,6 +341,9 @@ bool program_node::is_dynamic() const {
         if (input->get_output_layout().is_dynamic())
             return true;
     }
+
+    if (is_type<reshape>() && get_dependencies().size() == 2)
+        return true;
 
     return get_output_layout().is_dynamic();
 }
