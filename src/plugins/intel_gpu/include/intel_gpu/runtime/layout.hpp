@@ -445,6 +445,7 @@ struct layout {
     std::string to_string() const;
 
     bool is_dynamic() const;
+    bool is_static() const;
 
     tensor get_tensor() const;
 };
