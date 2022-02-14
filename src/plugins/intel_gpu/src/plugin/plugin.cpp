@@ -30,6 +30,7 @@
 #include "transformations/init_node_info.hpp"
 #include "transformations/common_optimizations/dimension_tracking.hpp"
 #include <transformations/rt_info/fused_names_attribute.hpp>
+#include <openvino/pass/serialize.hpp>
 
 #include <transformations/utils/utils.hpp>
 #include "openvino/pass/serialize.hpp"
