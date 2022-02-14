@@ -284,16 +284,13 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         }
     }
 
+
     OPENVINO_ASSERT(_impl_params->output_layout.is_static(),
                     "[GPU] Can't execute ", primitive_id, " primitive as output layout is dynamic in runtime");
 
-    OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
-
-    // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
-    if (is_dynamic() || has_mutable_input() || is_output()) {
-        set_arguments();
-    }
     on_execute();
+
+    OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
 
     GPU_DEBUG_IF(debug_config->verbose >= 1) {
         std::ostringstream in_addr;
@@ -315,6 +312,17 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                        << out_alloc_type << ", in_usm("
                        << in_addr.str() << "), out_usm("
                        << out_ptr << ")" << std::endl;
+    }
+
+    GPU_DEBUG_GET_INSTANCE(debug_config);
+    GPU_DEBUG_IF(debug_config->verbose >= 1) {
+        GPU_DEBUG_COUT << "Execute " << id() << ", memory type: "
+                       << output_memory().get_allocation_type() << std::endl;
+    }
+
+    // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
+    if (is_dynamic() || has_mutable_input() || is_output()) {
+        set_arguments();
     }
 
     if (_exec_deps.empty() && dependencies.empty())
