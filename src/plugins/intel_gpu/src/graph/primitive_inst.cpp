@@ -91,6 +91,7 @@ void primitive_inst::update_shape() {
 
     auto new_layout = _node.type()->calc_output_layout(_node);
     // TODO: Get rid of this const_cast ASAP
+    std::cerr << id() << " update shape: " << new_layout.get_partial_shape() << std::endl;
     const_cast<program_node&>(_node).set_output_layout(new_layout);
     reset_shape_change();
 }
@@ -105,7 +106,6 @@ void primitive_inst::realloc_if_needed() {
 }
 
 void primitive_inst::update_impl() {
-    update_shape();
     if (!_node.is_type<data>() && !(_node.is_type<mutable_data>() && _node.get_dependencies().empty())) {
         std::cerr << "update impl for node " << id() << std::endl;
         _impl = std::move(_node.type()->choose_impl(_node));
@@ -175,7 +175,30 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                      "Invalid/unset input",
                      !_has_valid_input,
                      "Cannot execute primitive " + primitive_id + " with invalid/unset input");
+
+    static std::mutex m;
+    {
+        // Lock for program nodes
+        // To be removed once concurrency issue for program node is resolved
+        std::lock_guard<std::mutex> lock(m);
+        update_shape();
+        update_impl();
+        realloc_if_needed();
+    }
+
     on_execute();
+
+    GPU_DEBUG_GET_INSTANCE(debug_config);
+    GPU_DEBUG_IF(debug_config->verbose >= 1) {
+        GPU_DEBUG_COUT << "Execute " << id() << ", memory type: "
+                       << output_memory().get_allocation_type() << std::endl;
+    }
+
+    // If a node has mutable input or it's an output, then the input/output buffers might be changed
+    // So we need to set arguments on each execution.
+    // if (has_mutable_input() || is_output() || is_dynamic()) {
+        set_arguments();
+    // }
 
     if (_exec_deps.empty())
         return _impl->execute(events, *this);
