@@ -670,7 +670,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         surf_lock = surfaces_lock::create(get_engine().type(), in_out_mem, get_stream());
     }
 
-    set_arguments();
+    // set_arguments();
     for (auto& inst : _exec_order) {
         GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
             auto& node = _program->get_node(inst->id());
