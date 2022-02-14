@@ -32,23 +32,18 @@ static void CreateParameterOp(Program& p, const std::shared_ptr<ngraph::op::v0::
     InferenceEngine::Layout l = inputDesc.getLayout();
     InferenceEngine::Precision ip = inputDesc.getPrecision();
 
-    for (size_t i = inputDims.size(); i < 4; i++) {
-        inputDims.push_back(1);
-    }
-
     cldnn::format inputFormat = cldnn::format::bfyx;
     if (InferenceEngine::Layout::BLOCKED == l && 6 == inputDims.size()) {
         inputFormat = cldnn::format::bfwzyx;
     } else {
         inputFormat = FormatFromLayout(l);
     }
+
     // look at the expected color format of this input
     auto inputName = layer_type_name_ID(op);
     auto preProcess = inputInfo->getPreProcess();
     size_t meanChannels = preProcess.getNumberOfChannels();
-    cldnn::layout networkInputLayout(DataTypeFromPrecision(op->get_output_element_type(0)),
-                                     inputFormat,
-                                     dataTensor.transform(inputFormat, 1));
+    cldnn::layout networkInputLayout(inputDims, DataTypeFromPrecision(op->get_output_element_type(0)), inputFormat);
     cldnn::primitive_id meanBlobID = inputName + Program::m_meanValuesTag;
     std::vector<float> meanValues;
 
@@ -248,6 +243,8 @@ static void CreateParameterOp(Program& p, const std::shared_ptr<ngraph::op::v0::
             cldnn::layout inputLayout(networkInputLayout);
             inputLayout.data_type = DataTypeFromPrecision(ip);
             p.inputLayouts.insert({ inputInfo->name(), inputLayout });
+
+            std::cerr << "create input with layout: " << inputLayout.to_string() << std::endl;
 
             p.AddPrimitive(cldnn::input_layout(inputName, inputLayout, inputInfo->name()));
 
