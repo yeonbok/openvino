@@ -53,10 +53,7 @@ static void CreateOneHotOp(Program& p, const std::shared_ptr<ngraph::op::v1::One
     int64_t depth = depth_value_node->cast_vector<int64_t>()[0];
 
     auto out_pshape = op->get_output_partial_shape(0);
-    if (out_pshape.is_dynamic()) {
-        IE_THROW() << "OneHot doesn't support dynamic shapes yet";
-    }
-    auto out_tensor = tensor_from_dims(out_pshape.to_shape());
+    auto out_tensor = out_pshape.is_dynamic() ? cldnn::tensor(0) : tensor_from_dims(out_pshape.to_shape());
 
     auto oneHotPrim = cldnn::one_hot(layerName,
                                      inputPrimitives[0],
