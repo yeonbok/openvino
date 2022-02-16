@@ -152,6 +152,12 @@ bool kernels_cache::is_cache_enabled() const {
 }
 
 size_t kernels_cache::get_max_kernels_per_batch() const {
+    if (getenv("BATCH_SIZE") != nullptr) {
+        int32_t bsize = atoi(getenv("BATCH_SIZE"));
+        std::cout << "Build batch size is set as : " << bsize << std::endl;
+        return bsize;
+    }
+    std::cout << "Build batch size is set as : " << 10 << std::endl;
     return 10;
 }
 
