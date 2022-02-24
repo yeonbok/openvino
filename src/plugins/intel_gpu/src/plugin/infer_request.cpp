@@ -519,7 +519,6 @@ void InferRequest::wait() {
     if (internal_outputs.empty()) {
         IE_THROW() << "Inference was not started!\n";
     }
-
     // wait for completion & collect outputs as requested by the model
     for (auto& no : _networkOutputs) {
         // In dynamic case, graph API must be used to retrieve outputID
@@ -628,7 +627,7 @@ void InferRequest::copy_output_data(cldnn::memory::ptr src, Blob::Ptr dst) {
     case Precision::I8:   copyResultToOutputBlob<int8_t, int8_t>(src, dst, stream);  break;
     case Precision::U16:  copyResultToOutputBlob<float, uint16_t>(src, dst, stream);  break;
     case Precision::U32:  copyResultToOutputBlob<int32_t, uint32_t>(src, dst, stream);  break;
-    case Precision::U64:  copyResultToOutputBlob<int32_t, uint64_t>(src, dst, stream);  break;
+    case Precision::U64:  copyResultToOutputBlob<int64_t, uint64_t>(src, dst, stream);  break;
     case Precision::U8:   copyResultToOutputBlob<uint8_t, uint8_t>(src, dst, stream);  break;
     case Precision::BOOL: copyResultToOutputBlob<int8_t, int8_t>(src, dst, stream);  break;
     default: IE_THROW(NotImplemented) << "The plugin does not support output " << dst->getTensorDesc().getPrecision() << " precision";
