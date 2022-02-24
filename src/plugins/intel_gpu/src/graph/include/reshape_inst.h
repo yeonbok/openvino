@@ -60,8 +60,6 @@ public:
 private:
     void on_execute() override;
 
-    void update_shape() override;
-
     void reuse_input();
 };
 
