@@ -88,17 +88,33 @@ void primitive_inst::update_shape() {
     // Do nothing for static nodes
     // if (!_node.is_dynamic())
     //     return;
+    GPU_DEBUG_GET_INSTANCE(debug_config);
 
     auto new_layout = _node.type()->calc_output_layout(_node);
+<<<<<<< HEAD
     // TODO: Get rid of this const_cast ASAP
     std::cerr << id() << " update shape: " << new_layout.get_partial_shape() << std::endl;
+=======
+
+    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
+    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
+    GPU_DEBUG_IF(debug_config->verbose >= 4) {
+        GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
+    }
+    if (out_layout != new_layout)
+        set_shape_change();
+    // TODO: Get rid of this const_cast
+>>>>>>> 5aa7b6b998... [GPU] Code cleanup
     const_cast<program_node&>(_node).set_output_layout(new_layout);
-    reset_shape_change();
 }
 
 void primitive_inst::realloc_if_needed() {
+    GPU_DEBUG_GET_INSTANCE(debug_config);
+
     if (!_output  || _output->get_layout().count() < _node.get_output_layout().count()) {
-        std::cerr << "realloc memory for node: " << id() << std::endl;
+        GPU_DEBUG_IF(debug_config->verbose >= 4) {
+            GPU_DEBUG_COUT << "realloc memory for node: " << id() << std::endl;
+        }
         _output = allocate_output();
     } else {
         _output = _network.get_engine().reinterpret_buffer(*_output, _node.get_output_layout());
@@ -107,11 +123,14 @@ void primitive_inst::realloc_if_needed() {
 
 void primitive_inst::update_impl() {
     if (!_node.is_type<data>() && !(_node.is_type<mutable_data>() && _node.get_dependencies().empty())) {
-        std::cerr << "update impl for node " << id() << std::endl;
         _impl = std::move(_node.type()->choose_impl(_node));
         _network.get_program()->compile();
         _impl->init_kernels();
-        std::cerr << "new impl " << (_impl != nullptr ? _impl->get_kernel_name() : "Nullptr") << std::endl;
+        reset_shape_change();
+        GPU_DEBUG_GET_INSTANCE(debug_config);
+        GPU_DEBUG_IF(debug_config->verbose >= 4) {
+            GPU_DEBUG_COUT << "Update impl for node " << id() << ": " << (_impl != nullptr ? _impl->get_kernel_name() : "Nullptr") << std::endl;
+        }
     }
 }
 
@@ -182,8 +201,10 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         // To be removed once concurrency issue for program node is resolved
         std::lock_guard<std::mutex> lock(m);
         update_shape();
-        update_impl();
-        realloc_if_needed();
+        if (shape_changed()) {
+            update_impl();
+            realloc_if_needed();
+        }
     }
 
     on_execute();
