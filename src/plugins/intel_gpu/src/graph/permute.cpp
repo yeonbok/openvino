@@ -25,26 +25,21 @@ layout permute_inst::calc_output_layout(permute_node const& node, kernel_impl_pa
     auto desc = impl_param.typed_desc<permute>();
     auto input_layout = impl_param.get_input_layout();
     auto permute_order = desc->permute_order;
-    std::vector<tensor::value_type> output_shape;
+    ov::PartialShape output_shape;
 
-    auto input_shape = input_layout.get_dims();
+    auto input_shape = input_layout.get_partial_shape();
 
     for (size_t x = 0; x < permute_order.size(); x++) {
         output_shape.push_back(input_shape[permute_order[x]]);
     }
 
-    for (size_t i = output_shape.size(); i < 4; i++) {
-        output_shape.push_back(1);
-    }
-
-    auto output_size = tensor(format::get_default_format(input_layout.get_rank()), output_shape);
-    auto op = desc->output_padding;
+    auto op = node.get_primitive()->output_padding;
 
     if (impl_param.has_fused_primitives()) {
         input_layout.data_type = impl_param.get_fused_output_layout().data_type;
     }
 
-    return layout(input_layout.data_type, input_layout.format, output_size, op);
+    return layout(output_shape, input_layout.data_type, input_layout.format, op);
 }
 
 template<typename ShapeType>

@@ -52,8 +52,9 @@ void convertAndCopy(const InferenceEngine::Blob* src, dst_t* dst) {
 }
 
 template<typename src_dt, typename dst_dt>
-void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, cldnn::stream& stream) {
-    size_t n = dst->size();
+void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, ov::intel_gpu::buf_info* bi, cldnn::stream& stream) {
+    size_t n = (bi == nullptr) ? dst->size() : bi->buf_size;
+    size_t offset = (bi == nullptr) ? 0 : bi->buf_offset;
 
     auto layout = src->get_layout();
     auto size = layout.get_tensor();
@@ -65,6 +66,7 @@ void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, cldnn::stream
     }
     cldnn::mem_lock<src_dt> src_lock{ src, stream };
     src_dt* src_ptr = src_lock.data();
+    dst_ptr += offset;
 
     if (layout.data_padding) {
         for (int64_t b = 0; b < size.batch[0]; b++) {
@@ -671,7 +673,6 @@ void InferRequest::wait() {
     if (internal_outputs.empty()) {
         IE_THROW() << "Inference was not started!\n";
     }
-
     // wait for completion & collect outputs as requested by the model
     for (auto& no : _networkOutputs) {
         std::string outputID = m_graph->MapOutputName(no.first);
@@ -683,10 +684,10 @@ void InferRequest::wait() {
         auto out_rank = out_partial_shape.rank().get_length();
 
         if (_outputs.find(no.first) == _outputs.end()) {
-            auto mem_dims = outputMemory->get_layout().size.to_shape();
+            auto mem_dims = outputMemory->get_layout().get_partial_shape().to_shape();
             auto precision = InferenceEngine::Precision::FP32;
             auto dims = SizeVector(mem_dims.begin(), mem_dims.end());
-            if (out_rank < dims.size()) {
+            if (static_cast<int32_t>(out_rank) < static_cast<int32_t>(dims.size())) {
                 for (size_t i = out_rank; i < dims.size(); i++) {
                     if (dims[i] != 1)
                         IE_THROW() << "[GPU] Unexpected out shape";
@@ -830,21 +831,21 @@ Blob::Ptr InferRequest::create_shared_device_blob(const InferenceEngine::TensorD
     return blob;
 }
 
-void InferRequest::copy_output_data(cldnn::memory::ptr src, Blob::Ptr dst) {
+void InferRequest::copy_output_data(cldnn::memory::ptr src, Blob::Ptr dst, buf_info* bi) {
     OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "InferRequest::copy_output_data");
     auto& stream = m_graph->GetNetwork()->get_stream();
     switch (dst->getTensorDesc().getPrecision()) {
-    case Precision::FP64: copyResultToOutputBlob<float, double>(src, dst, stream);    break;
-    case Precision::FP32: copyResultToOutputBlob<float, float>(src, dst, stream);    break;
-    case Precision::FP16: copyResultToOutputBlob<uint16_t, uint16_t>(src, dst, stream); break;
-    case Precision::I64:  copyResultToOutputBlob<int64_t, int64_t>(src, dst, stream);  break;
-    case Precision::I32:  copyResultToOutputBlob<int32_t, int32_t>(src, dst, stream);  break;
-    case Precision::I16:  copyResultToOutputBlob<float, int16_t>(src, dst, stream);  break;
-    case Precision::I8:   copyResultToOutputBlob<int8_t, int8_t>(src, dst, stream);  break;
-    case Precision::U16:  copyResultToOutputBlob<float, uint16_t>(src, dst, stream);  break;
-    case Precision::U32:  copyResultToOutputBlob<int32_t, uint32_t>(src, dst, stream);  break;
-    case Precision::U64:  copyResultToOutputBlob<int32_t, uint64_t>(src, dst, stream);  break;
-    case Precision::U8:   copyResultToOutputBlob<uint8_t, uint8_t>(src, dst, stream);  break;
+    case Precision::FP64: copyResultToOutputBlob<float, double>(src, dst, bi, stream);    break;
+    case Precision::FP32: copyResultToOutputBlob<float, float>(src, dst, bi, stream);    break;
+    case Precision::FP16: copyResultToOutputBlob<uint16_t, uint16_t>(src, dst, bi, stream); break;
+    case Precision::I64:  copyResultToOutputBlob<int64_t, int64_t>(src, dst, bi, stream);  break;
+    case Precision::I32:  copyResultToOutputBlob<int32_t, int32_t>(src, dst, bi, stream);  break;
+    case Precision::I16:  copyResultToOutputBlob<float, int16_t>(src, dst, bi, stream);  break;
+    case Precision::I8:   copyResultToOutputBlob<int8_t, int8_t>(src, dst, bi, stream);  break;
+    case Precision::U16:  copyResultToOutputBlob<float, uint16_t>(src, dst, bi, stream);  break;
+    case Precision::U32:  copyResultToOutputBlob<int32_t, uint32_t>(src, dst, bi, stream);  break;
+    case Precision::U64:  copyResultToOutputBlob<int64_t, uint64_t>(src, dst, bi, stream);  break;
+    case Precision::U8:   copyResultToOutputBlob<uint8_t, uint8_t>(src, dst, bi, stream);  break;
     default: IE_THROW(NotImplemented) << "The plugin does not support output " << dst->getTensorDesc().getPrecision() << " precision";
     }
 }
@@ -852,44 +853,46 @@ void InferRequest::copy_output_data(cldnn::memory::ptr src, Blob::Ptr dst) {
 void InferRequest::copy_input_data(std::shared_ptr<cldnn::network> network,
                                         const cldnn::primitive_id &inputName,
                                         const cldnn::layout& inputLayout,
-                                        const Blob &inputBlob) {
+                                        const Blob &inputBlob, buf_info* bi) {
     OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "InferRequest::copy_input_data");
+
+    size_t offset = (bi == nullptr) ? 0 : bi->buf_offset;
 
     cldnn::primitive_id internalName = "parameter:" + inputName;
     auto locked = inputBlob.cbuffer();
     switch (inputBlob.getTensorDesc().getPrecision()) {
     case Precision::FP32: {
-        float* blob_ptr = const_cast<float*>(locked.as<const float*>());
+        float* blob_ptr = const_cast<float*>(locked.as<const float*>()) + offset;
         network->set_input_data(internalName, network->get_engine().attach_memory(inputLayout, blob_ptr));
         break;
     }
     case Precision::I32: {
-        int32_t* blob_ptr = const_cast<int32_t*>(locked.as<const int32_t*>());
+        int32_t* blob_ptr = const_cast<int32_t*>(locked.as<const int32_t*>()) + offset;
         network->set_input_data(internalName, network->get_engine().attach_memory(inputLayout, blob_ptr));
         break;
     }
     case Precision::I64: {
-        int64_t* blob_ptr = const_cast<int64_t*>(locked.as<const int64_t*>());
+        int64_t* blob_ptr = const_cast<int64_t*>(locked.as<const int64_t*>()) + offset;
         network->set_input_data(internalName, network->get_engine().attach_memory(inputLayout, blob_ptr));
         break;
     }
     case Precision::FP16: {
-        uint16_t* blob_ptr = const_cast<uint16_t*>(locked.as<const uint16_t*>());
+        uint16_t* blob_ptr = const_cast<uint16_t*>(locked.as<const uint16_t*>()) + offset;
         network->set_input_data(internalName, network->get_engine().attach_memory(inputLayout, blob_ptr));
         break;
     }
     case Precision::I8: {
-        int8_t* blob_ptr = const_cast<int8_t*>(locked.as<const int8_t*>());
+        int8_t* blob_ptr = const_cast<int8_t*>(locked.as<const int8_t*>()) + offset;
         network->set_input_data(internalName, network->get_engine().attach_memory(inputLayout, blob_ptr));
         break;
     }
     case Precision::U8: {
-        uint8_t* blob_ptr = const_cast<uint8_t*>(locked.as<const uint8_t*>());
+        uint8_t* blob_ptr = const_cast<uint8_t*>(locked.as<const uint8_t*>()) + offset;
         network->set_input_data(internalName, network->get_engine().attach_memory(inputLayout, blob_ptr));
         break;
     }
     case Precision::BOOL: {
-        uint8_t* blob_ptr = const_cast<uint8_t*>(locked.as<const uint8_t*>());
+        uint8_t* blob_ptr = const_cast<uint8_t*>(locked.as<const uint8_t*>()) + offset;
         network->set_input_data(internalName, network->get_engine().attach_memory(inputLayout, blob_ptr));
         break;
     }
@@ -1121,18 +1124,12 @@ void InferRequest::prepare_output(const cldnn::primitive_id& outputName, Blob::P
     _nw_ptr->set_output_memory(internalName, outputMem);
 }
 
-InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngine::TensorDesc& desc) {
-    auto format = FormatFromLayout(desc.getLayout());
-    auto dt = DataTypeFromPrecision(desc.getPrecision());
-    auto shape = tensor_from_dims(desc.getDims());
-
-    auto l = cldnn::layout(dt, format, shape);
-
+InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngine::TensorDesc& desc, const cldnn::layout& layout) {
     if (m_graph->GetEngine()->use_unified_shared_memory()) {
         auto blobPtr = std::make_shared<RemoteUSMbuffer>(m_graph->GetContext(),
                                                          m_graph->GetNetwork()->get_stream(),
                                                          desc,
-                                                         l,
+                                                         layout,
                                                          nullptr,
                                                          0,
                                                          0,
@@ -1144,7 +1141,7 @@ InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngin
         auto blobPtr = std::make_shared<RemoteCLbuffer>(m_graph->GetContext(),
                                                         m_graph->GetNetwork()->get_stream(),
                                                         desc,
-                                                        l);
+                                                        layout);
         getBlobImpl(blobPtr.get())->allocate();
         checkAlloc(blobPtr, str_device_mem_not_allocated);
         return blobPtr;
