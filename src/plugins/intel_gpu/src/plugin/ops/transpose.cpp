@@ -59,8 +59,8 @@ static void CreateTransposeOp(Program& p, const std::shared_ptr<ngraph::op::v1::
         return;
     }
 
-    int rank = std::max(4, static_cast<int>(op->get_input_shape(0).size()));
-    if (order.empty()) {
+    int rank = static_cast<int>(op->get_input_partial_shape(0).rank().get_length());
+    if (ie_order.empty()) {
         // if order size is less than 4 - fill the rest with just copy
         for (int o = rank - 1; o >= 0; o--)
             order.push_back((uint16_t)o);
