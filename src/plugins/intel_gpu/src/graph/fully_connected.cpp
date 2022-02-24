@@ -106,16 +106,14 @@ layout fully_connected_inst::calc_output_layout(fully_connected_node const& node
 
     format output_format = get_preferred_format(node, impl_param);
     if (input_layout.is_dynamic()) {
-        auto batch = input_layout.size[0];
-        auto feature = input_layout.size[1];
+        auto batch = input_layout.get_partial_shape()[0];
+        auto feature = input_layout.get_partial_shape()[1];
         auto output_size = ov::PartialShape{batch, weights_layout.batch(), 1, 1};
         if (desc->input_size == 3) {
             output_size = ov::PartialShape{batch, feature, 1, weights_layout.batch()};
         }
 
-        std::cerr << "FC output shape: " << output_size << std::endl;
-
-        return layout(output_type, output_format, output_size);
+        return layout(output_size, output_type, output_format);
     } else {
         auto output_size = tensor(input_layout.batch(), weights_layout.batch(), 1, 1);
         if (desc->input_size == 3) {
