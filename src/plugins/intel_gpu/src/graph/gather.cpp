@@ -31,7 +31,7 @@ layout gather_inst::calc_output_layout(gather_node const& node) {
         std::vector<ov::PartialShape> input_shapes = {
             node.get_dependency(0).get_output_layout().size,
             node.get_dependency(1).get_output_layout().size,
-            ov::PartialShape{1} // axis input is removed on gather primitive creation, so we can't user get_dependency(2)
+            ov::PartialShape{1} // axis input is removed on gather primitive creation, so we can't use get_dependency(2)
         };
 
         int64_t axis = desc->axis;

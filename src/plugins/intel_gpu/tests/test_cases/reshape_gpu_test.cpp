@@ -638,7 +638,7 @@ TEST(reshape_gpu_f32, basic_runtime_dynamic_shape) {
 
     topology topology;
     topology.add(input_layout("input", layout{data_types::f32, format::bfwzyx, ov::PartialShape::dynamic()}));
-    topology.add(shape_of("shape_of_input", "input", data_types::i32));
+    topology.add(shape_of("shape_of_input", "input", 6, data_types::i32));
     topology.add(reduce("reduced_shape", "shape_of_input", reduce_mode::prod, {0}, true));
     topology.add(reshape("reshape", "input", "reduced_shape", ov::PartialShape::dynamic()));
 
