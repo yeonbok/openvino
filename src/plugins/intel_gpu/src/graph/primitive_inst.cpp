@@ -254,20 +254,22 @@ void primitive_inst::update_impl() {
 
 event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     const auto primitive_id = id();
-<<<<<<< HEAD
     OPENVINO_ASSERT(_has_valid_input, primitive_id, " has invalid/unset input");
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
     std::vector<event::ptr> dependencies;
     if (is_dynamic()) {
-        update_shape();
-        if (shape_changed() || !_impl) {
-            update_impl();
-            auto ev = update_weights();
-            if (ev)
-                dependencies.push_back(ev);
-            realloc_if_needed();
+        static std::mutex m;
+        {
+            update_shape();
+            if (shape_changed() || !_impl) {
+                update_impl();
+                auto ev = update_weights();
+                if (ev)
+                    dependencies.push_back(ev);
+                realloc_if_needed();
+            }
         }
     }
 
@@ -280,31 +282,8 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     if (is_dynamic() || has_mutable_input() || is_output()) {
         set_arguments();
     }
-||||||| parent of 21e4e0b143... [GPU] Common fixes + reshape update
-    CLDNN_ERROR_BOOL(primitive_id,
-                     "Invalid/unset input",
-                     !_has_valid_input,
-                     "Cannot execute primitive " + primitive_id + " with invalid/unset input");
-=======
-    CLDNN_ERROR_BOOL(primitive_id,
-                     "Invalid/unset input",
-                     !_has_valid_input,
-                     "Cannot execute primitive " + primitive_id + " with invalid/unset input");
-
-    static std::mutex m;
-    {
-        // Lock for program nodes
-        // To be removed once concurrency issue for program node is resolved
-        std::lock_guard<std::mutex> lock(m);
-        update_shape();
-        update_impl();
-        realloc_if_needed();
-    }
-
->>>>>>> 21e4e0b143... [GPU] Common fixes + reshape update
     on_execute();
 
-<<<<<<< HEAD
     GPU_DEBUG_IF(debug_config->verbose >= 1) {
         std::ostringstream in_addr;
         // buffer_ptr() only support usm_memory
@@ -327,21 +306,6 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                        << out_ptr << ")" << std::endl;
     }
 
-||||||| parent of 21e4e0b143... [GPU] Common fixes + reshape update
-=======
-    GPU_DEBUG_GET_INSTANCE(debug_config);
-    GPU_DEBUG_IF(debug_config->verbose >= 1) {
-        GPU_DEBUG_COUT << "Execute " << id() << ", memory type: "
-                       << output_memory().get_allocation_type() << std::endl;
-    }
-
-    // If a node has mutable input or it's an output, then the input/output buffers might be changed
-    // So we need to set arguments on each execution.
-    // if (has_mutable_input() || is_output() || is_dynamic()) {
-        set_arguments();
-    // }
-
->>>>>>> 21e4e0b143... [GPU] Common fixes + reshape update
     if (_exec_deps.empty())
         return _impl->execute(events, *this);
 

@@ -13,10 +13,9 @@
 #include <threading/ie_istreams_executor.hpp>
 
 namespace ov {
-namespace runtime {
 namespace intel_gpu {
 
-struct buf_info {
+struct buf_info_legacy {
     size_t buf_offset;
     size_t buf_size;
 };
@@ -109,5 +108,4 @@ private:
 };
 
 }  // namespace intel_gpu
-}  // namespace runtime
 }  // namespace ov
