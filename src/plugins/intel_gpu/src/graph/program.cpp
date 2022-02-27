@@ -13,18 +13,21 @@
 #include "kernel_selector_helper.h"
 #include "device_cache_reader.h"
 #include "auto_tuner.h"
-#include "layout_optimizer.h"
+//#include "layout_optimizer.h"
 #include "pass_manager.h"
 #include "primitive_type.h"
 #include "program_dump_graph.h"
 #include "sliding_window_utils.h"
 #include "program_helpers.h"
 
+#if 0
 #include "roi_pooling_inst.h"
 #include "reorg_yolo_inst.h"
 #include "eltwise_inst.h"
 #include "softmax_inst.h"
+#endif
 #include "permute_inst.h"
+#if 0
 #include "custom_gpu_primitive_inst.h"
 #include "binary_convolution_inst.h"
 #include "resample_inst.h"
@@ -34,14 +37,22 @@
 #include "scale_inst.h"
 #include "depth_to_space_inst.h"
 #include "convolution_inst.h"
+#endif
 #include "concatenation_inst.h"
+#if 0
 #include "crop_inst.h"
+#endif
 #include "data_inst.h"
+#if 0
 #include "deconvolution_inst.h"
 #include "detection_output_inst.h"
+#endif
 #include "input_layout_inst.h"
+#if 0
 #include "shuffle_channels_inst.h"
+#endif
 #include "arg_max_min_inst.h"
+#if 0
 #include "lstm_inst.h"
 #include "lstm_elt_inst.h"
 #include "lstm_gemm_inst.h"
@@ -59,6 +70,7 @@
 #include "region_yolo_inst.h"
 #include "strided_slice_inst.h"
 #include "loop_inst.h"
+#endif
 #include "to_string_utils.h"
 #include "runtime/cldnn_itt.hpp"
 #include "runtime/kernels_cache.hpp"
@@ -66,7 +78,7 @@
 #include "impls/cpu/register.hpp"
 #include "impls/common/register.hpp"
 #ifdef ENABLE_ONEDNN_FOR_GPU
-#include "impls/onednn/register.hpp"
+//#include "impls/onednn/register.hpp"
 #endif
 
 #include "kernel_base.h"
@@ -138,7 +150,7 @@ void program::init_primitives() {
         cpu::register_implementations();
         ocl::register_implementations();
 #ifdef ENABLE_ONEDNN_FOR_GPU
-        onednn::register_implementations();
+//        onednn::register_implementations();
 #endif
         is_initialized = true;
     }
@@ -204,6 +216,7 @@ program_node const& program::get_node(primitive_id const& id) const {
     }
 }
 
+#if 0
 // TODO: Remove once we will get full support for input/output padding in all primitive implementations.
 bool program::analyze_output_size_handling_need() {
     bool handling_needed = false;
@@ -306,7 +319,7 @@ bool program::analyze_output_size_handling_need() {
 
     return handling_needed;
 }
-
+#endif
 // create new nodes for a program based on the set of nodes
 // method created to be used by propagate_constants to build sub program from constant nodes
 void program::prepare_nodes(std::set<std::shared_ptr<program_node>> const& nodes) {
@@ -314,7 +327,7 @@ void program::prepare_nodes(std::set<std::shared_ptr<program_node>> const& nodes
     for (const auto& itr : nodes) {
         if (itr.get()->is_type<data>()) {
             get_or_create(std::make_shared<input_layout>(itr.get()->id(),
-                                                         itr.get()->as<data>().get_primitive()->mem->get_layout()));
+                                                         itr.get()->as<data>().get_primitive()->mems[0]->get_layout())); // TODO
         } else {
             get_or_create(itr->desc);
         }
@@ -337,7 +350,7 @@ void program::prepare_nodes(std::set<std::shared_ptr<program_node>> const& nodes
         if (!found) {
             add_node_dependencies(node_ptr.get());
         }
-        if (node_ptr->dependencies.size() == 0)
+        if (node_ptr->dependencies_new.size() == 0)
             inputs.push_back(node_ptr.get());
     }
 }
@@ -348,19 +361,20 @@ void program::prepare_nodes(topology const& topology) {
     for (const auto& prim : topo_map) {
         get_or_create(prim.second);
     }
-    add_split_outputs();
+//    add_split_outputs();
     for (const auto& node : nodes_map) {
         auto node_ptr = node.second.get();
         if (node_ptr == nullptr)
             throw std::runtime_error("NULL pointer in nodes_map.");
-        add_node_dependencies(node_ptr);
-        if (node_ptr->dependencies.size() == 0) {
+        add_node_dependencies_new(node_ptr);
+        if (node_ptr->dependencies_new.size() == 0) {
             inputs.push_back(node_ptr);
         }
     }
 }
 
 // add node's dependecies from its primitive dependencies
+#if 0
 void program::add_node_dependencies(program_node* node) {
     std::cout << "add_node_dependencies" << std::endl;
     if (node->is_type<permute>())
@@ -379,9 +393,10 @@ void program::add_node_dependencies(program_node* node) {
         }
     }
 }
-
+#endif
 // add node's dependecies from its primitive dependencies
 void program::add_node_dependencies_new(program_node* node) {
+#if 0
     auto deps = node->get_primitive()->dependencies();
     // add pointers to node's dependencies
     for (auto& dep : deps) {
@@ -394,13 +409,17 @@ void program::add_node_dependencies_new(program_node* node) {
                                      " that is input to: " + node->get_primitive()->id);
         }
     }
+#endif
     auto deps_new = node->get_primitive()->dependencies_new();
     // add pointers to node's dependencies
     for (auto& dep : deps_new) {
         try {
             auto dep_node = nodes_map.at(dep.pid);
             node->dependencies_new.push_back({dep_node.get(), dep.idx});
-            dep_node->users_new[dep.idx].push_back(node);
+            // TODO (taylor) refactor this
+            dep_node->idx_users[dep.idx].push_back(node);
+            dep_node->users_idx[node] = dep.idx;
+            dep_node->users.push_back(node);
         } catch (...) {
             throw std::runtime_error("Program doesn't contain primitive: " + dep.pid +
                     " that is input to: " + node->get_primitive()->id);
@@ -416,19 +435,19 @@ void program::copy_node_dependencies(program_node* dest_node, program_node* src_
         throw std::runtime_error("Node " + src_node->get_primitive()->id + " and its copy " +
                                  dest_node->get_primitive()->id + " do not match.");
     }
-    auto src_deps = src_node->get_dependencies();
+    auto src_deps = src_node->get_dependencies_new();
     // add pointers to node's dependencies
     for (auto& src_dep : src_deps) {
         // do not copy dependencies to nodes which does not belong to the new (subgraph) topology
-        if (nodes_map.find(src_dep->get_primitive()->id) == nodes_map.end())
+        if (nodes_map.find(src_dep.first->get_primitive()->id) == nodes_map.end())
             continue;
 
         try {
-            auto dest_dep = nodes_map.at(src_dep->get_primitive()->id);
-            dest_node->dependencies.push_back(dest_dep.get());
+            auto dest_dep = nodes_map.at(src_dep.first->get_primitive()->id);
+            dest_node->dependencies_new.push_back({dest_dep.get(), src_dep.second}); // TODO(taylor)
             dest_dep->users.push_back(dest_node);
         } catch (...) {
-            throw std::runtime_error("Program doesn't contain primitive: " + src_dep->get_primitive()->id +
+            throw std::runtime_error("Program doesn't contain primitive: " + src_dep.first->get_primitive()->id +
                                      " that is input to: " + src_node->get_primitive()->id);
         }
     }
@@ -488,8 +507,9 @@ void program::build_program(bool is_internal) {
 void program::init_graph() {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::InitGraph");
     apply_opt_pass<graph_initializations>();
-
+#if 0 // taylor
     apply_opt_pass<calculate_prior_boxes>();
+#endif
 
     apply_opt_pass<mark_nodes>();
 }
@@ -599,6 +619,7 @@ void program::post_optimize_graph(bool is_internal) {
 
 // mark if the node is constant assuming that all dependencies are marked properly
 void program::mark_if_constant(program_node& node) {
+#if 0 // TODO (taylor)
     if (node.get_dependencies().empty() || node.is_type<prior_box>()) {
         return;
     }
@@ -609,9 +630,12 @@ void program::mark_if_constant(program_node& node) {
             return;
         }
     }
+#endif
+    return;
 }
 // mark if the node is in data flow assuming that all dependencies are marked properly
 void program::mark_if_data_flow(program_node& node) {
+#if 0 // TODO (taylor)
     if (node.is_type<mutable_data>() || node.is_type<input_layout>()) {
         node.data_flow = true;
     } else {
@@ -626,6 +650,8 @@ void program::mark_if_data_flow(program_node& node) {
             }
         }
     }
+#endif
+    return;
 }
 
 void program::transfer_memory_to_device() {
@@ -637,31 +663,34 @@ void program::transfer_memory_to_device() {
         if (node->is_type<data>() && !node->need_lockable_memory()) {
             auto& data_node = node->as<data>();
             auto data_node_layout = data_node.get_output_layout();
-            auto& mem = data_node.get_attached_memory();
-            auto mem_layout = mem.get_layout();
-            auto alloc_type = mem.get_allocation_type();
+            auto mems = data_node.get_attached_memory_ptrs();
+            for (size_t i = 0; i < mems.size() ; ++i) {
+                auto& mem = mems[i];
+                auto mem_layout = mem->get_layout();
+                auto alloc_type = mem->get_allocation_type();
 
-            if (!program_helpers::are_layouts_identical(mem_layout, data_node_layout).second) {
-                std::string err_str("Node and memory layouts are incompatible, error occurred for " + node->id() + " node");
-                throw std::invalid_argument(err_str);
-            }
-
-
-            if (alloc_type == allocation_type::usm_host || alloc_type == allocation_type::usm_shared) {
-                GPU_DEBUG_GET_INSTANCE(debug_config);
-                GPU_DEBUG_IF(debug_config->verbose >= 2) {
-                    GPU_DEBUG_COUT << "[" << data_node.id() << ": constant]" << std::endl;
+                if (!program_helpers::are_layouts_identical(mem_layout, data_node_layout).second) {
+                    std::string err_str("Node and memory layouts are incompatible, error occurred for " + node->id() + " node");
+                    throw std::invalid_argument(err_str);
                 }
-                // Allocate and transfer memory
-                auto device_mem = mem.get_engine()->allocate_memory(data_node_layout, allocation_type::usm_device, false);
-                device_mem->copy_from(get_stream(), mem);
-                data_node.attach_memory(device_mem);
-                GPU_DEBUG_IF(debug_config->verbose >= 2) {
-                    GPU_DEBUG_COUT << "[" << data_node.id() << ": constant]" << std::endl;
+
+
+                if (alloc_type == allocation_type::usm_host || alloc_type == allocation_type::usm_shared) {
+                    GPU_DEBUG_GET_INSTANCE(debug_config);
+                    GPU_DEBUG_IF(debug_config->verbose >= 2) {
+                        GPU_DEBUG_COUT << "[" << data_node.id() << ": constant]" << std::endl;
+                    }
+                    // Allocate and transfer memory
+                    auto device_mem = mem->get_engine()->allocate_memory(data_node_layout, allocation_type::usm_device, false);
+                    device_mem->copy_from(get_stream(), *mem);
+                    data_node.attach_memory(device_mem);
+                    GPU_DEBUG_IF(debug_config->verbose >= 2) {
+                        GPU_DEBUG_COUT << "[" << data_node.id() << ": constant]" << std::endl;
+                    }
+                    const_cast<memory::ptr&>(data_node.get_primitive()->mems[i]).reset();
+                    // TODO: Do we need finish call here? Maybe call it in network::execute() ?
+                    get_stream().finish();
                 }
-                const_cast<memory::ptr&>(data_node.get_primitive()->mem).reset();
-                // TODO: Do we need finish call here? Maybe call it in network::execute() ?
-                get_stream().finish();
             }
         }
     }
@@ -683,6 +712,7 @@ void program::cleanup() {
     }
 }
 
+#if 0
 void program::add_split_outputs() {
     auto itr = nodes_map.begin();
     while (itr != nodes_map.end()) {
@@ -706,20 +736,22 @@ void program::add_split_outputs() {
         }
     }
 }
-
+#endif
 program::nodes_ordering& program::get_processing_order() { return processing_order; }
 
 const program::nodes_ordering& program::get_processing_order() const { return processing_order; }
-
 void program::prepare_memory_dependencies() {
+#if 0 // (taylor)
     if (!get_engine().configuration().use_memory_pool)
         return;
 
     apply_opt_pass<basic_memory_dependencies>();
     apply_opt_pass<skipped_branch_memory_dependencies>();
     apply_opt_pass<oooq_memory_dependencies>();
+#endif
 }
 
+#if 0
 std::string program::get_memory_dependencies_string() const {
     std::string mem_dep = "Memory dependencies/restrictions:\n";
     auto itr = processing_order.begin();
@@ -742,7 +774,8 @@ void program::apply_needed_padding(program_node& node, program_node& prev_node, 
         return;
 
     // Special handling for input nodes.
-    if (prev_node.is_type<input_layout>() || prev_node.is_type<mutable_data>()) {
+//    if (prev_node.is_type<input_layout>() || prev_node.is_type<mutable_data>()) {
+    if (prev_node.is_type<input_layout>()) {
         target_layout.data_padding = needed_padding;
 
         auto r_prim = std::make_shared<reorder>("reorder_input_" + node.id(), prev_node.id(), target_layout);
@@ -761,7 +794,7 @@ void program::reverse_connection(program_node& dep_node, program_node& user_node
         throw std::runtime_error("Trying to reverse connection, but nodes are wrongly or not connected.");
     }
 }
-
+#endif
 program_node& program::get_or_create(std::shared_ptr<primitive> prim) {
     auto itr = nodes_map.lower_bound(prim->id);
     if (itr != nodes_map.end() && itr->first == prim->id)
@@ -772,6 +805,7 @@ program_node& program::get_or_create(std::shared_ptr<primitive> prim) {
     return *new_node;
 }
 
+#if 0
 void program::add_intermediate(program_node& node,
                                program_node& next,
                                size_t prev_idx,
@@ -838,7 +872,6 @@ void program::add_intermediate(program_node& node,
     }
     add_intermediate(node, next, idx, connect_int_node_with_old_dep, move_usrs_of_prev_to_node);
 }
-
 void program::add_connection(program_node& prev, program_node& next) {
     prev.users.push_back(&next);
     next.dependencies.push_back(&prev);
@@ -1141,6 +1174,7 @@ void program::remove_nodes(std::vector<program_node*>& to_remove) {
     }
 }
 
+#endif
 // TODO: break this function into number of smaller ones + add per-primitive fields (possibly use
 // primitive_inst::to_string?)
 void program::dump_program(const char* stage,
@@ -1166,20 +1200,20 @@ void program::dump_program(const char* stage,
 
 data_types program::get_inference_precision(const program_node& node) const {
     if (node.is_input()) {
-        return node.get_output_layout().data_type;
+        return node.get_output_layout(0).data_type;
     }
     std::vector<data_types> input_dts;
-    for (auto& dep : node.get_dependencies()) {
-        if (dep->is_valid_output_layout())
-            input_dts.push_back(dep->get_output_layout().data_type);
+    for (auto& dep : node.get_dependencies_new()) {
+        if (dep.first->is_valid_output_layout(dep.second))
+            input_dts.push_back(dep.first->get_output_layout().data_type);
     }
 
     // Return f32 data_type as default inference precision if any layout is invalid
-    if (input_dts.size() != node.get_dependencies().size() || !node.is_valid_output_layout())
+    if (input_dts.size() != node.get_dependencies_new().size() || !node.is_all_valid_output_layout())
         return data_types::f32;
 
+#if 0
     data_types output_dt = node.get_output_layout().data_type;
-
     assert(!input_dts.empty());
     if (node.is_type<reorder>()) {
         // If reorder has different input/output types - pick the max one as runtime precision
@@ -1204,7 +1238,7 @@ data_types program::get_inference_precision(const program_node& node) const {
             return data_type_traits::max_type(input_dts[0], input_dts[1]);
         }
     }
-
+#endif
     return input_dts[0];
 }
 
@@ -1229,9 +1263,9 @@ program::primitives_info program::get_current_stage_info() const {
         for (auto& user : p->users) {
             users.push_back(user->id());
         }
-        std::vector<primitive_id> dependencies;
-        for (auto& a : p->dependencies) {
-            dependencies.push_back(a->id());
+        std::vector<input_info> dependencies;
+        for (auto& a : p->dependencies_new) {
+            dependencies.push_back(a.first->id());
         }
 
         std::vector<primitive_id> fused;
@@ -1244,20 +1278,25 @@ program::primitives_info program::get_current_stage_info() const {
         }
 
         // Initialize output_layout with dummy values and use them if layout is invalid
-        layout output_layout{ cldnn::data_types::f32, cldnn::format::any, {1, 1, 1, 1} };
-
-        if (p->is_valid_output_layout())
-            output_layout = p->get_output_layout();
-
+        std::vector<layout> output_layouts;
+        std::vector<std::string> layout_formats;
+        for (size_t i = 0; i < p->get_primitive()->num_outputs; ++i) {
+            layout output_layout{ cldnn::data_types::f32, cldnn::format::any, {1, 1, 1, 1} };
+            if (p->is_valid_output_layout(i)) {
+                output_layout = p->get_output_layout();
+            }
+            output_layouts.push_back(output_layout);
+            layout_formats.push_back(fmt_to_str(output_layout.format));
+        }
         primitive_info pi(p->id(),
                           type_to_str(p->get_primitive()),
                           dependencies,
                           users,
                           fused,
-                          output_layout,
-                          fmt_to_str(output_layout.format),
+                          output_layouts,
+                          layout_formats,
                           get_implementation_info(p->id()),
-                          p->is_valid_output_layout() ?
+                          p->is_all_valid_output_layout() ?
                             get_inference_precision(*p) : cldnn::data_types::f32,
                           p->selected_impl ? p->selected_impl->is_cpu() : false,
                           exec_id++);
@@ -1297,6 +1336,7 @@ const program::primitives_info& program::get_primitives_info() const { return pr
 
 void program::apply_opt_pass(base_pass& pass) { pm->run(*this, pass); }
 
+#if 0
 void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
     lo.set_implementation_forcing(options.get<build_option_type::force_implementations>()->forcing);
 
@@ -1511,3 +1551,4 @@ std::pair<int64_t, int64_t> program::get_estimated_device_mem_usage() {
 
     return std::make_pair(const_sum, get_engine().get_used_device_memory(allocation_type::usm_device));
 }
+#endif

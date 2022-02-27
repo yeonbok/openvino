@@ -18,7 +18,7 @@ struct typed_program_node<arg_max_min> : public typed_program_node_base<arg_max_
 
 public:
     typed_program_node(std::shared_ptr<primitive> prim, program& prog) : parent(prim, prog) {}
-//    program_node& input() const { return get_dependency(0); }
+    program_node& input() const { return *get_dependency_new(0).first; }
 };
 
 using arg_max_min_node = typed_program_node<arg_max_min>;
@@ -29,13 +29,7 @@ class typed_primitive_inst<arg_max_min> : public typed_primitive_inst_base<arg_m
 
 public:
     static layout calc_output_layout(arg_max_min_node const& node);
-    static std::vector<layout> calc_output_layouts(arg_max_min_node const& node) {
-        std::vector<layout> layouts;
-        for (auto i = 0; i < node.get_outputs_count() ; ++i) {
-            layouts.push_back(calc_output_layout(node));
-        }
-        return layouts;
-    }
+//    static std::vector<layout> calc_output_layouts(arg_max_min_node const& node);
     static std::string to_string(arg_max_min_node const& node);
 
 public:

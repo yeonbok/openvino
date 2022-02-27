@@ -59,7 +59,7 @@ struct primitive_type_base : primitive_type {
         return implementation_map<PType>::check_io_eq(node);
     }
 
-    cldnn::layout calc_output_layout(const cldnn::program_node& node) const override {
+    cldnn::layout calc_output_layout(const cldnn::program_node& node, int32_t idx = 0) const override {
         if (node.type() != this)
             throw std::invalid_argument("primitive_type_base::calc_output_layout: primitive type mismatch");
 
@@ -71,19 +71,24 @@ struct primitive_type_base : primitive_type {
         if (node.type() != this)
             throw std::invalid_argument("primitive_type_base::calc_output_layout: primitive type mismatch");
         // TODO : for now only limited types are updated with new dtype
+#if 0
         if (node.is_type<arg_max_min>())
             return typed_primitive_inst<arg_max_min>::calc_output_layouts(node);
         else
             return {typed_primitive_inst<PType>::calc_output_layout(node)};
+#else
+        return { typed_primitive_inst<PType>::calc_output_layout(node) };
+#endif
     }
 
-
+#if 0
     std::string to_string(const cldnn::program_node& node) const override {
         if (node.type() != this)
             throw std::invalid_argument("primitive_type_base::to_string: primitive type mismatch");
 
         return typed_primitive_inst<PType>::to_string(node);
     }
+#endif
 };
 
 }  // namespace cldnn

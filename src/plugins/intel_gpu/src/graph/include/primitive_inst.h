@@ -164,6 +164,7 @@ public:
         return _node.is_output();
     }
 
+    //TODO for multiple output
     bool mem_allocated() const {
         return _mem_allocated;
     }
@@ -187,7 +188,7 @@ protected:
     // this is a set of dependencies in terms of memory, if execution of this primitive requires data from another one,
     // it should be added to this set
 //    std::vector<std::shared_ptr<primitive_inst>> _deps;
-    std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> _deps_new;
+    std::vector<std::pair<std::shared_ptr<primitive_inst>, int32_t>> _deps_new;
 
     // this is a set of dependencies in terms of execution
     // execution of all primitives from this set should be enough to guarantee that all memory deps (see _deps)
@@ -196,7 +197,7 @@ protected:
     // only one fused primitive which will calculate multiple outputs (for example device enqueue can work in such
     // manner) in general - this member is introduced to relax logical connection between primitives which have to be
     // executed and memories which are used by this primitive
-    std::vector<std::shared_ptr<primitive_inst>> _exec_deps;
+    std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> _exec_deps_new;
 
     // _output is optional because its initialization might be postponed (reshape_inst may either allocate it's own
     // buffer or attach input as output
@@ -214,14 +215,14 @@ protected:
 
     memory::ptr allocate_output();
     std::vector<memory::ptr> allocate_outputs();
-    static std::vector<std::shared_ptr<primitive_inst>> build_exec_deps(
-        std::vector<std::shared_ptr<primitive_inst>> const& mem_deps);
+    static std::vector<std::pair<std::shared_ptr<primitive_inst>, int32_t>> build_exec_deps(
+        std::vector<std::pair<std::shared_ptr<primitive_inst>, int32_t>> const& mem_deps);
 
     // event function called by primitive_inst::execute after checking if primitive should rerun and before calling
     // _impl->execute() mainly for reshape (to update output memory if reshape_node.is_in_place() == true)
     virtual void on_execute() {}
 
-    static std::string generic_to_string(program_node const& node, const char* type_name);
+//    static std::string generic_to_string(program_node const& node, const char* type_name);
 };
 
 /*
@@ -300,8 +301,8 @@ protected:
 
     typed_primitive_inst_base(network& network, typed_node const& node, std::vector<memory::ptr> buffers)
         : typed_primitive_inst_base(network, node, false) {
-        for (size_t i = 0; i < _outputs.size() ; ++i) {
-            _outputs[i] = buffers[i];
+        for (size_t i = 0; i < buffers.size() ; ++i) {
+            _outputs.push_back(buffers[i]);
         }
     }
 

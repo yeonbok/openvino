@@ -5,7 +5,7 @@
 #include "test_utils.h"
 
 #include <intel_gpu/primitives/arg_max_min.hpp>
-#include <intel_gpu/primitives/mutable_data.hpp>
+//#include <intel_gpu/primitives/mutable_data.hpp>
 #include <intel_gpu/primitives/data.hpp>
 #include <intel_gpu/primitives/input_layout.hpp>
 #include <intel_gpu/primitives/permute.hpp>
@@ -683,11 +683,11 @@ TEST(top_k_layer_tests, second_output_taylor) {
 
     topology topology;
     topology.add(input_layout("input", input->get_layout()));
-    topology.add(cldnn::data("const", top_k_input));
+    topology.add(cldnn::data("const", {top_k_input}));
     topology.add(arg_max_min("arg_max", {input_info("input", 0), input_info("const", 0)}, arg_max_min::max, top_k, arg_max_min::batch, arg_max_min::sort_type::sort_by_values, false));
     topology.add(permute("permute_1", {input_info("arg_max", 0)}, {0, 1, 2, 3}));
     topology.add(permute("permute_2", {input_info("arg_max", 1)}, {0, 1, 2, 3}));
-    topology.add(concatenation("concat", {input_info("permute_1"), input_info("permute_2")}, concatenation::along_b));
+    topology.add(concatenation("concat", {input_info("permute_1"), input_info("permute_2")}, concatenation::along_b, data_types::f32));
 
     std::vector<float> input_vec = {
             //y0x0 y0x1 y1x0 y1x1

@@ -91,7 +91,7 @@ public:
         //}
 
         if (outputs_num == 2) {
-            argm_params.outputs.push_back(convert_data_tensor(arg.get_output_layout()));
+            argm_params.outputs.push_back(convert_data_tensor(arg.get_output_layout(0)));
         }
 
 
