@@ -5,6 +5,7 @@
 #pragma once
 
 #include "intel_gpu/graph/program.hpp"
+#if 0
 #include "layout_optimizer.h"
 #include "split_inst.h"
 #include "lstm_inst.h"
@@ -12,7 +13,8 @@
 #include "quantize_inst.h"
 #include "eltwise_inst.h"
 #include "convolution_inst.h"
-#include "permute_inst.h"
+#include "program_node.h"
+#endif
 #include <string>
 #include <vector>
 #include <memory>
@@ -70,15 +72,14 @@ public:
 private:
     void run(program& p) override;
 };
-
+#if 0 // taylor
 class calculate_prior_boxes : public base_pass {
 public:
     calculate_prior_boxes() : base_pass("calculated_prior_boxes") {}
-
 private:
     void run(program& p) override;
 };
-
+#endif
 class compile_graph : public base_pass {
 public:
     compile_graph() : base_pass("compile_graph") {}
@@ -110,9 +111,9 @@ public:
 
 private:
     void run(program& p) override;
-    void handle_split_node(program& p, split_node& node);
-    void handle_lstm_node(program& p, lstm_node& node);
-    void handle_dynamic_lstm_node(program& p, lstm_dynamic_node& node);
+//    void handle_split_node(program& p, split_node& node);
+//    void handle_lstm_node(program& p, lstm_node& node);
+//    void handle_dynamic_lstm_node(program& p, lstm_dynamic_node& node);
     void set_outputs(program& p);
 };
 
@@ -154,15 +155,15 @@ public:
 
 private:
     void run(program& p) override;
-    void handle_quantize_node(program& p, quantize_node& quantize_node);
-    void prepare_packed_quantize(program& p, quantize_node& quantize_node);
-    void prepare_dequantize_merge(program& p, eltwise_node& eltwise_node);
-    void remove_fake_reorders(program& p, reorder_node& reorder_node);
-    void prepare_asymmetric_quantization(program& p, convolution_node& convolution_node);
-    void prepare_scale_shift_opt(program &p, quantize_node& quantize_node);
-    bool optimize_quantize(program &p, quantize_node& quantize_node);
+//    void handle_quantize_node(program& p, quantize_node& quantize_node);
+//    void prepare_packed_quantize(program& p, quantize_node& quantize_node);
+//    void prepare_dequantize_merge(program& p, eltwise_node& eltwise_node);
+//    void remove_fake_reorders(program& p, reorder_node& reorder_node);
+//    void prepare_asymmetric_quantization(program& p, convolution_node& convolution_node);
+//    void prepare_scale_shift_opt(program &p, quantize_node& quantize_node);
+//    bool optimize_quantize(program &p, quantize_node& quantize_node);
 };
-
+#if 0
 class prepare_conv_eltw_fusing : public base_pass {
 public:
     explicit prepare_conv_eltw_fusing(layout_optimizer& lo_ref, bool b_fs_yx_fsv16_opt = false) :
@@ -354,16 +355,16 @@ public:
 class memory_dependency_pass : public base_pass {
 public:
     explicit memory_dependency_pass(const std::string& pass_name) : base_pass(pass_name) {}
-    void add_memory_dependency(program_node* node, std::pair<program_node*, int32_t> dep) {
-        if (node->can_be_optimized() || !dep.first->can_be_optimized()) {
-            node->add_memory_dependency({dep.first->id(), dep.second});
+    void add_memory_dependency(program_node* node, program_node* dep) {
+        if (node->can_be_optimized() || !dep->can_be_optimized()) {
+            node->add_memory_dependency(dep->id());
         } else {
-            if (node->id() == dep.first->id()) {
+            if (node->id() == dep->id()) {
                 return;
             }
-            for (auto subdep : dep.first->get_dependencies_new()) {
+            for (auto subdep : dep->get_dependencies()) {
                 add_memory_dependency(node, subdep);
-                add_memory_dependency(subdep.first, {node, 0}); //TODO(taylor): is this correct?
+                add_memory_dependency(subdep, node);
             }
         }
     }
@@ -374,7 +375,6 @@ public:
     basic_memory_dependencies() : memory_dependency_pass("basic_memory_dependencies") {}
     void run(program& p) override;
 };
-
 class skipped_branch_memory_dependencies : public memory_dependency_pass {
 public:
     skipped_branch_memory_dependencies() : memory_dependency_pass("skipped_branch_memory_dependencies") {}
@@ -400,5 +400,5 @@ public:
     add_onednn_optimization_attributes() : base_pass("add_onednn_optimization_attributes") {}
     void run(program& p) override;
 };
-
+#endif
 }  // namespace cldnn

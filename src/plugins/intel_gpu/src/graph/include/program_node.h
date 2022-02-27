@@ -5,7 +5,7 @@
 #pragma once
 
 #include "intel_gpu/primitives/primitive.hpp"
-#include "intel_gpu/primitives/activation.hpp"
+//#include "intel_gpu/primitives/activation.hpp"
 #include "intel_gpu/primitives/implementation_desc.hpp"
 #include "intel_gpu/graph/program.hpp"
 
@@ -31,6 +31,7 @@ class pre_replace_deconv;
 
 template <class T>
 struct typed_program_node;
+struct program_node;
 
 class json_composite;
 class xml_composite;
@@ -69,8 +70,10 @@ struct fused_primitive_desc {
     std::vector<std::pair<primitive_id, size_t>> deps;
     std::map<primitive_id, size_t> fused_deps;
     size_t total_num_deps = 0;
+#if 0 // TODO(taylor)
     activation_func activation;
     activation_additional_params activation_params = { 0.f, 0.f };
+#endif
     layout input_layout = layout(data_types::f32, format::bfyx, tensor());
     layout output_layout = layout(data_types::f32, format::bfyx, tensor());
 };
@@ -135,7 +138,7 @@ public:
     std::vector<std::pair<program_node*, int>> const& get_dependencies_new() const { return dependencies_new; }
 
 //    program_node& get_dependency(size_t idx) const { return *dependencies.at(idx); }
-    std::pair<program_node*, int> get_dependency_new(size_t idx) const { return dependencies_new.at(idx); }
+    std::pair<program_node*, int32_t> get_dependency_new(size_t idx) const { return dependencies_new.at(idx); }
 
     // replaces idx-th dependency of 'this' with 'new_dep', calls program::remove_if_dangling(old_dep)
     void replace_dependency(size_t idx, program_node& new_dep);
@@ -148,9 +151,9 @@ public:
     void remove_dependency(size_t idx);
     void remove_dependency(program_node& node);
 
-    std::set<primitive_id> get_memory_dependencies() const;
-    void add_memory_dependency(std::pair<primitive_id, int32_t> dep);
-    void add_memory_dependency(std::vector<std::pair<primitive_id, int32_t>> deps);
+    std::set<input_info, input_info::cmp> get_memory_dependencies() const;
+    void add_memory_dependency(input_info dep);
+    void add_memory_dependency(std::vector<input_info> deps);
 
     template <class PType>
     bool have_user_with_type() const {
@@ -184,11 +187,12 @@ public:
     }
 
     // only calculated output layout (for external usage), does not modify/use cached output layout nor invalidate users
-    layout calc_output_layout() const;
+    layout calc_output_layout(int32_t idx = 0) const;
     std::vector<layout> calc_output_layouts() const;
 
     // uses cached output layout if valid, if not calls 'calc_output_layout' and stores its result + invalidate all
     // users if layout has changed and @p invalidate_users_if_changed is set to true
+    layout get_output_layout(int32_t idx) const;
     layout get_output_layout(bool invalidate_users_if_changed = true, int32_t idx = 0);
     std::vector<layout> get_output_layouts(bool invalidate_users_if_changed = true);
     // returns cached output layout if valid, otherwise throws an exception
@@ -206,7 +210,7 @@ public:
 
     // forces recalculation of cached output layout, invalidates users if new layout is different than previous one and
     // @p invalidate_users_if_changed is set to true returns whether output layout has changed
-    bool recalc_output_layout(bool invalidate_users_if_changed = true);
+    bool recalc_output_layouts(bool invalidate_users_if_changed = true);
 
     bool is_padded() { return static_cast<bool>(get_output_layout().data_padding); }
     bool is_padded() const { return static_cast<bool>(get_output_layout().data_padding); }
@@ -219,8 +223,14 @@ public:
     void set_output(bool out) { output = out; }
     bool is_output() const { return output; }
 
-    bool is_valid_output_layout() const { return valid_output_layout; }
-
+//    bool is_valid_output_layout() const { return valid_output_layout; }
+    bool is_valid_output_layout(size_t idx) const { return valid_output_layouts[idx]; }
+    bool is_all_valid_output_layout() const {
+        for (auto l : valid_output_layouts) {
+            if (l == false) return false;
+        }
+        return true;
+    }
     uint8_t mark(uint8_t val = 1) {
         uint8_t ret = user_mark;
         user_mark = val;
@@ -230,7 +240,7 @@ public:
     bool is_marked() const { return user_mark != 0; }
     bool is_marked(uint8_t val) const { return user_mark == val; }
     uint8_t get_user_mark() const { return user_mark; }
-
+#if 0
     void add_fused_activation(activation_func activation_func,
                               activation_additional_params additional_params) {
         fused_activations.emplace_back(activation_func, additional_params);
@@ -253,11 +263,11 @@ public:
                        [](fused_activation_params const& p) { return p.params; });
         return params;
     }
-
     void copy_fused_activation(const program_node& rhs) {
         fused_activations = rhs.fused_activations;
     }
 
+#endif
     // check/set if the node can be optimized out (removed from the network)
     bool can_be_optimized() const { return optimized; }
     void can_be_optimized(bool opt) { optimized = opt; }
@@ -274,7 +284,7 @@ public:
     // Checks if primitive supports any padding in specified axis
     bool support_padding(int axis) const { return _support_padding_in_axis[axis]; }
     // Checks whether with current format specified padding is supported;
-    bool is_padding_supported(int axis, int padding) const;
+//    bool is_padding_supported(int axis, int padding) const;
 
     primitive_id get_org_primitive_id() const { return org_id; }
 
@@ -380,19 +390,19 @@ protected:
 
     std::unique_ptr<primitive_impl> selected_impl;
 
-    bool valid_output_layout = false;
-    bool valid_output_layouts = false;
+//    bool valid_output_layout = false;
+    std::vector<bool> valid_output_layouts;
 //    layout output_layout = layout(data_types::f32, format::bfyx, tensor());
     std::vector<layout> output_layouts;
 
 //    std::vector<program_node*> dependencies;
     std::vector<std::pair<program_node*, int>> dependencies_new;
     std::list<program_node*> users;
-    std::map<int, std::list<program_node*>> users_new;
+    std::map<int, std::list<program_node*>> idx_users;
+    std::map<program_node*, int32_t> users_idx;
 
     // list of primitives that can reuse same memory buffers due to execution order conflicts
-    std::set<primitive_id> memory_dependencies;
-    std::set<input_info> memory_dependencies_new;
+    std::set<input_info, input_info::cmp> memory_dependencies;
 
     impl_types impl_type = impl_types::any;
     bool constant = false;
@@ -410,14 +420,14 @@ protected:
     const primitive_id org_id;
 
     struct fused_activation_params {
-        activation_func func = activation_func::none;
-        activation_additional_params params = {0.0f, 0.0f};
+//        activation_func func = activation_func::none;
+//        activation_additional_params params = {0.0f, 0.0f};
 
         fused_activation_params() {}
 
-        fused_activation_params(activation_func _func, activation_additional_params _params) :
-                func(_func),
-                params(_params) {}
+//        fused_activation_params(activation_func _func, activation_additional_params _params) :
+//                func(_func),
+//                params(_params) {}
     };
 
     std::vector<fused_activation_params> fused_activations;

@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "intel_gpu/primitives/detection_output.hpp"
-#include "intel_gpu/primitives/proposal.hpp"
-#include "intel_gpu/primitives/non_max_suppression.hpp"
+//#include "intel_gpu/primitives/detection_output.hpp"
+//#include "intel_gpu/primitives/proposal.hpp"
+//#include "intel_gpu/primitives/non_max_suppression.hpp"
 
 namespace cldnn {
 namespace cpu {
@@ -20,9 +20,9 @@ namespace detail {
         attach_##prim##_impl();   \
     }
 
-REGISTER_CPU(proposal);
-REGISTER_CPU(non_max_suppression);
-REGISTER_CPU(detection_output);
+//REGISTER_CPU(proposal);
+//REGISTER_CPU(non_max_suppression);
+//REGISTER_CPU(detection_output);
 
 #undef REGISTER_CPU
 

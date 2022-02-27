@@ -24,7 +24,7 @@ layout concatenation_inst::calc_output_layout(concatenation_node const& node) {
     auto output_format = input_layout.format;
     auto result_sizes = input_layout.size.sizes();
 
-    auto output_dt = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
+    auto output_dt = !desc->output_data_types.empty() ? *desc->output_data_types[0] : input_layout.data_type;
 
     auto axis_index = node.get_primitive()->axis;
 
@@ -69,7 +69,7 @@ std::string concatenation_inst::to_string(concatenation_node const& node) {
 concatenation_inst::typed_primitive_inst(network& network, concatenation_node const& node)
     : parent(network, node) {
     auto input_layout = node.input().get_output_layout();
-    auto output_layout = node.get_output_layout();
+    auto output_layout = node.get_output_layout(0);
 
     tensor::value_type concat_count = 0;
     auto input_size = input_layout.size;

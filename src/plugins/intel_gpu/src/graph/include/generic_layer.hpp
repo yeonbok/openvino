@@ -32,7 +32,7 @@ struct generic_layer : public primitive_base<generic_layer> {
     /// @param output_layout Requested memory layout.
     /// @param mean Primitive id to get mean subtract values.
     generic_layer(const primitive_id& id,
-                  const input_info& input,
+                  const primitive_id& input,
                   const layout& output_layout,
                   const kernel_selector::generic_kernel_params& generic_params,
                   const primitive_id& ext_prim_id = "",

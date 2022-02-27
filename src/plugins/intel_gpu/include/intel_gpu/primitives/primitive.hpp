@@ -37,6 +37,17 @@ struct input_info {
 
     primitive_id pid;
     int32_t idx;
+    struct cmp {
+        bool operator() (const input_info a, const input_info b) {
+            if (a.pid < b.pid) {
+                return true;
+            } else if (a.pid == b.pid) {
+                return a.idx < b.idx;
+            } else {
+                return false;
+            }
+        }
+    };
 };
 /// @brief Base class of network primitive description.
 struct primitive {
@@ -46,14 +57,14 @@ public:
               const primitive_id& id,
               const std::vector<input_info>& input,
               const primitive_id& ext_prim_id = "",
-              const padding& output_padding = padding(),
-              const optional_data_type output_data_type = optional_data_type(), // TODO: change for multiple output
+              const std::vector<padding>& output_paddings = {padding()},
+              const std::vector<optional_data_type> output_data_types = {optional_data_type()}, // TODO: change for multiple output
               const int num_outputs = 1)
         : type(type),
           id(id),
           ext_prim_id(ext_prim_id),
-          output_padding(output_padding),
-          output_data_type(output_data_type),
+          output_paddings(output_paddings),
+          output_data_types(output_data_types),
           input(input),
           num_outputs(num_outputs) {}
 
@@ -110,10 +121,10 @@ public:
     const primitive_id ext_prim_id;
 
     /// @brief Requested output padding.
-    padding output_padding;
+    std::vector<padding> output_paddings;
 
     /// @brief Requested output precision, if any.
-    optional_data_type output_data_type;
+    std::vector<optional_data_type> output_data_types;
 
     size_t input_size() const { return input.size(); }
 
@@ -147,20 +158,20 @@ protected:
     explicit primitive_base(const primitive_id& id,
                             const std::vector<input_info>& input,
                             const primitive_id& ext_prim_id = "",
-                            const padding& output_padding = padding(),
-                            optional_data_type output_data_type = optional_data_type(),
+                            const std::vector<padding>& output_paddings = {padding()},
+                            std::vector<optional_data_type> output_data_types = {optional_data_type()},
                             const int num_outputs = 1)
-        : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type, num_outputs) {}
+        : primitive(PType::type_id(), id, input, ext_prim_id, output_paddings, output_data_types, num_outputs) {}
 };
 
 struct primitive_info {
     primitive_info(const primitive_id& original_id,
                    const std::string& type_id,
-                   const std::vector<primitive_id>& dependencies,
-                   const std::vector<primitive_id>& users,
+                   const std::vector<input_info>& dependencies,
+                   const std::vector<primitive_id>& users, // TODO (taylor) multiple output
                    const std::vector<primitive_id>& fused_ids,
-                   const layout& output_layout,
-                   const std::string& layout_str,
+                   const std::vector<layout>& output_layouts,
+                   const std::vector<std::string>& layout_strs,
                    const std::string& kernel_id,
                    const data_types& runtime_precision,
                    bool is_cpu,
@@ -170,8 +181,8 @@ struct primitive_info {
           c_dependencies(dependencies),
           c_users(users),
           c_fused_ids(fused_ids),
-          output_layout(output_layout),
-          layout_str(layout_str),
+          output_layouts(output_layouts),
+          layout_strs(layout_strs),
           kernel_id(kernel_id),
           runtime_precision(runtime_precision),
           is_cpu(is_cpu),
@@ -179,11 +190,11 @@ struct primitive_info {
 
     primitive_id original_id;
     std::string type_id;
-    primitive::primitive_id_arr c_dependencies;
+    std::vector<input_info> c_dependencies;
     primitive::primitive_id_arr c_users;
     primitive::primitive_id_arr c_fused_ids;
-    layout output_layout;
-    std::string layout_str;
+    std::vector<layout> output_layouts;
+    std::vector<std::string> layout_strs;
     std::string kernel_id;
     data_types runtime_precision;
     bool is_cpu;

@@ -6,8 +6,7 @@
 
 #include "pass_manager.h"
 #include "data_inst.h"
-#include "arg_max_min_inst.h"
-#include "mutable_data_inst.h"
+//#include "mutable_data_inst.h"
 #include "program_node.h"
 #include "intel_gpu/runtime/engine.hpp"
 #include "runtime/cldnn_itt.hpp"
@@ -24,9 +23,8 @@ void compile_graph::run(program& p) {
     for (auto& node : p.get_processing_order()) {
         node->set_unique_id();
         if (!node->is_type<data>()) {
-            node->get_output_layout();
-            if (node->is_type<arg_max_min>()) {
-                node->get_output_layouts();
+            for (int i = 0; i < node->get_outputs_count() ; ++i) {
+                node->get_output_layout(true, i);
             }
         }
     }
@@ -37,7 +35,8 @@ void compile_graph::run(program& p) {
     std::exception_ptr exception;
     for (int idx = 0; idx < proc_order.size(); idx++) {
         auto& node = *(std::next(proc_order.begin(), idx));
-        if (!node->is_type<data>() && !(node->is_type<mutable_data>() && node->get_dependencies_new().empty())) {
+//            if (!node->is_type<data>() && !(node->is_type<mutable_data>() && node->get_dependencies().empty())) {
+        if (!node->is_type<data>()) {
             tasks.push_back([node, &exception] {
                 try {
                     node->selected_impl = node->type()->choose_impl(*node);

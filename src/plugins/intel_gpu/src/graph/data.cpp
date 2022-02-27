@@ -42,13 +42,13 @@ data_node::typed_program_node(const std::shared_ptr<data> dprim, program& prog)
     : parent(dprim, prog), mems(dprim->mems) {
     constant = true;
     can_share_buffer(false);
-    recalc_output_layout(false);
+    recalc_output_layouts(false);
 }
 
 void data_node::attach_memory(memory::ptr new_mem, bool invalidate_users_if_changed, int32_t idx) {
     // TODO : multiple outputs
     mems[idx] = new_mem;
-    recalc_output_layout(invalidate_users_if_changed);
+    recalc_output_layouts(invalidate_users_if_changed);
 }
 
 std::string data_inst::to_string(data_node const& node) {
