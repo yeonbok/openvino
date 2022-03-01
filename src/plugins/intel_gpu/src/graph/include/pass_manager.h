@@ -13,8 +13,8 @@
 #include "quantize_inst.h"
 #include "eltwise_inst.h"
 #include "convolution_inst.h"
-#include "program_node.h"
 #endif
+#include "program_node.h"
 #include <string>
 #include <vector>
 #include <memory>

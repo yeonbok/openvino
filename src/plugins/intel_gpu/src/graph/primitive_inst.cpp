@@ -4,11 +4,15 @@
 
 #include "primitive_inst.h"
 #include "data_inst.h"
-//#include "mutable_data_inst.h"
-//#include "generic_layer_inst.h"
+#if 0 // TODO(taylor)
+#include "mutable_data_inst.h"
+#include "generic_layer_inst.h"
+#endif
 #include "input_layout_inst.h"
 #include "arg_max_min_inst.h"
+#if 0 // TODO(taylor)
 #include "experimental_detectron_roi_feature_extractor_inst.hpp"
+#endif
 
 #include "intel_gpu/graph/network.hpp"
 #include "intel_gpu/runtime/engine.hpp"
@@ -203,12 +207,12 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
       _outputs({}), _output_changed(false), _mem_allocated(allocate_memory) {
     if (allocate_memory) {
         std::cout << "primitive_inst::primitive_inst()::" << node.id() << std::endl;
+#if 0
         // In case when output is mutable_data primitive, and other users dependencies are only used for
         // suychronization, The output memory of such primitive will be fused with mutable_data
         auto users = node.get_users();
         auto user_count = users.size();
         uint32_t mutable_data_count = 0;
-#if 0
         for (auto& user : users) {
             // Get mutable_data nodes count from nodes users
             if (user->is_type<mutable_data>()) {
