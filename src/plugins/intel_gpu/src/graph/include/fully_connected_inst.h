@@ -53,6 +53,10 @@ public:
     memory::ptr bias_memory() const { return dep_memory_ptr(2); }
 
     bool bias_term() const { return !argument.bias.empty(); }
+
+    virtual event::ptr update_weights() override;
+
+    memory::ptr reordered_weights = nullptr;
 };
 
 using fully_connected_inst = typed_primitive_inst<fully_connected>;
