@@ -313,7 +313,7 @@ private:
     layout_optimizer& _lo;
     reorder_factory& _rf;
 };
-
+#endif
 class trim_to_outputs : public base_pass {
 public:
     trim_to_outputs() : base_pass("trimmed") {}
@@ -321,7 +321,7 @@ public:
 private:
     void run(program& p) override;
 };
-
+#if 0 // TODO(taylor)
 class strided_slice_optimize : public base_pass {
 public:
     strided_slice_optimize() : base_pass("strided_slice_optimize") {}

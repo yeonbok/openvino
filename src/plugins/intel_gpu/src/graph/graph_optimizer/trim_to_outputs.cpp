@@ -23,8 +23,8 @@ void trim_to_outputs::run(program& p) {
     }
 
     // do backward bfs starting from all outputs
-    std::queue<const std::vector<program_node*>*> queue;
-    queue.push(&p.get_outputs());
+    std::queue<std::vector<program_node*>> queue;
+    queue.push(p.get_outputs());
 
     std::vector<program_node*> special_nodes;
     for (auto& node : p.get_processing_order()) {
@@ -35,17 +35,21 @@ void trim_to_outputs::run(program& p) {
             (node->is_type<pooling>() && node->as<pooling>().get_primitive()->mode == pooling_mode::max_with_argmax))
             special_nodes.push_back(node);
     }
-    queue.push(&special_nodes);
+    queue.push(special_nodes);
 
     while (!queue.empty()) {
         auto nodes_list = queue.front();
         queue.pop();
 
-        for (auto& node : *nodes_list) {
+        for (auto& node : nodes_list) {
             if (!node->is_marked()) {
                 node->mark();
                 if (!node->get_dependencies().empty()) {
-                    queue.push(&node->get_dependencies());
+                    std::vector<program_node*> deps;
+                    for (auto& dep : node->get_dependencies()) {
+                        deps.push_back(dep.first);
+                    }
+                    queue.push(deps);
                 }
             }
         }

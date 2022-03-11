@@ -19,8 +19,8 @@ struct typed_program_node<max_unpooling> : public typed_program_node_base<max_un
 
 public:
     using parent::parent;
-    program_node& input() const { return get_dependency(0); }
-    program_node& argmax() const { return get_dependency(1); }
+    program_node& input() const { return *get_dependency(0).first; }
+    program_node& argmax() const { return *get_dependency(1).first; }
 };
 
 using max_unpooling_node = typed_program_node<max_unpooling>;

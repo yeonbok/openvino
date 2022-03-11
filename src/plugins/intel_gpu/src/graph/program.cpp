@@ -453,9 +453,7 @@ void program::set_options() {
 
 void program::build_program(bool is_internal) {
     init_graph();
-#if 0 // TODO(taylor)
     { pre_optimize_graph(is_internal); }
-#endif
     run_graph_compilation();
 #if 0 // TODO(taylor)
     { post_optimize_graph(is_internal); }
@@ -496,7 +494,7 @@ void program::init_graph() {
 }
 
 void program::run_graph_compilation() { apply_opt_pass<compile_graph>(); }
-#if 0 // TODO(taylor)
+
 void program::pre_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PreOptimizeGraph");
 
@@ -505,7 +503,7 @@ void program::pre_optimize_graph(bool is_internal) {
 
     // trim to outputs
     apply_opt_pass<trim_to_outputs>();  // ToDo remove hidden dependencies from trimm pass
-
+#if 0 // TODO(andrew)
     // handle symmetric and asymmetric padding for input
     apply_opt_pass<handle_input_padding>();
 
@@ -573,7 +571,9 @@ void program::pre_optimize_graph(bool is_internal) {
 
     // add optimization attributes for onednn primitives
     apply_opt_pass<add_onednn_optimization_attributes>();
+#endif
 }
+#if 0 // TODO(taylor)
 void program::post_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PostOptimizeGraph");
     // input reorder for fully connected if necessary
@@ -1135,19 +1135,21 @@ void program::fuse_nodes(program_node &fused_node,
     fused_node.set_output_layout(peer_layout, false);
     fused_node.recalc_output_layout(true);
 }
-
+#endif
 void program::remove_nodes(std::vector<program_node*>& to_remove) {
     for (auto const& node : to_remove) {
         if (node->is_input()) {
             get_inputs().remove(node);
         } else {
             for (auto& dep : node->dependencies) {
-                dep->users.remove(node);
+                dep.first->users.remove(node);
             }
         }
         for (auto& user : node->users) {
-            user->dependencies.erase(std::remove(user->dependencies.begin(), user->dependencies.end(), node),
-                                     user->dependencies.end());
+            user->dependencies.erase(std::remove_if(user->dependencies.begin(), user->dependencies.end(),
+            [&](const std::pair<program_node*, int>& dep) {
+                return node == dep.first;
+            }), user->dependencies.end());
         }
         get_processing_order().erase(node);
         optimized_out.push_back(node->id());
@@ -1155,7 +1157,6 @@ void program::remove_nodes(std::vector<program_node*>& to_remove) {
     }
 }
 
-#endif
 // TODO: break this function into number of smaller ones + add per-primitive fields (possibly use
 // primitive_inst::to_string?)
 void program::dump_program(const char* stage,

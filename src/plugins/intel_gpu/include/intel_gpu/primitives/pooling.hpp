@@ -44,14 +44,14 @@ struct pooling : public primitive_base<pooling> {
     /// @param size Pooling kernel size.
     /// @param pad Defines logical pad value added to input tensor.
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             pooling_mode mode,
             const tensor& size,
             const tensor& stride,
             const tensor& pad = {0, 0, 0, 0},
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           argmax(""),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(false),
@@ -71,7 +71,7 @@ struct pooling : public primitive_base<pooling> {
     /// @param size Pooling kernel size.
     /// @param pad Defines logical pad value added to input tensor
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             const primitive_id& argmax,
             pooling_mode mode,
             const tensor& size,
@@ -79,7 +79,7 @@ struct pooling : public primitive_base<pooling> {
             const tensor& pad = {0, 0, 0, 0},
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           argmax(argmax),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(false),
@@ -97,7 +97,7 @@ struct pooling : public primitive_base<pooling> {
     /// @param pad Defines logical pad value added to input tensor.
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             pooling_mode mode,
             const tensor& size,
             const tensor& stride,
@@ -106,7 +106,7 @@ struct pooling : public primitive_base<pooling> {
             const data_types output_data_type,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding, optional_data_type{output_data_type}),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}, {optional_data_type{output_data_type}}),
           argmax(""),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(false),
@@ -127,7 +127,7 @@ struct pooling : public primitive_base<pooling> {
     /// @param pad Defines logical pad value added to input tensor.
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             const primitive_id& argmax,
             pooling_mode mode,
             const tensor& size,
@@ -136,7 +136,7 @@ struct pooling : public primitive_base<pooling> {
             tensor output_size,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           argmax(argmax),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(false),
@@ -151,11 +151,11 @@ struct pooling : public primitive_base<pooling> {
     /// @param input Input primitive id.
     /// @param mode Pooling mode.
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             pooling_mode mode,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           argmax(""),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(true),
@@ -177,7 +177,7 @@ struct pooling : public primitive_base<pooling> {
     /// @param index_element_type Data type of index output.
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             const primitive_id& indices_output,
             const tensor& size,
             const tensor& stride,
@@ -190,7 +190,7 @@ struct pooling : public primitive_base<pooling> {
             const data_types output_data_type,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-            : primitive_base(id, {input, indices_output}, ext_prim_id, output_padding, optional_data_type{output_data_type}),
+            : primitive_base(id, {input, indices_output}, ext_prim_id, {output_padding}, {optional_data_type{output_data_type}}),
               argmax(""),
               indices_output(indices_output),
               mode(pooling_mode::max),
@@ -237,12 +237,12 @@ struct pooling : public primitive_base<pooling> {
     bool maxPoolOpset8Features{false};
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
         if (!argmax.empty())
-            ret.push_back(argmax);
+            ret.push_back({std::ref(argmax), 0});
         if (!indices_output.empty())
-            ret.push_back(indices_output);
+            ret.push_back({std::ref(indices_output), 0});
         return ret;
     }
 };
