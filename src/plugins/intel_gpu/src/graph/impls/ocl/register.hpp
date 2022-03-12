@@ -25,7 +25,6 @@
 #include "intel_gpu/primitives/fully_connected.hpp"
 #include "intel_gpu/primitives/gather.hpp"
 #include "intel_gpu/primitives/gather_nd.hpp"
-#include "intel_gpu/primitives/gather_elements.hpp"
 #include "intel_gpu/primitives/gemm.hpp"
 #include "intel_gpu/primitives/lrn.hpp"
 #include "intel_gpu/primitives/lstm.hpp"
@@ -106,7 +105,6 @@ REGISTER_OCL(embed);
 REGISTER_OCL(fully_connected);
 REGISTER_OCL(gather);
 REGISTER_OCL(gather_nd);
-REGISTER_OCL(gather_elements);
 REGISTER_OCL(gemm);
 REGISTER_OCL(lrn);
 REGISTER_OCL(lstm_gemm);

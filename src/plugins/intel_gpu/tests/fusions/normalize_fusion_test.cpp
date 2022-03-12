@@ -13,7 +13,6 @@
 #include <intel_gpu/primitives/permute.hpp>
 #include <intel_gpu/primitives/gather.hpp>
 #include <intel_gpu/primitives/gather_nd.hpp>
-#include <intel_gpu/primitives/gather_elements.hpp>
 #include <intel_gpu/primitives/scatter_update.hpp>
 #include <intel_gpu/primitives/scatter_nd_update.hpp>
 #include <intel_gpu/primitives/scatter_elements_update.hpp>
