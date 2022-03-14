@@ -24,6 +24,7 @@
 #include <algorithm>
 
 
+#if 0
 #define PRINT_TIME(func) \
 { \
  auto start = std::chrono::high_resolution_clock::now(); \
@@ -31,6 +32,9 @@
  auto duration = std::chrono::high_resolution_clock::now() - start; \
  std::cerr << id() << " " <<  #func <<  " " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << "us\n"; \
 }
+#else
+#define PRINT_TIME(func)
+#endif
 
 namespace {
 
@@ -94,10 +98,9 @@ bool is_any_user_cpu(const std::list<const program_node*>& users) {
 uint32_t primitive_inst::get_network_id() const { return _network.get_id(); }
 
 void primitive_inst::update_shape() {
-    // Do nothing for static nodes
-    // if (!_node.is_dynamic())
-    //     return;
     GPU_DEBUG_GET_INSTANCE(debug_config);
+    if (!_network.shape_changed())
+        return;
 
     auto new_layout = _node.type()->calc_output_layout(_node, *_node.get_kernel_impl_params());
     auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
