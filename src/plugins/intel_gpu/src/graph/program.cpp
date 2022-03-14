@@ -510,11 +510,11 @@ void program::pre_optimize_graph(bool is_internal) {
 
     // handle symmetric and asymmetric padding for input
     apply_opt_pass<handle_input_padding>();
-#if 0 // TODO(andrew)
+
     processing_order.calculate_BFS_processing_order();  // this method makes sense only for OOOQ (out of order execution queue)
 
     apply_opt_pass<reverse_optional_nodes_outputs>();
-
+#if 0 // TODO(andrew)
     bool output_size_handling_enabled = analyze_output_size_handling_need();
     for (auto& node : processing_order) {
         if (!node->is_type<data>())

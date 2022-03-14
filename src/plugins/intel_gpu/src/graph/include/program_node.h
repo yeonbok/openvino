@@ -192,12 +192,12 @@ public:
 
     // uses cached output layout if valid, if not calls 'calc_output_layout' and stores its result + invalidate all
     // users if layout has changed and @p invalidate_users_if_changed is set to true
-    layout get_output_layout(int32_t idx) const;
     layout get_output_layout(bool invalidate_users_if_changed = true, int32_t idx = 0);
-    std::vector<layout> get_output_layouts(bool invalidate_users_if_changed = true);
     // returns cached output layout if valid, otherwise throws an exception
-    layout get_output_layout() const;
+    layout get_output_layout(int32_t idx = 0) const;
+    std::vector<layout> get_output_layouts(bool invalidate_users_if_changed = true);
     std::vector<layout> get_output_layouts() const;
+
     // returns result of get_output_layout without padding
     layout get_non_padded_output_layout(bool invalidate_users_if_changed = true);
 
@@ -212,8 +212,8 @@ public:
     // @p invalidate_users_if_changed is set to true returns whether output layout has changed
     bool recalc_output_layouts(bool invalidate_users_if_changed = true);
 
-    bool is_padded(int32_t idx = 0) { return static_cast<bool>(get_output_layouts().at(idx).data_padding); }
-    bool is_padded(int32_t idx = 0) const { return static_cast<bool>(get_output_layouts().at(idx).data_padding); }
+    bool is_padded() { return static_cast<bool>(get_output_layout().data_padding); }
+    bool is_padded() const { return static_cast<bool>(get_output_layout().data_padding); }
 
     bool has_padded_dependency();
     bool has_padded_dependency() const;
