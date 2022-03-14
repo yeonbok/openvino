@@ -388,8 +388,8 @@ layout prior_box_inst::calc_output_layout(prior_box_node const& node) {
     // Second feature stores the variance of each prior coordinate.
 
     auto output_data_type = input_layout.data_type == data_types::f16 ? data_types::f16 : data_types::f32;
-    if (node.get_primitive()->output_data_type)
-        output_data_type = *node.get_primitive()->output_data_type;
+    if (!node.get_primitive()->output_data_types.empty())
+        output_data_type = *node.get_primitive()->output_data_types.at(0);
     return {output_data_type, cldnn::format::bfyx, cldnn::tensor(1, 2, 1, layer_width * layer_height * num_priors * 4)};
 }
 

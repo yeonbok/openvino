@@ -15,7 +15,7 @@ primitive_type_id detection_output::type_id() {
 }
 
 layout detection_output_inst::calc_output_layout(detection_output_node const& node) {
-    assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
+    assert(node.get_primitive()->output_data_types.empty() &&
            "Output data type forcing is not supported for "
            "detection_output_node!");
     CLDNN_ERROR_NOT_EQUAL(node.id(),
@@ -178,7 +178,7 @@ detection_output_inst::typed_primitive_inst(network& network, detection_output_n
                      "Detection output layer doesn't support output padding.");
     CLDNN_ERROR_BOOL(node.id(),
                      "Detection output layer Prior-box input padding",
-                     node.get_dependency(2).is_padded(),
+                     node.get_dependency(2).first->is_padded(),
                      "Detection output layer doesn't support input padding in Prior-Box input");
 }
 

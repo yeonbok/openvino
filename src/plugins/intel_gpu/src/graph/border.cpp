@@ -17,9 +17,9 @@ primitive_type_id border::type_id() {
 }
 
 layout border_inst::calc_output_layout(border_node const& node) {
-    assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
+    assert(node.get_primitive()->output_data_types.empty() &&
            "Output data type forcing is not supported for border_node!");
-    auto input_layout = node.input().get_output_layout();
+    auto input_layout = node.input().get_output_layouts().at(0);
     auto desc = node.get_primitive();
 
     auto&& new_size = input_layout.size;

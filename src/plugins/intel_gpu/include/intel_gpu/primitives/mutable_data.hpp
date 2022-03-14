@@ -32,10 +32,10 @@ struct mutable_data : public primitive_base<mutable_data> {
     /// @param filler_type @ref data filling function, default is zero
     /// @note If memory is attached by memory::attach(), the attached buffer should be valid till network build.
     mutable_data(const primitive_id& id,
-                 memory::ptr mem,
+                 std::vector<memory::ptr> mems,
                  const primitive_id& ext_prim_id = "",
                  filler_type fill_type = filler_type::no_fill)
-        : primitive_base(id, {}, ext_prim_id, padding()), mem(mem), fill_type(fill_type) {}
+        : primitive_base(id, {}, ext_prim_id, {padding()}), mems(mems), fill_type(fill_type) {}
 
     /// @brief Constructs mutable_data primitive with inputs.
     /// @param id This primitive id.
@@ -44,15 +44,15 @@ struct mutable_data : public primitive_base<mutable_data> {
     /// @note If memory is attached by memory::attach(), the attached buffer should be valid till network build.
     /// @param filler_type @ref data filling function, default is zero
     mutable_data(const primitive_id& id,
-                 const std::vector<primitive_id>& input,
-                 memory::ptr mem,
+                 const std::vector<input_info>& input,
+                 std::vector<memory::ptr> mems,
                  const primitive_id& ext_prim_id = "",
                  filler_type fill_type = filler_type::no_fill)
-        : primitive_base(id, {input}, ext_prim_id, padding()), mem(mem), fill_type(fill_type) {}
+        : primitive_base(id, {input}, ext_prim_id, {padding()}), mems(mems), fill_type(fill_type) {}
 
     /// @brief @ref memory object which contains data.
     /// @note If memory is attached by memory::attach(), the attached buffer should be valid till network build.
-    memory::ptr mem;
+    std::vector<memory::ptr> mems;
 
     /// @brief Specifies function which will be used to fill weights.
     filler_type fill_type;

@@ -47,8 +47,8 @@
 #include "data_inst.h"
 #if 0 // TODO(taylor)
 #include "deconvolution_inst.h"
-#include "detection_output_inst.h"
 #endif
+#include "detection_output_inst.h"
 #include "input_layout_inst.h"
 #if 0 // TODO(taylor)
 #include "shuffle_channels_inst.h"
@@ -58,12 +58,16 @@
 #include "lstm_inst.h"
 #include "lstm_elt_inst.h"
 #include "lstm_gemm_inst.h"
+#endif
 #include "mutable_data_inst.h"
+#if 0 // TODO(andrew)
 #include "pooling_inst.h"
 #include "border_inst.h"
 #include "primitive_inst.h"
+#endif
 #include "prior_box_inst.h"
 #include "proposal_inst.h"
+#if 0 // TODO(andrew)
 #include "reorder_inst.h"
 #include "split_inst.h"
 #include "mvn_inst.h"
@@ -503,10 +507,10 @@ void program::pre_optimize_graph(bool is_internal) {
 
     // trim to outputs
     apply_opt_pass<trim_to_outputs>();  // ToDo remove hidden dependencies from trimm pass
-#if 0 // TODO(andrew)
+
     // handle symmetric and asymmetric padding for input
     apply_opt_pass<handle_input_padding>();
-
+#if 0 // TODO(andrew)
     processing_order.calculate_BFS_processing_order();  // this method makes sense only for OOOQ (out of order execution queue)
 
     apply_opt_pass<reverse_optional_nodes_outputs>();
@@ -600,23 +604,21 @@ void program::post_optimize_graph(bool is_internal) {
 
 // mark if the node is constant assuming that all dependencies are marked properly
 void program::mark_if_constant(program_node& node) {
-#if 0 // TODO (taylor)
     if (node.get_dependencies().empty() || node.is_type<prior_box>()) {
         return;
     }
     node.constant = true;
     for (auto& dep : node.get_dependencies()) {
-        if (!dep->is_constant()) {
+        if (!dep.first->is_constant()) {
             node.constant = false;
             return;
         }
     }
-#endif
     return;
 }
 // mark if the node is in data flow assuming that all dependencies are marked properly
 void program::mark_if_data_flow(program_node& node) {
-#if 0 // TODO (taylor)
+    // TODO: mutable_data will be removed once multiple outputs is supported
     if (node.is_type<mutable_data>() || node.is_type<input_layout>()) {
         node.data_flow = true;
     } else {
@@ -625,13 +627,12 @@ void program::mark_if_data_flow(program_node& node) {
         if (node.is_type<detection_output>() || node.is_type<proposal>())
             inputs_count = 2;  // ignore third input as it is related to prior boxes (i.e. concat of prior-boxes)
         for (size_t idx = 0; idx < inputs_count; idx++) {
-            if (node.get_dependency(idx).is_in_data_flow()) {
+            if (node.get_dependency(idx).first->is_in_data_flow()) {
                 node.data_flow = true;
                 return;
             }
         }
     }
-#endif
     return;
 }
 
@@ -785,7 +786,6 @@ program_node& program::get_or_create(std::shared_ptr<primitive> prim) {
     return *new_node;
 }
 
-#if 0 // TODO(taylor)
 void program::add_intermediate(program_node& node,
                                program_node& next,
                                size_t prev_idx,
@@ -795,7 +795,7 @@ void program::add_intermediate(program_node& node,
         throw std::invalid_argument(
             "Node which is about to be added in between two other nodes should not have any existing dependencies");
 
-    auto& prev = next.get_dependency(prev_idx);
+    auto& prev = *next.get_dependency(prev_idx).first;
     // firstly add connection, later replace dependency, so 'prev' won't become dangling and therefore removed
     if (connect_int_node_with_old_dep) {
         add_connection(prev, node);
@@ -839,7 +839,7 @@ void program::add_intermediate(program_node& node,
     bool node_found = false;
     size_t idx = 0;
     for (size_t i = 0; i < next.get_dependencies().size(); i++) {
-        auto& input = next.get_dependency(i);
+        auto& input = *next.get_dependency(i).first;
         if (input.id() == prev.id()) {
             idx = i;
             node_found = true;
@@ -852,11 +852,12 @@ void program::add_intermediate(program_node& node,
     }
     add_intermediate(node, next, idx, connect_int_node_with_old_dep, move_usrs_of_prev_to_node);
 }
+
 void program::add_connection(program_node& prev, program_node& next) {
     prev.users.push_back(&next);
-    next.dependencies.push_back(&prev);
+    next.dependencies.push_back({&prev, 0});
 }
-
+#if 0 // TODO(taylor)
 void program::remove_connection(program_node& prev, program_node& next) {
     prev.users.remove(&next);
     next.dependencies.erase(std::remove(next.dependencies.begin(), next.dependencies.end(), &prev),
@@ -973,7 +974,7 @@ void program::replace(program_node& old_node, program_node& new_node) {
         outputs.push_back(&new_node);
     }
 }
-
+#endif
 bool program::remove_if_dangling(program_node& node) {
     if (!node.users.empty())
         return false;
@@ -991,7 +992,7 @@ bool program::remove_if_dangling(program_node& node) {
     }
     return true;
 }
-
+#if 0 // TODO(andrew)
 bool program::extract_and_remove(program_node& node) {
     if (node.get_dependencies().size() != 1)
         return false;

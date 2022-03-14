@@ -212,8 +212,8 @@ public:
     // @p invalidate_users_if_changed is set to true returns whether output layout has changed
     bool recalc_output_layouts(bool invalidate_users_if_changed = true);
 
-    bool is_padded() { return static_cast<bool>(get_output_layout().data_padding); }
-    bool is_padded() const { return static_cast<bool>(get_output_layout().data_padding); }
+    bool is_padded(int32_t idx = 0) { return static_cast<bool>(get_output_layouts().at(idx).data_padding); }
+    bool is_padded(int32_t idx = 0) const { return static_cast<bool>(get_output_layouts().at(idx).data_padding); }
 
     bool has_padded_dependency();
     bool has_padded_dependency() const;

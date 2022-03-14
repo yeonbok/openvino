@@ -20,32 +20,35 @@ primitive_type_id mutable_data::type_id() {
 }
 
 namespace {
-memory::ptr attach_or_copy_data(network& network, memory::ptr mem, bool reuse) {
+std::vector<memory::ptr> attach_or_copy_data(network& network, std::vector<memory::ptr> mems, bool reuse) {
     auto& engine = network.get_engine();
     auto& stream = network.get_stream();
+    std::vector<memory::ptr> result_mems;
+    for (auto mem : mems) {
+        if (mem->is_allocated_by(engine) && reuse) {
+            result_mems.push_back(mem);
+            return result_mems;
+        }
 
-    if (mem->is_allocated_by(engine) && reuse) {
-        return mem;
+        memory::ptr result = engine.allocate_memory(mem->get_layout(), false);
+        mem_lock<char, mem_lock_type::read> src(mem, stream);
+        mem_lock<char, mem_lock_type::write> dst(result, stream);
+        std::copy(src.begin(), src.end(), dst.begin());
+        result_mems.push_back(result);
     }
-
-    memory::ptr result = engine.allocate_memory(mem->get_layout(), false);
-    mem_lock<char, mem_lock_type::read> src(mem, stream);
-    mem_lock<char, mem_lock_type::write> dst(result, stream);
-    std::copy(src.begin(), src.end(), dst.begin());
-
-    return result;
+    return result_mems;
 }
 }  // namespace
 
 mutable_data_node::typed_program_node(const std::shared_ptr<mutable_data> dprim, program& prog)
-    : parent(dprim, prog), mem(dprim->mem) {
-    recalc_output_layout(false);
+    : parent(dprim, prog), mems(dprim->mems) {
+    recalc_output_layouts(false);
     can_share_buffer(false);
 }
 
-void mutable_data_node::attach_memory(memory::ptr new_mem, bool invalidate_users_if_changed) {
-    mem = new_mem;
-    recalc_output_layout(invalidate_users_if_changed);
+void mutable_data_node::attach_memory(memory::ptr new_mem, bool invalidate_users_if_changed, int32_t idx) {
+    mems[idx] = new_mem;
+    recalc_output_layouts(invalidate_users_if_changed);
 }
 
 std::string mutable_data_inst::to_string(mutable_data_node const& node) {
@@ -61,11 +64,11 @@ void mutable_data_inst::set_output_memory(memory::ptr mem_new, bool check) {
     auto& eng = _network.get_engine();
     auto& mem_node = const_cast<program_node&>(_node).as<mutable_data>();
     auto& mem_attached = mem_node.get_attached_memory();
-    const auto& mem_orig = *_output;
+    const auto& mem_orig = *_outputs[0];
 
     if (!eng.is_the_same_buffer(*mem_new, mem_attached)) {
         if (_node.is_input()) {
-            mem_new->copy_from(_network.get_stream(), *_output);
+            mem_new->copy_from(_network.get_stream(), *_outputs[0]);
         }
 
         // re-attach mutable_data internal memory if necessary
@@ -77,6 +80,6 @@ void mutable_data_inst::set_output_memory(memory::ptr mem_new, bool check) {
 }
 
 mutable_data_inst::typed_primitive_inst(network& network, mutable_data_node const& node)
-    : parent(network, node, attach_or_copy_data(network, node.get_attached_memory_ptr(), network.is_primary_stream())) {}
+    : parent(network, node, attach_or_copy_data(network, node.get_attached_memory_ptrs(), network.is_primary_stream())) {}
 
 }  // namespace cldnn
