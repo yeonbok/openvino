@@ -27,6 +27,15 @@
 #include <memory>
 #include <algorithm>
 
+
+#define PRINT_TIME(func) \
+{ \
+ auto start = std::chrono::high_resolution_clock::now(); \
+ func; \
+ auto duration = std::chrono::high_resolution_clock::now() - start; \
+ std::cerr << id() << " " <<  #func <<  " " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << "us\n"; \
+}
+
 namespace {
 
 bool is_optimized_output_user(const program_node* user) {
@@ -88,7 +97,7 @@ bool is_any_user_cpu(const std::list<const program_node*>& users) {
 
 uint32_t primitive_inst::get_network_id() const { return _network.get_id(); }
 
-void primitive_inst::check_memory_to_set(const memory& mem, const layout& layout) const {
+oid primitive_inst::check_memory_to_set(const memory& mem, const layout& layout) const {
     OPENVINO_ASSERT((mem.get_layout() == layout) || layout.is_dynamic(), "[GPU] Unexpected layout of input memory");
 
     // check shared image/buffer compatibility, if applicable
@@ -276,13 +285,13 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     if (is_dynamic()) {
         static std::mutex m;
         {
-            update_shape();
+            PRINT_TIME(update_shape());
             if (shape_changed() || !_impl) {
-                update_impl();
-                auto ev = update_weights();
+                PRINT_TIME(update_impl());
+                PRINT_TIME(auto ev = update_weights());
                 if (ev)
                     dependencies.push_back(ev);
-                realloc_if_needed();
+                PRINT_TIME(realloc_if_needed());
             }
         }
     }
