@@ -28,6 +28,7 @@
 #include <algorithm>
 
 
+#if 0
 #define PRINT_TIME(func) \
 { \
  auto start = std::chrono::high_resolution_clock::now(); \
@@ -35,6 +36,9 @@
  auto duration = std::chrono::high_resolution_clock::now() - start; \
  std::cerr << id() << " " <<  #func <<  " " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << "us\n"; \
 }
+#else
+#define PRINT_TIME(func)
+#endif
 
 namespace {
 
