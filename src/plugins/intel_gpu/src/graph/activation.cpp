@@ -16,7 +16,7 @@ primitive_type_id activation::type_id() {
 }
 
 layout activation_inst::calc_output_layout(activation_node const& node) {
-    assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
+    assert(node.get_primitive()->output_data_types.empty() &&
            "Output data type forcing is not supported for activation_node!");
 
     auto input_node_layout = node.input().get_non_padded_output_layout();
@@ -62,7 +62,7 @@ std::string activation_inst::to_string(activation_node const& node) {
 
 activation_inst::typed_primitive_inst(network& network, activation_node const& node) : parent(network, node) {
     auto input_arg = node.input().get_output_layout();
-    auto output_arg = node.get_output_layout();
+    auto output_arg = node.get_output_layout(0);
 
     CLDNN_ERROR_NOT_EQUAL(node.id(),
                           "ReLU input number",

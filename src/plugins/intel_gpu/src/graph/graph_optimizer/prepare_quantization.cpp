@@ -44,10 +44,10 @@ bool check_binarization(memory::ptr mem_input_low, memory::ptr mem_input_high, p
 void  prepare_quantization::prepare_scale_shift_opt(program &p, quantize_node& quantize_node) {
     const auto& stream = p.get_stream();
 
-    program_node &input_low_node = quantize_node.get_dependency(1);
-    program_node &input_high_node = quantize_node.get_dependency(2);
-    program_node &output_low_node = quantize_node.get_dependency(3);
-    program_node &output_high_node = quantize_node.get_dependency(4);
+    program_node &input_low_node = *quantize_node.get_dependency(1).first;
+    program_node &input_high_node = *quantize_node.get_dependency(2).first;
+    program_node &output_low_node = *quantize_node.get_dependency(3).first;
+    program_node &output_high_node = *quantize_node.get_dependency(4).first;
 
     if (!input_low_node.is_type<data>() || !input_high_node.is_type<data>() ||
         !output_low_node.is_type<data>() || !output_high_node.is_type<data>()) {
@@ -238,10 +238,10 @@ void  prepare_quantization::prepare_scale_shift_opt(program &p, quantize_node& q
         return;
     }
 
-    auto in_scale_prim = std::make_shared<data>(quantize_node.id() + "_in_scale", mem_input_scale);
-    auto in_shift_prim = std::make_shared<data>(quantize_node.id() + "_in_shift", mem_input_shift);
-    auto out_scale_prim = std::make_shared<data>(quantize_node.id() + "_output_scale", mem_output_scale);
-    auto out_shift_prim = std::make_shared<data>(quantize_node.id() + "_output_shift", mem_output_shift);
+    auto in_scale_prim = std::make_shared<data>(quantize_node.id() + "_in_scale", std::vector<memory::ptr>{mem_input_scale});
+    auto in_shift_prim = std::make_shared<data>(quantize_node.id() + "_in_shift", std::vector<memory::ptr>{mem_input_shift});
+    auto out_scale_prim = std::make_shared<data>(quantize_node.id() + "_output_scale", std::vector<memory::ptr>{mem_output_scale});
+    auto out_shift_prim = std::make_shared<data>(quantize_node.id() + "_output_shift", std::vector<memory::ptr>{mem_output_shift});
     auto& in_scale_node = p.get_or_create(in_scale_prim);
     auto& in_shift_node = p.get_or_create(in_shift_prim);
     auto& out_scale_node = p.get_or_create(out_scale_prim);
@@ -338,8 +338,8 @@ void prepare_quantization::handle_quantize_node(program& p, quantize_node& quant
 }
 
 void prepare_quantization::prepare_packed_quantize(program& p, quantize_node& quantize_node) {
-    program_node &input_low_node = quantize_node.get_dependency(1);
-    program_node &input_high_node = quantize_node.get_dependency(2);
+    program_node &input_low_node = *quantize_node.get_dependency(1).first;
+    program_node &input_high_node = *quantize_node.get_dependency(2).first;
 
     if (quantize_node.is_output() || !input_low_node.is_type<data>() || !input_high_node.is_type<data>()) {
         return;
@@ -370,13 +370,13 @@ void prepare_quantization::prepare_packed_quantize(program& p, quantize_node& qu
         output_dt = data_types::bin;
     }
 
-    quantize_node.typed_desc()->output_data_type = optional_data_type{output_dt};
-    quantize_node.recalc_output_layout();
+    quantize_node.typed_desc()->output_data_types = {optional_data_type{output_dt}};
+    quantize_node.recalc_output_layouts();
 }
 
 void prepare_quantization::prepare_dequantize_merge(program& p, eltwise_node& eltwise_node) {
     for (size_t i = 1; i < eltwise_node.get_dependencies().size(); i++) {
-        if (!eltwise_node.get_dependency(i).is_type<data>()) {
+        if (!eltwise_node.get_dependency(i).first->is_type<data>()) {
             return;
         }
     }
@@ -385,7 +385,7 @@ void prepare_quantization::prepare_dequantize_merge(program& p, eltwise_node& el
         if (dep_id >= eltw.get_dependencies().size())
             CLDNN_ERROR_MESSAGE(eltw.id(), "Invalid dependency id in dequantize optimization");
 
-        return eltw.get_dependency(dep_id).as<data>().get_attached_memory_ptr();
+        return eltw.get_dependency(dep_id).first->as<data>().get_attached_memory_ptr();
     };
 
     const auto& eltw_mode = eltwise_node.get_primitive()->mode;
@@ -408,7 +408,7 @@ void prepare_quantization::prepare_dequantize_merge(program& p, eltwise_node& el
 
         bool valid_scale_node = true;
         for (size_t i = 1; i < eltwise_dep.get_dependencies().size(); i++) {
-            if (!eltwise_dep.get_dependency(i).is_type<data>()) {
+            if (!eltwise_dep.get_dependency(i).first->is_type<data>()) {
                 valid_scale_node = false;
             }
         }
@@ -436,7 +436,7 @@ void prepare_quantization::prepare_dequantize_merge(program& p, eltwise_node& el
 
         if (same_params) {
             while (!eltwise_node.get_dependencies().empty()) {
-                auto& dep = eltwise_node.get_dependency(0);
+                auto& dep = *eltwise_node.get_dependency(0).first;
                 p.remove_connection(dep, eltwise_node);
                 p.remove_if_dangling(dep);
             }
@@ -452,8 +452,8 @@ void prepare_quantization::remove_fake_reorders(program& p, reorder_node& reorde
     }
 
     auto &usr = reorder_node.get_users().front();
-    auto &dep = reorder_node.get_dependency(0);
-    if (!(usr->is_type<convolution>() && usr->get_dependency(1).get_output_layout().data_type == data_types::i8) ||
+    auto &dep = *reorder_node.get_dependency(0).first;
+    if (!(usr->is_type<convolution>() && usr->get_dependency(1).first->get_output_layout().data_type == data_types::i8) ||
         !dep.is_input() ||
         dep.get_output_layout().data_type != data_types::u8 ||
         (reorder_node.get_output_layout().data_type != data_types::f32 && reorder_node.get_output_layout().data_type != data_types::f16) ||
@@ -501,10 +501,10 @@ void prepare_quantization::prepare_asymmetric_quantization(program &p, convoluti
         if (node.get_users().size() != 1)
             return false;
 
-        auto in0_layout = node.get_dependency(0).get_output_layout();
-        auto in1_layout = node.get_dependency(1).get_output_layout();
+        auto in0_layout = node.get_dependency(0).first->get_output_layout();
+        auto in1_layout = node.get_dependency(1).first->get_output_layout();
 
-        if (!node.get_dependency(1).is_type<data>())
+        if (!node.get_dependency(1).first->is_type<data>())
             return false;
 
         // Check if sub inputs are quantized
@@ -571,8 +571,8 @@ void prepare_quantization::prepare_asymmetric_quantization(program &p, convoluti
         }
     };
 
-    auto& in0 = convolution_node.get_dependency(0);
-    auto& in1 = convolution_node.get_dependency(1);
+    auto& in0 = *convolution_node.get_dependency(0).first;
+    auto& in1 = *convolution_node.get_dependency(1).first;
 
     bool asymmetric_data = in0.is_type<eltwise>() && is_zero_point_node(in0.as<eltwise>());
     bool asymmetric_weights = in1.is_type<eltwise>() && is_zero_point_node(in1.as<eltwise>());
@@ -599,7 +599,7 @@ void prepare_quantization::prepare_asymmetric_quantization(program &p, convoluti
         return;
 
 
-    primitive_id input = old_conv_prim->input[0];
+    primitive_id input = old_conv_prim->input[0].pid;
     std::vector<primitive_id> a_zero_points = {};
 
     cldnn::program_node* new_input = &in0;
@@ -615,8 +615,8 @@ void prepare_quantization::prepare_asymmetric_quantization(program &p, convoluti
     int ifm_aligned = ((ifm + 31) / 32) * 32;
 
     if (asymmetric_data) {
-        new_input = &in0.get_dependency(0);
-        new_a_zp = &in0.get_dependency(1);
+        new_input = in0.get_dependency(0).first;
+        new_a_zp = in0.get_dependency(1).first;
 
         auto l = layout{new_a_zp->get_output_layout().data_type, format::bfyx, tensor{1, ifm_aligned, 1, 1}};
         int s = new_a_zp->get_output_layout().size.feature[0];
@@ -638,8 +638,8 @@ void prepare_quantization::prepare_asymmetric_quantization(program &p, convoluti
     std::vector<primitive_id> weights = old_conv_prim->weights;
     cldnn::program_node* new_weights = &in1;
     if (asymmetric_weights) {
-        new_weights = &in1.get_dependency(0);
-        new_w_zp = &in1.get_dependency(1);
+        new_weights = in1.get_dependency(0).first;
+        new_w_zp = in1.get_dependency(1).first;
 
         auto l = layout{new_w_zp->get_output_layout().data_type, format::bfyx, tensor{ofm_aligned, 1, 1, 1}};
         int s = new_w_zp->get_output_layout().size.batch[0];
@@ -667,23 +667,23 @@ void prepare_quantization::prepare_asymmetric_quantization(program &p, convoluti
         int groups = static_cast<int>(convolution_node.get_groups());
         fill_compensation(groups, w, azp, wzp, data_to_allocate);
 
-        auto compensation_prim = std::make_shared<data>(convolution_node.id() + "_compensation", data_to_allocate);
+        auto compensation_prim = std::make_shared<data>(convolution_node.id() + "_compensation", std::vector<memory::ptr>{data_to_allocate});
         new_compenstation = &p.get_or_create(compensation_prim);
         p.get_inputs().push_back(new_compenstation);
         compensation.push_back(new_compenstation->id());
     }
 
     // Collect dependencies of a new convolution node
-    std::vector<program_node*> dependencies = {new_input, new_weights};
-    cldnn::program_node* new_bias = !old_conv_prim->bias.empty() ? &convolution_node.get_dependency(2) : nullptr;
+    std::vector<std::pair<program_node*, int>> dependencies = {{new_input, 0}, {new_weights, 0}};
+    cldnn::program_node* new_bias = !old_conv_prim->bias.empty() ? convolution_node.get_dependency(2).first : nullptr;
     if (new_bias)
-        dependencies.push_back(new_bias);
+        dependencies.push_back({new_bias, 0});
     if (new_w_zp)
-        dependencies.push_back(new_w_zp);
+        dependencies.push_back({new_w_zp, 0});
     if (new_a_zp)
-        dependencies.push_back(new_a_zp);
+        dependencies.push_back({new_a_zp, 0});
     if (new_compenstation)
-        dependencies.push_back(new_compenstation);
+        dependencies.push_back({new_compenstation, 0});
 
     auto new_conv_prim = std::make_shared<convolution>(
                 convolution_node.id() + "_asymmetric",
@@ -694,14 +694,14 @@ void prepare_quantization::prepare_asymmetric_quantization(program &p, convoluti
                 a_zero_points,
                 compensation,
                 old_conv_prim->groups,
-                *old_conv_prim->output_data_type,
+                *old_conv_prim->output_data_types.at(0),
                 old_conv_prim->stride,
                 old_conv_prim->pad,
                 old_conv_prim->dilation,
                 output_size,
                 old_conv_prim->grouped_weights_shape,
                 "",
-                old_conv_prim->output_padding);
+                old_conv_prim->output_paddings.at(0));
 
     auto& new_conv_node = p.get_or_create(new_conv_prim);
 
@@ -759,13 +759,13 @@ void prepare_quantization::prepare_asymmetric_quantization(program &p, convoluti
         p.remove_if_dangling(in1);
     }
 
-    new_conv_node.recalc_output_layout();
+    new_conv_node.recalc_output_layouts();
 }
 
 bool prepare_quantization::optimize_quantize(program &p, quantize_node& quantize_node) {
     const auto& stream = p.get_stream();
 
-    auto& input = quantize_node.get_dependency(0);
+    auto& input = *quantize_node.get_dependency(0).first;
     auto parallel_quantizes_num = 0;
     for (auto& usr : input.get_users()) {
         if (usr->is_type<quantize>())
@@ -777,10 +777,10 @@ bool prepare_quantization::optimize_quantize(program &p, quantize_node& quantize
 
     auto quantize_prim_first = quantize_node.get_primitive();
 
-    program_node &input_low_node_first = quantize_node.get_dependency(1);
-    program_node &input_high_node_first = quantize_node.get_dependency(2);
-    program_node &output_low_node_first = quantize_node.get_dependency(3);
-    program_node &output_high_node_first = quantize_node.get_dependency(4);
+    program_node &input_low_node_first = *quantize_node.get_dependency(1).first;
+    program_node &input_high_node_first = *quantize_node.get_dependency(2).first;
+    program_node &output_low_node_first = *quantize_node.get_dependency(3).first;
+    program_node &output_high_node_first = *quantize_node.get_dependency(4).first;
 
     if (!input_low_node_first.is_type<data>() || !input_high_node_first.is_type<data>() ||
         !output_low_node_first.is_type<data>() || !output_high_node_first.is_type<data>()) {
@@ -804,10 +804,10 @@ bool prepare_quantization::optimize_quantize(program &p, quantize_node& quantize
 
         auto quantize_prim_second = usr->as<quantize>().get_primitive();
 
-        program_node &input_low_node_second = usr->get_dependency(1);
-        program_node &input_high_node_second = usr->get_dependency(2);
-        program_node &output_low_node_second = usr->get_dependency(3);
-        program_node &output_high_node_second = usr->get_dependency(4);
+        program_node &input_low_node_second = *usr->get_dependency(1).first;
+        program_node &input_high_node_second = *usr->get_dependency(2).first;
+        program_node &output_low_node_second = *usr->get_dependency(3).first;
+        program_node &output_high_node_second = *usr->get_dependency(4).first;
 
         if (!input_low_node_second.is_type<data>() || !input_high_node_second.is_type<data>() ||
             !output_low_node_second.is_type<data>() || !output_high_node_second.is_type<data>())
@@ -833,7 +833,7 @@ bool prepare_quantization::optimize_quantize(program &p, quantize_node& quantize
             memcmp(mem_output_high_lock_first.data(), mem_output_high_lock_second.data(), mem_output_high_first->size()) != 0)
             continue;
 
-        if (quantize_prim_first->output_data_type != quantize_prim_second->output_data_type ||
+        if (quantize_prim_first->output_data_types.at(0) != quantize_prim_second->output_data_types.at(0) ||
             quantize_prim_first->levels != quantize_prim_second->levels)
             continue;
 
@@ -845,7 +845,7 @@ bool prepare_quantization::optimize_quantize(program &p, quantize_node& quantize
         return false;
 
     while (!quantize_node.get_dependencies().empty()) {
-        auto& dep = quantize_node.get_dependency(0);
+        auto& dep = *quantize_node.get_dependency(0).first;
         p.remove_connection(dep, quantize_node);
         p.remove_if_dangling(dep);
     }

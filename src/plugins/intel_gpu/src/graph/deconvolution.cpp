@@ -17,7 +17,7 @@ primitive_type_id deconvolution::type_id() {
 }
 
 layout deconvolution_inst::calc_output_layout(deconvolution_node const& node) {
-    assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
+    assert(node.get_primitive()->output_data_types.empty() &&
            "Output data type forcing is not supported for deconvolution_node!");
     auto desc = node.get_primitive();
 
@@ -150,7 +150,7 @@ deconvolution_inst::typed_primitive_inst(network& network, deconvolution_node co
     auto stride = argument.stride;
 
     auto input_inst = node.input().get_output_layout();
-    auto output_inst = node.get_output_layout();
+    auto output_inst = node.get_output_layout(0);
     auto output_size = output_inst.size;
 
     CLDNN_ERROR_NOT_EQUAL(node.id(),
@@ -211,7 +211,7 @@ deconvolution_inst::typed_primitive_inst(network& network, deconvolution_node co
 
         CLDNN_ERROR_NOT_EQUAL(node.id(),
                               "deconvolution padding filling value",
-                              node.get_output_layout().data_padding.filling_value(),
+                              node.get_output_layout(0).data_padding.filling_value(),
                               "padding mode",
                               0.0f,
                               "Unknown padding mode in deconvolution.");

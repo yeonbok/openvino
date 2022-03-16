@@ -34,7 +34,7 @@ struct binary_convolution : public primitive_base<binary_convolution> {
     /// @param pad_value Logical value of padding. Can be one of 3 values: 1 - pad bits equal to 1; -1 -> pad bits equal to 0; 0 -> pad is not counted
     /// @param calc_precision Precision of intermediate accumulators
     binary_convolution(const primitive_id& id,
-                       const primitive_id& input,
+                       const input_info& input,
                        const std::vector<primitive_id>& weights,
                        tensor stride = {1, 1, 1, 1},
                        tensor pad = {0, 0, 0, 0},
@@ -45,7 +45,7 @@ struct binary_convolution : public primitive_base<binary_convolution> {
                        data_types calc_precision = data_types::f32,
                        const primitive_id& ext_prim_id = "",
                        const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding, optional_data_type {calc_precision}),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}, {optional_data_type {calc_precision}}),
           pad(pad),
           stride(stride),
           dilation(dilation),
@@ -73,10 +73,10 @@ struct binary_convolution : public primitive_base<binary_convolution> {
 
     int32_t split() const { return static_cast<int32_t>(weights.size()); }
 
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
         ret.reserve(weights.size());
-        for (auto& w : weights) ret.push_back(std::ref(w));
+        for (auto& w : weights) ret.push_back({std::ref(w), 0});
         return ret;
     }
 };

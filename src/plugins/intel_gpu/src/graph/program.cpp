@@ -31,23 +31,23 @@
 #include "permute_inst.h"
 #if 0 // TODO(taylor)
 #include "custom_gpu_primitive_inst.h"
+#endif
 #include "binary_convolution_inst.h"
+#if 0 // TODO(andrew)
 #include "resample_inst.h"
 #include "reshape_inst.h"
 #include "quantize_inst.h"
 #include "activation_inst.h"
 #include "scale_inst.h"
 #include "depth_to_space_inst.h"
-#include "convolution_inst.h"
 #endif
+#include "convolution_inst.h"
 #include "concatenation_inst.h"
 #if 0 // TODO(taylor)
 #include "crop_inst.h"
 #endif
 #include "data_inst.h"
-#if 0 // TODO(taylor)
 #include "deconvolution_inst.h"
-#endif
 #include "detection_output_inst.h"
 #include "input_layout_inst.h"
 #if 0 // TODO(taylor)
@@ -60,8 +60,8 @@
 #include "lstm_gemm_inst.h"
 #endif
 #include "mutable_data_inst.h"
-#if 0 // TODO(andrew)
 #include "pooling_inst.h"
+#if 0 // TODO(andrew)
 #include "border_inst.h"
 #include "primitive_inst.h"
 #endif
@@ -226,7 +226,6 @@ program_node const& program::get_node(primitive_id const& id) const {
     }
 }
 
-#if 0 // TODO(taylor)
 // TODO: Remove once we will get full support for input/output padding in all primitive implementations.
 bool program::analyze_output_size_handling_need() {
     bool handling_needed = false;
@@ -333,7 +332,7 @@ bool program::analyze_output_size_handling_need() {
 
     return handling_needed;
 }
-#endif
+
 // create new nodes for a program based on the set of nodes
 // method created to be used by propagate_constants to build sub program from constant nodes
 void program::prepare_nodes(std::set<std::shared_ptr<program_node>> const& nodes) {
@@ -514,8 +513,9 @@ void program::pre_optimize_graph(bool is_internal) {
     processing_order.calculate_BFS_processing_order();  // this method makes sense only for OOOQ (out of order execution queue)
 
     apply_opt_pass<reverse_optional_nodes_outputs>();
-#if 0 // TODO(andrew)
-    bool output_size_handling_enabled = analyze_output_size_handling_need();
+
+    // TODO: It will be uncommented after enabling layout_optimizer
+    // bool output_size_handling_enabled = analyze_output_size_handling_need();
     for (auto& node : processing_order) {
         if (!node->is_type<data>())
             node->get_output_layout();
@@ -524,7 +524,7 @@ void program::pre_optimize_graph(bool is_internal) {
     if (options.get<build_option_type::optimize_data>()->enabled()) {
         apply_opt_pass<prepare_quantization>();
     }
-
+#if 0 // TODO(andrew)
     layout_optimizer lo(output_size_handling_enabled);
     set_layout_optimizer_attributes(lo);
 
@@ -857,21 +857,25 @@ void program::add_connection(program_node& prev, program_node& next) {
     prev.users.push_back(&next);
     next.dependencies.push_back({&prev, 0});
 }
-#if 0 // TODO(taylor)
+
 void program::remove_connection(program_node& prev, program_node& next) {
     prev.users.remove(&next);
-    next.dependencies.erase(std::remove(next.dependencies.begin(), next.dependencies.end(), &prev),
-                            next.dependencies.end());
+    next.dependencies.erase(std::remove_if(next.dependencies.begin(), next.dependencies.end(),
+    [&](const std::pair<program_node*, int>& dep) {
+        return &prev == dep.first;
+    }), next.dependencies.end());
 }
 
 void program::remove_all_connections(program_node& node) {
     // since the graph is not topological sorted, we need to remove the node from both dependencies and users
     for (auto& e : node.users) {
-        e->dependencies.erase(std::remove(e->dependencies.begin(), e->dependencies.end(), &node),
-                              e->dependencies.end());
+        e->dependencies.erase(std::remove_if(e->dependencies.begin(), e->dependencies.end(),
+        [&](const std::pair<program_node*, int>& dep) {
+            return &node == dep.first;
+        }), e->dependencies.end());
     }
     for (auto& e : node.dependencies) {
-        e->users.remove(&node);
+        e.first->users.remove(&node);
     }
     node.dependencies.clear();
     node.users.clear();
@@ -893,7 +897,7 @@ void program::rename(program_node& node, primitive_id const& new_id) {
 
     const_cast<primitive_id&>(node.desc->id) = new_id;
 }
-
+#if 0 // TODO(taylor)
 void program::swap_names(program_node& node1, program_node& node2) {
     const auto _extract_id = [](program_node& node) -> primitive_id& {
         return const_cast<primitive_id&>(node.desc->id);
@@ -902,7 +906,7 @@ void program::swap_names(program_node& node1, program_node& node2) {
     nodes_map.at(node1.id()).swap(nodes_map.at(node2.id()));
     std::swap(_extract_id(node1), _extract_id(node2));
 }
-
+#endif
 void program::replace_all_usages(program_node& old_node, program_node& new_node) {
     // We need a copy of users of old_node because old_node may be removed when doing replace_dependency()
     const std::list<program_node*> users(old_node.users);
@@ -922,12 +926,12 @@ void program::replace(program_node& old_node, program_node& new_node) {
             "Replacement node shouldn't be marked as an output since it's impossible to rename such node.");
 
     auto id = old_node.id();
-    new_node.output_layout = old_node.get_output_layout();
-    new_node.valid_output_layout = old_node.valid_output_layout;
+    new_node.output_layouts = old_node.get_output_layouts();
+    new_node.valid_output_layouts = old_node.valid_output_layouts;
 
     // copy old's dependencies
     while (!old_node.dependencies.empty()) {
-        auto& dep = old_node.dependencies.front();
+        auto& dep = old_node.dependencies.front().first;
         add_connection(*dep, new_node);
         remove_connection(*dep, old_node);
     }
@@ -936,8 +940,8 @@ void program::replace(program_node& old_node, program_node& new_node) {
     for (auto& user : old_node.users) {
         new_node.users.push_back(user);
         for (auto& users_dep : user->dependencies) {
-            if (users_dep == &old_node) {
-                users_dep = &new_node;
+            if (users_dep.first == &old_node) {
+                users_dep.first = &new_node;
                 break;
             }
         }
@@ -974,7 +978,7 @@ void program::replace(program_node& old_node, program_node& new_node) {
         outputs.push_back(&new_node);
     }
 }
-#endif
+
 bool program::remove_if_dangling(program_node& node) {
     if (!node.users.empty())
         return false;

@@ -25,9 +25,9 @@ public:
     }
 
     size_t inputs_count() const { return get_primitive()->input.size(); }
-    program_node& mean_nv12() const { return get_dependency(2); }
-    program_node& input(size_t idx = 0) const { return get_dependency(idx); }
-    program_node& mean() const { return get_dependency(1); }
+    program_node& mean_nv12() const { return *get_dependency(2).first; }
+    program_node& input(size_t idx = 0) const { return *get_dependency(idx).first; }
+    program_node& mean() const { return *get_dependency(1).first; }
 
     bool has_mean() const { return !typed_desc()->mean.empty(); }
 
@@ -38,7 +38,7 @@ public:
 
     std::shared_ptr<kernel_selector::fuse_params> get_fuse_params() const override {
         kernel_selector::DataLayout ks_input_layout = convert_data_tensor(input_layout).GetLayout();
-        kernel_selector::DataLayout ks_output_layout = convert_data_tensor(get_output_layout()).GetLayout();
+        kernel_selector::DataLayout ks_output_layout = convert_data_tensor(get_output_layout(0)).GetLayout();
         return std::make_shared<kernel_selector::reorder_fuse_params>(ks_input_layout, ks_output_layout);
     }
 

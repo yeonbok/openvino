@@ -22,9 +22,9 @@ layout reorder_inst::calc_output_layout(reorder_node const& node) {
     auto input_layout = node.input().get_output_layout();
     auto ifmt = input_layout.format;
 
-    auto odt = *node.get_primitive()->output_data_type;
+    auto odt = *node.get_primitive()->output_data_types.at(0);
     auto ofmt = node.get_primitive()->output_format;
-    auto op = node.get_primitive()->output_padding;
+    auto op = node.get_primitive()->output_paddings.at(0);
 
     if (ofmt == format::any) {
         ofmt = ifmt;
@@ -190,7 +190,7 @@ reorder_inst::typed_primitive_inst(network& network, reorder_node const& node)
         reuse_input();
 
     auto input_layout = node.input().get_output_layout();
-    auto output_layout = node.get_output_layout();
+    auto output_layout = node.get_output_layout(0);
 
     CLDNN_ERROR_LESS_THAN(node.id(),
                           "Input dimension size",
@@ -225,15 +225,19 @@ void reorder_inst::on_execute() {
 }
 
 void reorder_inst::reuse_input() {
-    if (static_cast<bool>(_output) && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
+    if (!_outputs.empty() && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
         return;
 
     build_deps();
 
     if (node.requires_reinterpret()) {
-        _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
+        for (auto i = 0; i < node.get_outputs_count(); ++i) {
+            _outputs[i] = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout(i));
+        }
     } else {
-        _output = input_memory_ptr();
+        for (auto i = 0; i < node.get_outputs_count(); ++i) {
+            _outputs[i] = input_memory_ptr(i);
+        }
     }
 }
 

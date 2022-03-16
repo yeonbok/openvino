@@ -24,9 +24,9 @@ public:
     typed_program_node(const std::shared_ptr<scale> prim, program& prog) : parent(prim, prog) {
         support_padding_all(true);
     }
-    program_node& input() const { return get_dependency(0); }
-    program_node& scale_in() const { return get_dependency(1); }
-    program_node& bias() const { return get_dependency(2); }
+    program_node& input() const { return *get_dependency(0).first; }
+    program_node& scale_in() const { return *get_dependency(1).first; }
+    program_node& bias() const { return *get_dependency(2).first; }
 
     bool bias_term() const { return get_primitive()->bias.length() != 0; }
 

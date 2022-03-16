@@ -23,8 +23,8 @@ layout quantize_inst::calc_output_layout(quantize_node const& node) {
     auto input_layout = node.input().get_output_layout();
     auto output_format = input_layout.format;
     auto out_dt = input_layout.data_type;
-    if (node.get_primitive()->output_data_type)
-        out_dt = *node.get_primitive()->output_data_type;
+    if (!node.get_primitive()->output_data_types.empty())
+        out_dt = *node.get_primitive()->output_data_types.at(0);
 
     if (out_dt == data_types::bin) {
         output_format = format::b_fs_yx_32fp;

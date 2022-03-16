@@ -5,7 +5,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 #include "binary_convolution_inst.h"
 #include "convolution_inst.h"
-#include "reorder_inst.h"
+// #include "reorder_inst.h"
 #include "primitive_type_base.h"
 #include "sliding_window_utils.h"
 #include "intel_gpu/runtime/error_handler.hpp"
@@ -21,7 +21,7 @@ primitive_type_id binary_convolution::type_id() {
 layout binary_convolution_inst::calc_output_layout(binary_convolution_node const& node) {
     auto desc = node.get_primitive();
 
-    auto output_type = *node.get_primitive()->output_data_type;
+    auto output_type = *node.get_primitive()->output_data_types.at(0);
     auto output_size = desc->output_size;
     auto layout = cldnn::layout{output_type, format::bfyx, output_size};
     if (node.has_fused_primitives()) {
@@ -71,7 +71,7 @@ binary_convolution_inst::typed_primitive_inst(network& network, binary_convoluti
     auto stride = argument.stride;
 
     auto input_inst = node.input().get_output_layout();
-    auto output_inst = node.get_output_layout();
+    auto output_inst = node.get_output_layout(0);
     auto output_size = output_inst.size;
 
     CLDNN_ERROR_NOT_EQUAL(node.id(),
@@ -101,7 +101,7 @@ binary_convolution_inst::typed_primitive_inst(network& network, binary_convoluti
                               "Weights/output dims mismatch");
         CLDNN_ERROR_NOT_EQUAL(node.id(),
                               "Convolution padding mode",
-                              node.get_output_layout().data_padding.filling_value(),
+                              node.get_output_layout(0).data_padding.filling_value(),
                               "padding value",
                               0.0f,
                               "Unknown padding mode.");

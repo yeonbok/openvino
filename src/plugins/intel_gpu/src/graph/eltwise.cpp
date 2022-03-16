@@ -20,7 +20,7 @@ primitive_type_id eltwise::type_id() {
 layout eltwise_inst::calc_output_layout(eltwise_node const& node) {
     auto input_node_layout = node.input().get_non_padded_output_layout();
 
-    auto output_type = node.get_primitive()->output_data_type ? *node.get_primitive()->output_data_type : input_node_layout.data_type;
+    auto output_type = !node.get_primitive()->output_data_types.empty() ? *node.get_primitive()->output_data_types.at(0) : input_node_layout.data_type;
 
     auto size = input_node_layout.size;
     auto format = input_node_layout.format;
@@ -74,8 +74,8 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node) {
         output_layout.data_type = data_types::i8;
     }
 
-    if (node.get_primitive()->output_data_type) {
-        output_layout.data_type = *node.get_primitive()->output_data_type;
+    if (!node.get_primitive()->output_data_types.empty()) {
+        output_layout.data_type = *node.get_primitive()->output_data_types.at(0);
     }
 
     if (node.has_fused_primitives()) {
@@ -209,8 +209,8 @@ eltwise_inst::typed_primitive_inst(network& network, eltwise_node const& node) :
                               prim->stride.size(),
                               "");
 
-        const auto out_x = node.get_output_layout().size.spatial[0];
-        const auto out_y = node.get_output_layout().size.spatial[1];
+        const auto out_x = node.get_output_layout(0).size.spatial[0];
+        const auto out_y = node.get_output_layout(0).size.spatial[1];
         // check if strides are correctly set. I.e INPUT_SIZE_X / STRIDE_X = OUTPUT_SIZE_X, same for Y dimension
         for (size_t i = 0; i < inputs_count; i++) {
             const auto& in_layout = node.input(i).get_output_layout();

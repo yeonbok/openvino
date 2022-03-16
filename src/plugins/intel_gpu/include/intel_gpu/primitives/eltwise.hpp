@@ -75,12 +75,12 @@ struct eltwise : public primitive_base<eltwise> {
     /// @param with_activation Enables Relu activation.
     /// @param activation_slp Relu activation slope.
     eltwise(const primitive_id& id,
-            const primitive_id& input,
-            const primitive_id& input2,
+            const input_info& input,
+            const input_info& input2,
             eltwise_mode mode,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, {input, input2}, ext_prim_id, output_padding),
+        : primitive_base(id, {input, input2}, ext_prim_id, {output_padding}),
           mode(mode),
           coefficients(std::vector<float>(0)),
           stride(std::vector<tensor>(0)) {}
@@ -94,13 +94,13 @@ struct eltwise : public primitive_base<eltwise> {
     /// @param with_activation Enables Relu activation.
     /// @param activation_slp Relu activation slope.
     eltwise(const primitive_id& id,
-            const primitive_id& input,
-            const primitive_id& input2,
+            const input_info& input,
+            const input_info& input2,
             std::vector<tensor> stride,
             eltwise_mode mode,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, {input, input2}, ext_prim_id, output_padding),
+        : primitive_base(id, {input, input2}, ext_prim_id, {output_padding}),
           mode(mode),
           coefficients(std::vector<float>(0)),
           stride(stride) {}
@@ -111,12 +111,12 @@ struct eltwise : public primitive_base<eltwise> {
     /// @param mode Eltwise mode.
     /// @param data_type Expected output data type.
     eltwise(const primitive_id& id,
-            const std::vector<primitive_id>& inputs,
+            const std::vector<input_info>& inputs,
             eltwise_mode mode,
             data_types data_type,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, inputs, ext_prim_id, output_padding, optional_data_type{data_type}),
+        : primitive_base(id, inputs, ext_prim_id, {output_padding}, {optional_data_type{data_type}}),
           mode(mode),
           coefficients(std::vector<float>(0)),
           stride(std::vector<tensor>(0)) {}
@@ -126,11 +126,11 @@ struct eltwise : public primitive_base<eltwise> {
     /// @param inputs Input primitives ids.
     /// @param mode Eltwise mode.
     eltwise(const primitive_id& id,
-            const std::vector<primitive_id>& inputs,
+            const std::vector<input_info>& inputs,
             eltwise_mode mode,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, inputs, ext_prim_id, output_padding),
+        : primitive_base(id, inputs, ext_prim_id, {output_padding}),
           mode(mode),
           coefficients(std::vector<float>(0)),
           stride(std::vector<tensor>(0)) {}
@@ -141,13 +141,13 @@ struct eltwise : public primitive_base<eltwise> {
     /// @param coefficients Blob-wise coefficient for SUM operation
     /// @param mode Eltwise mode.
     eltwise(const primitive_id& id,
-            const std::vector<primitive_id>& inputs,
+            const std::vector<input_info>& inputs,
             eltwise_mode mode,
             const std::vector<float>& coefficients,
             data_types data_type,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, inputs, ext_prim_id, output_padding, optional_data_type{data_type}),
+        : primitive_base(id, inputs, ext_prim_id, {output_padding}, {optional_data_type{data_type}}),
           mode(mode),
           coefficients(coefficients),
           stride(std::vector<tensor>(0)) {

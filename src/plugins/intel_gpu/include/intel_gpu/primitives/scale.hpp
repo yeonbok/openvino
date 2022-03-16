@@ -36,13 +36,13 @@ struct scale : public primitive_base<scale> {
     /// @param input Input primitive id.
     /// @param scale_input Scale input primitive id with values needed for product computation.
     scale(const primitive_id& id,
-          const primitive_id& input,
-          const primitive_id& scale_input,  // should be bfyx or yxfb, where each dimension can be 1, if all dimensions
+          const input_info& input,
+          const input_info& scale_input,  // should be bfyx or yxfb, where each dimension can be 1, if all dimensions
                                             // are 1 then this is scalar
           const optional_data_type& output_dt = {},
           const primitive_id& ext_prim_id = "",
           const padding& output_padding = padding())
-        : primitive_base(id, {input, scale_input}, ext_prim_id, output_padding, output_dt), bias("") {}
+        : primitive_base(id, {input, scale_input}, ext_prim_id, {output_padding}, {output_dt}), bias("") {}
 
     /// @brief Constructs scale primitive with optional adding bias.
     /// @param id This primitive id.
@@ -50,24 +50,24 @@ struct scale : public primitive_base<scale> {
     /// @param scale_input Scale input primitive id with values needed for product computation.
     /// @param bias Primitive id containing bias data.
     scale(const primitive_id& id,
-          const primitive_id& input,
-          const primitive_id& scale_input,  // should be bfyx or yxfb, where each dimension can be 1, if all dimensions
+          const input_info& input,
+          const input_info& scale_input,  // should be bfyx or yxfb, where each dimension can be 1, if all dimensions
                                             // are 1 then this is scalar
           const primitive_id& bias,  // should be same size as scale_input
           const optional_data_type& output_dt = {},
           const primitive_id& ext_prim_id = "",
           const padding& output_padding = padding())
-        : primitive_base(id, {input, scale_input}, ext_prim_id, output_padding, output_dt), bias(bias) {}
+        : primitive_base(id, {input, scale_input}, ext_prim_id, {output_padding}, {output_dt}), bias(bias) {}
 
     /// @brief Primitive id containing bias data.
     primitive_id bias;
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
         if (bias.empty())
             return {};
         else
-            return {bias};
+            return {{std::ref(bias), 0}};
     }
 };
 /// @}

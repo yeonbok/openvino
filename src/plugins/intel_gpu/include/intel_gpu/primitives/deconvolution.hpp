@@ -31,14 +31,14 @@ struct deconvolution : public primitive_base<deconvolution> {
     /// @param with_activation Enables Relu activation.
     /// @param activation_slp Relu activation slope.
     deconvolution(const primitive_id& id,
-                  const primitive_id& input,
+                  const input_info& input,
                   const std::vector<primitive_id>& weights,
                   const std::vector<primitive_id>& bias,
                   tensor stride = {1, 1, 1, 1},
                   tensor pad = {0, 0, 0, 0},
                   const primitive_id& ext_prim_id = "",
                   const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           pad(pad),
           stride(stride),
           with_output_size(false),
@@ -57,7 +57,7 @@ struct deconvolution : public primitive_base<deconvolution> {
     /// @param with_activation Enables Relu activation.
     /// @param activation_slp Relu activation slope.
     deconvolution(const primitive_id& id,
-                  const primitive_id& input,
+                  const input_info& input,
                   const std::vector<primitive_id>& weights,
                   const std::vector<primitive_id>& bias,
                   uint32_t groups,
@@ -65,7 +65,7 @@ struct deconvolution : public primitive_base<deconvolution> {
                   tensor pad = {0, 0, 0, 0},
                   const primitive_id& ext_prim_id = "",
                   const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           pad(pad),
           stride(stride),
           with_output_size(false),
@@ -83,13 +83,13 @@ struct deconvolution : public primitive_base<deconvolution> {
     /// @param with_activation Enables Relu activation.
     /// @param activation_slp Relu activation slope.
     deconvolution(const primitive_id& id,
-                  const primitive_id& input,
+                  const input_info& input,
                   const std::vector<primitive_id>& weights,
                   tensor stride = {1, 1, 1, 1},
                   tensor pad = {0, 0, 0, 0},
                   const primitive_id& ext_prim_id = "",
                   const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           pad(pad),
           stride(stride),
           with_output_size(false),
@@ -108,14 +108,14 @@ struct deconvolution : public primitive_base<deconvolution> {
     /// @param with_activation Enables Relu activation.
     /// @param activation_slp Relu activation slope.
     deconvolution(const primitive_id& id,
-                  const primitive_id& input,
+                  const input_info& input,
                   const std::vector<primitive_id> &weights,
                   uint32_t groups,
                   tensor stride = {1, 1, 1, 1},
                   tensor pad = {0, 0, 0, 0},
                   const primitive_id& ext_prim_id = "",
                   const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           pad(pad),
           stride(stride),
           with_output_size(false),
@@ -135,7 +135,7 @@ struct deconvolution : public primitive_base<deconvolution> {
     /// @param activation_slp Relu activation slope.
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     deconvolution(const primitive_id& id,
-                  const primitive_id& input,
+                  const input_info& input,
                   const std::vector<primitive_id>& weights,
                   const std::vector<primitive_id>& bias,
                   tensor stride,
@@ -143,7 +143,7 @@ struct deconvolution : public primitive_base<deconvolution> {
                   tensor output_size,
                   const primitive_id& ext_prim_id = "",
                   const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           pad(pad),
           stride(stride),
           with_output_size(true),
@@ -165,7 +165,7 @@ struct deconvolution : public primitive_base<deconvolution> {
     /// @param activation_slp Relu activation slope.
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     deconvolution(const primitive_id& id,
-                  const primitive_id& input,
+                  const input_info& input,
                   const std::vector<primitive_id>& weights,
                   const std::vector<primitive_id>& bias,
                   uint32_t groups,
@@ -175,7 +175,7 @@ struct deconvolution : public primitive_base<deconvolution> {
                   bool grouped_weights_shape,
                   const primitive_id& ext_prim_id = "",
                   const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           pad(pad),
           stride(stride),
           with_output_size(true),
@@ -195,14 +195,14 @@ struct deconvolution : public primitive_base<deconvolution> {
     /// @param activation_slp Relu activation slope.
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     deconvolution(const primitive_id& id,
-                  const primitive_id& input,
+                  const input_info& input,
                   const std::vector<primitive_id>& weights,
                   tensor stride,
                   tensor pad,
                   tensor output_size,
                   const primitive_id& ext_prim_id = "",
                   const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           pad(pad),
           stride(stride),
           with_output_size(true),
@@ -224,7 +224,7 @@ struct deconvolution : public primitive_base<deconvolution> {
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     /// @return Deconvolution primitive with specified settings.
     static deconvolution create_with_output_size(const primitive_id& id,
-                                                 const primitive_id& input,
+                                                 const input_info& input,
                                                  const std::vector<primitive_id>& weights,
                                                  const std::vector<primitive_id>& bias,
                                                  tensor output_size,
@@ -254,7 +254,7 @@ struct deconvolution : public primitive_base<deconvolution> {
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     /// @return Deconvolution primitive with specified settings.
     static deconvolution create_with_output_size(const primitive_id& id,
-                                                 const primitive_id& input,
+                                                 const input_info& input,
                                                  const std::vector<primitive_id>& weights,
                                                  tensor output_size,
                                                  tensor stride = {1, 1, 1, 1},
@@ -292,11 +292,11 @@ struct deconvolution : public primitive_base<deconvolution> {
     int32_t split() const { return static_cast<int32_t>(weights.size()); }
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
         ret.reserve(weights.size() + bias.size());
-        for (auto& w : weights) ret.push_back(std::ref(w));
-        for (auto& b : bias) ret.push_back(std::ref(b));
+        for (auto& w : weights) ret.push_back({std::ref(w), 0});
+        for (auto& b : bias) ret.push_back({std::ref(b), 0});
 
         return ret;
     }

@@ -18,7 +18,7 @@ primitive_type_id reshape::type_id() {
 }
 
 layout reshape_inst::calc_output_layout(reshape_node const& node) {
-    assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
+    assert(node.get_primitive()->output_data_types.empty() &&
            "Output data type forcing is not supported for reshape_node!");
     auto input_layout = node.input().get_non_padded_output_layout();
     auto sizes = node.get_primitive()->output_shape.sizes();
@@ -65,7 +65,7 @@ std::string reshape_inst::to_string(reshape_node const& node) {
 
 reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) : parent(network, node, false) {
     auto input_layout = node.input().get_output_layout();
-    auto output_layout = node.get_output_layout();
+    auto output_layout = node.get_output_layout(0);
     CLDNN_ERROR_DATA_TYPES_MISMATCH(node.id(),
                                     "Input layout data typr",
                                     input_layout.data_type,
@@ -82,7 +82,7 @@ reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) :
     // if reshape operated in-place, postpone creation of the output until network run,
     // then create new memory object as the reinterpreted output of the previous primitive
     if (!node.can_be_optimized())
-        _output = allocate_output();
+        _outputs = allocate_outputs();
     else
         reuse_input();
 }
@@ -91,7 +91,7 @@ void reshape_inst::on_execute() {
     if (!node.can_be_optimized())
         return;
 
-    if (_output && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
+    if (!_outputs.empty() && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
         return;
 
     reuse_input();
@@ -99,7 +99,9 @@ void reshape_inst::on_execute() {
 
 void reshape_inst::reuse_input() {
     build_deps();  // reshape need deps
-    _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
+    for (auto i = 0; i < node.get_outputs_count(); ++i) {
+        _outputs[i] = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout(i));
+    }
 }
 
 }  // namespace cldnn

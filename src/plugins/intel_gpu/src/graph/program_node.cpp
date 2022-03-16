@@ -266,13 +266,13 @@ std::vector<layout> program_node::get_output_layouts() const {
 
     return output_layouts;
 }
-#if 0 // TODO(taylor)
-layout program_node::get_non_padded_output_layout(bool invalidate_users_if_changed) {
-    auto out_layout = get_output_layout(invalidate_users_if_changed);
+
+layout program_node::get_non_padded_output_layout(bool invalidate_users_if_changed, int32_t idx) {
+    auto out_layout = get_output_layout(invalidate_users_if_changed, idx);
     auto result = layout({out_layout.data_type, out_layout.format, out_layout.size});
     return result;
 }
-#endif
+
 bool program_node::set_output_layouts(std::vector<layout>& new_layouts, bool invalidate_users_if_changed) {
     bool changed = false;
     for (auto i = 0; i < new_layouts.size(); ++i) {
