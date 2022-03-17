@@ -4,6 +4,7 @@
 
 #include "program_node.h"
 #include "intel_gpu/graph/program.hpp"
+#include "program_helpers.h"
 #include "primitive_inst.h"
 
 #ifdef ENABLE_ONEDNN_FOR_GPU
@@ -24,6 +25,8 @@
 #include "reshape_inst.h"
 
 using namespace cldnn;
+
+thread_local size_t program_node::cur_id = 0;
 
 program_node::program_node(std::shared_ptr<primitive> prim, program& prog)
     : desc(prim), myprog(prog), org_id(prim->id) {
