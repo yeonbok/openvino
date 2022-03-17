@@ -48,6 +48,7 @@ enum class KernelType {
     CONTRACT,
     ONE_HOT,
     GATHER,
+    GATHER_ELEMENTS,
     GATHER_ND,
     SCATTER_UPDATE,
     SCATTER_ND_UPDATE,

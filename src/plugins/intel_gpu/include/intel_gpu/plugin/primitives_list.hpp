@@ -206,7 +206,8 @@ REGISTER_FACTORY(v5, Loop);
 REGISTER_FACTORY(v6, CTCGreedyDecoderSeqLen);
 REGISTER_FACTORY(v6, MVN);
 REGISTER_FACTORY(v6, ExperimentalDetectronROIFeatureExtractor);
-REGISTER_FACTORY(v6, ExperimentalDetectronTopKROIs)
+REGISTER_FACTORY(v6, ExperimentalDetectronTopKROIs);
+REGISTER_FACTORY(v6, GatherElements);
 
 // ------------------------------ Supported v7 ops ------------------------------ //
 REGISTER_FACTORY(v7, Gather);
