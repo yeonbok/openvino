@@ -25,6 +25,7 @@
 #include "intel_gpu/primitives/fully_connected.hpp"
 #include "intel_gpu/primitives/gather.hpp"
 #include "intel_gpu/primitives/gather_nd.hpp"
+#include "intel_gpu/primitives/gather_elements.hpp"
 #include "intel_gpu/primitives/gemm.hpp"
 #include "intel_gpu/primitives/lrn.hpp"
 #include "intel_gpu/primitives/lstm.hpp"
