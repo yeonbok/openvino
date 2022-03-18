@@ -33,7 +33,7 @@ inline void DoTestBase(engine& engine,
         FAIL();
     }
 
-    auto gather_elements_inst = gather_elements("gather_elements", "InputData", "InputIndices", input_rank, -1,-1, batch_merged_output);
+    auto gather_elements_inst = gather_elements("gather_elements", "InputData", "InputIndices", axis);
     topology.add(input_layout("InputData", input0->get_layout()));
     topology.add(input_layout("InputIndices", input1->get_layout()));
     topology.add(gather_elements_inst);
@@ -80,11 +80,21 @@ inline void DoTestV6(engine& engine,
     DoTestBase(engine, input0, input1, expected_results, axis, fmt, size, true);
 }
 
-TEST(gather_elements_gpu_fp16, d2324_i1324_a0){
+TEST(gather_elements_gpu_fp16, d2342_i1342_a0){
     int axis=0;
 
     auto& engine = get_test_engine();
 
+    //NOTE: format::bfyx, {2,3,2,4}로 하면 b=2,f=3,x=2,y=4로 저장된다. 아래 코드 실행해보면 이해됨
+    /*
+        for(auto i:input0->get_layout().get_ordered_dims())std::cout<<i<<' ';
+        std::cout<<std::endl;
+        for(auto i:input1->get_layout().get_ordered_dims())std::cout<<i<<' ';
+        std::cout<<std::endl;
+        std::cout<<input0->get_layout().size<<std::endl;
+    */
+    //차원을 내부적으로는 b,f,x,y,z,w,g 순서로 표현한다는듯.
+    //다만 차원순서와 달리 메모리포맷은 bfyx로 잘 저장된다.
     auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 2, 4 } }); // data
     auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 1, 3, 2, 4 } }); // indices
     // auto input2 = engine.allocate_memory({  }); //axis
@@ -120,7 +130,7 @@ TEST(gather_elements_gpu_fp16, d2324_i1324_a0){
     for(auto&i:expected16)
         expected32.push_back(float16_to_float32(i.v));
 
-    DoTestV6(engine, input0, input1, expected32, axis, format::bfzyx, input1->get_layout().size);
+    DoTestV6(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);
 }
 
 TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
@@ -128,8 +138,8 @@ TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
 
     auto& engine = get_test_engine();
 
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 3, 4 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 3, 9 } }); // indices
+    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 4, 3 } }); // data
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 9, 3 } }); // indices
 
     int axis_len=input0->get_layout().get_dim(axis);
 

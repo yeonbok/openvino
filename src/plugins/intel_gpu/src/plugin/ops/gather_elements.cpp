@@ -19,20 +19,11 @@ static void CreateGatherElementsOp(Program& p, const std::shared_ptr<ngraph::op:
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
 
-    int32_t input_rank = static_cast<int32_t>(op->get_input_shape(0).size());
-    int32_t indices_rank = static_cast<int32_t>(op->get_input_shape(1).size());
-
-    auto batch_dims = 0;//op->get_batch_dims();
-
     auto primitive = cldnn::gather_elements(layerName,
                                       inputPrimitives[0],
                                       inputPrimitives[1],
-                                      input_rank,
-                                      indices_rank,
-                                      batch_dims,
-                                      true,
+                                      op->get_axis(),
                                       op->get_friendly_name());
-
     p.AddPrimitive(primitive);
     p.AddPrimitiveToProfiler(op);
 }

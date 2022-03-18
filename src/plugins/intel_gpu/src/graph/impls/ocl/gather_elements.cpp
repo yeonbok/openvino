@@ -27,10 +27,7 @@ struct gather_elements_impl : typed_primitive_impl_ocl<gather_elements> {
         auto gather_elements_optional_params =
             get_default_optional_params<kernel_selector::gather_elements_optional_params>(arg.get_program());
 
-        gather_elements_params.indices_rank = arg.get_primitive()->indices_rank;
-        gather_elements_params.batch_dims = arg.get_primitive()->batch_dims;
-        gather_elements_params.batch_merged_output = arg.get_primitive()->batch_merged_output;
-
+        gather_elements_params.axis = arg.get_primitive()->axis;
         gather_elements_params.inputs.push_back(convert_data_tensor(arg.input(1).get_output_layout()));
 
         auto& kernel_selector = kernel_selector::gather_elements_kernel_selector::Instance();

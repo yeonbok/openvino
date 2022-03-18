@@ -48,25 +48,17 @@ static inline std::vector<std::string> GetDefaultOrder(size_t size) {
 CommonDispatchData GatherElementsKernelRef::SetDefault(const gather_elements_params& params, const optional_params&) const {
     CommonDispatchData dispatchData;
 
-    auto indices_dims = params.inputs[1].LogicalDims();
-
-    if (indices_dims.size() > 1) {
-        std::reverse(indices_dims.begin(), indices_dims.end());
-    }
-
-    indices_dims[params.indices_rank - 1] = 1; // set last dim of indices to 1
-
     switch (params.inputs[1].GetLayout()) {
     case DataLayout::bfyx:
-        dispatchData.gws = { indices_dims[3], indices_dims[2], indices_dims[1] * indices_dims[0] };
+        dispatchData.gws = {1, 1, 1};//{ indices_dims[3], indices_dims[2], indices_dims[1] * indices_dims[0] };
         break;
 
     case DataLayout::bfzyx:
-        dispatchData.gws = { indices_dims[4] * indices_dims[3], indices_dims[2], indices_dims[1] * indices_dims[0] };
+        dispatchData.gws = {1, 1, 1};//{ indices_dims[4] * indices_dims[3], indices_dims[2], indices_dims[1] * indices_dims[0] };
         break;
 
     case DataLayout::bfwzyx:
-        dispatchData.gws = { indices_dims[5] * indices_dims[4], indices_dims[3] * indices_dims[2], indices_dims[1] * indices_dims[0] };
+        dispatchData.gws = {1, 1, 1};//{ indices_dims[5] * indices_dims[4], indices_dims[3] * indices_dims[2], indices_dims[1] * indices_dims[0] };
         break;
 
     default:
@@ -74,52 +66,15 @@ CommonDispatchData GatherElementsKernelRef::SetDefault(const gather_elements_par
         break;
     }
 
-    dispatchData.lws = GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo);
+    dispatchData.lws = {1, 1, 1};//GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo);
 
     return dispatchData;
-}
-
-static size_t GetIndicesLastDim(const gather_elements_params& params) {
-    // get indices dims
-    auto indices_dims = params.inputs[1].LogicalDims();
-
-    if (indices_dims.size() > 1) {
-        std::reverse(indices_dims.begin(), indices_dims.end());
-    }
-
-    auto indices_last_dim = indices_dims[params.indices_rank - 1];
-
-    return indices_last_dim;
-}
-
-static size_t GetSliceSize(const gather_elements_params& params) {
-    // get input dims
-    auto input_dims = params.inputs[0].LogicalDims();
-
-    if (input_dims.size() > 1) {
-        std::reverse(input_dims.begin(), input_dims.end());
-    }
-
-    // get last dim of indices
-    auto indices_last_dim = GetIndicesLastDim(params);
-
-    // calculate slize size which is used in kernel to copy
-    size_t wi_slice_size = 1;
-    for (size_t i = params.batch_dims + indices_last_dim; i < input_dims.size(); i++) {
-        wi_slice_size *= input_dims[i];
-    }
-
-    return wi_slice_size;
 }
 
 JitConstants GatherElementsKernelRef::GetJitConstants(const gather_elements_params& params) const {
     JitConstants jit = MakeBaseParamsJitConstants(params);
 
-    jit.AddConstant(MakeJitConstant("INDICES_RANK", params.indices_rank));
-    jit.AddConstant(MakeJitConstant("BATCH_DIMS", params.batch_dims));
-    jit.AddConstant(MakeJitConstant("BATCH_MERGED_OUTPUT", params.batch_merged_output));
-    jit.AddConstant(MakeJitConstant("WI_SLICE_SIZE", GetSliceSize(params)));
-    jit.AddConstant(MakeJitConstant("INDICES_LAST_DIM", GetIndicesLastDim(params)));
+    jit.AddConstant(MakeJitConstant("AXIS", params.axis));
 
     if (!params.fused_ops.empty()) {
         FusedOpsConfiguration conf = { "", GetDefaultOrder(params.output.GetDims().size()), "val", params.inputs[0].GetDType() };
@@ -137,30 +92,25 @@ bool GatherElementsKernelRef::Validate(const Params& p, const optional_params& o
     const gather_elements_params& params = static_cast<const gather_elements_params&>(p);
     auto input_dims = params.inputs[0].LogicalDims();
     auto indices_dims = params.inputs[1].LogicalDims();
-    auto indices_rank = params.indices_rank;
-    auto batch_dims = params.batch_dims;
+    auto axis = params.axis;
 
+    //왜 뒤집혀있을까..
     std::reverse(input_dims.begin(), input_dims.end());
     std::reverse(indices_dims.begin(), indices_dims.end());
 
-    if (indices_rank < 1) {
+    int input_axisdim = input_dims[axis];
+    int indices_axisdim = indices_dims[axis];
+
+    input_dims[axis] = indices_dims[axis]=-1;
+    if ( input_dims != indices_dims )
         return false;
-    }
+    input_dims[axis] = input_axisdim;
+    indices_dims[axis] = indices_axisdim;
 
-    if (batch_dims + indices_dims[indices_rank - 1] > input_dims.size()) {
+    int dim = input_dims.size();
+    if ( axis < 0 || axis >= dim )
         return false;
-    }
-
-    if (batch_dims >= std::min(input_dims.size(), static_cast<size_t>(indices_rank))) {
-        return false;
-    }
-
-    for (uint8_t i = 0; i < batch_dims; i++) {
-        if (input_dims[i] != indices_dims[i]) {
-            return false;
-        }
-    }
-
+    //TODO: indices가 조건 만족하는지 등의 추가조건 검사
     for (auto& fused_op : params.fused_ops) {
         if (!IsFusedPrimitiveSupported(fused_op))
             return false;

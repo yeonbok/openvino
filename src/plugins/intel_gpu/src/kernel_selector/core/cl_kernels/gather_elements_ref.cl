@@ -41,132 +41,43 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
 #endif
 )
 {
-
     const uint dim0 = get_global_id(0);
     const uint dim1 = get_global_id(1);
     const uint dim2 = get_global_id(2);
 
-    // Calculate indice index
-    const uint F_NUM = (INDICES_RANK == 2) ? 1 : INPUT1_FEATURE_NUM;
-    const uint idx_f = dim2 % F_NUM;
-    const uint idx_b = dim2 / F_NUM;
-
+    //TODO: Calculate Index or INPUT0_GET_INDEX(b,f,y,x)같은거 사용?
+    //아래는 임시로 아무값이나 줌
     #if INPUT1_DIMS == 4
+        const uint idx_b = 1;
+        const uint idx_f = dim2;
         const uint idx_x = dim0;
         const uint idx_y = dim1;
         const uint idx_z = 0;
         const uint idx_w = 0;
+        const uint in_b = 1;
+        const uint in_f = 1;
+        const uint in_x = 1;
+        const uint in_y = 1;
 
         const uint idx_arr[INPUT1_DIMS*2] = {idx_b, idx_f, idx_y, idx_x, 0, 0, 0, 0};
         const uint idx_dim[INPUT1_DIMS] = {INPUT1_BATCH_NUM, INPUT1_FEATURE_NUM, INPUT1_SIZE_Y, INPUT1_SIZE_X};
     #elif INPUT1_DIMS == 5
-        const uint X_NUM = (INDICES_RANK == 5) ? 1 : INPUT1_SIZE_X;
-
-        const uint idx_x = dim0 % X_NUM;
-        const uint idx_y = dim0 / X_NUM;
-        const uint idx_z = dim1;
-        const uint idx_w = 0;
-
-        const uint idx_arr[INPUT1_DIMS*2] = {idx_b, idx_f, idx_z, idx_y, idx_x, 0, 0, 0, 0, 0};
-        const uint idx_dim[INPUT1_DIMS] = {INPUT1_BATCH_NUM, INPUT1_FEATURE_NUM, INPUT1_SIZE_Z, INPUT1_SIZE_Y, INPUT1_SIZE_X};
+        //TODO
     #else
-        const uint X_NUM = (INDICES_RANK == 6) ? 1 : INPUT1_SIZE_X;
-        const uint Z_NUM = (INDICES_RANK == 4) ? 1 : INPUT1_SIZE_Z;
-
-        const uint idx_x = dim0 % X_NUM;
-        const uint idx_y = dim0 / X_NUM;
-        const uint idx_z = dim1 % Z_NUM;
-        const uint idx_w = dim1 / Z_NUM;
-
-        const uint idx_arr[INPUT1_DIMS*2] = {idx_b, idx_f, idx_w, idx_z, idx_y, idx_x, 0, 0, 0, 0, 0, 0};
-        const uint idx_dim[INPUT1_DIMS] = {INPUT1_BATCH_NUM, INPUT1_FEATURE_NUM, INPUT1_SIZE_W, INPUT1_SIZE_Z, INPUT1_SIZE_Y, INPUT1_SIZE_X};
+        //TODO
     #endif
 
     const int idx = GET_UPDATES_INDEX(INPUT1, IDX_ORDER);
 
-    // Calculate data index
-    uint indices_val[INDICES_MAX_DIM + BATCH_DIMS];
-    for (int i = 0; i < INDICES_MAX_DIM + BATCH_DIMS; i++) {
-        indices_val[i] = 0;
-    }
-
-    for (int i = 0; i < BATCH_DIMS; i++) {
-        indices_val[i] = idx_arr[i];
-    }
-
-    for (int i = 0; i < INDICES_LAST_DIM; i++) {
-        indices_val[i + BATCH_DIMS] = indices[idx+i];
-    }
-
-    #if INPUT0_DIMS == 4
-        const uint in_x = indices_val[3];
-        const uint in_y = indices_val[2];
-    #elif INPUT0_DIMS == 5
-        const uint in_x = indices_val[4];
-        const uint in_y = indices_val[3];
-        const uint in_z = indices_val[2];
-    #else
-        const uint in_x = indices_val[5];
-        const uint in_y = indices_val[4];
-        const uint in_z = indices_val[3];
-        const uint in_w = indices_val[2];
-    #endif
-    const uint in_f = indices_val[1];
-    const uint in_b = indices_val[0];
-
     const uint data_idx = GET_UPDATES_INDEX(INPUT0, IN_ORDER);
 
     // Calculate output index
-    #if BATCH_DIMS <= 1
-        const uint out_x = idx_x;
-        const uint out_y = idx_y;
-        const uint out_z = idx_z;
-        const uint out_w = idx_w;
-        const uint out_f = idx_f;
-        const uint out_b = idx_b;
-    #else
-        #if BATCH_MERGED_OUTPUT
-            uint pitch_acc = 1;
-            uint output_batch_size = 0;
-            for (int i = BATCH_DIMS - 1; i >= 0; i--) {
-                output_batch_size += (idx_arr[i] * pitch_acc);
-                pitch_acc *= idx_dim[i];
-            }
-
-            #if OUTPUT_DIMS == 4
-                const uint out_x = idx_arr[BATCH_DIMS+2];
-                const uint out_y = idx_arr[BATCH_DIMS+1];
-            #elif OUTPUT_DIMS == 5
-                const uint out_x = idx_arr[BATCH_DIMS+3];
-                const uint out_y = idx_arr[BATCH_DIMS+2];
-                const uint out_z = idx_arr[BATCH_DIMS+1];
-            #else
-                const uint out_x = idx_arr[BATCH_DIMS+4];
-                const uint out_y = idx_arr[BATCH_DIMS+3];
-                const uint out_z = idx_arr[BATCH_DIMS+2];
-                const uint out_w = idx_arr[BATCH_DIMS+1];
-            #endif
-            const uint out_f = idx_arr[BATCH_DIMS+0];
-            const uint out_b = output_batch_size;
-        #else
-            #if OUTPUT_DIMS == 4
-                const uint out_x = idx_arr[3];
-                const uint out_y = idx_arr[2];
-            #elif OUTPUT_DIMS == 5
-                const uint out_x = idx_arr[4];
-                const uint out_y = idx_arr[3];
-                const uint out_z = idx_arr[2];
-            #else
-                const uint out_x = idx_arr[5];
-                const uint out_y = idx_arr[4];
-                const uint out_z = idx_arr[3];
-                const uint out_w = idx_arr[2];
-            #endif
-            const uint out_f = idx_arr[1];
-            const uint out_b = idx_arr[0];
-
-        #endif
-    #endif
+    const uint out_x = idx_x;
+    const uint out_y = idx_y;
+    const uint out_z = idx_z;
+    const uint out_w = idx_w;
+    const uint out_f = idx_f;
+    const uint out_b = idx_b;
 
     const uint output_idx = GET_OUTPUT_INDEX(OUT_ORDER);
 
@@ -188,48 +99,8 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
         const uint b_pitch = f_pitch * OUTPUT_FEATURE_NUM;
     #endif
 
-    for (int i = 0; i < WI_SLICE_SIZE; i++) {
-        uint dst_idx = output_idx + i;
-        INPUT0_TYPE val = data[data_idx + i];
-
-        #if HAS_FUSED_OPS
-            const uint b_remain = dst_idx % b_pitch;
-            const uint f_remain = b_remain % f_pitch;
-            #if OUTPUT_DIMS == 4
-                const uint y_remain = f_remain % y_pitch;
-
-                const uint y = f_remain / y_pitch;
-            #elif OUTPUT_DIMS == 5
-                const uint z_remain = f_remain % z_pitch;
-                const uint y_remain = z_remain % y_pitch;
-
-                const uint z = f_remain / z_pitch;
-                const uint y = z_remain / y_pitch;
-            #else
-                const uint w_remain = f_remain % w_pitch;
-                const uint z_remain = w_remain % z_pitch;
-                const uint y_remain = z_remain % y_pitch;
-
-                const uint w = f_remain / w_pitch;
-                const uint z = w_remain / z_pitch;
-                const uint y = z_remain / y_pitch;
-            #endif
-            const uint b = dst_idx / b_pitch;
-            const uint f = b_remain / f_pitch;
-            const uint x = y_remain;
-
-            #if FUSED_OPS_CAN_USE_PRELOAD
-                FUSED_OPS_PRELOAD;
-                FUSED_OPS_CALC;
-            #else
-                FUSED_OPS;
-            #endif
-
-            output[dst_idx] = FUSED_OPS_RESULT;
-        #else
-            output[dst_idx] = ACTIVATION(val, ACTIVATION_PARAMS);
-        #endif
-    }
+    if(!dim0 && !dim1 && !dim2)
+        printf("hello?\n");
 }
 
 #undef INDICES_MAX_DIM
