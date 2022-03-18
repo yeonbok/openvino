@@ -7,6 +7,8 @@
 #include <intel_gpu/primitives/input_layout.hpp>
 #include <intel_gpu/primitives/gather_elements.hpp>
 
+#include "ngraph/runtime/reference/gather_elements.hpp"
+
 using namespace cldnn;
 using namespace ::tests;
 
@@ -14,8 +16,7 @@ inline void DoTestBase(engine& engine,
     const cldnn::memory::ptr input0,
     const cldnn::memory::ptr input1,
     const std::vector<float>& expected_results,
-    const int indices_rank,
-    const int batch_dims,
+    const int axis,
     const cldnn::format fmt,
     const tensor ts,
     const bool batch_merged_output) {
@@ -32,12 +33,12 @@ inline void DoTestBase(engine& engine,
         FAIL();
     }
 
-    auto gather_elements_inst = gather_elements("gather_elements", "InputData", "InputIndices", input_rank, indices_rank, batch_dims, batch_merged_output);
+    auto gather_elements_inst = gather_elements("gather_elements", "InputData", "InputIndices", input_rank, -1,-1, batch_merged_output);
     topology.add(input_layout("InputData", input0->get_layout()));
     topology.add(input_layout("InputIndices", input1->get_layout()));
     topology.add(gather_elements_inst);
 
-    network network(engine, topology);//여기서 test fail
+    network network(engine, topology);
 
     network.set_input_data("InputData", input0);
     network.set_input_data("InputIndices", input1);
@@ -73,665 +74,91 @@ inline void DoTestV6(engine& engine,
     const cldnn::memory::ptr input0,
     const cldnn::memory::ptr input1,
     const std::vector<float>& expected_results,
-    const int indices_rank,
-    const int batch_dims,
+    const int axis,
     const cldnn::format fmt,
     const tensor size) {
-    DoTestBase(engine, input0, input1, expected_results, indices_rank, batch_dims, fmt, size, true);
+    DoTestBase(engine, input0, input1, expected_results, axis, fmt, size, true);
 }
 
-TEST(gather_elements_gpu_fp16, d23322_i231312_ir6_batch2) {
+TEST(gather_elements_gpu_fp16, d2324_i1324_a0){
+    int axis=0;
+
     auto& engine = get_test_engine();
 
-    const int indices_rank = 6;
-    const int batch_dims = 2;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 3, 2, 2, 3 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 3, 2, 1, 3, 1 } }); // indices
-    // expected output dim: v5{6,1,3,1,2}, v8{2,3,1,3,1,2}
-
-    set_values(input0, {
-        FLOAT16(11), FLOAT16(12),  FLOAT16(13), FLOAT16(14),    FLOAT16(15), FLOAT16(16),  FLOAT16(11), FLOAT16(12),    FLOAT16(13), FLOAT16(14),  FLOAT16(15), FLOAT16(16),
-        FLOAT16(21), FLOAT16(22),  FLOAT16(23), FLOAT16(24),    FLOAT16(25), FLOAT16(26),  FLOAT16(21), FLOAT16(22),    FLOAT16(23), FLOAT16(24),  FLOAT16(25), FLOAT16(26),
-        FLOAT16(31), FLOAT16(32),  FLOAT16(33), FLOAT16(34),    FLOAT16(35), FLOAT16(36),  FLOAT16(31), FLOAT16(32),    FLOAT16(33), FLOAT16(34),  FLOAT16(35), FLOAT16(36),
-
-        FLOAT16(11), FLOAT16(12),  FLOAT16(13), FLOAT16(14),    FLOAT16(15), FLOAT16(16),  FLOAT16(11), FLOAT16(12),    FLOAT16(13), FLOAT16(14),  FLOAT16(15), FLOAT16(16),
-        FLOAT16(21), FLOAT16(22),  FLOAT16(23), FLOAT16(24),    FLOAT16(25), FLOAT16(26),  FLOAT16(21), FLOAT16(22),    FLOAT16(23), FLOAT16(24),  FLOAT16(25), FLOAT16(26),
-        FLOAT16(31), FLOAT16(32),  FLOAT16(33), FLOAT16(34),    FLOAT16(35), FLOAT16(36),  FLOAT16(31), FLOAT16(32),    FLOAT16(33), FLOAT16(34),  FLOAT16(35), FLOAT16(36),
-        });
-
-    set_values(input1, {
-        FLOAT16(2), FLOAT16(1),    FLOAT16(1), FLOAT16(1),    FLOAT16(1), FLOAT16(1),
-        FLOAT16(1), FLOAT16(0),    FLOAT16(2), FLOAT16(0),    FLOAT16(2), FLOAT16(0),
-        FLOAT16(0), FLOAT16(1),    FLOAT16(0), FLOAT16(1),    FLOAT16(0), FLOAT16(1),
-
-        FLOAT16(2), FLOAT16(0),    FLOAT16(1), FLOAT16(0),    FLOAT16(1), FLOAT16(0),
-        FLOAT16(1), FLOAT16(1),    FLOAT16(2), FLOAT16(1),    FLOAT16(2), FLOAT16(1),
-        FLOAT16(0), FLOAT16(0),    FLOAT16(1), FLOAT16(0),    FLOAT16(2), FLOAT16(0),
-        });
-
-    std::vector<float> expected_results = {
-        FLOAT16(15), FLOAT16(16),   FLOAT16(11), FLOAT16(12),   FLOAT16(11), FLOAT16(12),
-        FLOAT16(25), FLOAT16(26),   FLOAT16(23), FLOAT16(24),   FLOAT16(23), FLOAT16(24),
-        FLOAT16(33), FLOAT16(34),   FLOAT16(33), FLOAT16(34),   FLOAT16(33), FLOAT16(34),
-
-        FLOAT16(13), FLOAT16(14),   FLOAT16(15), FLOAT16(16),   FLOAT16(15), FLOAT16(16),
-        FLOAT16(21), FLOAT16(22),   FLOAT16(25), FLOAT16(26),   FLOAT16(25), FLOAT16(26),
-        FLOAT16(31), FLOAT16(32),   FLOAT16(35), FLOAT16(36),   FLOAT16(33), FLOAT16(34),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfzyx, {6, 1, 2, 1, 3});
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfwzyx, { 2, 3, 2, 1, 3, 1 });
-}
-
-TEST(gather_elements_gpu_fp16, d231322_i231321_ir6_batch5) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 6;
-    const int batch_dims = 5;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 3, 2, 2, 3, 1 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 2, 3, 1, 2, 3, 1 } }); // indices
-    // expected output dim: v5{36}, v8{2, 3, 2, 3, 1}
-
-    set_values(input0, {
-        FLOAT16(11), FLOAT16(12),   FLOAT16(13), FLOAT16(14),   FLOAT16(15), FLOAT16(16),   FLOAT16(17), FLOAT16(18),   FLOAT16(19), FLOAT16(10),   FLOAT16(21), FLOAT16(18),
-        FLOAT16(21), FLOAT16(22),   FLOAT16(23), FLOAT16(24),   FLOAT16(25), FLOAT16(26),   FLOAT16(27), FLOAT16(28),   FLOAT16(29), FLOAT16(20),   FLOAT16(27), FLOAT16(28),
-        FLOAT16(31), FLOAT16(32),   FLOAT16(33), FLOAT16(34),   FLOAT16(35), FLOAT16(36),   FLOAT16(37), FLOAT16(38),   FLOAT16(39), FLOAT16(30),   FLOAT16(31), FLOAT16(30),
-
-        FLOAT16(11), FLOAT16(12),   FLOAT16(13), FLOAT16(14),   FLOAT16(15), FLOAT16(16),   FLOAT16(17), FLOAT16(18),   FLOAT16(19), FLOAT16(10),   FLOAT16(17), FLOAT16(18),
-        FLOAT16(21), FLOAT16(22),   FLOAT16(23), FLOAT16(24),   FLOAT16(25), FLOAT16(26),   FLOAT16(27), FLOAT16(28),   FLOAT16(29), FLOAT16(20),   FLOAT16(27), FLOAT16(28),
-        FLOAT16(31), FLOAT16(32),   FLOAT16(33), FLOAT16(34),   FLOAT16(35), FLOAT16(36),   FLOAT16(37), FLOAT16(38),   FLOAT16(39), FLOAT16(30),   FLOAT16(29), FLOAT16(30),
-        });
-
-    set_values(input1, {
-        FLOAT16(1), FLOAT16(1),    FLOAT16(1), FLOAT16(1),    FLOAT16(1), FLOAT16(1),
-        FLOAT16(0), FLOAT16(0),    FLOAT16(0), FLOAT16(0),    FLOAT16(0), FLOAT16(0),
-        FLOAT16(1), FLOAT16(0),    FLOAT16(0), FLOAT16(1),    FLOAT16(1), FLOAT16(0),
-
-        FLOAT16(1), FLOAT16(1),    FLOAT16(1), FLOAT16(1),    FLOAT16(1), FLOAT16(1),
-        FLOAT16(0), FLOAT16(0),    FLOAT16(0), FLOAT16(0),    FLOAT16(0), FLOAT16(0),
-        FLOAT16(1), FLOAT16(0),    FLOAT16(0), FLOAT16(1),    FLOAT16(1), FLOAT16(0),
-        });
-
-    std::vector<float> expected_results = {
-        FLOAT16(12), FLOAT16(14),   FLOAT16(16), FLOAT16(18),   FLOAT16(10), FLOAT16(18),
-        FLOAT16(21), FLOAT16(23),   FLOAT16(25), FLOAT16(27),   FLOAT16(29), FLOAT16(27),
-        FLOAT16(32), FLOAT16(33),   FLOAT16(35), FLOAT16(38),   FLOAT16(30), FLOAT16(31),
-
-        FLOAT16(12), FLOAT16(14),   FLOAT16(16), FLOAT16(18),   FLOAT16(10), FLOAT16(18),
-        FLOAT16(21), FLOAT16(23),   FLOAT16(25), FLOAT16(27),   FLOAT16(29), FLOAT16(27),
-        FLOAT16(32), FLOAT16(33),   FLOAT16(35), FLOAT16(38),   FLOAT16(30), FLOAT16(29),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, {36, 1, 1, 1});
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfzyx, {2, 3, 2, 3, 1});
-}
-
-TEST(gather_elements_gpu_fp16, d23322_i23321_ir5_batch4) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 5;
-    const int batch_dims = 4;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 3, 2, 2, 3 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 3, 1, 2, 3 } }); // indices
-    // expected output dim: v5{36}, v8{2,3,2,3}
-
-    set_values(input0, {
-        FLOAT16(11), FLOAT16(12),   FLOAT16(13), FLOAT16(14),   FLOAT16(15), FLOAT16(16),   FLOAT16(17), FLOAT16(18),   FLOAT16(19), FLOAT16(10),   FLOAT16(21), FLOAT16(18),
-        FLOAT16(21), FLOAT16(22),   FLOAT16(23), FLOAT16(24),   FLOAT16(25), FLOAT16(26),   FLOAT16(27), FLOAT16(28),   FLOAT16(29), FLOAT16(20),   FLOAT16(27), FLOAT16(28),
-        FLOAT16(31), FLOAT16(32),   FLOAT16(33), FLOAT16(34),   FLOAT16(35), FLOAT16(36),   FLOAT16(37), FLOAT16(38),   FLOAT16(39), FLOAT16(30),   FLOAT16(31), FLOAT16(30),
-
-        FLOAT16(11), FLOAT16(12),   FLOAT16(13), FLOAT16(14),   FLOAT16(15), FLOAT16(16),   FLOAT16(17), FLOAT16(18),   FLOAT16(19), FLOAT16(10),   FLOAT16(17), FLOAT16(18),
-        FLOAT16(21), FLOAT16(22),   FLOAT16(23), FLOAT16(24),   FLOAT16(25), FLOAT16(26),   FLOAT16(27), FLOAT16(28),   FLOAT16(29), FLOAT16(20),   FLOAT16(27), FLOAT16(28),
-        FLOAT16(31), FLOAT16(32),   FLOAT16(33), FLOAT16(34),   FLOAT16(35), FLOAT16(36),   FLOAT16(37), FLOAT16(38),   FLOAT16(39), FLOAT16(30),   FLOAT16(29), FLOAT16(30),
-        });
-
-    set_values(input1, {
-        FLOAT16(1), FLOAT16(1),    FLOAT16(1), FLOAT16(1),    FLOAT16(1), FLOAT16(1),
-        FLOAT16(0), FLOAT16(0),    FLOAT16(0), FLOAT16(0),    FLOAT16(0), FLOAT16(0),
-        FLOAT16(1), FLOAT16(0),    FLOAT16(0), FLOAT16(1),    FLOAT16(1), FLOAT16(0),
-
-        FLOAT16(1), FLOAT16(1),    FLOAT16(1), FLOAT16(1),    FLOAT16(1), FLOAT16(1),
-        FLOAT16(0), FLOAT16(0),    FLOAT16(0), FLOAT16(0),    FLOAT16(0), FLOAT16(0),
-        FLOAT16(1), FLOAT16(0),    FLOAT16(0), FLOAT16(1),    FLOAT16(1), FLOAT16(0),
-        });
-
-    std::vector<float> expected_results = {
-        FLOAT16(12), FLOAT16(14),   FLOAT16(16), FLOAT16(18),   FLOAT16(10), FLOAT16(18),
-        FLOAT16(21), FLOAT16(23),   FLOAT16(25), FLOAT16(27),   FLOAT16(29), FLOAT16(27),
-        FLOAT16(32), FLOAT16(33),   FLOAT16(35), FLOAT16(38),   FLOAT16(30), FLOAT16(31),
-
-        FLOAT16(12), FLOAT16(14),   FLOAT16(16), FLOAT16(18),   FLOAT16(10), FLOAT16(18),
-        FLOAT16(21), FLOAT16(23),   FLOAT16(25), FLOAT16(27),   FLOAT16(29), FLOAT16(27),
-        FLOAT16(32), FLOAT16(33),   FLOAT16(35), FLOAT16(38),   FLOAT16(30), FLOAT16(29),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 36, 1, 1, 1 });
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 3, 2, 3 });
-}
-
-
-TEST(gather_elements_gpu_fp16, d23223_i2321_ir4_batch3) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 4;
-    const int batch_dims = 3;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 3, 3, 2, 2 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 1, 2 } }); // indices
-    // expected output dim: v5{12,3} v8{2,3,3,2}
-
-    set_values(input0, {
-        FLOAT16(11), FLOAT16(12), FLOAT16(13),  FLOAT16(14), FLOAT16(15), FLOAT16(16),  FLOAT16(17), FLOAT16(18),FLOAT16(15),  FLOAT16(16), FLOAT16(17), FLOAT16(18),
-        FLOAT16(21), FLOAT16(22), FLOAT16(23),  FLOAT16(24), FLOAT16(25), FLOAT16(26),  FLOAT16(27), FLOAT16(28),FLOAT16(25),  FLOAT16(26), FLOAT16(27), FLOAT16(28),
-        FLOAT16(29), FLOAT16(30), FLOAT16(31),  FLOAT16(32), FLOAT16(33), FLOAT16(34),  FLOAT16(35), FLOAT16(36),FLOAT16(33),  FLOAT16(34), FLOAT16(35), FLOAT16(36),
-
-        FLOAT16(11), FLOAT16(12), FLOAT16(13),  FLOAT16(14), FLOAT16(15), FLOAT16(16),  FLOAT16(17), FLOAT16(18),FLOAT16(15),  FLOAT16(16), FLOAT16(17), FLOAT16(18),
-        FLOAT16(21), FLOAT16(22), FLOAT16(23),  FLOAT16(24), FLOAT16(25), FLOAT16(26),  FLOAT16(27), FLOAT16(28),FLOAT16(25),  FLOAT16(26), FLOAT16(27), FLOAT16(28),
-        FLOAT16(29), FLOAT16(30), FLOAT16(31),  FLOAT16(32), FLOAT16(33), FLOAT16(34),  FLOAT16(35), FLOAT16(36),FLOAT16(33),  FLOAT16(34), FLOAT16(35), FLOAT16(36),
-        });
-
-    set_values(input1, {
-        FLOAT16(1), FLOAT16(1),
-        FLOAT16(1), FLOAT16(0),
-        FLOAT16(1), FLOAT16(1),
-
-        FLOAT16(0), FLOAT16(0),
-        FLOAT16(0), FLOAT16(1),
-        FLOAT16(0), FLOAT16(0),
-        });
-
-    std::vector<float> expected_results = {
-        FLOAT16(14), FLOAT16(15), FLOAT16(16),  FLOAT16(16), FLOAT16(17), FLOAT16(18),
-        FLOAT16(24), FLOAT16(25), FLOAT16(26),  FLOAT16(27), FLOAT16(28), FLOAT16(25),
-        FLOAT16(32), FLOAT16(33), FLOAT16(34),  FLOAT16(34), FLOAT16(35), FLOAT16(36),
-
-        FLOAT16(11), FLOAT16(12), FLOAT16(13),  FLOAT16(17), FLOAT16(18), FLOAT16(15),
-        FLOAT16(21), FLOAT16(22), FLOAT16(23),  FLOAT16(26), FLOAT16(27), FLOAT16(28),
-        FLOAT16(29), FLOAT16(30), FLOAT16(31),  FLOAT16(35), FLOAT16(36), FLOAT16(33),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 12, 3, 1, 1 });
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 3, 3, 2 });
-}
-
-TEST(gather_elements_gpu_fp16, d2342_i2312_ir4_batch2) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 4;
-    const int batch_dims = 2;
     auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 2, 4 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 2, 1 } }); // indices
-    // expected output dim: v5{6,1}, v8(2,3,1)
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 1, 3, 2, 4 } }); // indices
+    // auto input2 = engine.allocate_memory({  }); //axis
+    // 최적화를 위해서 axis매개변수를 넘기지 말고 그냥 6개 케이스에 대해 다 나눠서 만들기?
+    // // expected output dim: v6{1,3,2,4}
 
-    set_values(input0, {
-        FLOAT16(11), FLOAT16(12),   FLOAT16(13), FLOAT16(14),   FLOAT16(15), FLOAT16(16),   FLOAT16(17), FLOAT16(18),
-        FLOAT16(21), FLOAT16(22),   FLOAT16(23), FLOAT16(24),   FLOAT16(25), FLOAT16(26),   FLOAT16(27), FLOAT16(28),
-        FLOAT16(29), FLOAT16(30),   FLOAT16(31), FLOAT16(32),   FLOAT16(33), FLOAT16(34),   FLOAT16(35), FLOAT16(36),
+    int axis_len=input0->get_layout().get_dim(axis);
 
-        FLOAT16(11), FLOAT16(12),   FLOAT16(13), FLOAT16(14),   FLOAT16(15), FLOAT16(16),   FLOAT16(17), FLOAT16(18),
-        FLOAT16(21), FLOAT16(22),   FLOAT16(23), FLOAT16(24),   FLOAT16(25), FLOAT16(26),   FLOAT16(27), FLOAT16(28),
-        FLOAT16(29), FLOAT16(30),   FLOAT16(31), FLOAT16(32),   FLOAT16(33), FLOAT16(34),   FLOAT16(35), FLOAT16(36),
-    });
+    auto ivec0=generate_random_1d<FLOAT16>(input0->count(),0,999);
+    auto ivec1=generate_random_1d<int>(input1->count(),-axis_len,axis_len-1);
+    set_values(input0, ivec0);
+    set_values(input1, ivec1);
 
-    set_values(input1, {
-        FLOAT16(1), FLOAT16(1),
-        FLOAT16(0), FLOAT16(0),
-        FLOAT16(2), FLOAT16(1),
+    std::vector<size_t> ivec1u(ivec1.size());
+    std::transform(
+        ivec1.begin(),
+        ivec1.end(),
+        ivec1u.begin(),
+        [axis_len](int idx){return idx<0?idx+axis_len:idx;}
+    );
 
-        FLOAT16(0), FLOAT16(0),
-        FLOAT16(2), FLOAT16(1),
-        FLOAT16(2), FLOAT16(0),
-    });
+    std::vector<FLOAT16> expected16(input1->count());
+    auto to_vec_size_t=[](const std::vector<int>& vec){return std::vector<size_t>(vec.begin(),vec.end());};
+    ngraph::runtime::reference::gather_elements<FLOAT16,size_t>(
+        ivec0.data(),
+        ivec1u.data(),
+        expected16.data(),
+        ov::Shape(to_vec_size_t(input0->get_layout().get_dims())),
+        ov::Shape(to_vec_size_t(input1->get_layout().get_dims())),
+        ov::Shape(to_vec_size_t(input1->get_layout().get_dims())),
+        axis);
+    std::vector<float> expected32;
+    for(auto&i:expected16)
+        expected32.push_back(float16_to_float32(i.v));
 
-    std::vector<float> expected_results = {
-        FLOAT16(14),
-        FLOAT16(21),
-        FLOAT16(34),
-
-        FLOAT16(11),
-        FLOAT16(26),
-        FLOAT16(33),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 6, 1, 1, 1 });
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 3, 1, 1 });
+    DoTestV6(engine, input0, input1, expected32, axis, format::bfzyx, input1->get_layout().size);
 }
 
-TEST(gather_elements_gpu_fp16, d234_i2311_ir4_batch2) {
+TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
+    int axis=3;
+
     auto& engine = get_test_engine();
 
-    const int indices_rank = 4;
-    const int batch_dims = 2;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 1, 4 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 1, 1 } }); // indices
-    // expected output dim: v5{6,1,1}, v8{2,3,1,1}
-
-    set_values(input0, {
-        FLOAT16(1), FLOAT16(2), FLOAT16(3), FLOAT16(4),
-        FLOAT16(5), FLOAT16(6), FLOAT16(7), FLOAT16(8),
-        FLOAT16(9), FLOAT16(10), FLOAT16(11), FLOAT16(12),
-
-        FLOAT16(13), FLOAT16(14), FLOAT16(15), FLOAT16(16),
-        FLOAT16(17), FLOAT16(18), FLOAT16(19), FLOAT16(20),
-        FLOAT16(21), FLOAT16(22), FLOAT16(23), FLOAT16(24),
-
-        });
-
-    set_values(input1, {
-        FLOAT16(1),
-        FLOAT16(0),
-        FLOAT16(2),
-
-        FLOAT16(0),
-        FLOAT16(2),
-        FLOAT16(2),
-        });
-
-    std::vector<float> expected_results = {
-        FLOAT16(2),
-        FLOAT16(5),
-        FLOAT16(11),
-
-        FLOAT16(13),
-        FLOAT16(19),
-        FLOAT16(23),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 6, 1, 1, 1 });
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 3, 1, 1 });
-}
-
-TEST(gather_elements_gpu_fp16, d234_i21_ir2_batch1) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 2;
-    const int batch_dims = 1;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 1, 4 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // indices
-    // expected output dim: v5{2,4,1,1}, v8{2,4,1,1}
-
-    set_values(input0, {
-        FLOAT16(1), FLOAT16(2), FLOAT16(3), FLOAT16(4),
-        FLOAT16(5), FLOAT16(6), FLOAT16(7), FLOAT16(8),
-        FLOAT16(9), FLOAT16(10), FLOAT16(11), FLOAT16(12),
-
-        FLOAT16(13), FLOAT16(14), FLOAT16(15), FLOAT16(16),
-        FLOAT16(17), FLOAT16(18), FLOAT16(19), FLOAT16(20),
-        FLOAT16(21), FLOAT16(22), FLOAT16(23), FLOAT16(24),
-
-    });
-
-    set_values(input1, {
-        FLOAT16(1),
-        FLOAT16(0),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(5), FLOAT16(6), FLOAT16(7), FLOAT16(8),
-        FLOAT16(13), FLOAT16(14), FLOAT16(15), FLOAT16(16),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 4, 1, 1 });
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 4, 1, 1 });
-}
-
-TEST(gather_elements_gpu_fp16, d22_i21_ir2_batch1) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 2;
-    const int batch_dims = 1;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 2, 1, 1 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // indices
-    // expected output dim: v5{2,1,1}, v8{2,1,1}
-
-    set_values(input0, {
-        FLOAT16(1), FLOAT16(2),
-        FLOAT16(3), FLOAT16(4),
-    });
-
-    set_values(input1, {
-        FLOAT16(1),
-        FLOAT16(0),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(2),
-        FLOAT16(3),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 1, 1, 1 });
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 1, 1, 1, 1 });
-}
-
-TEST(gather_elements_gpu_fp16, d3223_i321113_ir6_batch0) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 6;
-    const int batch_dims = 0;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 3, 2 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfwzyx, { 3, 2, 3, 1, 1, 1 } }); // indices
-    // expected output dim: 323111
-
-    set_values(input0, {
-        FLOAT16(11), FLOAT16(12), FLOAT16(13),   FLOAT16(14), FLOAT16(15), FLOAT16(16),
-        FLOAT16(21), FLOAT16(22), FLOAT16(23),   FLOAT16(24), FLOAT16(25), FLOAT16(26),
-
-        FLOAT16(31), FLOAT16(32), FLOAT16(33),   FLOAT16(34), FLOAT16(35), FLOAT16(36),
-        FLOAT16(41), FLOAT16(42), FLOAT16(43),   FLOAT16(44), FLOAT16(45), FLOAT16(46),
-
-        FLOAT16(51), FLOAT16(52), FLOAT16(53),   FLOAT16(54), FLOAT16(55), FLOAT16(56),
-        FLOAT16(61), FLOAT16(62), FLOAT16(63),   FLOAT16(64), FLOAT16(65), FLOAT16(66),
-    });
-
-    set_values(input1, {
-        FLOAT16(2), FLOAT16(1), FLOAT16(1),
-        FLOAT16(1), FLOAT16(0), FLOAT16(0),
-
-        FLOAT16(0), FLOAT16(1), FLOAT16(0),
-        FLOAT16(2), FLOAT16(0), FLOAT16(1),
-
-        FLOAT16(1), FLOAT16(1), FLOAT16(0),
-        FLOAT16(0), FLOAT16(0), FLOAT16(0),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(64), FLOAT16(65), FLOAT16(66),
-        FLOAT16(31), FLOAT16(32), FLOAT16(33),
-
-        FLOAT16(21), FLOAT16(22), FLOAT16(23),
-        FLOAT16(54), FLOAT16(55), FLOAT16(56),
-
-        FLOAT16(41), FLOAT16(42), FLOAT16(43),
-        FLOAT16(11), FLOAT16(12), FLOAT16(13),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfwzyx, { 3, 2, 3, 1, 1, 1 });
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfwzyx, { 3, 2, 3, 1, 1, 1 });
-}
-
-TEST(gather_elements_gpu_fp16, d3221_i32312_ir3_batch0) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 3;
-    const int batch_dims = 0;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 3, 2, 2, 1, 3 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 1, 2 } }); // indices
-    // expected output dim: 32213
-
-    set_values(input0, {
-        FLOAT16(11), FLOAT16(12),     FLOAT16(13), FLOAT16(14),     FLOAT16(15), FLOAT16(16),
-        FLOAT16(21), FLOAT16(22),     FLOAT16(23), FLOAT16(24),     FLOAT16(25), FLOAT16(26),
-
-        FLOAT16(31), FLOAT16(32),     FLOAT16(33), FLOAT16(34),     FLOAT16(35), FLOAT16(36),
-        FLOAT16(41), FLOAT16(42),     FLOAT16(43), FLOAT16(44),     FLOAT16(45), FLOAT16(46),
-
-        FLOAT16(51), FLOAT16(52),     FLOAT16(53), FLOAT16(54),     FLOAT16(55), FLOAT16(56),
-        FLOAT16(61), FLOAT16(62),     FLOAT16(63), FLOAT16(64),     FLOAT16(65), FLOAT16(66),
-    });
-
-    set_values(input1, {
-        FLOAT16(2), FLOAT16(1),
-        FLOAT16(1), FLOAT16(0),
-
-        FLOAT16(0), FLOAT16(1),
-        FLOAT16(2), FLOAT16(0),
-
-        FLOAT16(1), FLOAT16(1),
-        FLOAT16(0), FLOAT16(0),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(61), FLOAT16(62),     FLOAT16(63), FLOAT16(64),     FLOAT16(65), FLOAT16(66),
-        FLOAT16(31), FLOAT16(32),     FLOAT16(33), FLOAT16(34),     FLOAT16(35), FLOAT16(36),
-
-        FLOAT16(21), FLOAT16(22),     FLOAT16(23), FLOAT16(24),     FLOAT16(25), FLOAT16(26),
-        FLOAT16(51), FLOAT16(52),     FLOAT16(53), FLOAT16(54),     FLOAT16(55), FLOAT16(56),
-
-        FLOAT16(41), FLOAT16(42),     FLOAT16(43), FLOAT16(44),     FLOAT16(45), FLOAT16(46),
-        FLOAT16(11), FLOAT16(12),     FLOAT16(13), FLOAT16(14),     FLOAT16(15), FLOAT16(16),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfzyx, { 3, 2, 2, 1, 3 });
-    // DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfzyx, { 3, 2, 2, 1, 3 });
-}
-
-TEST(gather_elements_gpu_fp16, d3231_i32312_ir3_batch0) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 3;
-    const int batch_dims = 0;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 3, 2, 2, 1, 3 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 1, 3 } }); // indices
-    // expected output dim: {3,2,2,1}
-
-    set_values(input0, {
-        FLOAT16(11), FLOAT16(12),     FLOAT16(13), FLOAT16(14),     FLOAT16(15), FLOAT16(16),
-        FLOAT16(21), FLOAT16(22),     FLOAT16(23), FLOAT16(24),     FLOAT16(25), FLOAT16(26),
-
-        FLOAT16(31), FLOAT16(32),     FLOAT16(33), FLOAT16(34),     FLOAT16(35), FLOAT16(36),
-        FLOAT16(41), FLOAT16(42),     FLOAT16(43), FLOAT16(44),     FLOAT16(45), FLOAT16(46),
-
-        FLOAT16(51), FLOAT16(52),     FLOAT16(53), FLOAT16(54),     FLOAT16(55), FLOAT16(56),
-        FLOAT16(61), FLOAT16(62),     FLOAT16(63), FLOAT16(64),     FLOAT16(65), FLOAT16(66),
-    });
-
-    set_values(input1, {
-        FLOAT16(2), FLOAT16(1), FLOAT16(1),
-        FLOAT16(1), FLOAT16(0), FLOAT16(2),
-
-        FLOAT16(0), FLOAT16(1), FLOAT16(0),
-        FLOAT16(2), FLOAT16(0), FLOAT16(1),
-
-        FLOAT16(1), FLOAT16(1), FLOAT16(2),
-        FLOAT16(0), FLOAT16(0), FLOAT16(0),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(63), FLOAT16(64),
-        FLOAT16(35), FLOAT16(36),
-
-        FLOAT16(21), FLOAT16(22),
-        FLOAT16(53), FLOAT16(54),
-
-        FLOAT16(45), FLOAT16(46),
-        FLOAT16(11), FLOAT16(12),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 3, 2, 2, 1 });
-    //DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 3, 2, 2, 1 });
-}
-
-TEST(gather_elements_gpu_fp16, d3112_i3221_ir4_batch0) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 4;
-    const int batch_dims = 0;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 1, 2, 1 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 1, 2 } }); // indices
-    // expected output dim: {3,2,2,1,1,2}
-
-    set_values(input0, {
-        FLOAT16(1), FLOAT16(2),
-        FLOAT16(7), FLOAT16(8),
-        FLOAT16(13), FLOAT16(14),
-    });
-
-    set_values(input1, {
-        FLOAT16(2), FLOAT16(1),
-        FLOAT16(0), FLOAT16(1),
-
-        FLOAT16(2), FLOAT16(1),
-        FLOAT16(0), FLOAT16(1),
-
-        FLOAT16(2), FLOAT16(1),
-        FLOAT16(0), FLOAT16(1),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(13), FLOAT16(14),       FLOAT16(7), FLOAT16(8),
-        FLOAT16(1), FLOAT16(2),         FLOAT16(7), FLOAT16(8),
-
-        FLOAT16(13), FLOAT16(14),       FLOAT16(7), FLOAT16(8),
-        FLOAT16(1), FLOAT16(2),         FLOAT16(7), FLOAT16(8),
-
-        FLOAT16(13), FLOAT16(14),       FLOAT16(7), FLOAT16(8),
-        FLOAT16(1), FLOAT16(2),         FLOAT16(7), FLOAT16(8),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfwzyx, { 3, 2, 2, 1, 1, 2 });
-    //DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfwzyx, { 3, 2, 2, 1, 1, 2 });
-}
-
-TEST(gather_elements_gpu_fp16, d3332_i3223_ir4_batch0) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 4;
-    const int batch_dims = 0;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 3, 3, 2 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 3, 2 } }); // indices
-    // expected output dim: {3,2,3,2}
-
-    set_values(input0, {
-        FLOAT16(1), FLOAT16(2), FLOAT16(3),     FLOAT16(4), FLOAT16(5), FLOAT16(6),
-        FLOAT16(7), FLOAT16(8), FLOAT16(9),     FLOAT16(10), FLOAT16(11), FLOAT16(12),
-        FLOAT16(13), FLOAT16(14), FLOAT16(15),  FLOAT16(16), FLOAT16(17), FLOAT16(18),
-
-        FLOAT16(19), FLOAT16(20), FLOAT16(21),     FLOAT16(22), FLOAT16(23), FLOAT16(24),
-        FLOAT16(25), FLOAT16(26), FLOAT16(27),     FLOAT16(28), FLOAT16(29), FLOAT16(30),
-        FLOAT16(31), FLOAT16(32), FLOAT16(33),     FLOAT16(34), FLOAT16(35), FLOAT16(36),
-
-        FLOAT16(41), FLOAT16(42), FLOAT16(43),     FLOAT16(44), FLOAT16(45), FLOAT16(46),
-        FLOAT16(51), FLOAT16(52), FLOAT16(53),     FLOAT16(54), FLOAT16(55), FLOAT16(56),
-        FLOAT16(61), FLOAT16(62), FLOAT16(63),     FLOAT16(64), FLOAT16(65), FLOAT16(66),
-    });
-
-    set_values(input1, {
-        FLOAT16(2), FLOAT16(0), FLOAT16(0),        FLOAT16(2), FLOAT16(2), FLOAT16(0),
-        FLOAT16(1), FLOAT16(0), FLOAT16(0),        FLOAT16(1), FLOAT16(1), FLOAT16(0),
-
-        FLOAT16(1), FLOAT16(0), FLOAT16(1),        FLOAT16(1), FLOAT16(1), FLOAT16(1),
-        FLOAT16(2), FLOAT16(0), FLOAT16(0),        FLOAT16(2), FLOAT16(1), FLOAT16(0),
-
-        FLOAT16(1), FLOAT16(1), FLOAT16(1),        FLOAT16(0), FLOAT16(1), FLOAT16(1),
-        FLOAT16(1), FLOAT16(2), FLOAT16(1),        FLOAT16(0), FLOAT16(2), FLOAT16(1),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(41), FLOAT16(42), FLOAT16(43),      FLOAT16(61), FLOAT16(62), FLOAT16(63),
-        FLOAT16(19), FLOAT16(20), FLOAT16(21),      FLOAT16(25), FLOAT16(26), FLOAT16(27),
-
-        FLOAT16(22), FLOAT16(23), FLOAT16(24),      FLOAT16(28), FLOAT16(29), FLOAT16(30),
-        FLOAT16(41), FLOAT16(42), FLOAT16(43),      FLOAT16(51), FLOAT16(52), FLOAT16(53),
-
-        FLOAT16(28), FLOAT16(29), FLOAT16(30),      FLOAT16(10), FLOAT16(11), FLOAT16(12),
-        FLOAT16(34), FLOAT16(35), FLOAT16(36),      FLOAT16(16), FLOAT16(17), FLOAT16(18),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 3, 2, 3, 2 });
-    //DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 3, 2, 3, 2 });
-}
-
-TEST(gather_elements_gpu_fp16, d3323_i322_ir3_batch0) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 3;
-    const int batch_dims = 0;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 3, 3, 2 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 1, 2 } }); // indices
-    // expected output dim: {3,2,3,2}
-
-    set_values(input0, {
-        FLOAT16(1), FLOAT16(2), FLOAT16(3),     FLOAT16(4), FLOAT16(5), FLOAT16(6),
-        FLOAT16(7), FLOAT16(8), FLOAT16(9),     FLOAT16(10), FLOAT16(11), FLOAT16(12),
-        FLOAT16(13), FLOAT16(14), FLOAT16(15),  FLOAT16(16), FLOAT16(17), FLOAT16(18),
-
-        FLOAT16(19), FLOAT16(20), FLOAT16(21),     FLOAT16(22), FLOAT16(23), FLOAT16(24),
-        FLOAT16(25), FLOAT16(26), FLOAT16(27),     FLOAT16(28), FLOAT16(29), FLOAT16(30),
-        FLOAT16(31), FLOAT16(32), FLOAT16(33),     FLOAT16(34), FLOAT16(35), FLOAT16(36),
-
-        FLOAT16(41), FLOAT16(42), FLOAT16(43),     FLOAT16(44), FLOAT16(45), FLOAT16(46),
-        FLOAT16(51), FLOAT16(52), FLOAT16(53),     FLOAT16(54), FLOAT16(55), FLOAT16(56),
-        FLOAT16(61), FLOAT16(62), FLOAT16(63),     FLOAT16(64), FLOAT16(65), FLOAT16(66),
-    });
-
-    set_values(input1, {
-        FLOAT16(2), FLOAT16(0),
-        FLOAT16(2), FLOAT16(1),
-
-        FLOAT16(1), FLOAT16(2),
-        FLOAT16(1), FLOAT16(0),
-
-        FLOAT16(0), FLOAT16(1),
-        FLOAT16(0), FLOAT16(2),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(41), FLOAT16(42), FLOAT16(43),     FLOAT16(44), FLOAT16(45), FLOAT16(46),
-        FLOAT16(51), FLOAT16(52), FLOAT16(53),     FLOAT16(54), FLOAT16(55), FLOAT16(56),
-
-        FLOAT16(31), FLOAT16(32), FLOAT16(33),     FLOAT16(34), FLOAT16(35), FLOAT16(36),
-        FLOAT16(19), FLOAT16(20), FLOAT16(21),     FLOAT16(22), FLOAT16(23), FLOAT16(24),
-
-        FLOAT16(7), FLOAT16(8), FLOAT16(9),        FLOAT16(10), FLOAT16(11), FLOAT16(12),
-        FLOAT16(13), FLOAT16(14), FLOAT16(15),     FLOAT16(16), FLOAT16(17), FLOAT16(18),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 3, 2, 3, 2 });
-    //DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 3, 2, 3, 2 });
-}
-
-TEST(gather_elements_gpu_fp16, d22_i21_ir2_batch0) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 2;
-    const int batch_dims = 0;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 2, 1, 1 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 1, 1, 1 } }); // indices
-    // expected output dim: {2,2,1,1}
-
-    set_values(input0, {
-        FLOAT16(1), FLOAT16(2),
-        FLOAT16(3), FLOAT16(4)
-    });
-
-    set_values(input1, {
-        FLOAT16(1), FLOAT16(0),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(3), FLOAT16(4),
-        FLOAT16(1), FLOAT16(2),
-    };
-
-    DoTestV6(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 2, 1, 1 });
-    //DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 2, 2, 1, 1 });
-}
-
-TEST(gather_elements_gpu_fp16, d22_i32_ir2_batch0) {
-    auto& engine = get_test_engine();
-
-    const int indices_rank = 2;
-    const int batch_dims = 0;
-    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 2, 1, 1 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 3, 2, 1, 1 } }); // indices
-    // expected output dim: {3,1,1}
-
-    set_values(input0, {
-        FLOAT16(1), FLOAT16(2),
-        FLOAT16(3), FLOAT16(4)
-    });
-
-    set_values(input1, {
-        FLOAT16(0), FLOAT16(0),
-        FLOAT16(1), FLOAT16(0),
-        FLOAT16(1), FLOAT16(1),
-    });
-
-    std::vector<float> expected_results = {
-        FLOAT16(1),
-        FLOAT16(3),
-        FLOAT16(4),
-    };
-
-    DoTestV6(engine,input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 3, 1, 1, 1 });
-    //DoTestV8(engine, input0, input1, expected_results, indices_rank, batch_dims, format::bfyx, { 3, 1, 1, 1 });
+    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 3, 4 } }); // data
+    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 3, 9 } }); // indices
+
+    int axis_len=input0->get_layout().get_dim(axis);
+
+    auto ivec0=generate_random_1d<FLOAT16>(input0->count(),0,999);
+    auto ivec1=generate_random_1d<int>(input1->count(),-axis_len,axis_len-1);
+    set_values(input0, ivec0);
+    set_values(input1, ivec1);
+
+    std::vector<size_t> ivec1u(ivec1.size());
+    std::transform(
+        ivec1.begin(),
+        ivec1.end(),
+        ivec1u.begin(),
+        [axis_len](int idx){return idx<0?idx+axis_len:idx;}
+    );
+
+    std::vector<FLOAT16> expected16(input1->count());
+    auto to_vec_size_t=[](const std::vector<int>& vec){return std::vector<size_t>(vec.begin(),vec.end());};
+    ngraph::runtime::reference::gather_elements<FLOAT16,size_t>(
+        ivec0.data(),
+        ivec1u.data(),
+        expected16.data(),
+        ov::Shape(to_vec_size_t(input0->get_layout().get_dims())),
+        ov::Shape(to_vec_size_t(input1->get_layout().get_dims())),
+        ov::Shape(to_vec_size_t(input1->get_layout().get_dims())),
+        axis);
+    std::vector<float> expected32;
+    for(auto&i:expected16)
+        expected32.push_back(float16_to_float32(i.v));
+
+    DoTestV6(engine, input0, input1, expected32, axis, format::bfzyx, input1->get_layout().size);
 }
