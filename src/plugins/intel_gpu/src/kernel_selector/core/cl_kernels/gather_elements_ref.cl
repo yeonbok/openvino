@@ -7,30 +7,6 @@
 #define GET_UPDATES_INDEX(prefix, idx_order) CAT(prefix, _GET_INDEX)(idx_order)
 #define GET_OUTPUT_INDEX(out_order) OUTPUT_GET_INDEX(out_order)
 
-#if INPUT0_DIMS == 4
-    #define IN_ORDER in_b,in_f,in_y,in_x
-#elif INPUT0_DIMS == 5
-    #define IN_ORDER in_b,in_f,in_z,in_y,in_x
-#else
-    #define IN_ORDER in_b,in_f,in_w,in_z,in_y,in_x
-#endif
-
-#if INPUT1_DIMS == 4
-    #define IDX_ORDER idx_b,idx_f,idx_y,idx_x
-#elif INPUT1_DIMS == 5
-    #define IDX_ORDER idx_b,idx_f,idx_z,idx_y,idx_x
-#else
-    #define IDX_ORDER idx_b,idx_f,idx_w,idx_z,idx_y,idx_x
-#endif
-
-#if OUTPUT_DIMS == 4
-    #define OUT_ORDER out_b,out_f,out_y,out_x
-#elif OUTPUT_DIMS == 5
-    #define OUT_ORDER out_b,out_f,out_z,out_y,out_x
-#else
-    #define OUT_ORDER out_b,out_f,out_w,out_z,out_y,out_x
-#endif
-
 #define INDICES_MAX_DIM 6
 
 KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
@@ -46,41 +22,86 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
     const uint dim2 = get_global_id(2);
 
     //TODO: Calculate Index or INPUT0_GET_INDEX(b,f,y,x)같은거 사용?
-    //아래는 임시로 아무값이나 줌
-    #if INPUT1_DIMS == 4
-        const uint idx_b = 1;
-        const uint idx_f = dim2;
-        const uint idx_x = dim0;
-        const uint idx_y = dim1;
-        const uint idx_z = 0;
-        const uint idx_w = 0;
-        const uint in_b = 1;
-        const uint in_f = 1;
-        const uint in_x = 1;
-        const uint in_y = 1;
+    const uint in0b=INPUT0_BATCH_NUM;
+    const uint in0f=INPUT0_FEATURE_NUM;
+    const uint in0y=INPUT0_SIZE_Y;
+    const uint in0x=INPUT0_SIZE_X;
+    const uint in1b=INPUT1_BATCH_NUM;
+    const uint in1f=INPUT1_FEATURE_NUM;
+    const uint in1y=INPUT1_SIZE_Y;
+    const uint in1x=INPUT1_SIZE_X;
 
-        const uint idx_arr[INPUT1_DIMS*2] = {idx_b, idx_f, idx_y, idx_x, 0, 0, 0, 0};
-        const uint idx_dim[INPUT1_DIMS] = {INPUT1_BATCH_NUM, INPUT1_FEATURE_NUM, INPUT1_SIZE_Y, INPUT1_SIZE_X};
-    #elif INPUT1_DIMS == 5
-        //TODO
-    #else
-        //TODO
-    #endif
+printf("%d %d %d %d\n",in0b,in0f,in0y,in0x);
+printf("%d %d %d %d\n",in1b,in1f,in1y,in1x);
+//    for(uint b=0;b<in0b;b++){
+//        for(uint f=0;f<in0f;f++){
+//            for(uint y=0;y<in0y;y++){
+//                for(uint x=0;x<in0x;x++){
+//                    printf("%f ",data[INPUT0_GET_INDEX(b,f,y,x)]);
+//                }
+//            }
+//        }
+//    }
+//    for(uint b=0;b<in1b;b++){
+//        for(uint f=0;f<in1f;f++){
+//            for(uint y=0;y<in1y;y++){
+//                for(uint x=0;x<in1x;x++){
+//                    printf("%d ",indices[INPUT1_GET_INDEX(b,f,y,x)]);
+//                }
+//            }
+//        }
+//    }
 
-    const int idx = GET_UPDATES_INDEX(INPUT1, IDX_ORDER);
+#if AXIS==0
+    #define AXIS_LEN0 INPUT0_BATCH_NUM
+    #define AXIS_LEN1 INPUT1_BATCH_NUM
+#elif AXIS==1
+    #define AXIS_LEN0 INPUT0_FEATURE_NUM
+    #define AXIS_LEN1 INPUT1_FEATURE_NUM
+#elif AXIS==2
+    #define AXIS_LEN0 INPUT0_SIZE_Y
+    #define AXIS_LEN1 INPUT1_SIZE_Y
+#else
+    #define AXIS_LEN0 INPUT0_SIZE_X
+    #define AXIS_LEN1 INPUT1_SIZE_X
+#endif
 
-    const uint data_idx = GET_UPDATES_INDEX(INPUT0, IN_ORDER);
+    for(uint b=0;b<in1b;b++){
+        for(uint f=0;f<in1f;f++){
+            for(uint y=0;y<in1y;y++){
+                for(uint x=0;x<in1x;x++){
+                    int axis_val=indices[INPUT1_GET_INDEX(b,f,y,x)];
+                    if(axis_val<0)
+                        axis_val+=AXIS_LEN0;
+                    #if AXIS==0
+                        if(dim0<=4 && dim1<=4 && dim2<=4){
+                            printf("0 %d %d %d %d %d\n",b,f,y,x,axis_val);
+                            printf("1 %f\n",data[INPUT0_GET_INDEX(axis_val,f,y,x)]);
+                            printf("2 %d\n",INPUT0_GET_INDEX(axis_val,f,y,x));
+                            printf("\n");
+                        }
+                        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(axis_val,f,y,x)];
+                    #elif AXIS==1
+                        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,axis_val,y,x)];
+                    #elif AXIS==2
+                        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,f,axis_val,x)];
+                    #else
+                        if(dim0<=4 && dim1<=4 && dim2<=4){
+                            printf("0 %d %d %d %d %d\n",b,f,y,x,axis_val);
+                            printf("1 %f\n",data[INPUT0_GET_INDEX(b,f,y,axis_val)]);
+                            printf("2 %d\n",INPUT0_GET_INDEX(b,f,y,axis_val));
+                            printf("\n");
+                        }
+                        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,f,y,axis_val)];
+                    #endif
+                }
+            }
+        }
+    }
 
-    // Calculate output index
-    const uint out_x = idx_x;
-    const uint out_y = idx_y;
-    const uint out_z = idx_z;
-    const uint out_w = idx_w;
-    const uint out_f = idx_f;
-    const uint out_b = idx_b;
-
-    const uint output_idx = GET_OUTPUT_INDEX(OUT_ORDER);
-
+    if(!dim0 && !dim1 && !dim2)
+        printf("hello?\n");
+    
     // Copy data to output as slice size
     #if HAS_FUSED_OPS
         #if OUTPUT_DIMS == 4
@@ -98,9 +119,6 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
         #endif
         const uint b_pitch = f_pitch * OUTPUT_FEATURE_NUM;
     #endif
-
-    if(!dim0 && !dim1 && !dim2)
-        printf("hello?\n");
 }
 
 #undef INDICES_MAX_DIM

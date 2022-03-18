@@ -96,7 +96,7 @@ TEST(gather_elements_gpu_fp16, d2342_i1342_a0){
     //차원을 내부적으로는 b,f,x,y,z,w,g 순서로 표현한다는듯.
     //다만 차원순서와 달리 메모리포맷은 bfyx로 잘 저장된다.
     auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 2, 4 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 1, 3, 2, 4 } }); // indices
+    auto input1 = engine.allocate_memory({ data_types::i32, format::bfyx, { 1, 3, 2, 4 } }); // indices
     // auto input2 = engine.allocate_memory({  }); //axis
     // 최적화를 위해서 axis매개변수를 넘기지 말고 그냥 6개 케이스에 대해 다 나눠서 만들기?
     // // expected output dim: v6{1,3,2,4}
@@ -107,6 +107,8 @@ TEST(gather_elements_gpu_fp16, d2342_i1342_a0){
     auto ivec1=generate_random_1d<int>(input1->count(),-axis_len,axis_len-1);
     set_values(input0, ivec0);
     set_values(input1, ivec1);
+    for(auto i:ivec0)std::cout<<(float)i<<' ';std::cout<<std::endl;
+    for(auto i:ivec1)std::cout<<i<<' ';std::cout<<std::endl;
 
     std::vector<size_t> ivec1u(ivec1.size());
     std::transform(
@@ -139,7 +141,7 @@ TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
     auto& engine = get_test_engine();
 
     auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 4, 3 } }); // data
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfyx, { 2, 3, 9, 3 } }); // indices
+    auto input1 = engine.allocate_memory({ data_types::i32, format::bfyx, { 2, 3, 9, 3 } }); // indices
 
     int axis_len=input0->get_layout().get_dim(axis);
 
@@ -147,6 +149,8 @@ TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
     auto ivec1=generate_random_1d<int>(input1->count(),-axis_len,axis_len-1);
     set_values(input0, ivec0);
     set_values(input1, ivec1);
+    for(auto i:ivec0)std::cout<<(float)i<<' ';std::cout<<std::endl;
+    for(auto i:ivec1)std::cout<<i<<' ';std::cout<<std::endl;
 
     std::vector<size_t> ivec1u(ivec1.size());
     std::transform(
@@ -170,5 +174,5 @@ TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
     for(auto&i:expected16)
         expected32.push_back(float16_to_float32(i.v));
 
-    DoTestV6(engine, input0, input1, expected32, axis, format::bfzyx, input1->get_layout().size);
+    DoTestV6(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);
 }
