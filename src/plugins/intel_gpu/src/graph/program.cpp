@@ -13,46 +13,40 @@
 #include "kernel_selector_helper.h"
 #include "device_cache_reader.h"
 #include "auto_tuner.h"
-#if 0 // TODO(taylor)
 #include "layout_optimizer.h"
-#endif
 #include "pass_manager.h"
 #include "primitive_type.h"
 #include "program_dump_graph.h"
 #include "sliding_window_utils.h"
 #include "program_helpers.h"
 
-#if 0 // TODO(taylor)
 #include "roi_pooling_inst.h"
 #include "reorg_yolo_inst.h"
-#include "eltwise_inst.h"
-#include "softmax_inst.h"
-#endif
-#include "permute_inst.h"
 #if 0 // TODO(taylor)
-#include "custom_gpu_primitive_inst.h"
+#include "eltwise_inst.h"
 #endif
+#include "softmax_inst.h"
+#include "permute_inst.h"
+#include "custom_gpu_primitive_inst.h"
 #include "binary_convolution_inst.h"
-#if 0 // TODO(andrew)
 #include "resample_inst.h"
 #include "reshape_inst.h"
+#if 0 // TODO(andrew)
 #include "quantize_inst.h"
 #include "activation_inst.h"
+#endif
 #include "scale_inst.h"
 #include "depth_to_space_inst.h"
-#endif
 #include "convolution_inst.h"
 #include "concatenation_inst.h"
-#if 0 // TODO(taylor)
 #include "crop_inst.h"
-#endif
 #include "data_inst.h"
 #include "deconvolution_inst.h"
 #include "detection_output_inst.h"
+#include "fully_connected_inst.h"
+#include "gather_inst.h"
 #include "input_layout_inst.h"
-#if 0 // TODO(taylor)
 #include "shuffle_channels_inst.h"
-#endif
 #include "arg_max_min_inst.h"
 #if 0 // TODO(taylor)
 #include "lstm_inst.h"
@@ -60,21 +54,24 @@
 #include "lstm_gemm_inst.h"
 #endif
 #include "mutable_data_inst.h"
+#include "normalize_inst.h"
 #include "pooling_inst.h"
-#if 0 // TODO(andrew)
 #include "border_inst.h"
 #include "primitive_inst.h"
-#endif
 #include "prior_box_inst.h"
 #include "proposal_inst.h"
-#if 0 // TODO(andrew)
 #include "reorder_inst.h"
+#if 0 // TODO(andrew)
 #include "split_inst.h"
+#endif
 #include "mvn_inst.h"
+#if 0 // TODO(andrew)
 #include "gemm_inst.h"
+#endif
 #include "reduce_inst.h"
 #include "region_yolo_inst.h"
 #include "strided_slice_inst.h"
+#if 0 // TODO(andrew)
 #include "loop_inst.h"
 #endif
 #include "to_string_utils.h"
@@ -514,8 +511,7 @@ void program::pre_optimize_graph(bool is_internal) {
 
     apply_opt_pass<reverse_optional_nodes_outputs>();
 
-    // TODO: It will be uncommented after enabling layout_optimizer
-    // bool output_size_handling_enabled = analyze_output_size_handling_need();
+    bool output_size_handling_enabled = analyze_output_size_handling_need();
     for (auto& node : processing_order) {
         if (!node->is_type<data>())
             node->get_output_layout();
@@ -524,10 +520,10 @@ void program::pre_optimize_graph(bool is_internal) {
     if (options.get<build_option_type::optimize_data>()->enabled()) {
         apply_opt_pass<prepare_quantization>();
     }
-#if 0 // TODO(andrew)
+
     layout_optimizer lo(output_size_handling_enabled);
     set_layout_optimizer_attributes(lo);
-
+#if 0 // TODO(andrew)
     reorder_factory rf;
     if (options.get<build_option_type::optimize_data>()->enabled()) {
         apply_opt_pass<pre_replace_deconv>(lo);
@@ -1323,7 +1319,6 @@ const program::primitives_info& program::get_primitives_info() const { return pr
 
 void program::apply_opt_pass(base_pass& pass) { pm->run(*this, pass); }
 
-#if 0 // TODO(taylor)
 void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
     lo.set_implementation_forcing(options.get<build_option_type::force_implementations>()->forcing);
 
@@ -1352,7 +1347,7 @@ void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
             if (conv.get_primitive()->deformable_mode)
                 lo.set_optimization_attribute(layout_optimizer::optimization_attributes_type::deformable_convolution, 1);
 
-            auto input_size = node->get_dependency(0).get_output_layout().size;
+            auto input_size = node->get_dependency(0).first->get_output_layout().size;
             auto ifm = static_cast<uint32_t>(input_size.feature[0]);
             if (conv.get_primitive()->groups == ifm && conv.get_primitive()->groups >= 16)
                 total_dw_conv_layers++;
@@ -1495,7 +1490,7 @@ void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
         lo.set_optimization_attribute(layout_optimizer::optimization_attributes_type::use_onednn_impls, 1);
 #endif
 }
-
+#if 0 // TODO(taylor)
 std::pair<int64_t, int64_t> program::get_estimated_device_mem_usage() {
     auto max_alloc_size = get_engine().get_device_info().max_alloc_mem_size;
     memory_pool pool(get_engine());
