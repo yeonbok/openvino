@@ -107,8 +107,6 @@ TEST(gather_elements_gpu_fp16, d2342_i1342_a0){
     auto ivec1=generate_random_1d<int>(input1->count(),-axis_len,axis_len-1);
     set_values(input0, ivec0);
     set_values(input1, ivec1);
-    for(auto i:ivec0)std::cout<<(float)i<<' ';std::cout<<std::endl;
-    for(auto i:ivec1)std::cout<<i<<' ';std::cout<<std::endl;
 
     std::vector<size_t> ivec1u(ivec1.size());
     std::transform(
@@ -149,8 +147,6 @@ TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
     auto ivec1=generate_random_1d<int>(input1->count(),-axis_len,axis_len-1);
     set_values(input0, ivec0);
     set_values(input1, ivec1);
-    for(auto i:ivec0)std::cout<<(float)i<<' ';std::cout<<std::endl;
-    for(auto i:ivec1)std::cout<<i<<' ';std::cout<<std::endl;
 
     std::vector<size_t> ivec1u(ivec1.size());
     std::transform(
@@ -176,3 +172,45 @@ TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
 
     DoTestV6(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);
 }
+
+//A: indicis의 axis=0축 크기
+#define TOKENPASTE_(x, y) x ## y
+#define TOKENPASTE(x, y) TOKENPASTE_(x, y)
+#define TESTbfyx0(B,F,Y,X,A) TEST(gather_elements_gpu_fp16, TOKENPASTE(bfyx0_,__LINE__)){\
+    int axis=0;\
+    auto& engine = get_test_engine();\
+    auto input0 = engine.allocate_memory({ data_types::f16, format::bfyx, { B,F,X,Y } });\
+    auto input1 = engine.allocate_memory({ data_types::i32, format::bfyx, { A,F,X,Y } });\
+\
+    auto ivec0=generate_random_1d<FLOAT16>(input0->count(),0,999);\
+    auto ivec1=generate_random_1d<int>(input1->count(),-B,B-1);\
+    set_values(input0, ivec0);\
+    set_values(input1, ivec1);\
+\
+    std::vector<size_t> ivec1u(ivec1.size());\
+    std::transform(ivec1.begin(),ivec1.end(),ivec1u.begin(),[](int idx){return idx<0?idx+B:idx;});\
+\
+    std::vector<FLOAT16> expected16(input1->count());\
+    auto to_vec_size_t=[](const std::vector<int>& vec){return std::vector<size_t>(vec.begin(),vec.end());};\
+    ngraph::runtime::reference::gather_elements<FLOAT16,size_t>(\
+        ivec0.data(),\
+        ivec1u.data(),\
+        expected16.data(),\
+        ov::Shape(to_vec_size_t(input0->get_layout().get_dims())),\
+        ov::Shape(to_vec_size_t(input1->get_layout().get_dims())),\
+        ov::Shape(to_vec_size_t(input1->get_layout().get_dims())),\
+        axis);\
+    std::vector<float> expected32;\
+    for(auto&i:expected16)\
+        expected32.push_back(float16_to_float32(i.v));\
+\
+    DoTestV6(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);\
+}
+
+//extreme cases
+// TESTbfyx0(0,0,0,0,0);//zero-able?
+TESTbfyx0(1,1,1,1,1);//smallest
+TESTbfyx0(2,2,2,2,99999);//large axis_len
+TESTbfyx0(33,33,33,33,1);//huge data
+TESTbfyx0(22,22,22,22,22);//balanced big1
+TESTbfyx0(33,33,33,33,33);//balanced big2
