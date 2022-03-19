@@ -12,19 +12,19 @@ namespace kernel_selector {
 ParamsKey GatherElementsKernelRef::GetSupportedKey() const {
     ParamsKey k;
     k.EnableInputDataType(Datatype::F16);
-    k.EnableInputDataType(Datatype::F32);
+    // k.EnableInputDataType(Datatype::F32);
     k.EnableInputDataType(Datatype::INT32);
     k.EnableOutputDataType(Datatype::F16);
-    k.EnableOutputDataType(Datatype::F32);
+    // k.EnableOutputDataType(Datatype::F32);
     k.EnableOutputDataType(Datatype::INT32);
-    k.EnableOutputDataType(Datatype::INT8);
-    k.EnableOutputDataType(Datatype::UINT8);
+    // k.EnableOutputDataType(Datatype::INT8);
+    // k.EnableOutputDataType(Datatype::UINT8);
     k.EnableInputLayout(DataLayout::bfyx);
     k.EnableOutputLayout(DataLayout::bfyx);
-    k.EnableInputLayout(DataLayout::bfzyx);
-    k.EnableOutputLayout(DataLayout::bfzyx);
-    k.EnableInputLayout(DataLayout::bfwzyx);
-    k.EnableOutputLayout(DataLayout::bfwzyx);
+    // k.EnableInputLayout(DataLayout::bfzyx);
+    // k.EnableOutputLayout(DataLayout::bfzyx);
+    // k.EnableInputLayout(DataLayout::bfwzyx);
+    // k.EnableOutputLayout(DataLayout::bfwzyx);
     k.EnableTensorOffset();
     k.EnableTensorPitches();
     k.EnableBatching();
@@ -50,24 +50,24 @@ CommonDispatchData GatherElementsKernelRef::SetDefault(const gather_elements_par
 
     switch (params.inputs[1].GetLayout()) {
     case DataLayout::bfyx:
-        dispatchData.gws = {1, 1, 1};//{ indices_dims[3], indices_dims[2], indices_dims[1] * indices_dims[0] };
+        //fully parallelizable -> 모든 indices마다 커널할당
+        dispatchData.gws = { params.inputs[1].Batch().v*params.inputs[1].Feature().v, params.inputs[1].Y().v, params.inputs[1].X().v};
         break;
 
-    case DataLayout::bfzyx:
-        dispatchData.gws = {1, 1, 1};//{ indices_dims[4] * indices_dims[3], indices_dims[2], indices_dims[1] * indices_dims[0] };
-        break;
+    // case DataLayout::bfzyx:
+    //     dispatchData.gws = { indices_dims[4] * indices_dims[3], indices_dims[2], indices_dims[1] * indices_dims[0] };
+    //     break;
 
-    case DataLayout::bfwzyx:
-        dispatchData.gws = {1, 1, 1};//{ indices_dims[5] * indices_dims[4], indices_dims[3] * indices_dims[2], indices_dims[1] * indices_dims[0] };
-        break;
+    // case DataLayout::bfwzyx:
+    //     dispatchData.gws = { indices_dims[5] * indices_dims[4], indices_dims[3] * indices_dims[2], indices_dims[1] * indices_dims[0] };
+    //     break;
 
     default:
         throw std::invalid_argument("Unsupported data layout for scatter elements update primitive");
         break;
     }
 
-    dispatchData.lws = {1, 1, 1};//GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo);
-
+    dispatchData.lws = GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo);
     return dispatchData;
 }
 

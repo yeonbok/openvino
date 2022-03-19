@@ -12,9 +12,6 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
 #endif
 )
 {
-    const uint dim0 = get_global_id(0);
-    const uint dim1 = get_global_id(1);
-    const uint dim2 = get_global_id(2);
 #if AXIS==0
     #define AXIS_LEN0 INPUT0_BATCH_NUM
     #define AXIS_LEN1 INPUT1_BATCH_NUM
@@ -28,27 +25,25 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
     #define AXIS_LEN0 INPUT0_SIZE_X
     #define AXIS_LEN1 INPUT1_SIZE_X
 #endif
-
-    for(uint b=0;b<INPUT1_BATCH_NUM;b++){
-        for(uint f=0;f<INPUT1_FEATURE_NUM;f++){
-            for(uint y=0;y<INPUT1_SIZE_Y;y++){
-                for(uint x=0;x<INPUT1_SIZE_X;x++){
-                    int axis_val=indices[INPUT1_GET_INDEX(b,f,y,x)];
-                    if(axis_val<0)
-                        axis_val+=AXIS_LEN0;
-                    #if AXIS==0
-                        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(axis_val,f,y,x)];
-                    #elif AXIS==1
-                        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,axis_val,y,x)];
-                    #elif AXIS==2
-                        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,f,axis_val,x)];
-                    #else
-                        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,f,y,axis_val)];
-                    #endif
-                }
-            }
-        }
-    }
+    const uint dim0 = get_global_id(0);
+    const uint dim1 = get_global_id(1);
+    const uint dim2 = get_global_id(2);
+    const uint b=dim0/INPUT1_FEATURE_NUM;
+    const uint f=dim0%INPUT1_FEATURE_NUM;
+    const uint y=dim1;
+    const uint x=dim2;
+    int axis_val=indices[INPUT1_GET_INDEX(b,f,y,x)];
+    if(axis_val<0)
+        axis_val+=AXIS_LEN0;
+    #if AXIS==0
+        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(axis_val,f,y,x)];
+    #elif AXIS==1
+        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,axis_val,y,x)];
+    #elif AXIS==2
+        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,f,axis_val,x)];
+    #else
+        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,f,y,axis_val)];
+    #endif
     
     // Copy data to output as slice size
     #if HAS_FUSED_OPS
