@@ -67,6 +67,8 @@ inline void DoTestBase(engine& engine,
     cldnn::mem_lock<uint16_t> output_ptr(output, get_test_stream());
     for (size_t i = 0; i < expected_results.size(); ++i) {
         EXPECT_EQ(expected_results[i], float16_to_float32(output_ptr[i]));
+        if ( expected_results[i] != float16_to_float32(output_ptr[i]) )
+            break;
     }
 }
 
@@ -210,7 +212,7 @@ TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
 //extreme cases
 // TESTbfyx0(0,0,0,0,0);//zero-able?
 TESTbfyx0(1,1,1,1,1);//smallest
-TESTbfyx0(2,2,2,2,99999);//large axis_len
-TESTbfyx0(33,33,33,33,1);//huge data
-TESTbfyx0(22,22,22,22,22);//balanced big1
-TESTbfyx0(33,33,33,33,33);//balanced big2
+TESTbfyx0(1,1,1,1,11111111);//large axis_len
+TESTbfyx0(66,66,66,66,1);//huge data
+TESTbfyx0(44,44,44,44,44);//balanced big1
+TESTbfyx0(55,55,55,55,55);//balanced big2

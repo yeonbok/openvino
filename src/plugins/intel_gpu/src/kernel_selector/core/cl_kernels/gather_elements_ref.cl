@@ -44,24 +44,6 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
     #else
         output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,f,y,axis_val)];
     #endif
-    
-    // Copy data to output as slice size
-    #if HAS_FUSED_OPS
-        #if OUTPUT_DIMS == 4
-            const uint y_pitch = OUTPUT_SIZE_X;
-            const uint f_pitch = y_pitch * OUTPUT_SIZE_Y;
-        #elif OUTPUT_DIMS == 5
-            const uint y_pitch = OUTPUT_SIZE_X;
-            const uint z_pitch = y_pitch * OUTPUT_SIZE_Y;
-            const uint f_pitch = z_pitch * OUTPUT_SIZE_Z;
-        #else
-            const uint y_pitch = OUTPUT_SIZE_X;
-            const uint z_pitch = y_pitch * OUTPUT_SIZE_Y;
-            const uint w_pitch = z_pitch * OUTPUT_SIZE_Z;
-            const uint f_pitch = w_pitch * OUTPUT_SIZE_W;
-        #endif
-        const uint b_pitch = f_pitch * OUTPUT_FEATURE_NUM;
-    #endif
 }
 
 #undef INDICES_MAX_DIM
