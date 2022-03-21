@@ -221,8 +221,9 @@ public:
         if (cache_entry_map.find(key) == cache_entry_map.end()) {
             if (create_new_data) {
                 auto new_entry = create_new_data();
-                add_new_entry(key, new_entry);
-                data = cache_entry_map[key].second.data;
+                if (add_new_entry(key, new_entry)) {
+                    data = cache_entry_map[key].second.data;
+                }
             }
             is_found = false;
         } else {
@@ -255,20 +256,27 @@ public:
     }
 
 private:
-    void add_new_entry(TypeK key, LRUCache::CacheEntry entry) {
-        if (cache_entry_map.find(key) == cache_entry_map.end()) {
-            if (curr_data_size > 0 && capacity < (curr_data_size + entry.size)) {
-                //  Remove cache at the end of order
-                curr_data_size -= cache_entry_map[order.back()].second.size;
-                cache_entry_map.erase(order.back());
-                order.pop_back();
-            }
-        } else {
+    bool add_new_entry(TypeK key, LRUCache::CacheEntry entry) {
+        if (entry.size > capacity)
+            return false;
+
+        size_t new_data_size = curr_data_size + entry.size;
+        while (new_data_size > capacity) {
+            //  Remove cache at the end of order
+            new_data_size -= cache_entry_map[order.back()].second.size;
+            cache_entry_map.erase(order.back());
+            order.pop_back();
+        }
+
+        if (cache_entry_map.find(key) != cache_entry_map.end()) {
             order.erase(cache_entry_map[key].first);
         }
         order.push_front(key);
         cache_entry_map[key] = std::make_pair(order.begin(), entry);
-        curr_data_size += entry.size;
+        
+        curr_data_size = new_data_size;
+
+        return true;
     }
 };
 }  // namespace cldnn

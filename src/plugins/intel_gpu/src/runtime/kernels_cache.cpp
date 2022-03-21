@@ -40,6 +40,7 @@
 #include <Windows.h>
 #endif
 
+#define DEF_IN_MEMORY_CACHE_CAPACITY_IN_MB 100
 namespace {
 std::mutex cacheAccessMutex;
 
@@ -226,7 +227,10 @@ void kernels_cache::get_program_source(const kernels_code& kernels_source_code, 
     }
 }
 
-kernels_cache::kernels_cache(engine& engine) : _engine(engine) { }
+kernels_cache::kernels_cache(engine& engine)
+    : _engine(engine)
+    , _in_memory_kernels_cache(DEF_IN_MEMORY_CACHE_CAPACITY_IN_MB * 1024 * 1024) {
+}
 
 kernel_id kernels_cache::set_kernel_source(
     const std::shared_ptr<kernel_string>& kernel_string,
@@ -298,7 +302,19 @@ void kernels_cache::build_batch(const engine& build_engine, const batch_program&
     std::string cached_bin_name = get_cache_path() + std::to_string(batch.hash_value) + ".cl_cache";
     cl::Program::Binaries precompiled_kernels = {};
 
-    if (is_cache_enabled()) {
+    // in-memory cache
+    if (batch.kernels_counter == 1) {
+        std::vector<uint8_t> data;
+        bool hitted = false;
+        std::tie(data, hitted) = _in_memory_kernels_cache.get(batch.hash_value);
+
+        if (hitted && (data.size() > 0)) {
+            precompiled_kernels.push_back(data);
+        }
+    }
+
+    // file-memory cache
+    if (precompiled_kernels.empty() && is_cache_enabled()) {
         // Try to load file with name ${hash_value}.cl_cache which contains precompiled kernels for current bucket
         // If read is successful, then remove kernels from compilation bucket
         auto bin = loadBinaryFromFile(cached_bin_name);
@@ -306,6 +322,7 @@ void kernels_cache::build_batch(const engine& build_engine, const batch_program&
             precompiled_kernels.push_back(bin);
         }
     }
+
     try {
         cl::vector<cl::Kernel> kernels;
 
@@ -327,12 +344,22 @@ void kernels_cache::build_batch(const engine& build_engine, const batch_program&
 
             program.createKernels(&kernels);
 
+            auto program_bin = getProgramBinaries(program);
+
+            // save to in_memory cache
+            // Cache is saved at both in-memory and file, because in-memory cache capacity is limited.
+            if (batch.kernels_counter == 1) {
+                _in_memory_kernels_cache.get(batch.hash_value, [program_bin](){
+                    return LRUCache<size_t, std::vector<uint8_t>>::CacheEntry{program_bin, program_bin.size()};
+                });
+            }
+            // save to file cache
             if (is_cache_enabled()) {
                 // If kernels caching is enabled, then we save compiled bucket to binary file with name ${code_hash_value}.cl_cache
                 // Note: Bin file contains full bucket, not separate kernels, so kernels reuse across different models is quite limited
                 // Bucket size can be changed in get_max_kernels_per_batch() method, but forcing it to 1 will lead to much longer
                 // compile time.
-                saveBinaryToFile(cached_bin_name, getProgramBinaries(program));
+                saveBinaryToFile(cached_bin_name, program_bin);
             }
         } else {
             cl::Program program(cl_build_engine.get_cl_context(), {cl_build_engine.get_cl_device()}, precompiled_kernels);
@@ -455,6 +482,7 @@ void kernels_cache::reset() {
     _kernels.clear();
     _kernels_code.clear();
     _pending_compilation = false;
+    _in_memory_kernels_cache.clear();
 }
 
 }  // namespace cldnn

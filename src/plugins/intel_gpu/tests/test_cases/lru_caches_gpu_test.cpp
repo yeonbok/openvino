@@ -113,4 +113,51 @@ TEST(LRUCache_test, basic02) {
     }
 }
 
+TEST(LRUCache_test, capacity_check)
+{
+    const std::vector<std::string> inputs = {
+        "LRUCache_test",
+        "[short cache 1]",
+        "[short cache 2]",
+        "[short cache 3]",
+        "LRUCache_test",
+        "last string",
+        "Long data should delete short cache 1 2 3",
+        "last string"};
 
+    const std::vector<std::string> expected_final_cache = {
+        "last string",
+        "Long data should delete short cache 1 2 3",
+        "LRUCache_test"};
+
+    const size_t capacity = inputs[1].size() + 
+                            inputs[2].size() + 
+                            inputs[3].size() + 
+                            inputs[4].size() +
+                            inputs[5].size();
+
+    LRUCache<std::string, std::string> cache(capacity);
+
+    // check hitted result
+    std::vector<bool> expected_hitted = {false, false, false, false, true, false, false, true};
+    for (int i = 0; i < inputs.size(); i++) {
+        auto& in = inputs[i];
+        
+        std::string data = "";
+        bool hitted = false;
+        std::tie(data, hitted) = cache.get(in, [in](){
+            return LRUCache<std::string, std::string>::CacheEntry{in, in.size()};
+        });
+        EXPECT_EQ(hitted, (bool)expected_hitted[i]);
+    }
+
+    // compare final cache datas
+    auto final_cache = cache.get_all_keys();
+    EXPECT_EQ(final_cache.size(), expected_final_cache.size());
+
+    int32_t i = 0;
+    for (auto& it : final_cache) {
+        EXPECT_EQ(it, expected_final_cache[i]);
+        i++;
+    }
+}
