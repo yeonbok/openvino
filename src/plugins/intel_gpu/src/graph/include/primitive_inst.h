@@ -82,6 +82,7 @@ public:
     const primitive_id& get_ext_prim_id() const { return _node.get_ext_prim_id(); }
     bool can_be_optimized() const { return _node.can_be_optimized(); }
     std::shared_ptr<const primitive> desc() const { return _node.get_primitive(); }
+    std::shared_ptr<const primitive> get_primitive() const { return _node.get_primitive(); }
     program_node const& get_node() const { return _node; }
     network& get_network() const { return _network; }
     uint32_t get_network_id() const;
@@ -188,6 +189,13 @@ protected:
     // buffer or attach input as output
     // depending on reshape_node.is_in_place())
     memory::ptr _output;
+    layout dyn_layout = layout(data_types::f32, format::bfyx, tensor());
+    static layout get_input_layout(program_node const& node, primitive_inst const* inst, size_t idx) {
+        if (inst)
+            return inst->dependencies()[idx]->dyn_layout;
+        else
+            return node.get_dependency(idx).get_output_layout();
+    }
 
     std::vector<memory::cptr> _intermediates_memory;
 

@@ -17,10 +17,12 @@ primitive_type_id concatenation::type_id() {
     return &instance;
 }
 
-layout concatenation_inst::calc_output_layout(concatenation_node const& node) {
+//layout concatenation_inst::calc_output_layout(concatenation_node const* node, concatenation_inst const* inst) {
+layout concatenation_inst::calc_output_layout(concatenation_node const& node, concatenation_inst const* inst) {
     auto desc = node.get_primitive();
 
-    auto input_layout = node.input(0).get_output_layout();
+    //auto input_layout = node->input(0).get_output_layout();
+    auto input_layout = get_input_layout(node, inst, 0);
     auto output_format = input_layout.format;
     auto result_sizes = input_layout.get_dims();
 
@@ -31,8 +33,9 @@ layout concatenation_inst::calc_output_layout(concatenation_node const& node) {
     // calculate sum of features from all inputs
     result_sizes[axis_index] = 0;
     for (size_t i = 0; i < desc->input.size(); ++i) {
-        auto input_sizes = node.input(i).get_output_layout().get_dims();
-        if (node.input(i).get_output_layout().format == format::b_fs_yx_fsv16)
+        auto input_layout = get_input_layout(node, inst, i);
+        auto input_sizes = input_layout.get_dims();
+        if (input_layout.format == format::b_fs_yx_fsv16)
             output_format = format::b_fs_yx_fsv16;
 
         result_sizes[axis_index] += input_sizes[axis_index];

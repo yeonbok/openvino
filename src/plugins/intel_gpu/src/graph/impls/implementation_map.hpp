@@ -155,10 +155,10 @@ public:
     using factory_type = std::function<primitive_impl*(const typed_program_node<primitive_kind>&)>;
     using map_type = singleton_map<impl_types, std::pair<std::set<key_type>, factory_type>>;
 
-    static factory_type get(const typed_program_node<primitive_kind>& primitive) {
-        impl_types target_impl_type = primitive.get_preferred_impl_type();
+    static factory_type get(const typed_program_node<primitive_kind>& node) {
+        impl_types target_impl_type = node.get_preferred_impl_type();
         // lookup in database; throw if not found
-        auto key = key_builder()(primitive);
+        auto key = key_builder()(node);
         for (auto& kv : map_type::instance()) {
             impl_types impl_type = kv.first;
             if ((target_impl_type & impl_type) != impl_type)
@@ -174,20 +174,37 @@ public:
         target_impl_type_ss << target_impl_type;
         throw std::runtime_error(std::string("implementation_map for ") + typeid(primitive_kind).name() +
                                     " could not find any implementation to match key: " +
-                                    get_key_name(key) + ", impl_type: " + target_impl_type_ss.str() + ", node_id: " + primitive.id());
+                                    get_key_name(key) + ", impl_type: " + target_impl_type_ss.str() + ", node_id: " + node.id());
     }
-
+    static factory_type get(primitive_id id, impl_types types, layout input_layout) {
+        auto key = key_builder(input_layout);
+        for (auto& kv : map_type::instance()) {
+            impl_types impl_type = kv.first;
+            if ((types & impl_type) != impl_type)
+                continue;
+            std::set<key_type>& keys_set = kv.second.first;
+            auto& factory = kv.second.second;
+            if (keys_set.empty() || keys_set.find(key) != keys_set.end())  {
+                return factory;
+            }
+        }
+        std::stringstream target_impl_type_ss;
+        target_impl_type_ss << types;
+        throw std::runtime_error(std::string("implementation_map for ") + typeid(primitive_kind).name() +
+                                    " could not find any implementation to match key: " +
+                                    get_key_name(key) + ", impl_type: " + target_impl_type_ss.str() + ", node_id: " + id);
+    }
     // check if for a given engine and type there exist an implementation
-    static bool check(const typed_program_node<primitive_kind>& primitive) {
-        impl_types target_impl_type = primitive.get_preferred_impl_type();
-        auto key = key_builder()(primitive);
+    static bool check(const typed_program_node<primitive_kind>& node) {
+        impl_types target_impl_type = node.get_preferred_impl_type();
+        auto key = key_builder()(node);
         return check_key(target_impl_type, key);
     }
 
     // check if there exists a kernel implementation of a primitive with output set it primitive's output layout
-    static bool check_io_eq(const typed_program_node<primitive_kind>& primitive) {
-        impl_types target_impl_type = primitive.get_preferred_impl_type();
-        auto key = key_builder()(primitive.get_output_layout());
+    static bool check_io_eq(const typed_program_node<primitive_kind>& node) {
+        impl_types target_impl_type = node.get_preferred_impl_type();
+        auto key = key_builder()(node.get_output_layout());
         return check_key(target_impl_type, key);
     }
 
