@@ -20,15 +20,11 @@
 #include "one_hot_inst.h"
 #endif
 #include "permute_inst.h"
-#if 0 // TODO(andrew)
-#include "gemm_inst.h"
-#endif
 #include "quantize_inst.h"
 #include "mvn_inst.h"
-#if 0 // TODO(andrew)
 #include "depth_to_space_inst.h"
 #include "region_yolo_inst.h"
-#endif
+
 #include <vector>
 #include <memory>
 #include <utility>
@@ -156,14 +152,14 @@ std::vector<std::pair<std::shared_ptr<primitive>, bool>> reorder_factory::get_we
 
     return ret;
 }
-#if 0 // TODO(andrew)
+
 bool layout_optimizer::is_format_supported(program_node& node, format::type fmt) {
     if (node.is_type<fully_connected>() && fmt == format::byxf)
         return false;
 
     if (node.is_type<mvn>() && fmt == format::b_fs_yx_fsv16 &&
-        node.get_dependency(0).get_output_layout().data_type != data_types::i8 &&
-        node.get_dependency(0).get_output_layout().data_type != data_types::u8)
+        node.get_dependency(0).first->get_output_layout().data_type != data_types::i8 &&
+        node.get_dependency(0).first->get_output_layout().data_type != data_types::u8)
         return false;
 
     if (node.is_type<input_layout>())
@@ -194,9 +190,9 @@ bool layout_optimizer::can_fuse_reorder(program_node& prev, program_node& next, 
     auto use_onednn_impls = _optimization_attributes.use_onednn_impls;
 
     auto is_input_idx = [&](size_t idx) -> bool {
-        if (&next.get_dependency(idx) == &prev)
+        if (next.get_dependency(idx).first == &prev)
             return true;
-        if (next.get_dependency(idx).is_type<reorder>() && &next.get_dependency(idx).get_dependency(0) == &prev)
+        if (next.get_dependency(idx).first->is_type<reorder>() && next.get_dependency(idx).first->get_dependency(0).first == &prev)
             return true;
         return false;
     };
@@ -205,7 +201,7 @@ bool layout_optimizer::can_fuse_reorder(program_node& prev, program_node& next, 
     if (next.get_preferred_impl_type() == impl_types::onednn) {
         for (auto& fused_op : next.get_fused_primitives()) {
             if (fused_op.node->is_type<eltwise>() && fused_op.deps.size() == 1) {
-                auto eltw_in_layout = next.get_dependency(fused_op.dep_start_idx).get_output_layout();
+                auto eltw_in_layout = next.get_dependency(fused_op.dep_start_idx).first->get_output_layout();
                 auto out_layout = next.get_output_layout();
                 if (program_helpers::needs_onednn_sum_post_op(fused_op.node->as<eltwise>(), eltw_in_layout) &&
                     program_helpers::are_layouts_identical_for_onednn_sum_post_op(eltw_in_layout, out_layout) &&
@@ -370,7 +366,7 @@ bool layout_optimizer::can_fuse_reorder(program_node& prev, program_node& next, 
             }
             // The current reorder can be fused if it is a dependency of eltwise sum primitive fused.
             for (size_t i = 0; i < next.get_dependencies().size(); i++) {
-                auto& d_node = next.get_dependency(i);
+                auto& d_node = *next.get_dependency(i).first;
                 if (cur->id() == d_node.id() && dep_idx_set.find(i) != dep_idx_set.end()) {
                     return true;
                 }
@@ -394,7 +390,7 @@ bool layout_optimizer::can_fuse_reorder(program_node& prev, program_node& next, 
 
     return false;
 }
-
+#if 0 // TODO(andrew)
 bool layout_optimizer::can_fuse_reorder_to_prev(program_node& prev, program_node* next, format fmt_prev, format fmt_next) {
     // Ref kernels are the main for depth_to_space and region_yolo. It can do anything. Should not see next.
     if (prev.is_type<depth_to_space>() || prev.is_type<region_yolo>())
@@ -1185,9 +1181,9 @@ layout layout_optimizer::get_expected_layout(layout const& current_layout,
 
     return layout(expected_data_type, expected_format, expected_tensor);
 }
-#if 0 // TODO(andrew)
+
 bool layout_optimizer::are_data_types_suitable_for_onednn(program_node& node) {
-    auto in_dt = node.get_dependency(0).get_output_layout().data_type;
+    auto in_dt = node.get_dependency(0).first->get_output_layout().data_type;
     auto out_dt = node.get_output_layout().data_type;
 
     if (in_dt == data_types::f32 && !node.is_type<fully_connected>())
@@ -1220,7 +1216,7 @@ bool layout_optimizer::are_data_types_suitable_for_onednn(program_node& node) {
     } else if (node.is_type<fully_connected>() || node.is_type<gemm>()) {
         bool is_fc = node.is_type<fully_connected>();
         auto wei_dt = is_fc ? node.as<fully_connected>().weights().get_output_layout().data_type :
-                              node.as<gemm>().get_dependency(1).get_output_layout().data_type;
+                              node.as<gemm>().get_dependency(1).first->get_output_layout().data_type;
 
         if ((in_dt == data_types::f16 && wei_dt == data_types::f16) &&
             (out_dt == data_types::f16 || out_dt == data_types::f32 || out_dt == data_types::i8))
@@ -1234,7 +1230,7 @@ bool layout_optimizer::are_data_types_suitable_for_onednn(program_node& node) {
 
     return false;
 }
-
+#if 0 // TODO(andrew)
 bool layout_optimizer::are_layouts_suitable_for_onednn(program_node& node) {
     auto in_padding = node.get_dependencies().front()->get_output_layout().data_padding;
     auto out_padding = node.get_output_layout().data_padding;
@@ -1270,7 +1266,7 @@ bool layout_optimizer::are_layouts_suitable_for_onednn(program_node& node) {
     }
     return true;
 }
-
+#endif
 impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format preferred_format) {
     impl_types preferred_impl = impl_types::any;
     if (!_forcing_map.empty() && _forcing_map.count(node.id()) != 0) {
@@ -1314,7 +1310,7 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
             format::bs_fs_yx_bsv32_fsv32,
         };
 
-        auto input_layout = node.get_dependency(0).get_output_layout();
+        auto input_layout = node.get_dependency(0).first->get_output_layout();
         auto output_layout = node.get_output_layout();
 
         auto input_fmt = input_layout.format;
@@ -1384,7 +1380,7 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
             size_t sum_post_op_cnt = 0;
             for (auto& fused_op : node.get_fused_primitives()) {
                 if (fused_op.node->is_type<eltwise>() && node.get_dependencies().size() > fused_op.dep_start_idx && fused_op.deps.size() == 1)  {
-                    auto& eltw_in = node.get_dependency(fused_op.dep_start_idx);
+                    auto& eltw_in = *node.get_dependency(fused_op.dep_start_idx).first;
                     if (program_helpers::are_layouts_identical_for_onednn_sum_post_op(eltw_in.get_output_layout(), node.get_output_layout()) &&
                         program_helpers::needs_onednn_sum_post_op(fused_op.node->as<eltwise>(), eltw_in.get_output_layout())) {
                         if (sum_post_op_cnt > 0)
@@ -1427,7 +1423,7 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
         size_t eltw_dep = 0;
         for (auto& fo : node.get_fused_primitives()) {
             if (fo.node->is_type<eltwise>()) {
-                auto in_layout = node.get_dependency(fo.dep_start_idx).get_output_layout();
+                auto in_layout = node.get_dependency(fo.dep_start_idx).first->get_output_layout();
                 auto out_layout = node.get_output_layout();
                 auto in_dt = in_layout.data_type;
                 auto out_dt = out_layout.data_type;
@@ -1466,7 +1462,7 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
             return impl_types::ocl;
 
         for (auto& dep : node.get_dependencies()) {
-            if (dep->is_in_data_flow() && dep->get_preferred_impl_type() == impl_types::onednn) {
+            if (dep.first->is_in_data_flow() && dep.first->get_preferred_impl_type() == impl_types::onednn) {
                 return impl_types::onednn;
             }
         }
@@ -1488,7 +1484,7 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
             if (fo.node->is_type<eltwise>()) {
                 // FC checkings
                 if (node.is_type<fully_connected>()) {
-                    auto in_layout = node.get_dependency(fo.dep_start_idx).get_output_layout();
+                    auto in_layout = node.get_dependency(fo.dep_start_idx).first->get_output_layout();
                     auto out_layout = node.get_output_layout();
                     auto in_dt = in_layout.data_type;
                     auto out_dt = out_layout.data_type;
@@ -1533,13 +1529,13 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
         } else {
             impl_candidate = impl_types::ocl;
             auto gemm_prim = node.as<gemm>().get_primitive();
-            auto in0_l = node.get_dependency(0).get_output_layout();
-            auto in1_l = node.get_dependency(1).get_output_layout();
+            auto in0_l = node.get_dependency(0).first->get_output_layout();
+            auto in1_l = node.get_dependency(1).first->get_output_layout();
             auto out_l = node.get_output_layout();
             auto has_input2 = gemm_prim->dependencies().size() == 3;
             size_t in2_batched_size;
             if (has_input2) {
-                auto in2_l = node.get_dependency(2).get_output_layout();
+                auto in2_l = node.get_dependency(2).first->get_output_layout();
                 in2_batched_size = in2_l.count() / (in2_l.size.spatial[0] * in2_l.size.spatial[1]);
             }
             size_t size_k = gemm_prim->transpose_input0 ? in0_l.size.spatial[1] : in0_l.size.spatial[0];
@@ -1568,7 +1564,7 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
 
     return preferred_impl;
 }
-#endif
+
 format layout_optimizer::get_preferred_format(program_node& node) {
     format expected = format::any;
     auto output_layout = node.get_output_layout();

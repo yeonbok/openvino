@@ -301,7 +301,7 @@ private:
     bool update_implementations;
     bool remove_output_reorders;
 };
-
+#endif
 class reorder_inputs : public base_pass {
 public:
     reorder_inputs(layout_optimizer& lo_ref, reorder_factory& rf_ref);
@@ -312,7 +312,7 @@ private:
     layout_optimizer& _lo;
     reorder_factory& _rf;
 };
-#endif
+
 class trim_to_outputs : public base_pass {
 public:
     trim_to_outputs() : base_pass("trimmed") {}

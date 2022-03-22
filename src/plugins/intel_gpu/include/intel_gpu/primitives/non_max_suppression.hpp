@@ -37,8 +37,8 @@ struct non_max_suppression : public primitive_base<non_max_suppression> {
     /// @param second_output Id of primitive specifying output for scores for each selected box.
     /// @param third_output Id of primitive specifying output for total number of selected boxes.
     non_max_suppression(const primitive_id& id,
-                        const primitive_id& boxes_positions,
-                        const primitive_id& boxes_score,
+                        const input_info& boxes_positions,
+                        const input_info& boxes_score,
                         int selected_indices_num,
                         bool center_point_box = false,
                         bool sort_result_descending = true,
@@ -70,20 +70,20 @@ struct non_max_suppression : public primitive_base<non_max_suppression> {
     primitive_id second_output;
     primitive_id third_output;
 
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
         if (!num_select_per_class.empty())
-            ret.push_back(num_select_per_class);
+            ret.push_back({std::ref(num_select_per_class), 0});
         if (!iou_threshold.empty())
-            ret.push_back(iou_threshold);
+            ret.push_back({std::ref(iou_threshold), 0});
         if (!score_threshold.empty())
-            ret.push_back(score_threshold);
+            ret.push_back({std::ref(score_threshold), 0});
         if (!soft_nms_sigma.empty())
-            ret.push_back(soft_nms_sigma);
+            ret.push_back({std::ref(soft_nms_sigma), 0});
         if (!second_output.empty())
-            ret.push_back(second_output);
+            ret.push_back({std::ref(second_output), 0});
         if (!third_output.empty())
-            ret.push_back(third_output);
+            ret.push_back({std::ref(third_output), 0});
 
         return ret;
     }
