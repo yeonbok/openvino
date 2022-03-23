@@ -10,6 +10,7 @@
 #include "intel_gpu/graph/program.hpp"
 
 #include "kernel_selector_helper.h"
+#include "fused_primitive_info.h"
 #include "meta_utils.h"
 
 #include <set>
@@ -86,18 +87,6 @@ struct fused_primitive_desc_onednn {
     size_t mem_dep;              // memory dependency for working with fused node
 };
 #endif // ENABLE_ONEDNN_FOR_GPU
-
-struct fused_primitive_desc {
-    std::shared_ptr<program_node> node;
-    size_t dep_start_idx;
-    std::vector<std::pair<primitive_id, size_t>> deps;
-    std::map<primitive_id, size_t> fused_deps;
-    size_t total_num_deps = 0;
-    activation_func activation;
-    activation_additional_params activation_params = { 0.f, 0.f };
-    layout input_layout = layout(data_types::f32, format::bfyx, tensor());
-    layout output_layout = layout(data_types::f32, format::bfyx, tensor());
-};
 
 /*
     Base class for all primitives which wraps API class and extends it to be used

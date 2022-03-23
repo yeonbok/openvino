@@ -39,8 +39,16 @@ protected:
 public:
     static primitive_impl* create(const lstm_gemm_node& arg) {
         const auto& weights_layout = arg.weights().get_output_layout();
+        std::vector<layout> input_layouts;
+        for (auto i : arg.get_dependencies()) {
+            input_layouts.push_back(i->get_output_layout());
+        }
+        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
+                                                           arg.get_program(), arg.get_fused_primitives(),
+                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
 
-        auto lstm_gemm_params = get_default_params<kernel_selector::lstm_gemm_params>(arg);
+        auto lstm_gemm_params = get_default_params<kernel_selector::lstm_gemm_params>(param_info);
         lstm_gemm_params.weights = convert_data_tensor(weights_layout);
 
         if (arg.bias_term()) {

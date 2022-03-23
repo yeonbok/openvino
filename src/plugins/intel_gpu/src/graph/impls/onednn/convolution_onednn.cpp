@@ -114,13 +114,35 @@ protected:
         auto& reorderKS = kernel_selector::ReorderWeightsKernelSelctor::Instance();
         kernel_selector::reorder_weights_params r_params;
 
+        std::vector<layout> input_layouts;
+        for (auto i : arg.get_dependencies()) {
+            input_layouts.push_back(i->get_output_layout());
+        }
+
         auto cldnn_prim = arg.get_primitive();
         auto weights_layout = arg.get_dependency(1).get_output_layout();
         auto grouped_weights = format::is_grouped(weights_layout.format) || arg.get_primitive()->grouped_weights_shape;
         cldnn::format out_fmt = onednn::find_format(pd.weights_desc(0), grouped_weights);
         kernel_selector::WeightsLayout reqLayout = to_weights_layout(out_fmt, cldnn_prim->grouped_weights_shape);
 
-        set_params(arg, r_params);
+        const auto& bias_layout = arg.bias_term() ?  arg.bias().get_output_layout() : layout(data_types::f32, format::any, tensor());
+        const auto& weights_zero_points_layout = arg.weights_zero_points_term() ? arg.weights_zero_points().get_output_layout()
+                                                 : layout(data_types::f32, format::any, tensor());
+        const auto& activations_zero_points_layout = arg.activations_zero_points_term() ? arg.activations_zero_points().get_output_layout()
+                                                 : layout(data_types::f32, format::any, tensor());
+        const auto& compensation_layout = arg.compensation_term() ? arg.compensation().get_output_layout()
+                                                 : layout(data_types::f32, format::any, tensor());
+
+        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+                                                           cldnn_prim->type_string(), input_layouts, arg.get_output_layout(),
+                                                           arg.get_program(), arg.get_fused_primitives(),
+                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
+                                                           weights_layout, arg.bias_term(), bias_layout,
+                                                           arg.weights_zero_points_term(), weights_zero_points_layout,
+                                                           arg.activations_zero_points_term(), activations_zero_points_layout,
+                                                           arg.compensation_term(), compensation_layout);
+
+        set_params(param_info, r_params);
         r_params.layerID = arg.id() + "_reorder_";
         r_params.input = convert_weights_tensor(weights_layout, cldnn_prim->grouped_weights_shape);
         r_params.output = r_params.input.TransformIgnorePadding(reqLayout, r_params.input.GetDType(), arg.get_groups(), false);
