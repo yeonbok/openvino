@@ -142,7 +142,7 @@ void concat_input_order::run(program& p) {
         std::vector<tensor::value_type> feature_sizes;
         feature_sizes.reserve(inputs_count);
         for (size_t input_idx = 0; input_idx < inputs_count; ++input_idx) {
-            auto& dep = concat_node.get_dependency(input_idx);
+            auto& dep = *concat_node.get_dependency(input_idx).first;
             auto dep_layout = dep.get_output_layout();
             single_format &= dep_layout.format == out_format;
             feature_sizes.push_back(dep_layout.size.feature[0]);
@@ -189,21 +189,21 @@ void concat_input_order::run(program& p) {
             shuffled_ranges.push_back(original_ranges[ord]);
         }
         // Change input order
-        std::vector<program_node*> new_dependencies = {};
+        std::vector<std::pair<program_node*, int>> new_dependencies = {};
         new_dependencies.reserve(inputs_count);
         for (auto& ord : new_order) {
-            new_dependencies.push_back(&concat_node.get_dependency(ord));
+            new_dependencies.push_back({concat_node.get_dependency(ord).first, concat_node.get_dependency(ord).second});
         }
         // Update in place with const cast instead of replacing
         auto& dependencies = concat_node.get_dependencies();
-        auto& mutable_dependencies = const_cast<std::vector<program_node*>&>(dependencies);
+        auto& mutable_dependencies = const_cast<std::vector<std::pair<program_node*, int>>&>(dependencies);
         for (size_t i = 0; i < new_dependencies.size(); ++i) {
             mutable_dependencies[i] = new_dependencies[i];
         }
-        std::vector<primitive_id> new_input_ids;
+        std::vector<input_info> new_input_ids;
         new_input_ids.reserve(inputs_count);
         for (auto& ord : new_order) {
-            new_input_ids.push_back(prim->input[ord]);
+            new_input_ids.push_back(input_info(prim->input[ord].pid, prim->input[ord].idx));
         }
         auto mutable_prim = std::const_pointer_cast<concatenation>(prim);
         mutable_prim->input = new_input_ids;

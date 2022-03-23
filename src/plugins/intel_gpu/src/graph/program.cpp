@@ -530,7 +530,7 @@ void program::pre_optimize_graph(bool is_internal) {
         apply_opt_pass<prepare_primitive_fusing>(lo);
 
         apply_opt_pass<reorder_inputs>(lo, rf);
-#if 0 // TODO(andrew)
+
         // Ideally this should be done before fusing to simplify logic and make the pass more powerful,
         // but after format selection to select correct alignment.
         // Unfortunately those passes currently happen in reverse order.
@@ -538,7 +538,7 @@ void program::pre_optimize_graph(bool is_internal) {
 
         // TODO this code should be moved to post compilation after kernel selector will support handling reorder bias
         apply_opt_pass<pre_optimize_bias>(rf);
-
+#if 0 // TODO(andrew)
         // passes regarding conv + eltwise optimizations
 
         // shrinking eltwise if users are conv 1x1 with stride > 1 optimization

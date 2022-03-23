@@ -25,7 +25,7 @@ bool pre_optimize_bias::optimize_bias(T& node, reorder_factory& rf, program& p) 
     bool bias_optimized = false;
     for (size_t i = bias_offset; i < node.get_dependencies().size() - node.get_fused_inputs_count(); ++i) {
         // find weights primitive with given pimitive_id and add it to weights_optimizer
-        const program_node& bias = node.get_dependency(i);
+        const program_node& bias = *node.get_dependency(i).first;
         auto new_layout = layout(bias.get_output_layout().data_type,
                                  format::bfyx,
                                  { 1, static_cast<tensor::value_type>(bias.get_output_layout().count()), 1, 1 });
@@ -66,7 +66,7 @@ void pre_optimize_bias::run(program& p, reorder_factory& rf) {
     }
     if (bias_optimized) {
         for (auto n : p.get_processing_order()) {
-            n->recalc_output_layout(true);
+            n->recalc_output_layouts(true);
         }
     }
 }

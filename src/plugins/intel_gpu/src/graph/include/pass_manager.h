@@ -215,7 +215,7 @@ private:
     void run(program& p) override;
     layout_optimizer& _lo;
 };
-#if 0 // TODO(andrew)
+
 class pre_optimize_bias : public base_pass {
 public:
     explicit pre_optimize_bias(reorder_factory& rf_ref);
@@ -227,7 +227,7 @@ private:
     bool optimize_bias(T& node, reorder_factory& rf, program& p);
     reorder_factory& _rf;
 };
-
+#if 0 // TODO(andrew)
 class prepare_padding : public base_pass {
 public:
     explicit prepare_padding(bool output_size_handling_enabled_switch)
@@ -332,7 +332,7 @@ public:
     reverse_optional_nodes_outputs() : base_pass("reverse_optional_nodes_outputs") {}
     void run(program& p) override;
 };
-#if 0 // TODO(andrew)
+
 class concat_input_order : public base_pass {
     // This optimization changes order of inputs for concatenation to provide
     // better alignment for execution and allow for optimizing out in some cases.
@@ -354,7 +354,7 @@ public:
     concat_input_order() : base_pass("concat_input_order") {}
     void run(program& p) override;
 };
-
+#if 0 // TODO(andrew)
 class memory_dependency_pass : public base_pass {
 public:
     explicit memory_dependency_pass(const std::string& pass_name) : base_pass(pass_name) {}

@@ -101,7 +101,7 @@ std::pair<std::shared_ptr<reorder>, bool> reorder_factory::get_reorder(primitive
     std::stringstream ss;
     ss << src_id << "_reorder_" << count;
 
-    auto reorder = std::make_shared<cldnn::reorder>(ss.str(), src_id, out_layout);
+    auto reorder = std::make_shared<cldnn::reorder>(ss.str(), input_info(src_id), out_layout);
     _cached_reorders[ckey] = reorder;
 
     return std::make_pair(reorder, false);
@@ -145,7 +145,7 @@ std::vector<std::pair<std::shared_ptr<primitive>, bool>> reorder_factory::get_we
         std::stringstream ss;
         ss << input_id << "_generic_layer_" << count;
 
-        auto reorder = std::make_shared<cldnn::generic_layer>(ss.str(), input_id, expected_layout, reorder_params);
+        auto reorder = std::make_shared<cldnn::generic_layer>(ss.str(), input_info(input_id), expected_layout, reorder_params);
         _cached_generic_reorders[ckey] = reorder;
         ret.push_back(std::make_pair(reorder, false));
     }
