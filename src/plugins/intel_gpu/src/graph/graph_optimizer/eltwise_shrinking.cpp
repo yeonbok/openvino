@@ -50,7 +50,7 @@ void eltwise_shrinking::run(program& p) {
                     }
 
                     // Check that eltwise is not an input of operation fused to convolution
-                    if (user->get_dependency(0).id() != eltw->id) {
+                    if (user->get_dependency(0).first->id() != eltw->id) {
                         can_shrink = false;
                         break;
                     }
@@ -88,17 +88,17 @@ void eltwise_shrinking::run(program& p) {
                         auto dep_stride_x = stride_x;
                         auto dep_stride_y = stride_y;
                         // don't shrink if input is broadcasted
-                        if (node->get_dependency(dep).get_output_layout().size.spatial[0] == 1) {
+                        if (node->get_dependency(dep).first->get_output_layout().size.spatial[0] == 1) {
                             dep_stride_x = 1;
                         }
 
-                        if (node->get_dependency(dep).get_output_layout().size.spatial[1] == 1) {
+                        if (node->get_dependency(dep).first->get_output_layout().size.spatial[1] == 1) {
                             dep_stride_y = 1;
                         }
 
                         e->stride.push_back({0, 0, dep_stride_x, dep_stride_y});
                     }
-                    node->recalc_output_layout();
+                    node->recalc_output_layouts();
 
                     // change stride on every convolution
                     for (size_t i = 0; i < convs_to_shrink.size(); i++) {
@@ -109,7 +109,7 @@ void eltwise_shrinking::run(program& p) {
                         c->stride.spatial[1] = 1;
                         // TODO: remove forcing "false" with_output_size if not needed
                         c->with_output_size = false;
-                        convs_to_shrink[i]->recalc_output_layout();
+                        convs_to_shrink[i]->recalc_output_layouts();
                     }
                 }
             }

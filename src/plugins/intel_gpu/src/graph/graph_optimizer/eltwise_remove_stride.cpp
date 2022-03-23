@@ -27,15 +27,15 @@ void eltwise_remove_stride::conv_stride_extend(program& p, program_node& node, c
     if (filter_size.spatial[0] == 1 && filter_size.spatial[1] == 1) {
         auto deps = node.get_dependencies();
         for (auto dep : deps) {
-            if (dep->is_type<convolution>()) {
-                conv_stride_extend(p, *dep, tensor);
-                dep->recalc_output_layout(true);
+            if (dep.first->is_type<convolution>()) {
+                conv_stride_extend(p, *dep.first, tensor);
+                dep.first->recalc_output_layouts(true);
                 break;
             }
         }
         auto c = const_cast<convolution*>(&(*conv));
         c->with_output_size = false;
-        node.recalc_output_layout(true);
+        node.recalc_output_layouts(true);
     } else {
         bool can_shrink_x = (filter_size.spatial[0] - (conv->stride.spatial[0] + (tensor.spatial[0] - 1))) >= 0;
         bool can_shrink_y = (filter_size.spatial[1] - (conv->stride.spatial[1] + (tensor.spatial[1] - 1))) >= 0;
@@ -44,7 +44,7 @@ void eltwise_remove_stride::conv_stride_extend(program& p, program_node& node, c
             c->stride.spatial[0] += tensor.spatial[0] - 1;
             c->stride.spatial[1] += tensor.spatial[1] - 1;
             c->with_output_size = false;
-            node.recalc_output_layout(true);
+            node.recalc_output_layouts(true);
             tensor.spatial[0] = 1;
             tensor.spatial[1] = 1;
         }
@@ -70,9 +70,9 @@ void eltwise_remove_stride::run(program& p) {
                 for (size_t i = 0; i < deps.size(); i++) {
                     auto dep = deps[i];
                     // TODO: add other primitives beside convolution here
-                    if (dep->is_type<convolution>()) {
+                    if (dep.first->is_type<convolution>()) {
                         auto e = const_cast<eltwise*>(&(*eltw));
-                        conv_stride_extend(p, *dep, e->stride[i]);
+                        conv_stride_extend(p, *dep.first, e->stride[i]);
                     }
                 }
             }

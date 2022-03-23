@@ -538,7 +538,7 @@ void program::pre_optimize_graph(bool is_internal) {
 
         // TODO this code should be moved to post compilation after kernel selector will support handling reorder bias
         apply_opt_pass<pre_optimize_bias>(rf);
-#if 0 // TODO(andrew)
+
         // passes regarding conv + eltwise optimizations
 
         // shrinking eltwise if users are conv 1x1 with stride > 1 optimization
@@ -546,7 +546,6 @@ void program::pre_optimize_graph(bool is_internal) {
 
         // trying to set stride to 1x1 by shrinking convolutions before eltwise if doable
         apply_opt_pass<eltwise_remove_stride>();
-#endif
     }
 #if 0 // TODO(andrew)
     apply_opt_pass<strided_slice_optimize>();
