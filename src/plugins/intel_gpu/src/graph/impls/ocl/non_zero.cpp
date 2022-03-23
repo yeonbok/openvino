@@ -29,8 +29,13 @@ struct count_nonzero_impl : typed_primitive_impl_ocl<count_nonzero> {
         // if (arg.can_be_optimized()) {
         //     return new count_nonzero_impl(arg, {});
         // }
+        const auto& prim = arg.get_primitive();
+        const auto& param_info = kernel_impl_params(arg.get_program(), prim, arg.get_unique_id(),
+                                                    arg.get_input_layouts(), arg.get_output_layout(),
+                                                    arg.get_fused_primitives(),
+                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
 
-        auto nonzero_params = get_default_params<kernel_selector::count_nonzero_params>(arg);
+        auto nonzero_params = get_default_params<kernel_selector::count_nonzero_params>(param_info);
         auto nonzero_optional_params =
             get_default_optional_params<kernel_selector::count_nonzero_optional_params>(arg.get_program());
 
@@ -61,8 +66,13 @@ public:
         // if (arg.can_be_optimized()) {
         //     return new gather_nonzero_impl(arg, {});
         // }
+        const auto& prim = arg.get_primitive();
+        const auto& param_info = kernel_impl_params(arg.get_program(), prim, arg.get_unique_id(),
+                                                    arg.get_input_layouts(), arg.get_output_layout(),
+                                                    arg.get_fused_primitives(),
+                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
 
-        auto nonzero_params = get_default_params<kernel_selector::gather_nonzero_params>(arg);
+        auto nonzero_params = get_default_params<kernel_selector::gather_nonzero_params>(param_info);
         auto nonzero_optional_params =
             get_default_optional_params<kernel_selector::gather_nonzero_optional_params>(arg.get_program());
 
