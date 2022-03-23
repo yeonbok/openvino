@@ -12,6 +12,10 @@
 #include <algorithm>
 #include <sstream>
 #include <vector>
+#include <deque>
+#include <unordered_map>
+#include <mutex>
+#include <functional>
 
 namespace cldnn {
 
@@ -183,4 +187,85 @@ inline std::string to_string(const T& v) {
 /// @}
 /// @endcond
 /// @}
+
+/// @brief LRU cache which remove the least recently used data when cache is full.
+template<typename TypeK, typename TypeD>
+class LRUCache {
+public:
+    struct CacheEntry {
+        TypeD   data;
+        size_t  size;   // the size of data. it is necessary to check total data size is limited to capacity
+    };
+
+private:
+    std::deque<TypeK> deque;
+    std::unordered_map<TypeK, std::pair<typename std::deque<TypeK>::iterator, LRUCache::CacheEntry>> cache_entry_map;
+    size_t curr_data_size;
+    const size_t capacity;
+
+    std::mutex mtx;
+
+public:
+    explicit LRUCache(size_t caps) : curr_data_size(0), capacity(caps) {}
+
+    ~LRUCache() {
+        clear();
+    }
+
+    std::tuple<TypeD, bool> get(TypeK key, std::function<LRUCache::CacheEntry(void)> create_new_data) {
+        if (!create_new_data) {
+            throw std::runtime_error("create_new_data should not be null");
+        }
+        std::lock_guard<std::mutex> lock(mtx);
+        TypeD data;
+        bool is_created_entry = false;
+        if (cache_entry_map.find(key) == cache_entry_map.end()) {
+            if (create_new_data) {
+                auto new_entry = create_new_data();
+                add_new_entry(key, new_entry);
+                data = cache_entry_map[key].second.data;
+                is_created_entry = true;
+            }
+        } else {
+            // Move current data to front of deque
+            deque.erase(cache_entry_map[key].first);
+            deque.push_front(key);
+            cache_entry_map[key].first = deque.begin();
+            data = cache_entry_map[key].second.data;
+        }
+        return std::make_pair(data, is_created_entry);
+    }
+
+    void clear() {
+        std::lock_guard<std::mutex> lock(mtx);
+        deque.clear();
+        cache_entry_map.clear();
+        curr_data_size = 0;
+    }
+
+    size_t count() const {
+       return cache_entry_map.size();
+    }
+
+    std::deque<TypeK> get_all_keys() const {
+        return deque;
+    }
+
+private:
+    void add_new_entry(TypeK key, LRUCache::CacheEntry entry) {
+        if (cache_entry_map.find(key) == cache_entry_map.end()) {
+            if (capacity < (curr_data_size + entry.size)) {
+                //  Remove cache at the dend of deque
+                curr_data_size -= cache_entry_map[deque.back()].second.size;
+                cache_entry_map.erase(deque.back());
+                deque.pop_back();
+            }
+        } else {
+            deque.erase(cache_entry_map[key].first);
+        }
+        deque.push_front(key);
+        cache_entry_map[key] = std::make_pair(deque.begin(), entry);
+        curr_data_size += entry.size;
+    }
+};
 }  // namespace cldnn
