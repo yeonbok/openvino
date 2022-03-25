@@ -22,17 +22,6 @@ inline void DoTestBase(engine& engine,
     const bool batch_merged_output = true) {
     topology topology;
 
-    int input_rank = 0;
-    if (input0->get_layout().format == format::bfyx) {
-        input_rank = 4;
-    } else if (input0->get_layout().format == format::bfzyx) {
-        input_rank = 5;
-    } else if (input0->get_layout().format == format::bfwzyx) {
-        input_rank = 6;
-    } else {
-        FAIL();
-    }
-
     auto gather_elements_inst = gather_elements("gather_elements", "InputData", "InputIndices", axis);
     topology.add(input_layout("InputData", input0->get_layout()));
     topology.add(input_layout("InputIndices", input1->get_layout()));

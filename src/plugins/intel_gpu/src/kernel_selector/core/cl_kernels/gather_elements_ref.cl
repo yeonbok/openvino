@@ -65,7 +65,7 @@ INPUT0_TYPE val = data[in0_idx];
 #if HAS_FUSED_OPS
     FUSED_OPS;
     output[out_idx] = TO_OUTPUT_TYPE(FUSED_OPS_RESULT);
-    printf("fused");
+    if(!b&&!f&&!y&&!x)printf("[KERNEL]: gather_elements has fused ops\n");
 #else
     output[out_idx] = ACTIVATION(val, ACTIVATION_PARAMS);
 #endif
