@@ -21,8 +21,8 @@ ParamsKey GatherElementsKernelRef::GetSupportedKey() const {
     // k.EnableOutputDataType(Datatype::UINT8);
     k.EnableInputLayout(DataLayout::bfyx);
     k.EnableOutputLayout(DataLayout::bfyx);
-    // k.EnableInputLayout(DataLayout::bfzyx);
-    // k.EnableOutputLayout(DataLayout::bfzyx);
+    k.EnableInputLayout(DataLayout::bfzyx);
+    k.EnableOutputLayout(DataLayout::bfzyx);
     // k.EnableInputLayout(DataLayout::bfwzyx);
     // k.EnableOutputLayout(DataLayout::bfwzyx);
     k.EnableTensorOffset();
@@ -51,12 +51,12 @@ CommonDispatchData GatherElementsKernelRef::SetDefault(const gather_elements_par
     switch (params.inputs[1].GetLayout()) {
     case DataLayout::bfyx:
         //fully parallelizable -> 모든 indices마다 커널할당
-        dispatchData.gws = { params.inputs[1].Batch().v*params.inputs[1].Feature().v, params.inputs[1].Y().v, params.inputs[1].X().v};
+        dispatchData.gws = { params.inputs[1].X().v, params.inputs[1].Y().v, params.inputs[1].Feature().v*params.inputs[1].Batch().v };
         break;
 
-    // case DataLayout::bfzyx:
-    //     dispatchData.gws = { indices_dims[4] * indices_dims[3], indices_dims[2], indices_dims[1] * indices_dims[0] };
-    //     break;
+    case DataLayout::bfzyx:
+        dispatchData.gws = { params.inputs[1].X().v, params.inputs[1].Y().v*params.inputs[1].Z().v, params.inputs[1].Feature().v*params.inputs[1].Batch().v };
+        break;
 
     // case DataLayout::bfwzyx:
     //     dispatchData.gws = { indices_dims[5] * indices_dims[4], indices_dims[3] * indices_dims[2], indices_dims[1] * indices_dims[0] };

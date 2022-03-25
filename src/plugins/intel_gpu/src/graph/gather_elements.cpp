@@ -51,6 +51,7 @@ std::string gather_elements_inst::to_string(gather_elements_node const& node) {
     gather_elements_info.add("input shape", node.input(0).get_output_layout().size.to_string());
     gather_elements_info.add("indices shape", node.input(1).get_output_layout().size.to_string());
     gather_elements_info.add("target axis", desc->axis);
+    gather_elements_info.add("output format", calc_output_layout(node).format);
     gather_elements_info.add("output shape", calc_output_layout(node).size.to_string());
 
     node_info->add("gather_elements info", gather_elements_info);

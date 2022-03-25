@@ -19,7 +19,7 @@ inline void DoTestBase(engine& engine,
     const int axis,
     const cldnn::format fmt,
     const tensor ts,
-    const bool batch_merged_output) {
+    const bool batch_merged_output = true) {
     topology topology;
 
     int input_rank = 0;
@@ -65,21 +65,59 @@ inline void DoTestBase(engine& engine,
 
     // Compare output value
     cldnn::mem_lock<uint16_t> output_ptr(output, get_test_stream());
-    for (size_t i = 0; i < expected_results.size(); ++i) {
+    for (size_t i = 0; i < expected_results.size(); ++i)
         EXPECT_EQ(expected_results[i], float16_to_float32(output_ptr[i]));
-        if ( expected_results[i] != float16_to_float32(output_ptr[i]) )
-            break;
-    }
+    // for(int i = 0; i < std::min<size_t>(100, expected_results.size()); ++i){
+    //     if (i % output->get_layout().get_dims().back() == 0)
+    //         std::cout << std::endl;
+    //     std::cout << float16_to_float32(output_ptr[i]) << ' ';
+    // }
 }
 
-inline void DoTestV6(engine& engine,
-    const cldnn::memory::ptr input0,
-    const cldnn::memory::ptr input1,
-    const std::vector<float>& expected_results,
-    const int axis,
-    const cldnn::format fmt,
-    const tensor size) {
-    DoTestBase(engine, input0, input1, expected_results, axis, fmt, size, true);
+TEST(gather_elements_gpu_fp16, d23425_i2339_a3){
+    int axis=2;
+
+    auto& engine = get_test_engine();
+
+    auto input0 = engine.allocate_memory({ data_types::f16, format::bfzyx, { 2, 3, 5, 2, 4 } }); // data
+    auto input1 = engine.allocate_memory({ data_types::i32, format::bfzyx, { 2, 3, 5, 2, 2 } }); // indices
+
+    int axis_len=input0->get_layout().get_dim(axis);
+
+    auto ivec0=generate_random_1d<FLOAT16>(input0->count(),0,999);
+    auto ivec1=generate_random_1d<int>(input1->count(),-axis_len,axis_len-1);
+    set_values(input0, ivec0);
+    set_values(input1, ivec1);
+
+    std::vector<size_t> ivec1u(ivec1.size());
+    std::transform(
+        ivec1.begin(),
+        ivec1.end(),
+        ivec1u.begin(),
+        [axis_len](int idx){return idx<0?idx+axis_len:idx;}
+    );
+
+    std::vector<FLOAT16> expected16(input1->count());
+    auto to_vec_size_t=[](const std::vector<int>& vec){return std::vector<size_t>(vec.begin(),vec.end());};
+    ngraph::runtime::reference::gather_elements<FLOAT16,size_t>(
+        ivec0.data(),
+        ivec1u.data(),
+        expected16.data(),
+        ov::Shape(to_vec_size_t(input0->get_layout().get_dims())),
+        ov::Shape(to_vec_size_t(input1->get_layout().get_dims())),
+        ov::Shape(to_vec_size_t(input1->get_layout().get_dims())),
+        axis);
+    std::vector<float> expected32;
+    for(auto&i:expected16)
+        expected32.push_back(float16_to_float32(i.v));
+    
+    // for(int i = 0; i < std::min<size_t>(100, expected16.size()); ++i){
+    //     if (i % input1->get_layout().get_dims().back() == 0)
+    //         std::cout << std::endl;
+    //     std::cout << expected32[i] << ' ';
+    // }
+
+    DoTestBase(engine, input0, input1, expected32, axis, format::bfzyx, input1->get_layout().size);
 }
 
 TEST(gather_elements_gpu_fp16, d2342_i1342_a0){
@@ -132,7 +170,7 @@ TEST(gather_elements_gpu_fp16, d2342_i1342_a0){
     for(auto&i:expected16)
         expected32.push_back(float16_to_float32(i.v));
 
-    DoTestV6(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);
+    DoTestBase(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);
 }
 
 TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
@@ -172,7 +210,7 @@ TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
     for(auto&i:expected16)
         expected32.push_back(float16_to_float32(i.v));
 
-    DoTestV6(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);
+    DoTestBase(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);
 }
 
 //A: indicis의 axis=0축 크기
@@ -206,7 +244,7 @@ TEST(gather_elements_gpu_fp16, d2334_i2339_a3){
     for(auto&i:expected16)\
         expected32.push_back(float16_to_float32(i.v));\
 \
-    DoTestV6(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);\
+    DoTestBase(engine, input0, input1, expected32, axis, format::bfyx, input1->get_layout().size);\
 }
 
 //extreme cases

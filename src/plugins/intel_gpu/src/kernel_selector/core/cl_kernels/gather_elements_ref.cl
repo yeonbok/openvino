@@ -13,29 +13,55 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
 )
 {
 #if INPUT1_DIMS==4
-#elif INPUT1_DIMS==5
-#elif INPUT1_DIMS==6
-#else
-#endif
     const uint dim0 = get_global_id(0);
     const uint dim1 = get_global_id(1);
     const uint dim2 = get_global_id(2);
-    const uint b=dim0/INPUT1_FEATURE_NUM;
-    const uint f=dim0%INPUT1_FEATURE_NUM;
+    const uint b=dim2/INPUT1_FEATURE_NUM;
+    const uint f=dim2%INPUT1_FEATURE_NUM;
     const uint y=dim1;
-    const uint x=dim2;
+    const uint x=dim0;
     int axis_val=indices[INPUT1_GET_INDEX(b,f,y,x)];
+    const uint out_idx=OUTPUT_GET_INDEX(b,f,y,x);
     if(axis_val<0)
         axis_val+=AXIS_LEN0;
     #if AXIS==0
-        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(axis_val,f,y,x)];
+        const uint in0_idx=INPUT0_GET_INDEX(axis_val,f,y,x);
     #elif AXIS==1
-        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,axis_val,y,x)];
+        const uint in0_idx=INPUT0_GET_INDEX(b,axis_val,y,x);
     #elif AXIS==2
-        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,f,axis_val,x)];
+        const uint in0_idx=INPUT0_GET_INDEX(b,f,axis_val,x);
     #else
-        output[OUTPUT_GET_INDEX(b,f,y,x)]=data[INPUT0_GET_INDEX(b,f,y,axis_val)];
+        const uint in0_idx=INPUT0_GET_INDEX(b,f,y,axis_val);
     #endif
+#elif INPUT1_DIMS==5
+    const uint dim0 = get_global_id(0);
+    const uint dim1 = get_global_id(1);
+    const uint dim2 = get_global_id(2);
+    const uint b=dim2/INPUT1_FEATURE_NUM;
+    const uint f=dim2%INPUT1_FEATURE_NUM;
+    const uint z=dim1/INPUT1_SIZE_Y;
+    const uint y=dim1%INPUT1_SIZE_Y;
+    const uint x=dim0;
+    int axis_val=indices[INPUT1_GET_INDEX(b,f,z,y,x)];
+    if(axis_val<0)
+        axis_val+=AXIS_LEN0;
+    #if AXIS==0
+        const uint in0_idx=INPUT0_GET_INDEX(axis_val,f,z,y,x);
+    #elif AXIS==1
+        const uint in0_idx=INPUT0_GET_INDEX(b,axis_val,z,y,x);
+    #elif AXIS==2
+        const uint in0_idx=INPUT0_GET_INDEX(b,f,axis_val,y,x);
+    #elif AXIS==3
+        const uint in0_idx=INPUT0_GET_INDEX(b,f,z,axis_val,x);
+    #else
+        const uint in0_idx=INPUT0_GET_INDEX(b,f,z,y,axis_val);
+    #endif
+    const uint out_idx=OUTPUT_GET_INDEX(b,f,z,y,x);
+#elif INPUT1_DIMS==6
+#else
+#endif
+    output[out_idx]=data[in0_idx];
+    //TODO: fusing
 }
 
 #undef INDICES_MAX_DIM
@@ -44,3 +70,4 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
 #undef OUT_ORDER
 #undef IDX_ORDER
 #undef IN_ORDER
+#undef AXIS
