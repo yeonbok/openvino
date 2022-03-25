@@ -12,18 +12,10 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
 #endif
 )
 {
-#if AXIS==0
-    #define AXIS_LEN0 INPUT0_BATCH_NUM
-    #define AXIS_LEN1 INPUT1_BATCH_NUM
-#elif AXIS==1
-    #define AXIS_LEN0 INPUT0_FEATURE_NUM
-    #define AXIS_LEN1 INPUT1_FEATURE_NUM
-#elif AXIS==2
-    #define AXIS_LEN0 INPUT0_SIZE_Y
-    #define AXIS_LEN1 INPUT1_SIZE_Y
+#if INPUT1_DIMS==4
+#elif INPUT1_DIMS==5
+#elif INPUT1_DIMS==6
 #else
-    #define AXIS_LEN0 INPUT0_SIZE_X
-    #define AXIS_LEN1 INPUT1_SIZE_X
 #endif
     const uint dim0 = get_global_id(0);
     const uint dim1 = get_global_id(1);

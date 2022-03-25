@@ -73,8 +73,26 @@ CommonDispatchData GatherElementsKernelRef::SetDefault(const gather_elements_par
 
 JitConstants GatherElementsKernelRef::GetJitConstants(const gather_elements_params& params) const {
     JitConstants jit = MakeBaseParamsJitConstants(params);
+    /*
+        #if AXIS==0
+            #define AXIS_LEN0 INPUT0_BATCH_NUM
+            #define AXIS_LEN1 INPUT1_BATCH_NUM
+        #elif AXIS==1
+            #define AXIS_LEN0 INPUT0_FEATURE_NUM
+            #define AXIS_LEN1 INPUT1_FEATURE_NUM
+        #elif AXIS==2
+            #define AXIS_LEN0 INPUT0_SIZE_Y
+            #define AXIS_LEN1 INPUT1_SIZE_Y
+        #else
+            #define AXIS_LEN0 INPUT0_SIZE_X
+            #define AXIS_LEN1 INPUT1_SIZE_X
+        #endif
+    */
 
+    auto dims = params.inputs[0].LogicalDims();
+    std::reverse(dims.begin(), dims.end());
     jit.AddConstant(MakeJitConstant("AXIS", params.axis));
+    jit.AddConstant(MakeJitConstant("AXIS_LEN0", dims[params.axis]));
 
     if (!params.fused_ops.empty()) {
         FusedOpsConfiguration conf = { "", GetDefaultOrder(params.output.GetDims().size()), "val", params.inputs[0].GetDType() };
