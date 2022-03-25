@@ -21,7 +21,6 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
     const uint y=dim1;
     const uint x=dim0;
     int axis_val=indices[INPUT1_GET_INDEX(b,f,y,x)];
-    const uint out_idx=OUTPUT_GET_INDEX(b,f,y,x);
     if(axis_val<0)
         axis_val+=AXIS_LEN0;
     #if AXIS==0
@@ -33,6 +32,7 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
     #else
         const uint in0_idx=INPUT0_GET_INDEX(b,f,y,axis_val);
     #endif
+    const uint out_idx=OUTPUT_GET_INDEX(b,f,y,x);
 #elif INPUT1_DIMS==5
     const uint dim0 = get_global_id(0);
     const uint dim1 = get_global_id(1);
@@ -65,6 +65,7 @@ INPUT0_TYPE val = data[in0_idx];
 #if HAS_FUSED_OPS
     FUSED_OPS;
     output[out_idx] = TO_OUTPUT_TYPE(FUSED_OPS_RESULT);
+    printf("fused");
 #else
     output[out_idx] = ACTIVATION(val, ACTIVATION_PARAMS);
 #endif
