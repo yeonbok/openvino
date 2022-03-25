@@ -57,6 +57,8 @@ attach_gather_elements_impl::attach_gather_elements_impl() {
         std::make_tuple(data_types::f32, format::bfwzyx),
         std::make_tuple(data_types::f16, format::bfwzyx),
         std::make_tuple(data_types::i32, format::bfwzyx),
+        std::make_tuple(data_types::i8, format::bfyx),
+        std::make_tuple(data_types::i8, format::bfzyx),
     });
 }
 

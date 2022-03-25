@@ -41,15 +41,11 @@ struct gather_elements_test_params {
 class GatherElementsPrimitiveFusingTest : public ::BaseFusingTest<gather_elements_test_params> {
 public:
     void execute(gather_elements_test_params& p) {
-        // topology topo;
-        // topo.add(input_layout("InputData", layout({ data_types::f16, format::bfzyx, { 2, 3, 5, 2, 4 } })));
-        // topo.add(input_layout("InputIndices", layout({ data_types::f16, format::bfzyx, { 2, 3, 5, 2, 2 } })));
-        // topo.add(gather_elements("gather_elements", "InputData", "InputIndices", 2));
-        // network testnet(engine, topo);
-
         auto input_prim = get_mem(get_input_layout(p));
-        // network network_basic(this->engine, this->topology_non_fused);
         network network_not_fused(this->engine, this->topology_non_fused, bo_not_fused);
+        //quantize fuse시 GetNaiveBestKernel()의
+        //allImplementations = GetAllImplementations(params, options, kType);가 empty이다 (이제 고쳤다.)
+        //k.EnableOutputDataType(Datatype::INT8); k.EnableOutputDataType(Datatype::UINT8); 켜줘야했다.
         network network_fused(this->engine, this->topology_fused, bo_fused);
         network_fused.set_input_data("input", input_prim);
         network_not_fused.set_input_data("input", input_prim);
@@ -115,13 +111,13 @@ TEST_P(gather_elements_quantize, basic) {
 
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("gather_elements_indices", get_mem(get_indices_layout(p), 0, p.output_shape.sizes()[p.axis])),
+        data("gather_elements_indices", get_mem(get_indices_layout(p), 0, p.axis - 1)),//maybe wrong? p.axis의 shape값-1이 되야할듯
         data("in_lo", get_mem(get_per_channel_layout(p), min_random, 0)),
         data("in_hi", get_mem(get_per_channel_layout(p), 1, max_random)),
         data("out_lo", get_mem(get_single_element_layout(p), -127)),
         data("out_hi", get_mem(get_single_element_layout(p), 127)),
-        gather_elements("gather_elements_prim", "input", "gather_elements_indices", p.axis),
-        quantize("quantize", "gather_elements_prim", "in_lo", "in_hi", "out_lo", "out_hi", 255, data_types::i8),
+        gather_elements("gather_elements", "input", "gather_elements_indices", p.axis),
+        quantize("quantize", "gather_elements", "in_lo", "in_hi", "out_lo", "out_hi", 255, data_types::i8),
         reorder("reorder_bfyx", "quantize", p.default_format, data_types::f32)
     );
 
@@ -131,15 +127,15 @@ TEST_P(gather_elements_quantize, basic) {
 
 INSTANTIATE_TEST_SUITE_P(fusings_gpu, gather_elements_quantize, ::testing::ValuesIn(std::vector<gather_elements_test_params>{
     gather_elements_test_params{ CASE_GATHER_ND_FP16_4D_1, 2, 3 },
-    // gather_elements_test_params{ CASE_GATHER_ND_FP16_4D_2, 2, 3 },
-    // gather_elements_test_params{ CASE_GATHER_ND_FP16_4D_3, 2, 3 },
+    gather_elements_test_params{ CASE_GATHER_ND_FP16_4D_2, 2, 3 },
+    gather_elements_test_params{ CASE_GATHER_ND_FP16_4D_3, 2, 3 },
 
-    // gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_1, 2, 3 },
-    // gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_2, 2, 3 },
-    // gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_3, 2, 3 },
-    // gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_4, 2, 3 },
-    // gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_5, 2, 3 },
-    // gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_6, 2, 3 },
+    gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_1, 2, 3 },
+    gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_2, 2, 3 },
+    gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_3, 2, 3 },
+    gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_4, 2, 3 },
+    gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_5, 2, 3 },
+    gather_elements_test_params{ CASE_GATHER_ND_FP16_5D_6, 2, 3 },
 
     // gather_elements_test_params{ CASE_GATHER_ND_FP16_6D_1, 2, 3 },
     // gather_elements_test_params{ CASE_GATHER_ND_FP16_6D_2, 2, 3 },
@@ -169,7 +165,7 @@ TEST_P(gather_elements_activation_scale_eltwise, basic) {
 
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("gather_elements_indices", get_mem(get_indices_layout(p), 0, p.axis - 1)),
+        data("gather_elements_indices", get_mem(get_indices_layout(p), 0, p.axis - 1)),//maybe wrong? p.axis의 shape값-1이 되야할듯
         data("scale_data", get_mem(get_per_channel_layout(p), 1.0f / 255)),
         data("eltwise_data", get_mem(get_output_layout(p))),
         gather_elements("gather_elements", "input", "gather_elements_indices", p.axis),

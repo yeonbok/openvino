@@ -17,8 +17,8 @@ ParamsKey GatherElementsKernelRef::GetSupportedKey() const {
     k.EnableOutputDataType(Datatype::F16);
     // k.EnableOutputDataType(Datatype::F32);
     k.EnableOutputDataType(Datatype::INT32);
-    // k.EnableOutputDataType(Datatype::INT8);
-    // k.EnableOutputDataType(Datatype::UINT8);
+    k.EnableOutputDataType(Datatype::INT8);
+    k.EnableOutputDataType(Datatype::UINT8);
     k.EnableInputLayout(DataLayout::bfyx);
     k.EnableOutputLayout(DataLayout::bfyx);
     k.EnableInputLayout(DataLayout::bfzyx);
@@ -141,7 +141,7 @@ KernelsData GatherElementsKernelRef::GetKernelsData(const Params& params, const 
     if (!Validate(params, options)) {
         return {};
     }
-
+    //여기까지는 옴. 두번째 넷웍 실행(=퓨즈드 온)에서 여기  못오는듯?
     KernelData kd = KernelData::Default<gather_elements_params>(params);
     gather_elements_params& newParams = *static_cast<gather_elements_params*>(kd.params.get());
 
