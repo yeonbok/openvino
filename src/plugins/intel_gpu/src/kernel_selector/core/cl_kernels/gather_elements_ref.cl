@@ -60,8 +60,14 @@ KERNEL(gather_elements_ref)(const __global INPUT0_TYPE* data,
 #elif INPUT1_DIMS==6
 #else
 #endif
-    output[out_idx]=data[in0_idx];
-    //TODO: fusing
+
+INPUT0_TYPE val = data[in0_idx];
+#if HAS_FUSED_OPS
+    FUSED_OPS;
+    output[out_idx] = TO_OUTPUT_TYPE(FUSED_OPS_RESULT);
+#else
+    output[out_idx] = ACTIVATION(val, ACTIVATION_PARAMS);
+#endif
 }
 
 #undef INDICES_MAX_DIM
