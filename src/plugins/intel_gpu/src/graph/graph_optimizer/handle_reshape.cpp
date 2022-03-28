@@ -69,7 +69,7 @@ void handle_reshape::run(program& p) {
 
     for (const auto& node : p.get_processing_order()) {
         if (node->is_type<reshape>()) {
-            auto& input_node = node->get_dependency(0);
+            auto& input_node = *node->get_dependency(0).first;
 
             if (input_node.is_type<reorder>())
                 continue;
@@ -110,7 +110,7 @@ void handle_reshape::run(program& p) {
                     if (std::find(reorder_node_to_split.begin(), reorder_node_to_split.end(), user) !=
                         reorder_node_to_split.end()) {
                         auto new_reshape = std::make_shared<reshape>("reorder:_reshape_split_" + user->id() + "_" + node->id(),
-                                                                     input_node.id(),
+                                                                     input_info(input_node.id()),
                                                                      output_shape);
                         auto& new_reshape_node = p.get_or_create(new_reshape);
                         user->replace_dependency(0, input_node);
@@ -132,7 +132,7 @@ void handle_reshape::run(program& p) {
                         format = cldnn::format::bfwzyx;
                     auto reshape_input = std::make_shared<reorder>(
                         "reorder:_reshape_input_" + reorder_node->id() + "_" + reorder_reshape_node->id(),
-                        input_node.id(),
+                        input_info(input_node.id()),
                         format,
                         reshape_in_layout.data_type);
                     auto& reshape_input_node = p.get_or_create(reshape_input);
@@ -141,7 +141,7 @@ void handle_reshape::run(program& p) {
                                        0,
                                        reshape_input_node.get_dependencies().empty());
                     reshape_reorder_id++;
-                    reshape_input_node.recalc_output_layout();
+                    reshape_input_node.recalc_output_layouts();
                 }
             }
 
@@ -152,17 +152,17 @@ void handle_reshape::run(program& p) {
                 // in reshape stage we assume user provides the input vector in bfyx
                 if (!program_helpers::are_layouts_identical(reshape_layout, bfyx_layout).second) {
                     auto reshape_input = std::make_shared<reorder>("reorder:_reshape_input_" + node->id(),
-                                                                   input_node.id(),
+                                                                   input_info(input_node.id()),
                                                                    cldnn::format::bfyx,
                                                                    reshape_layout.data_type);
                     auto& reshape_input_node = p.get_or_create(reshape_input);
                     p.add_intermediate(reshape_input_node, *node, 0, reshape_input_node.get_dependencies().empty());
-                    reshape_input_node.recalc_output_layout();
+                    reshape_input_node.recalc_output_layouts();
 
                     auto reshape_users = node->get_users();
                     for (const auto& user : reshape_users) {
                         auto reshape_output = std::make_shared<reorder>("reorder:_reshape_output_" + node->id(),
-                                                                        user->id(),
+                                                                        input_info(user->id()),
                                                                         reshape_layout.format,
                                                                         reshape_layout.data_type);
                         auto& reshape_output_node = p.get_or_create(reshape_output);
@@ -170,7 +170,7 @@ void handle_reshape::run(program& p) {
                                            *user,
                                            *node,
                                            reshape_output_node.get_dependencies().empty());
-                        reshape_output_node.recalc_output_layout();
+                        reshape_output_node.recalc_output_layouts();
                     }
                 }
             }

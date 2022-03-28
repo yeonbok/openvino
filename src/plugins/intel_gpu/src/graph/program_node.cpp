@@ -67,16 +67,16 @@ std::vector<primitive_id> program_node::get_dependencies_ids() const {
     for (auto& dependency : dependencies) dep_ids.push_back(dependency.first->get_primitive()->id);
     return dep_ids;
 }
-#if 0 // TODO(taylor)
+
 void program_node::remove_dependency(size_t idx) {
     if (idx >= dependencies.size())
         return;
 
-    dependencies[idx]->users.remove(this);
-    myprog.remove_if_dangling(*dependencies[idx]);
+    dependencies[idx].first->users.remove(this);
+    myprog.remove_if_dangling(*dependencies[idx].first);
     dependencies.erase(dependencies.begin() + idx);
 }
-#endif
+
 std::set<input_info, input_info::cmp> program_node::get_memory_dependencies() const { return memory_dependencies; }
 
 void program_node::add_memory_dependency(input_info prim) { memory_dependencies.insert(prim); }

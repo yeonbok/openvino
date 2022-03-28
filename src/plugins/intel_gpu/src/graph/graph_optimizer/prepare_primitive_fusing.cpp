@@ -125,7 +125,7 @@ void prepare_primitive_fusing::fuse_sigmoid_mul_to_swish(program &p) {
                 return;
 
             activation_additional_params swish_params = {1.0f, 0.0f};
-            auto swish_prim = std::make_shared<cldnn::activation>(mul.id() + "_swish", input.id(), activation_func::swish, swish_params);
+            auto swish_prim = std::make_shared<cldnn::activation>(mul.id() + "_swish", input_info(input.id()), activation_func::swish, swish_params);
             auto& swish = p.get_or_create(swish_prim);
 
             p.add_optimized_primitive_info(node.id(), {swish.id()});

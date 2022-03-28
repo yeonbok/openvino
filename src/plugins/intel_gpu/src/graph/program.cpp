@@ -512,8 +512,11 @@ void program::pre_optimize_graph(bool is_internal) {
 
     bool output_size_handling_enabled = analyze_output_size_handling_need();
     for (auto& node : processing_order) {
-        if (!node->is_type<data>())
-            node->get_output_layout();
+        if (!node->is_type<data>()) {
+            for (int i = 0; i < node->get_outputs_count(); ++i) {
+                node->get_output_layout(true, i);
+            }
+        }
     }
 
     if (options.get<build_option_type::optimize_data>()->enabled()) {
@@ -547,11 +550,11 @@ void program::pre_optimize_graph(bool is_internal) {
         // trying to set stride to 1x1 by shrinking convolutions before eltwise if doable
         apply_opt_pass<eltwise_remove_stride>();
     }
-#if 0 // TODO(andrew)
+
     apply_opt_pass<strided_slice_optimize>();
 
     apply_opt_pass<handle_reshape>();
-
+#if 0 // TODO(andrew)
     apply_opt_pass<prepare_padding>(output_size_handling_enabled);
 
     apply_opt_pass<remove_redundant_reorders>(lo, options.get<build_option_type::optimize_data>()->enabled());
