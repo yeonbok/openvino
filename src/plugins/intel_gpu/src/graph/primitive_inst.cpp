@@ -12,6 +12,9 @@
 #include "experimental_detectron_roi_feature_extractor_inst.hpp"
 #include "reshape_inst.h"
 
+#include "kernel_selector/core/kernel_selector_common.h"
+#include "kernel_selector_helper.h"
+
 #include "intel_gpu/graph/network.hpp"
 #include "intel_gpu/runtime/engine.hpp"
 #include "intel_gpu/runtime/memory.hpp"
@@ -124,8 +127,10 @@ void primitive_inst::update_shape() {
     GPU_DEBUG_IF(debug_config->verbose >= 4) {
         GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
     }
+
     if (out_layout != new_layout)
         set_shape_change();
+
     // TODO: Get rid of this const_cast
     const_cast<program_node&>(_node).set_output_layout(new_layout);
 }
@@ -142,12 +147,53 @@ void primitive_inst::realloc_if_needed() {
         _output = _network.get_engine().reinterpret_buffer(*_output, _node.get_output_layout());
     }
 }
+std::string primitive_inst::get_layout_key() {
+    std::string layout_key_str = "";
+    if (!_node.is_valid_output_layout()) {
+        std::cout << id() << " has invaild output layout!" << std::endl;
+        return "";
+    }
+    layout_key_str = id() + "_" + std::to_string(_node.get_unique_id());
+
+    auto data_tensor = convert_data_tensor(_node.get_output_layout());
+    layout_key_str += "_" + kernel_selector::toString_v2(data_tensor);
+
+    for (auto in : _node.get_dependencies()) {
+        auto data_tensor = convert_data_tensor(in->get_output_layout());
+        layout_key_str += "_" + kernel_selector::toString_v2(data_tensor);
+    }
+    return layout_key_str;
+}
 
 void primitive_inst::update_impl() {
+    auto pid = id();
     if (!_node.is_type<data>() && !(_node.is_type<mutable_data>() && _node.get_dependencies().empty())) {
-        PRINT_TIME(_impl = std::move(_node.type()->choose_impl(_node)));
-        PRINT_TIME(_network.get_program()->compile());
-        PRINT_TIME(_impl->init_kernels());
+        auto layout_key = get_layout_key();
+        auto ret = std::getenv("NO_USE_IMPL_CACHE");
+        if ((ret == nullptr) && layout_key != "") {
+            auto cache = _network.get_program()->get_primitive_impl_cache();
+            bool is_hitted = false;
+            std::shared_ptr<cldnn::primitive_impl> origin_impl;
+            PRINT_TIME(std::tie(origin_impl, is_hitted) = cache->get(layout_key, [&]() {
+                cldnn::LRUCache<std::string, std::shared_ptr<cldnn::primitive_impl>>::CacheEntry new_entry;
+                auto new_impl = std::move(_node.type()->choose_impl(_node));
+                PRINT_TIME(_network.get_program()->compile());
+                PRINT_TIME(new_impl->init_kernels());
+                new_entry.size = 1;
+                new_entry.data = std::move(new_impl);
+                return new_entry;
+            }));
+
+            _impl = std::move(origin_impl->clone());
+            if (is_hitted) {
+                PRINT_TIME(_impl->init_kernels());
+            }
+        } else {
+            PRINT_TIME(_impl = std::move(_node.type()->choose_impl(_node)));
+            PRINT_TIME(_network.get_program()->compile());
+            PRINT_TIME(_impl->init_kernels());
+        }
+
         reset_shape_change();
         GPU_DEBUG_GET_INSTANCE(debug_config);
         GPU_DEBUG_IF(debug_config->verbose >= 4) {
