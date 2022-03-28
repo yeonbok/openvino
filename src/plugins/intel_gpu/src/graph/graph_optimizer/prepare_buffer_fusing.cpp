@@ -92,12 +92,13 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
     for (auto& input : node.get_dependencies()) {
         if (input->get_preferred_impl_type() == impl_types::onednn) {
             for (auto& fused_op : input->get_fused_primitives()) {
-                if (fused_op.node->is_type<eltwise>() && fused_op.deps.size() == 1) {
+                if (fused_op.is_type<eltwise>() && fused_op.deps.size() == 1) {
                     auto& eltw_in = input->get_dependency(fused_op.dep_start_idx);
                     auto eltw_in_layout = eltw_in.get_output_layout();
                     auto out_layout = input->get_output_layout();
 
-                    if (!fused_op.node->as<eltwise>().get_primitive()->needs_onednn_sum_post_op(eltw_in_layout))
+//                    if (!fused_op.node->as<eltwise>().get_primitive()->needs_onednn_sum_post_op(eltw_in_layout))
+                    if (!fused_op.typed_desc<eltwise>()->needs_onednn_sum_post_op(eltw_in_layout))
                         continue;
                     if (program_helpers::are_layouts_identical_for_onednn_sum_post_op(eltw_in_layout, out_layout))
                         return false;

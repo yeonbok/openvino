@@ -76,8 +76,22 @@ public:
 
         assert(arg.get_output_layout().feature() / primitive->split() == weights_layout.batch());
 
+        std::vector<layout> input_layouts;
+        for (auto i : arg.get_dependencies()) {
+            input_layouts.push_back(i->get_output_layout());
+        }
+
+        const auto& bias_layout = arg.bias_term() ?  arg.bias().get_output_layout() : layout(data_types::f32, format::any, tensor());
+
+        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
+                                                           arg.get_program(), arg.get_fused_primitives(),
+                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
+                                                           weights_layout, arg.bias_term(), bias_layout);
+
+
         auto conv_params =
-            get_weights_bias_default_params<kernel_selector::binary_convolution_params>(arg, actual_split);
+            get_weights_bias_default_params<kernel_selector::binary_convolution_params>(param_info, actual_split);
         auto conv_optional_params =
             get_default_weights_bias_optional_params<kernel_selector::binary_convolution_optional_params>(
                 arg.get_program());

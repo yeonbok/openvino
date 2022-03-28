@@ -42,10 +42,17 @@ protected:
 
 public:
     static primitive_impl* create(const reorder_node& arg) {
-        auto&& input_layout = arg.input().get_output_layout();
+        std::vector<layout> input_layouts;
         auto&& output_layout = arg.get_output_layout();
+        for (auto i : arg.get_dependencies()) {
+            input_layouts.push_back(i->get_output_layout());
+        }
+        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
+                                                           arg.get_program(), arg.get_fused_primitives(),
+                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
 
-        auto reorder_params = get_default_params<kernel_selector::reorder_params>(arg);
+        auto reorder_params = get_default_params<kernel_selector::reorder_params>(param_info);
         auto reorder_optional_params =
             get_default_optional_params<kernel_selector::reorder_optional_params>(arg.get_program());
 
@@ -57,7 +64,7 @@ public:
         }
 
         if (arg.has_mean()) {
-            if (input_layout.format == cldnn::format::nv12) {
+            if (input_layouts[0].format == cldnn::format::nv12) {
                 const auto& mean_layout = arg.mean_nv12().get_output_layout();
                 reorder_params.mean = convert_data_tensor(mean_layout);
                 reorder_params.mode = kernel_selector::mean_subtruct_mode::IN_BUFFER;
@@ -98,7 +105,7 @@ public:
             reorder_params.winograd_nr_tiles_x = ceil_div(output_layout.spatial(0), 4);
         }
 
-        reorder_params.winograd = input_layout.format.is_winograd() || output_layout.format.is_winograd();
+        reorder_params.winograd = input_layouts[0].format.is_winograd() || output_layout.format.is_winograd();
 
         auto& kernel_selector = kernel_selector::reorder_kernel_selector::Instance();
         auto best_kernels = kernel_selector.GetBestKernels(reorder_params, reorder_optional_params);

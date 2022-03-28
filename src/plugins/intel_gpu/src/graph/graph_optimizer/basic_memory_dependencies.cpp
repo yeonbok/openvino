@@ -3,7 +3,6 @@
 //
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
 #include "pass_manager.h"
 #include "program_node.h"
 #include "layout_optimizer.h"
@@ -42,7 +41,9 @@ void basic_memory_dependencies::run(program& p) {
             size_t eltw_dep = 0;
 
             for (auto& fused_op : conv.get_fused_primitives()) {
-                if (fused_op.node->is_type<eltwise>() && fused_op.deps.size() == 1) {
+        //        if (fused_op.node->is_type<eltwise>() && fused_op.deps.size() == 1) {
+//                if (fused_op.desc->type == eltwise::type_id()  && fused_op.deps.size() == 1) {
+                if (fused_op.is_type<eltwise>()  && fused_op.deps.size() == 1) {
                     auto eltw_in_layout = conv.get_dependency(fused_op.dep_start_idx).get_output_layout();
                     auto conv_out_layout = node->get_output_layout();
                     if (eltw_dep > 0) {

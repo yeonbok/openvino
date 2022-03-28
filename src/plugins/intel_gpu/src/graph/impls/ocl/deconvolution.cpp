@@ -67,8 +67,20 @@ public:
         const auto& pad = primitive->pad;
         const auto& groups = primitive->groups;
 
+        std::vector<layout> input_layouts;
+        for (auto i : arg.get_dependencies()) {
+            input_layouts.push_back(i->get_output_layout());
+        }
+
+        const auto& bias_layout = arg.bias_term() ?  arg.bias().get_output_layout() : layout(data_types::f32, format::any, tensor());
+        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
+                                                           arg.get_program(), arg.get_fused_primitives(),
+                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
+                                                           weights_layout, arg.bias_term(), bias_layout);
+
         auto deconv_params = get_weights_bias_default_params<kernel_selector::deconvolution_params>(
-            arg,
+            param_info,
             (groups > 1) ? 1 : actual_split,
             1,
             primitive->grouped_weights_shape);

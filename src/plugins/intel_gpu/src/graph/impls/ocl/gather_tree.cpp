@@ -23,7 +23,16 @@ struct gather_tree_impl : typed_primitive_impl_ocl<gather_tree> {
     }
 
     static primitive_impl* create(const gather_tree_node& arg) {
-        auto b_params = get_default_params<kernel_selector::gather_tree_params>(arg, 1);
+        std::vector<layout> input_layouts;
+        for (auto i : arg.get_dependencies()) {
+            input_layouts.push_back(i->get_output_layout());
+        }
+        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
+                                                           arg.get_program(), arg.get_fused_primitives(),
+                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
+
+        auto b_params = get_default_params<kernel_selector::gather_tree_params>(param_info, 1);
         auto b_optional_params = get_default_optional_params<kernel_selector::gather_tree_optional_params>(arg.get_program());
 
         for (size_t i = 1; i < arg.get_dependencies().size(); i++) {

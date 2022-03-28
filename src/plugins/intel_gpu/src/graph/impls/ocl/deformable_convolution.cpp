@@ -48,8 +48,20 @@ public:
         const auto depthwise_separable_opt = arg.get_depthwise_sep_opt();
         const auto actual_split = depthwise_separable_opt ? (decltype(split))1 : split;
 
+        std::vector<layout> input_layouts;
+        for (auto i : arg.get_dependencies()) {
+            input_layouts.push_back(i->get_output_layout());
+        }
+
+        const auto& bias_layout = arg.bias_term() ?  arg.bias().get_output_layout() : layout(data_types::f32, format::any, tensor());
+        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
+                                                           arg.get_program(), arg.get_fused_primitives(),
+                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
+                                                           weights_layout, arg.bias_term(), bias_layout);
+
         auto conv_params = get_weights_bias_default_params<kernel_selector::convolution_params>(
-            arg,
+            param_info,
             (groups > 1 && !depthwise_separable_opt) ? groups : actual_split,
             groups);
         auto conv_optional_params =
@@ -102,7 +114,17 @@ public:
         const auto& groups = primitive->groups;
         const auto& deformable_groups = primitive->deformable_groups;
 
-        auto conv_params = get_default_params<kernel_selector::convolution_params>(arg, groups);
+        std::vector<layout> input_layouts;
+        for (auto i : arg.get_dependencies()) {
+            input_layouts.push_back(i->get_output_layout());
+        }
+
+        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
+                                                           arg.get_program(), arg.get_fused_primitives(),
+                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
+
+        auto conv_params = get_default_params<kernel_selector::convolution_params>(param_info, groups);
         auto conv_optional_params =
             get_default_optional_params<kernel_selector::convolution_optional_params>(arg.get_program());
 

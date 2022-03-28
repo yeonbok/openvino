@@ -549,12 +549,12 @@ void network::allocate_primitives() {
             size_t eltw_dep = 0;
 
             for (auto& fused_op : node->get_fused_primitives()) {
-                if (fused_op.node->is_type<eltwise>() && fused_op.deps.size() == 1) {
+                if (fused_op.is_type<eltwise>() && fused_op.deps.size() == 1) {
                     auto& eltw_in = node->get_dependency(fused_op.dep_start_idx);
                     auto eltw_in_layout = eltw_in.get_output_layout();
                     auto out_layout = node->get_output_layout();
 
-                    if (!fused_op.node->as<eltwise>().get_primitive()->needs_onednn_sum_post_op(eltw_in_layout))
+                    if (!fused_op.typed_desc<eltwise>()->needs_onednn_sum_post_op(eltw_in_layout))
                         continue;
 
                     if (program_helpers::are_layouts_identical_for_onednn_sum_post_op(eltw_in_layout, out_layout)) {
@@ -578,7 +578,7 @@ void network::allocate_primitives() {
                         }
                     }
 
-                    if (fused_op.node->as<eltwise>().get_primitive()->needs_onednn_sum_post_op(eltw_in_layout) && !can_reuse_eltwise_mem) {
+                    if (fused_op.typed_desc<eltwise>()->needs_onednn_sum_post_op(eltw_in_layout) && !can_reuse_eltwise_mem) {
                         throw std::runtime_error("Buffer reuse is required for onednn sum post operation.");
                     }
                 }

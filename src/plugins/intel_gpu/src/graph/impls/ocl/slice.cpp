@@ -71,8 +71,17 @@ struct slice_impl : typed_primitive_impl_ocl<slice> {
     }
 
     static primitive_impl* create(const slice_node& arg) {
+        std::vector<layout> input_layouts;
+        for (auto i : arg.get_dependencies()) {
+            input_layouts.push_back(i->get_output_layout());
+        }
+        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
+                                                           arg.get_program(), arg.get_fused_primitives(),
+                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
+
         auto params = get_default_params<kernel_selector::slice_params>(
-                arg);
+                param_info);
         auto op_params = get_default_optional_params<
                 kernel_selector::slice_optional_params>(
                 arg.get_program());

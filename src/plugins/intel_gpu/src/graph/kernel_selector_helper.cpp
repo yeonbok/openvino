@@ -822,7 +822,6 @@ kernel_selector::activation_function get_kernel_selector_activation_param(activa
             break;
     }
 }
-
 void set_params(const program_node& node, kernel_selector::params& params) {
     const auto& program = node.get_program();
     const auto& device_info = program.get_engine().get_device_info();
@@ -855,6 +854,42 @@ void set_params(const program_node& node, kernel_selector::params& params) {
 
     if (impl_forcing.count(node.id()) != 0) {
         params.forceImplementation = impl_forcing.at(node.id()).kernel_name;
+    }
+}
+
+//template<typename params_t>
+void set_params_taylor(const prim_kernel_params& param_info, kernel_selector::params& params) {
+    const auto& program = param_info.prog;
+    const auto& device_info = program.get_engine().get_device_info();
+
+    params.uniqueID = std::to_string(program.get_id()) + "_"  + param_info.unique_id;
+    params.engineInfo.bSubGroupSupport = device_info.supports_subgroups;
+    params.engineInfo.bSubGroupShortSupport = device_info.supports_subgroups_short;
+    params.engineInfo.bSubGroupCharSupport = device_info.supports_subgroups_char;
+    params.engineInfo.bFP16Support = device_info.supports_fp16;
+    params.engineInfo.bFP64Support = device_info.supports_fp64;
+    params.engineInfo.bIMADSupport = device_info.supports_imad != 0;
+    params.engineInfo.bIMMADSupport = device_info.supports_immad != 0;
+    params.engineInfo.bImageSupport = device_info.supports_image != 0;
+    params.engineInfo.bOptHintsSupport = false;
+    params.engineInfo.bLocalBlockIOSupport = device_info.supports_local_block_io;
+    params.engineInfo.deviceType = get_device_type(device_info.dev_type);
+    params.engineInfo.maxWorkGroupSize = device_info.max_work_group_size;
+    params.engineInfo.maxLocalMemSize = device_info.max_local_mem_size;
+    params.engineInfo.maxImage2dWidth = device_info.max_image2d_width;
+    params.engineInfo.maxImage2dHeight = device_info.max_image2d_height;
+    params.engineInfo.computeUnitsCount = device_info.execution_units_count;
+    params.engineInfo.maxThreadsPerExecutionUnit = device_info.num_threads_per_eu > 0 ? device_info.num_threads_per_eu : 7;
+    params.engineInfo.maxThreadsPerDevice = params.engineInfo.maxThreadsPerExecutionUnit * device_info.execution_units_count;
+    params.engineInfo.deviceCache = program.get_tuning_cache();
+    params.engineInfo.driverVersion = device_info.driver_version;
+    params.engineInfo.supportedSimdSizes = device_info.supported_simd_sizes;
+
+    auto impl_forcing_bo = program.get_options().get<build_option_type::force_implementations>();
+    const auto& impl_forcing = impl_forcing_bo->forcing;
+
+    if (impl_forcing.count(param_info.prim_id) != 0) {
+        params.forceImplementation = impl_forcing.at(param_info.prim_id).kernel_name;
     }
 }
 

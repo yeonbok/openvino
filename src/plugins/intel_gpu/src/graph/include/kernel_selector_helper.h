@@ -110,26 +110,49 @@ layout from_weights_tensor(const kernel_selector::weights_tensor& t);
 kernel_selector::activation_function get_kernel_selector_activation_param(activation_func activation_func);
 
 struct prim_kernel_params {
-    size_t prog_id;
-    size_t unique_id;
+    uint32_t prog_id;
+    std::string unique_id;
     primitive_id prim_id;
     std::string type_str;
     std::vector<layout> input_layouts;
     layout output_layout;
-    device_info dev_info;
-    std::shared_ptr<kernel_selector::TuningCache> tuning_cache;
+    const program& prog;
+    //device_info dev_info;
+    //std::shared_ptr<kernel_selector::TuningCache> tuning_cache;
     std::string forceImplementation;
-    std::vector<cldnn::fused_primitive_desc>& fused_prims;
+    std::vector<cldnn::fused_primitive_desc> fused_prims;
     std::vector<activation_func> fused_act_funcs;
     std::vector<activation_additional_params> activation_params;
 
-    prim_kernel_params(size_t pid, size_t uid, primitive_id prim_id, std::string type_str, std::vector<layout>& in_layouts, layout& out_layout,
-        device_info& d_info, std::shared_ptr<kernel_selector::TuningCache> tune_cache, std::string impl,
-        std::vector<cldnn::fused_primitive_desc>& fused_prims, std::vector<activation_func>& fused_act_funcs,
-        std::vector<activation_additional_params> act_params)
-        : prog_id(pid), unique_id(uid), prim_id(prim_id), type_str(type_str), input_layouts(in_layouts), output_layout(out_layout), dev_info(d_info),
-          tuning_cache(tune_cache), forceImplementation(impl),
-          fused_prims(fused_prims), fused_act_funcs(fused_act_funcs), activation_params(act_params) {}
+    layout weights_layout;
+    layout bias_layout;
+    bool bias_term;
+
+    bool weights_zero_points_term;
+    layout weights_zero_points_layout;
+
+    bool activations_zero_points_term;
+    layout activations_zero_points_layout;
+
+    bool compensation_term;
+    layout compensation_layout;
+
+    prim_kernel_params(uint32_t pid, std::string uid, primitive_id prim_id, std::string type_str, std::vector<layout>& in_layouts, layout out_layout,
+        program& prog,
+        const std::vector<cldnn::fused_primitive_desc>& fused_prims, const std::vector<activation_func>& fused_act_funcs,
+        const std::vector<activation_additional_params> act_params,
+        layout weights_layout = layout(data_types::f32, format::any, tensor()),
+        bool bias_term = false, layout bias_layout = layout(data_types::f32, format::any, tensor()),
+        bool weights_zero_points_term = false, layout weights_zero_points_layout = layout(data_types::f32, format::any, tensor()),
+        bool activations_zero_points_term = false, layout activations_zero_points_layout = layout(data_types::f32, format::any, tensor()),
+        bool compensation_term = false, layout compensation_layout = layout(data_types::f32, format::any, tensor()))
+        : prog_id(pid), unique_id(uid), prim_id(prim_id), type_str(type_str), input_layouts(in_layouts), output_layout(out_layout),
+          prog(prog),
+          fused_prims(fused_prims), fused_act_funcs(fused_act_funcs), activation_params(act_params),
+          weights_layout(weights_layout), bias_term(bias_term), bias_layout(bias_layout),
+          weights_zero_points_term(weights_zero_points_term), weights_zero_points_layout(weights_zero_points_layout),
+          activations_zero_points_term(activations_zero_points_term), activations_zero_points_layout(activations_zero_points_layout),
+          compensation_term(compensation_term), compensation_layout(compensation_layout) {}
 };
 
 template <typename T = std::uint32_t>
@@ -178,10 +201,8 @@ inline void convert_new_activation_func(const p_type primitive, std::vector<kern
                                    primitive->additional_params.b});
 }
 
-template <typename params_t>
-void set_params_taylor(const prim_kernel_params& param_info, kernel_selector::params& params) {
-    return;
-}
+//template <typename params_t>
+void set_params_taylor(const prim_kernel_params& param_info, kernel_selector::params& params);
 
 void set_params(const program_node& node, kernel_selector::params& params);
 // required things from arg_t
@@ -193,10 +214,11 @@ void set_params(const program_node& node, kernel_selector::params& params);
 // fused_prarams
 
 template <typename params_t>
-inline params_t get_default_params_taylor(const prim_kernel_params& param_info, uint32_t split = 1) {
+inline params_t get_default_params(const prim_kernel_params& param_info, uint32_t split = 1) {
     params_t params;
 
-    set_params_params_taylor(param_info, params);
+    //set_params_taylor<params_t>(param_info, params);
+    set_params_taylor(param_info, params);
 
 //    const auto& input_layout = arg.input().get_output_layout();
 //    const auto& output_layout = arg.get_output_layout();
@@ -212,7 +234,9 @@ inline params_t get_default_params_taylor(const prim_kernel_params& param_info, 
     size_t op_id = 0;
     for (auto& fused_prim : param_info.fused_prims) {
         kernel_selector::fused_operation_desc desc;
-        desc.op_params = fused_prim.node->get_fuse_params();
+//        desc.op_params = fused_prim.node->get_fuse_params();
+        desc.op_params = std::move(fused_prim.f_param);
+
         if (!desc.op_params) {
             CLDNN_ERROR_MESSAGE(param_info.prim_id, "Invalid fused operation (" + param_info.prim_id + ") of type " +
                                            param_info.type_str);
@@ -258,7 +282,7 @@ inline params_t get_default_params_taylor(const prim_kernel_params& param_info, 
     }
     return params;
 }
-
+#if 0
 template <typename params_t, typename arg_t>
 inline params_t get_default_params(const arg_t& arg, uint32_t split = 1) {
     params_t params;
@@ -325,40 +349,43 @@ inline params_t get_default_params(const arg_t& arg, uint32_t split = 1) {
 
     return params;
 }
+#endif
 
-template <typename params_t, typename arg_t>
-inline params_t get_weights_bias_default_params(const arg_t& arg, uint32_t split = 1, uint32_t groups = 1, bool has_group_dimension = false) {
-    params_t params = get_default_params<params_t>(arg, split);
-    const auto& weights_layout = arg.weights().get_output_layout();
-    params.weights = convert_weights_tensor(weights_layout, has_group_dimension);
+//inline params_t get_weights_bias_default_params(const arg_t& arg, uint32_t split = 1, uint32_t groups = 1, bool has_group_dimension = false) {
+template <typename params_t>
+inline params_t get_weights_bias_default_params(const prim_kernel_params& param_info, uint32_t split = 1, uint32_t groups = 1,
+                                                bool has_group_dimension = false) {
+    params_t params = get_default_params<params_t>(param_info, split);
+//    const auto& weights_layout = arg.weights().get_output_layout();
+    params.weights = convert_weights_tensor(param_info.weights_layout, has_group_dimension);
 
-    if (arg.bias_term()) {
-        auto bias_layout = arg.bias().get_output_layout();
-        params.bias.push_back(convert_data_tensor(bias_layout).FlattenFeatureAndSpatials());
+    if (param_info.bias_term) {
+        params.bias.push_back(convert_data_tensor(param_info.bias_layout).FlattenFeatureAndSpatials());
     }
 
     return params;
 }
 
-template <typename params_t, typename arg_t>
-params_t get_weight_bias_zero_point_default_params(const arg_t& arg, uint32_t split = 1, uint32_t groups = 1, bool has_group_dimension = false) {
-    params_t params = get_weights_bias_default_params<params_t>(arg, split, groups, has_group_dimension);
+template <typename params_t>
+params_t get_weight_bias_zero_point_default_params(const prim_kernel_params& param_info, uint32_t split = 1, uint32_t groups = 1,
+                                                   bool has_group_dimension = false) {
+    params_t params = get_weights_bias_default_params<params_t>(param_info, split, groups, has_group_dimension);
 
-    if (arg.weights_zero_points_term()) {
+    if (param_info.weights_zero_points_term) {
         params.weights_zero_points.push_back(
-            convert_data_tensor(arg.weights_zero_points().get_output_layout())
+            convert_data_tensor(param_info.weights_zero_points_layout)
             .FlattenFeatureAndSpatials());
     }
 
-    if (arg.activations_zero_points_term()) {
+    if (param_info.activations_zero_points_term) {
         params.activations_zero_points.push_back(
-            convert_data_tensor(arg.activations_zero_points().get_output_layout())
+            convert_data_tensor(param_info.activations_zero_points_layout)
             .FlattenFeatureAndSpatials());
     }
 
-    if (arg.compensation_term()) {
+    if (param_info.compensation_term) {
         params.compensation.push_back(
-            convert_data_tensor(arg.compensation().get_output_layout()).FlattenFeatureAndSpatials());
+            convert_data_tensor(param_info.compensation_layout).FlattenFeatureAndSpatials());
     }
 
     return params;
