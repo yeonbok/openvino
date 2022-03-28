@@ -20,7 +20,7 @@ void prepare_padding::run(program& p) {
             if (node->get_dependencies().empty())
                 continue;
 
-            if (node->get_dependency(0).is_type<data>())
+            if (node->get_dependency(0).first->is_type<data>())
                 continue;
 
             // Padded offsets aren't supported by onednn kernels
@@ -29,7 +29,7 @@ void prepare_padding::run(program& p) {
 
             auto add_required_padding = [&p](program_node& node, padding& needed_padding) {
                 // Add extra reorder if a previous node or one of its user nodes is an onednn kernel not to add padding to the onednn kernel
-                auto& input = node.get_dependency(0);
+                auto& input = *node.get_dependency(0).first;
                 bool is_usr_onednn = false;
                 for (auto& input_usr : input.get_users())
                     if (input_usr->get_preferred_impl_type() == impl_types::onednn)
@@ -43,7 +43,7 @@ void prepare_padding::run(program& p) {
                     p.add_intermediate(new_reorder_node, node, input);
                 }
 
-                p.apply_needed_padding(node, node.get_dependency(0), needed_padding);
+                p.apply_needed_padding(node, *node.get_dependency(0).first, needed_padding);
             };
 
             if (node->is_type<convolution>()) {
@@ -134,7 +134,7 @@ void prepare_padding::run(program& p) {
             continue;
 
         auto conv = node.get_primitive();
-        auto& conv_input_node = node.get_dependency(0);
+        auto& conv_input_node = *node.get_dependency(0).first;
         auto conv_layout = node.get_output_layout();
 
         // right now output padding optimization is only available for bfyx format and data type = float32
@@ -213,7 +213,7 @@ void prepare_padding::run(program& p) {
             continue;
 
         auto conv = node.get_primitive();
-        auto& conv_input_node = node.get_dependency(0);
+        auto& conv_input_node = *node.get_dependency(0).first;
         auto conv_layout = node.get_output_layout();
 
         // right now output padding optimization is only available for bfyx format and data type = float32

@@ -16,9 +16,7 @@
 #include "gemm_inst.h"
 #include "eltwise_inst.h"
 #include "pooling_inst.h"
-#if 0 // TODO(andrew)
 #include "one_hot_inst.h"
-#endif
 #include "permute_inst.h"
 #include "quantize_inst.h"
 #include "mvn_inst.h"
@@ -390,7 +388,7 @@ bool layout_optimizer::can_fuse_reorder(program_node& prev, program_node& next, 
 
     return false;
 }
-#if 0 // TODO(andrew)
+
 bool layout_optimizer::can_fuse_reorder_to_prev(program_node& prev, program_node* next, format fmt_prev, format fmt_next) {
     // Ref kernels are the main for depth_to_space and region_yolo. It can do anything. Should not see next.
     if (prev.is_type<depth_to_space>() || prev.is_type<region_yolo>())
@@ -446,7 +444,7 @@ bool layout_optimizer::can_fuse_reorder_to_prev(program_node& prev, program_node
 
     return false;
 }
-#endif
+
 namespace {
 bool should_use_winograd_2x3_s1(std::shared_ptr<const convolution> const& prim,
                                 layout const& input_layout,
@@ -1230,9 +1228,9 @@ bool layout_optimizer::are_data_types_suitable_for_onednn(program_node& node) {
 
     return false;
 }
-#if 0 // TODO(andrew)
+
 bool layout_optimizer::are_layouts_suitable_for_onednn(program_node& node) {
-    auto in_padding = node.get_dependencies().front()->get_output_layout().data_padding;
+    auto in_padding = node.get_dependencies().front().first->get_output_layout().data_padding;
     auto out_padding = node.get_output_layout().data_padding;
     // Check if padding exists
     if (node.get_preferred_impl_type() == impl_types::onednn && (in_padding || out_padding)) {
@@ -1266,7 +1264,7 @@ bool layout_optimizer::are_layouts_suitable_for_onednn(program_node& node) {
     }
     return true;
 }
-#endif
+
 impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format preferred_format) {
     impl_types preferred_impl = impl_types::any;
     if (!_forcing_map.empty() && _forcing_map.count(node.id()) != 0) {

@@ -554,11 +554,11 @@ void program::pre_optimize_graph(bool is_internal) {
     apply_opt_pass<strided_slice_optimize>();
 
     apply_opt_pass<handle_reshape>();
-#if 0 // TODO(andrew)
+
     apply_opt_pass<prepare_padding>(output_size_handling_enabled);
 
     apply_opt_pass<remove_redundant_reorders>(lo, options.get<build_option_type::optimize_data>()->enabled());
-
+#if 0 // TODO(andrew)
     if (!is_internal) {
         // ToDo remove hidden dependencies from propagate_constants pass
         apply_opt_pass<propagate_constants>();
@@ -732,7 +732,7 @@ void program::prepare_memory_dependencies() {
 #endif
 }
 
-#if 0
+#if 0 // TODO(andrew)
 std::string program::get_memory_dependencies_string() const {
     std::string mem_dep = "Memory dependencies/restrictions:\n";
     auto itr = processing_order.begin();
@@ -746,7 +746,7 @@ std::string program::get_memory_dependencies_string() const {
     }
     return mem_dep;
 }
-
+#endif
 void program::apply_needed_padding(program_node& node, program_node& prev_node, const padding& needed_padding) {
     auto target_layout = prev_node.get_output_layout();
 
@@ -758,14 +758,14 @@ void program::apply_needed_padding(program_node& node, program_node& prev_node, 
     if (prev_node.is_type<input_layout>() || prev_node.is_type<mutable_data>()) {
         target_layout.data_padding = needed_padding;
 
-        auto r_prim = std::make_shared<reorder>("reorder_input_" + node.id(), prev_node.id(), target_layout);
+        auto r_prim = std::make_shared<reorder>("reorder_input_" + node.id(), input_info(prev_node.id()), target_layout);
         add_intermediate(r_prim, node, 0);
         return;
     }
 
     prev_node.merge_output_padding(needed_padding);
 }
-
+#if 0 // TODO(andrew)
 void program::reverse_connection(program_node& dep_node, program_node& user_node) {
     if (std::find(dep_node.users.begin(), dep_node.users.end(), &user_node) != dep_node.users.end()) {
         remove_connection(dep_node, user_node);

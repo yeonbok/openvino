@@ -22,7 +22,7 @@ public:
     typed_program_node(const std::shared_ptr<one_hot> prim, program& prog) : parent(prim, prog) {
         support_padding_all(true);
     }
-    program_node& input() const { return get_dependency(0); }
+    program_node& input() const { return *get_dependency(0).first; }
 };
 
 using one_hot_node = typed_program_node<one_hot>;

@@ -227,7 +227,7 @@ private:
     bool optimize_bias(T& node, reorder_factory& rf, program& p);
     reorder_factory& _rf;
 };
-#if 0 // TODO(andrew)
+
 class prepare_padding : public base_pass {
 public:
     explicit prepare_padding(bool output_size_handling_enabled_switch)
@@ -237,7 +237,7 @@ private:
     void run(program& p) override;
     bool output_size_handling_enabled;
 };
-
+#if 0 // TODO(andrew)
 class post_input_reorder : public base_pass {
 public:
     post_input_reorder() : base_pass("post_input_reorder") {}
@@ -288,7 +288,7 @@ private:
     std::vector<primitive_id> const_outputs;
     std::set<std::shared_ptr<program_node>> nodes;
 };
-
+#endif
 class remove_redundant_reorders : public base_pass {
 public:
     explicit remove_redundant_reorders(layout_optimizer& lo_ref, bool enable_reorder_fusing = false, bool update_implementations = false,
@@ -301,7 +301,7 @@ private:
     bool update_implementations;
     bool remove_output_reorders;
 };
-#endif
+
 class reorder_inputs : public base_pass {
 public:
     reorder_inputs(layout_optimizer& lo_ref, reorder_factory& rf_ref);
