@@ -8,6 +8,7 @@
 #include "intel_gpu/primitives/activation.hpp"
 #include "intel_gpu/primitives/implementation_desc.hpp"
 #include "intel_gpu/graph/program.hpp"
+#include "intel_gpu/runtime/utils.hpp"
 
 #include "kernel_selector_helper.h"
 #include "meta_utils.h"
@@ -365,7 +366,11 @@ public:
         cur_id = 0;
     }
 
+    std::shared_ptr<LRUCache<std::string, std::shared_ptr<primitive_impl>>> get_primitive_impl_cache() const { return primitive_impl_cache; }
+
 protected:
+    std::shared_ptr<LRUCache<std::string, std::shared_ptr<primitive_impl>>> primitive_impl_cache;
+
     size_t unique_id = 0;
     static thread_local size_t cur_id;
 
