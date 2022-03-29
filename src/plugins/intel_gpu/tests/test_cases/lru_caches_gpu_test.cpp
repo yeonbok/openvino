@@ -22,16 +22,16 @@ TEST(LRUCache_test, basic01)
         input_values.push_back(std::make_pair(i, i + 10));
     }
 
-    std::vector<bool> exp_flags = {true, true, true, true, false, false, true};
+    std::vector<bool> expected_hitted = {false, false, false, false, true, true, false};
     for (int i = 0; i < input_values.size(); i++) {
         auto& in = input_values[i];
         int data = 0;
-        bool is_new_entry = false;
-        std::tie(data, is_new_entry) = ca.get(in.first, [in](){
+        bool hitted = true;
+        std::tie(data, hitted) = ca.get(in.first, [in](){
             return LRUCache<int, int>::CacheEntry{in.second, sizeof(in.second)};
         });
         EXPECT_EQ(data, in.second);
-        EXPECT_EQ(is_new_entry, (bool)exp_flags[i]);
+        EXPECT_EQ(hitted, (bool)expected_hitted[i]);
     }
 
     EXPECT_EQ(cap, ca.count());
@@ -87,17 +87,17 @@ TEST(LRUCache_test, basic02) {
     inputs.push_back(std::make_shared<LRUCacheTestData>(3, 23, 13));
     inputs.push_back(std::make_shared<LRUCacheTestData>(5, 25, 15));
 
-    std::vector<bool> exp_flags = {true, true, true, true, false, false, false, true};
+    std::vector<bool> expected_hitted = {false, false, false, false, true, true, true, false};
 
     for (int i = 0; i < inputs.size(); i++) {
         auto& in = inputs[i];
         std::shared_ptr<LRUCacheTestData> p_data;
-        bool is_new_entry = false;
-        std::tie(p_data, is_new_entry) = ca.get(in->key, [in](){
+        bool hitted = true;
+        std::tie(p_data, hitted) = ca.get(in->key, [in](){
             return LRUCache<std::string, std::shared_ptr<LRUCacheTestData>>::CacheEntry{in, sizeof(LRUCacheTestData)};
         });
         EXPECT_EQ(p_data->key, in->key);
-        EXPECT_EQ(is_new_entry, (bool)exp_flags[i]);
+        EXPECT_EQ(hitted, (bool)expected_hitted[i]);
     }
 
     EXPECT_EQ(cap, ca.count());
