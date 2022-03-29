@@ -48,11 +48,9 @@
 #include "input_layout_inst.h"
 #include "shuffle_channels_inst.h"
 #include "arg_max_min_inst.h"
-#if 0 // TODO(taylor)
 #include "lstm_inst.h"
 #include "lstm_elt_inst.h"
 #include "lstm_gemm_inst.h"
-#endif
 #include "mutable_data_inst.h"
 #include "normalize_inst.h"
 #include "pooling_inst.h"
@@ -558,7 +556,7 @@ void program::pre_optimize_graph(bool is_internal) {
     apply_opt_pass<prepare_padding>(output_size_handling_enabled);
 
     apply_opt_pass<remove_redundant_reorders>(lo, options.get<build_option_type::optimize_data>()->enabled());
-#if 0 // TODO(andrew)
+
     if (!is_internal) {
         // ToDo remove hidden dependencies from propagate_constants pass
         apply_opt_pass<propagate_constants>();
@@ -568,7 +566,7 @@ void program::pre_optimize_graph(bool is_internal) {
     if (options.get<build_option_type::optimize_data>()->enabled()) {
         apply_opt_pass<prepare_buffer_fusing>();
     }
-
+#if 0 // TODO(andrew)
     // check if there exists some layout incompatibilities and add an reorder node if required
     apply_opt_pass<add_required_reorders>();
 

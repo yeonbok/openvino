@@ -72,7 +72,7 @@ struct lstm : public primitive_base<lstm> {
     /// @brief Output selection. Default the entire hidden sequence is returned.
     /// @param offset_order Order of the concatenated weights, recurrent, and bias. ONNX default is iofz [input, output, forget, block].
     lstm(const primitive_id& id,
-         const std::vector<primitive_id>& input,
+         const std::vector<input_info>& input,
          const primitive_id& weights,
          const primitive_id& recurrent,
          const primitive_id& bias = "",
@@ -87,7 +87,7 @@ struct lstm : public primitive_base<lstm> {
          const lstm_weights_order offset_order = lstm_weights_order::iofz,
          const primitive_id& ext_prim_id = "",
          const padding& output_padding = padding())
-        : primitive_base(id, input, ext_prim_id, output_padding),
+        : primitive_base(id, input, ext_prim_id, {output_padding}),
           weights(weights),
           recurrent(recurrent),
           bias(bias),
@@ -133,18 +133,18 @@ struct lstm : public primitive_base<lstm> {
     // /// @brief The sequence output for the hidden.
     // uint32_t output_sequence;
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
-        ret.push_back(weights);
-        ret.push_back(recurrent);
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
+        ret.push_back({std::ref(weights), 0});
+        ret.push_back({std::ref(recurrent), 0});
         if (!bias.empty()) {
-            ret.push_back(bias);
+            ret.push_back({std::ref(bias), 0});
         }
         if (!initial_hidden.empty()) {
-            ret.push_back(initial_hidden);
+            ret.push_back({std::ref(initial_hidden), 0});
         }
         if (!initial_cell.empty()) {
-            ret.push_back(initial_cell);
+            ret.push_back({std::ref(initial_cell), 0});
         }
         return ret;
     }
@@ -161,7 +161,7 @@ struct lstm_gemm : public primitive_base<lstm_gemm> {
     /// @param input hidden Primitive id containing hidden data. Provide empty string if using lstm without hidden values.
     /// @param direction default = 0, bidirectional = 1.
     lstm_gemm(const primitive_id& id,
-              const primitive_id& input,
+              const input_info& input,
               const primitive_id& weights,
               const primitive_id& recurrent,
               const primitive_id& bias = "",
@@ -169,7 +169,7 @@ struct lstm_gemm : public primitive_base<lstm_gemm> {
               const uint32_t direction = 0,
               const primitive_id& ext_prim_id = "",
               const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           weights(weights),
           recurrent(recurrent),
           bias(bias),
@@ -188,14 +188,14 @@ struct lstm_gemm : public primitive_base<lstm_gemm> {
     uint32_t direction;
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
-        ret.push_back(weights);
-        ret.push_back(recurrent);
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
+        ret.push_back({std::ref(weights), 0});
+        ret.push_back({std::ref(recurrent), 0});
         if (!bias.empty())
-            ret.push_back(bias);
+            ret.push_back({std::ref(bias), 0});
         if (!hidden.empty())
-            ret.push_back(hidden);
+            ret.push_back({std::ref(hidden), 0});
         return ret;
     }
 };
@@ -214,7 +214,7 @@ struct lstm_elt : public primitive_base<lstm_elt> {
     /// @param offset_order. Order of the concatenated weights, recurrent, and bias. ONNX default is iofz [input, output, forget, block].
     /// @param direction default = 0, bidirectional = 1.
     lstm_elt(const primitive_id& id,
-             const primitive_id& input,
+             const input_info& input,
              const primitive_id& cell = "",
              const float clip = 0,
              const bool input_forget = 0,
@@ -226,7 +226,7 @@ struct lstm_elt : public primitive_base<lstm_elt> {
              const uint32_t direction = 0,
              const primitive_id& ext_prim_id = "",
              const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+        : primitive_base(id, {input}, ext_prim_id, {output_padding}),
           cell(cell),
           clip(clip),
           input_forget(input_forget),
@@ -251,10 +251,10 @@ struct lstm_elt : public primitive_base<lstm_elt> {
     uint32_t direction;
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
         if (!cell.empty())
-            ret.push_back(cell);
+            ret.push_back({std::ref(cell), 0});
         return ret;
     }
 };

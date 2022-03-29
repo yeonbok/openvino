@@ -270,7 +270,7 @@ private:
     void optimize_weights(T& node, program& p);
     reorder_factory& _rf;
 };
-
+#endif
 class propagate_constants : public base_pass {
 public:
     propagate_constants() : base_pass("propagate_constants") {}
@@ -281,14 +281,14 @@ private:
     bool has_non_const_user(program_node& node) const;
     void handle_constant(program& prog, program_node& node);
     void add_constant(program& prog, program_node& node);
-    void add_deps_to_tpl(program& prog, const std::vector<program_node*>& node);
+    void add_deps_to_tpl(program& prog, const std::vector<std::pair<program_node*, int>>& node);
 
     bool has_non_trivial_constants = false;
     std::list<typed_program_node<data>*> const_inputs;
     std::vector<primitive_id> const_outputs;
     std::set<std::shared_ptr<program_node>> nodes;
 };
-#endif
+
 class remove_redundant_reorders : public base_pass {
 public:
     explicit remove_redundant_reorders(layout_optimizer& lo_ref, bool enable_reorder_fusing = false, bool update_implementations = false,

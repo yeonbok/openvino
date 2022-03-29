@@ -328,12 +328,13 @@ void program_node::invalidate_users() const {
 void program_node::support_padding_all(bool support) {
     std::fill(_support_padding_in_axis.begin(), _support_padding_in_axis.end(), support);
 }
-#if 0 // TODO(taylor)
+
 bool program_node::is_padding_supported(int axis, int padding) const {
     if (!support_padding(axis))
         return false;
 
-    auto fmt = output_layout.format;
+    // TODO(andrew) - Need to check all format of output layouts?
+    auto fmt = output_layouts.at(0).format;
 
     // WA for known cases of padding not supported in implementations
     if (fmt == format::b_fs_yx_fsv16) {
@@ -357,7 +358,7 @@ bool program_node::is_padding_supported(int axis, int padding) const {
 
     return true;
 }
-#endif
+
  void program_node::set_selected_impl(std::unique_ptr<primitive_impl> impl) {
     selected_impl = std::move(impl);
 }

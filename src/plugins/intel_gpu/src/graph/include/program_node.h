@@ -279,9 +279,7 @@ public:
     // Checks if primitive supports any padding in specified axis
     bool support_padding(int axis) const { return _support_padding_in_axis[axis]; }
     // Checks whether with current format specified padding is supported;
-#if 0 // TODO(taylor)
     bool is_padding_supported(int axis, int padding) const;
-#endif
 
     primitive_id get_org_primitive_id() const { return org_id; }
 
