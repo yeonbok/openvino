@@ -242,7 +242,6 @@ static void CreateStridedSliceOp(Program& p, const std::shared_ptr<ngraph::op::v
                                                  op->get_end_mask(),
                                                  op->get_new_axis_mask(),
                                                  op->get_shrink_axis_mask(),
-                                                 op->get_output_partial_shape(0).to_shape(),
                                                  op->get_friendly_name());
 
     p.AddPrimitive(stridedSlicePrim);
