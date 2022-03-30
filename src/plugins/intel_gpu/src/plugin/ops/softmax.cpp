@@ -32,7 +32,7 @@ static void CreateSoftmaxOp(Program& p, const std::shared_ptr<ngraph::op::v8::So
     std::string layerName = layer_type_name_ID(op);
 
     int64_t axis = op->get_axis();
-    size_t rank = op->get_input_shape(0).size();
+    size_t rank = op->get_input_partial_shape(0).size();
     if (axis < 0)
         axis += rank;
     if (axis < 0 || axis >= static_cast<int64_t>(rank))
@@ -54,7 +54,7 @@ static void CreateLogSoftmaxOp(Program& p, const std::shared_ptr<ngraph::op::v5:
 
     auto axis = op->get_axis();
     if (axis < 0)
-        axis += op->get_input_shape(0).size();
+        axis += op->get_input_partial_shape(0).size();
 
     auto softmaxPrim = cldnn::softmax(layerNameSoftmax,
                                       inputPrimitives[0],
