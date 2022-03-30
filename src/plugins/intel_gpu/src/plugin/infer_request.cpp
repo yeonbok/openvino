@@ -989,7 +989,7 @@ void InferRequest::allocate_outputs() {
 
             auto host_blob = create_host_blob(desc);
             _outputs[no.first] = host_blob;
-            auto device_blob = create_device_blob(device_blob_desc, output_layout);
+            auto device_blob = create_device_blob(device_blob_desc);
             _deviceOutputs[no.first] = device_blob;
         } else {
             if (m_graph->GetEngine()->use_unified_shared_memory()) {
@@ -1000,7 +1000,7 @@ void InferRequest::allocate_outputs() {
                 _deviceOutputs[no.first] = create_shared_device_blob(desc, output_layout, host_blob->buffer().as<void*>());
             } else {
                 _outputs[no.first] = create_host_blob(desc);
-                _deviceOutputs[no.first] = create_device_blob(desc, output_layout);
+                _deviceOutputs[no.first] = create_device_blob(desc);
             }
         }
     }
@@ -1123,7 +1123,7 @@ void InferRequest::prepare_output(const cldnn::primitive_id& outputName, Blob::P
 InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngine::TensorDesc& desc) {
     auto format = FormatFromLayout(desc.getLayout());
     auto dt = DataTypeFromPrecision(desc.getPrecision());
-    auto shape = tensor_from_dims(desc.getDims());
+    ov::PartialShape shape(desc.getDims());
 
     auto l = cldnn::layout(dt, format, shape);
 
@@ -1161,7 +1161,7 @@ std::vector<std::shared_ptr<InferenceEngine::IVariableStateInternal>> InferReque
 Blob::Ptr InferRequest::reinterpret_device_blob(Blob::Ptr data, const TensorDesc& new_desc) {
     auto format = FormatFromLayout(new_desc.getLayout());
     auto dt = DataTypeFromPrecision(new_desc.getPrecision());
-    auto shape = tensor_from_dims(new_desc.getDims());
+    ov::PartialShape shape(new_desc.getDims());
 
     auto l = cldnn::layout(dt, format, shape);
 

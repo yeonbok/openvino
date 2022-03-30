@@ -101,7 +101,7 @@ static void CreateConstantOp(Program& p, const std::shared_ptr<ngraph::op::v0::C
                    ngraph::is_type<ngraph::op::v0::SquaredDifference>(outOp)) {
             bool all_inputs_1d = true;
             for (size_t j = 0; j < outOp->get_input_size(); j++) {
-                auto& in_shape = outOp->get_input_shape(j);
+                auto& in_shape = outOp->get_input_partial_shape(j);
                 if (in_shape.size() > 1)
                     all_inputs_1d = false;
             }
@@ -142,18 +142,7 @@ static void CreateConstantOp(Program& p, const std::shared_ptr<ngraph::op::v0::C
 }
 
 void createClDnnConstant(Program& p, const ngraph::Shape& constDims, const std::shared_ptr<ngraph::op::v0::Constant>& op, const ConstProperties& props) {
-    cldnn::tensor constTensor = getConstTensor(constDims);
     auto constFormat = cldnn::format::get_default_format(constDims.size());
-
-    if (props.needsBatchInterpretation) {
-        constTensor.batch[0] = constTensor.count();
-        constTensor.feature[0] = 1;
-    }
-
-    // If constDims has a dimension = 0, then create tensor with single value
-    // TODO: check if dim=0 is a valid case
-    if (std::accumulate(constDims.begin(), constDims.end(), 1, std::multiplies<size_t>()) == 0)
-        constTensor = cldnn::tensor{1};
 
     // Swap O and I dimensions to match expected deconvolution weights format
     size_t inputFeatureElements = 1;
@@ -176,7 +165,6 @@ void createClDnnConstant(Program& p, const ngraph::Shape& constDims, const std::
             outputFeatureElements = newDims[0];
             groups = 1;
         }
-        constTensor = getConstTensor(newDims);
     }
 
     cldnn::layout constLayout = cldnn::layout(DataTypeFromPrecision(op->get_output_element_type(0)),

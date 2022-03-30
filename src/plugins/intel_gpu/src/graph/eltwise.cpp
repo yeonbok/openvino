@@ -31,20 +31,23 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node) {
 
     auto output_type = node.get_primitive()->output_data_type ? *node.get_primitive()->output_data_type : input_node_layout.data_type;
 
-    auto size = input_node_layout.get_tensor();
+    ov::PartialShape out_pshape;
     auto format = input_node_layout.format;
     for (size_t i = 0; i < node.inputs_count(); i++) {
         if (i == primary_input_idx)
             continue;
 
         auto l = node.input(i).get_non_padded_output_layout();
-        size = tensor::max(size, l.get_tensor());
+        if (!ov::PartialShape::broadcast_merge_into(out_pshape, l.size, ov::op::AutoBroadcastSpec(ov::op::AutoBroadcastType::NUMPY))) {
+            IE_THROW() << "incorrect input shapes\n";
+        }
+
         if (l.format == format::b_fs_zyx_fsv16)  // use optimized 5D
             format = format::b_fs_zyx_fsv16;
         else if (l.format == format::bs_fs_zyx_bsv16_fsv16)
             format = format::bs_fs_zyx_bsv16_fsv16;
     }
-    auto output_layout = layout(output_type, format, size);
+    auto output_layout = layout(output_type, format, out_pshape);
 
     auto mode = node.get_primitive()->mode;
     // list of operations supported for integer types
@@ -211,58 +214,34 @@ std::string eltwise_inst::to_string(eltwise_node const& node) {
 eltwise_inst::typed_primitive_inst(network& network, eltwise_node const& node) : parent(network, node) {
     check_inputs_count(node);
     // check for stride
-    auto prim = node.get_primitive();
-    auto inputs_count = node.inputs_count();
+    // auto prim = node.get_primitive();
+    // auto inputs_count = node.inputs_count();
 
-    if (!prim->stride.empty()) {
-        // number of strides must match number of inputs
-        CLDNN_ERROR_NOT_EQUAL(node.id(),
-                              "Eltwise inputs count",
-                              inputs_count,
-                              "Eltwise strides count",
-                              prim->stride.size(),
-                              "");
+    // if (!prim->stride.empty()) {
+    //     // number of strides must match number of inputs
+    //     CLDNN_ERROR_NOT_EQUAL(node.id(),
+    //                           "Eltwise inputs count",
+    //                           inputs_count,
+    //                           "Eltwise strides count",
+    //                           prim->stride.size(),
+    //                           "");
 
-        const auto out_x = node.get_output_layout().spatial(0);
-        const auto out_y = node.get_output_layout().spatial(1);
-        // check if strides are correctly set. I.e INPUT_SIZE_X / STRIDE_X = OUTPUT_SIZE_X, same for Y dimension
-        for (size_t i = 0; i < inputs_count; i++) {
-            const auto& in_layout = node.input(i).get_output_layout();
-            auto stride = prim->stride[i];
+    //     const auto out_x = node.get_output_layout().spatial(0);
+    //     const auto out_y = node.get_output_layout().spatial(1);
+    //     // check if strides are correctly set. I.e INPUT_SIZE_X / STRIDE_X = OUTPUT_SIZE_X, same for Y dimension
+    //     for (size_t i = 0; i < inputs_count; i++) {
+    //         const auto& in_layout = node.input(i).get_output_layout();
+    //         auto stride = prim->stride[i];
 
-            const auto in_x_div_stride_x = (in_layout.spatial(0) - 1) / stride.spatial[0] + 1;
-            if (in_x_div_stride_x != out_x && in_x_div_stride_x != 1)
-                CLDNN_ERROR_NOT_EQUAL(node.id(),
-                                      "Eltwise input_x / stride_x",
-                                      in_x_div_stride_x,
-                                      "Eltwise output_x",
-                                      out_x,
-                                      "");
+    //         const auto in_x_div_stride_x = (in_layout.spatial(0) - 1) / stride.spatial[0] + 1;
+    //         if (in_x_div_stride_x != out_x && in_x_div_stride_x != 1)
+    //             CLDNN_ERROR_NOT_EQUAL(node.id(),
+    //                                   "Eltwise input_x / stride_x",
+    //                                   in_x_div_stride_x,
+    //                                   "Eltwise output_x",
+    //                                   out_x,
+    //                                   "");
 
-            const auto in_y_div_stride_y = (in_layout.spatial(1) - 1) / stride.spatial[1] + 1;
-            if (in_y_div_stride_y != out_y && in_y_div_stride_y != 1)
-                CLDNN_ERROR_NOT_EQUAL(node.id(),
-                                      "Eltwise inputyx / stride_y",
-                                      in_y_div_stride_y,
-                                      "Eltwise output_y",
-                                      out_y,
-                                      "");
-        }
-    } else {
-        std::vector<int32_t> input0_size = node.input().get_output_layout().get_tensor().raw.vector();
-        for (size_t i = 1; i < inputs_count; i++) {
-            std::vector<int32_t> input_size = node.input(i).get_output_layout().get_tensor().raw.vector();
-            for (size_t d = 0; d < input0_size.size(); d++) {
-                bool sizes_equal = input0_size[d] == input_size[d];
-                bool broadcast =
-                    (input0_size[d] == 1 || input_size[d] == 1) && (input0_size[d] != 1 || input_size[d] != 1);
-                CLDNN_ERROR_BOOL(node.id(),
-                                 "Sizes equal or broadcast is possible",
-                                 !(sizes_equal || broadcast),
-                                 "Invalid input shapes");
-            }
-        }
-    }
 }
 
 void eltwise_inst::check_inputs_count(eltwise_node const& node) {
