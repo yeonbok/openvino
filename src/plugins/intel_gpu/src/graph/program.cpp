@@ -566,13 +566,12 @@ void program::pre_optimize_graph(bool is_internal) {
     if (options.get<build_option_type::optimize_data>()->enabled()) {
         apply_opt_pass<prepare_buffer_fusing>();
     }
-#if 0 // TODO(andrew)
+
     // check if there exists some layout incompatibilities and add an reorder node if required
     apply_opt_pass<add_required_reorders>();
 
     // add optimization attributes for onednn primitives
     apply_opt_pass<add_onednn_optimization_attributes>();
-#endif
 }
 #if 0 // TODO(taylor)
 void program::post_optimize_graph(bool is_internal) {
