@@ -36,7 +36,7 @@
  std::cerr << id() << " " <<  #func <<  " " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << "us\n"; \
 }
 #else
-#define PRINT_TIME(func)
+#define PRINT_TIME(func) func;
 #endif
 
 namespace {

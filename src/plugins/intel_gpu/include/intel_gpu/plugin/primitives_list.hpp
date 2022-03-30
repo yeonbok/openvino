@@ -65,6 +65,7 @@ REGISTER_FACTORY(v0, Tanh);
 REGISTER_FACTORY(v0, TensorIterator);
 REGISTER_FACTORY(v0, Tile);
 REGISTER_FACTORY(v0, Unsqueeze);
+REGISTER_FACTORY(v0, ShapeOf);
 
 // ----------------------------- Unsupported v0 ops ----------------------------- //
 // Deprecated ops
