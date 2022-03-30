@@ -28,9 +28,7 @@ layout shape_of_inst::calc_output_layout(shape_of_node const& node, kernel_impl_
         dt = impl_param.get_fused_output_layout().data_type;
     }
 
-    cldnn::tensor out_size{static_cast<tensor::value_type>(prim->output_rank), 1, 1, 1};
-
-    return layout{dt, format::bfyx, out_size};
+    return layout{dt, format::bfyx, ov::PartialShape{prim->output_rank}};
 }
 
 std::string shape_of_inst::to_string(shape_of_node const& node) {
