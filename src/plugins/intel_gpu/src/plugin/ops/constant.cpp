@@ -101,7 +101,7 @@ static void CreateConstantOp(Program& p, const std::shared_ptr<ngraph::op::v0::C
                    ngraph::is_type<ngraph::op::v0::SquaredDifference>(outOp)) {
             bool all_inputs_1d = true;
             for (size_t j = 0; j < outOp->get_input_size(); j++) {
-                auto& in_shape = outOp->get_input_shape(j);
+                auto& in_shape = outOp->get_input_partial_shape(j);
                 if (in_shape.size() > 1)
                     all_inputs_1d = false;
             }

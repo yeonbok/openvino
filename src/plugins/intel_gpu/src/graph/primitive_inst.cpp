@@ -37,7 +37,7 @@
  std::cerr << id() << " " <<  #func <<  " " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << "us\n"; \
 }
 #else
-#define PRINT_TIME(func)
+#define PRINT_TIME(func) func;
 #endif
 
 namespace {
@@ -101,7 +101,7 @@ bool is_any_user_cpu(const std::list<const program_node*>& users) {
 
 uint32_t primitive_inst::get_network_id() const { return _network.get_id(); }
 
-oid primitive_inst::check_memory_to_set(const memory& mem, const layout& layout) const {
+void primitive_inst::check_memory_to_set(const memory& mem, const layout& layout) const {
     OPENVINO_ASSERT((mem.get_layout() == layout) || layout.is_dynamic(), "[GPU] Unexpected layout of input memory");
 
     // check shared image/buffer compatibility, if applicable

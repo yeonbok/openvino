@@ -69,6 +69,8 @@ public:
     using parent::parent;
 
     program_node& input(size_t index = 0) const { return get_dependency(index); }
+
+    std::vector<memory::ptr> const_mem = {};
 };
 
 using strided_slice_node = typed_program_node<strided_slice>;

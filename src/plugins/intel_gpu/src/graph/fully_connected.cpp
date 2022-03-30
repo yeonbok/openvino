@@ -177,7 +177,7 @@ fully_connected_inst::typed_primitive_inst(network& network, fully_connected_nod
 // override this for fc/conv/etc
 // and in common primitive_execute we call
 // if (is_weightable_layer()) update_weights();
-virtual event::ptr fully_connected_inst::update_weights() {
+event::ptr fully_connected_inst::update_weights() {
     if (!_impl)
         return nullptr;
 
@@ -199,7 +199,7 @@ virtual event::ptr fully_connected_inst::update_weights() {
 
         kernel_arguments_data args;
         args.inputs.push_back(dep_memory_ptr(1));
-        args.output = reordered_weights;
+        args.outputs.push_back(reordered_weights);
         stream.set_arguments(*kernel, weights_params.clKernel->params, args);
         auto out_ev = stream.enqueue_kernel(*kernel, weights_params.clKernel->params, args, {}, true);
         stream.wait_for_events({out_ev});
