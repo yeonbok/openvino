@@ -454,7 +454,7 @@ void remove_redundant_reorders::run(program& p) {
             //local_desc.node = p.get_node_ptr(node->id());
             local_desc.f_param = node->get_fuse_params();
             local_desc.dep_start_idx = input.get_fused_primitives().size();
-            local_desc.total_num_deps = node->get_dependencies().size();
+//            local_desc.total_num_deps = node->get_dependencies().size();
             local_desc.input_layout = node->get_dependency(0).get_output_layout();  // original convolution's output layout
             local_desc.output_layout = output_layout;
             local_desc.activation = activation_func::none;

@@ -246,7 +246,7 @@ inline params_t get_default_params(const prim_kernel_params& param_info, uint32_
         desc.dep_size = fused_prim.deps.size();
         desc.op_id = op_id++;
         desc.output_tensor = convert_data_tensor(fused_prim.output_layout);
-        prim_id_type_map[param_info.prim_id] = std::make_pair(desc.op_id, desc.output_tensor.GetDType());
+        prim_id_type_map[fused_prim.desc->id] = std::make_pair(desc.op_id, desc.output_tensor.GetDType());
 
         for (size_t i = desc.dep_idx_start; i < desc.dep_idx_start + desc.dep_size; i++) {
             desc.tensors.push_back(convert_data_tensor(param_info.input_layouts[i]));
