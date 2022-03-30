@@ -105,23 +105,14 @@ layout fully_connected_inst::calc_output_layout(fully_connected_node const& node
     }
 
     format output_format = get_preferred_format(node, impl_param);
-    if (input_layout.is_dynamic()) {
-        auto batch = input_layout.get_partial_shape()[0];
-        auto feature = input_layout.get_partial_shape()[1];
-        auto output_size = ov::PartialShape{batch, weights_layout.batch(), 1, 1};
-        if (desc->input_size == 3) {
-            output_size = ov::PartialShape{batch, feature, 1, weights_layout.batch()};
-        }
-
-        return layout(output_size, output_type, output_format);
-    } else {
-        auto output_size = tensor(input_layout.batch(), weights_layout.batch(), 1, 1);
-        if (desc->input_size == 3) {
-            output_size = tensor(input_layout.batch(), input_layout.feature(), 1, weights_layout.batch());
-        }
-
-        return layout(output_type, output_format, output_size);
+    auto batch = input_layout.size[0];
+    auto feature = input_layout.size[1];
+    auto output_size = ov::PartialShape{batch, weights_layout.batch()};
+    if (desc->input_size == 3) {
+        output_size = ov::PartialShape{batch, feature, weights_layout.batch()};
     }
+
+    return layout(output_type, output_format, output_size);
 }
 
 std::string fully_connected_inst::to_string(fully_connected_node const& node) {
@@ -174,7 +165,7 @@ void fully_connected_inst::update_weights() {
 
         kernel_arguments_data args;
         args.inputs.push_back(dep_memory_ptr(1));
-        args.output = reordered_weights;
+        args.outputs.push_back(reordered_weights);
         stream.set_arguments(*kernel, weights_params.clKernel->params, args);
         auto out_ev = stream.enqueue_kernel(*kernel, weights_params.clKernel->params, args, {}, true);
         stream.wait_for_events({out_ev});

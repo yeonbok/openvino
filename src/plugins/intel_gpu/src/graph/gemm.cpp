@@ -11,6 +11,8 @@
 #include <utility>
 #include <algorithm>
 
+#include "matmul_shape_inference.hpp"
+
 namespace cldnn {
 primitive_type_id gemm::type_id() {
     static primitive_type_base<gemm> instance;
@@ -20,23 +22,21 @@ primitive_type_id gemm::type_id() {
 layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params const& impl_param) {
     auto prim = impl_param.typed_desc<gemm>();
 
-    auto input0_layout = impl_param.get_input_layout(0);
-    auto input1_layout = impl_param.get_input_layout(1);
-    bool transpose_input0 = prim->transpose_input0;
-    bool transpose_input1 = prim->transpose_input1;
+    auto input0_layout = impl_param.input_layouts[0];
+    auto input1_layout = impl_param.input_layouts[1];
 
-    auto M = !transpose_input0 ? input0_layout.spatial(1) : input0_layout.spatial(0);
-    auto N = !transpose_input1 ? input1_layout.spatial(0) : input1_layout.spatial(1);
+    ov::op::v0::MatMul op;
+    op.set_transpose_a(prim->transpose_input0);
+    op.set_transpose_b(prim->transpose_input1);
 
-    auto output_size = input0_layout.get_tensor();
+    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+    std::vector<ov::PartialShape> input_shapes = {
+        node.get_dependency(0).get_output_layout().size,
+        node.get_dependency(1).get_output_layout().size,
+    };
 
-    for (size_t i = 1; i < prim->input_size(); ++i) {
-        auto input_layout = impl_param.get_input_layout(i);
-        output_size = tensor::max(output_size, input_layout.get_tensor());
-    }
+    shape_infer(&op, input_shapes, output_shapes);
 
-    output_size.spatial[0] = N;
-    output_size.spatial[1] = M;
     auto output_type = input0_layout.data_type;
     if ((output_type == data_types::u8 || output_type == data_types::i8) && prim->output_data_type)
         output_type = *prim->output_data_type;
@@ -47,7 +47,8 @@ layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params c
 
     auto output_format = input0_layout.format;
 
-    return layout(output_type, output_format, output_size, prim->output_padding);
+    return layout(output_type, output_format, output_shapes[0], prim->output_padding);
+
 }
 
 std::string gemm_inst::to_string(gemm_node const& node) {
@@ -74,47 +75,47 @@ std::string gemm_inst::to_string(gemm_node const& node) {
 }
 
 gemm_inst::typed_primitive_inst(network& network, gemm_node const& node) : parent(network, node) {
-    auto input0_layout = node.input(0).get_output_layout();
-    auto input1_layout = node.input(1).get_output_layout();
-    bool transpose_input0 = node.get_primitive()->transpose_input0;
-    bool transpose_input1 = node.get_primitive()->transpose_input1;
+    // auto input0_layout = node.input(0).get_output_layout();
+    // auto input1_layout = node.input(1).get_output_layout();
+    // bool transpose_input0 = node.get_primitive()->transpose_input0;
+    // bool transpose_input1 = node.get_primitive()->transpose_input1;
 
-    auto transposed_x0 = input0_layout.spatial(0);
-    auto transposed_y0 = input0_layout.spatial(1);
+    // auto transposed_x0 = input0_layout.spatial(0);
+    // auto transposed_y0 = input0_layout.spatial(1);
 
-    if (transpose_input0) {
-        std::swap(transposed_x0, transposed_y0);
-    }
+    // if (transpose_input0) {
+    //     std::swap(transposed_x0, transposed_y0);
+    // }
 
-    auto transposed_x1 = input1_layout.spatial(0);
-    auto transposed_y1 = input1_layout.spatial(1);
+    // auto transposed_x1 = input1_layout.spatial(0);
+    // auto transposed_y1 = input1_layout.spatial(1);
 
-    if (transpose_input1) {
-        std::swap(transposed_x1, transposed_y1);
-    }
+    // if (transpose_input1) {
+    //     std::swap(transposed_x1, transposed_y1);
+    // }
 
-    CLDNN_ERROR_NOT_EQUAL(node.id(),
-                          "Input 0 internal dimension size",
-                          transposed_x0,
-                          "Input 1 internal dimension size",
-                          transposed_y1,
-                          "");
+    // CLDNN_ERROR_NOT_EQUAL(node.id(),
+    //                       "Input 0 internal dimension size",
+    //                       transposed_x0,
+    //                       "Input 1 internal dimension size",
+    //                       transposed_y1,
+    //                       "");
 
-    if (node.inputs_count() == 3) {
-        auto input2_layout = node.input(2).get_output_layout();
+    // if (node.inputs_count() == 3) {
+    //     auto input2_layout = node.input(2).get_output_layout();
 
-        CLDNN_ERROR_NOT_EQUAL(node.id(),
-                              "Input 0 external dimension size",
-                              transposed_y0,
-                              "Input 2 rows number",
-                              input2_layout.spatial(1),
-                              "");
-        CLDNN_ERROR_NOT_EQUAL(node.id(),
-                              "Input 1 external dimension size",
-                              transposed_x1,
-                              "Input 2 columns number",
-                              input2_layout.spatial(0),
-                              "");
-    }
+    //     CLDNN_ERROR_NOT_EQUAL(node.id(),
+    //                           "Input 0 external dimension size",
+    //                           transposed_y0,
+    //                           "Input 2 rows number",
+    //                           input2_layout.spatial(1),
+    //                           "");
+    //     CLDNN_ERROR_NOT_EQUAL(node.id(),
+    //                           "Input 1 external dimension size",
+    //                           transposed_x1,
+    //                           "Input 2 columns number",
+    //                           input2_layout.spatial(0),
+    //                           "");
+    // }
 }
 }  // namespace cldnn

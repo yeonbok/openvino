@@ -42,7 +42,6 @@ struct strided_slice : public primitive_base<strided_slice> {
                   std::vector<int64_t> end_mask,
                   std::vector<int64_t> new_axis_mask,
                   std::vector<int64_t> shrink_axis_mask,
-                  const ov::Shape out_size,
                   const primitive_id& ext_prim_id = "",
                   const padding& output_padding = padding())
         : primitive_base(id, {input, begin_id, end_id, strides_id}, ext_prim_id, output_padding),
@@ -60,8 +59,6 @@ struct strided_slice : public primitive_base<strided_slice> {
     std::vector<int64_t> new_axis_mask;
     /// @brief Array of bits, that provide shrinks the dimensionality by 1, taking on the value at index begin[i].
     std::vector<int64_t> shrink_axis_mask;
-    /// @brief Size of output tensor
-    ov::Shape out_size;
 };
 /// @}
 /// @}

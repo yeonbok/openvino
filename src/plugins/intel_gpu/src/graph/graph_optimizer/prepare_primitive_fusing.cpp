@@ -292,6 +292,10 @@ void prepare_primitive_fusing::fuse_bias(program &p) {
             return node.as<fully_connected>().get_primitive()->input_size == 3;
         };
 
+        // FIXME: allow fusion for dynamic case
+        if (node->get_output_layout().is_dynamic())
+            continue;
+
         size_t out_features = static_cast<size_t>(node->get_output_layout().feature());
 
         // Change out_features value to proper dimension for 3D FC case
@@ -635,10 +639,15 @@ void prepare_primitive_fusing::fuse_simple_primitives(program &p) {
         };
 
         auto eltwise_supports_fusings = [&](eltwise_node& node) -> bool {
-            auto out_layout = node.get_output_layout();
-            if (out_layout.data_type == data_types::f16 && out_layout.batch() > 1 &&
-                (_lo.get_optimization_attributes().fs_b_yx_fsv32_network || out_layout.format == format::fs_b_yx_fsv32)) {
-                return false;
+            if (_lo.get_optimization_attributes().use_onednn_impls == 0) {
+                auto out_layout = node.get_output_layout();
+                // TODO: support fusions with dynamic shape
+                if (out_layout.is_dynamic())
+                    return false;
+                if (out_layout.data_type == data_types::f16 && out_layout.batch() > 1 &&
+                    (_lo.get_optimization_attributes().fs_b_yx_fsv32_network || out_layout.format == format::fs_b_yx_fsv32)) {
+                    return false;
+                }
             }
             return true;
         };
@@ -987,8 +996,13 @@ void prepare_primitive_fusing::fuse_simple_primitives(program &p) {
             auto parent1 = parents[0];
             auto parent2 = parents[1];
 
-            auto p1_raw_size = parent1->get_output_layout().get_tensor().sizes();
-            auto p2_raw_size = parent2->get_output_layout().get_tensor().sizes();
+            // TODO: add support for fusions with dyn shapes.
+            if (parent1->get_output_layout().is_dynamic() || parent2->get_output_layout().is_dynamic())
+                return;
+
+            // TODO: check if broadcasable
+            auto p1_raw_size = parent1->get_output_layout().get_dims();
+            auto p2_raw_size = parent2->get_output_layout().get_dims();
             for (unsigned k = 0; k < p1_raw_size.size(); k++) {
                 if (p1_raw_size[k] < p2_raw_size[k]) {
                     if (p1_raw_size[k] != 1)
