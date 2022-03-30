@@ -38,11 +38,13 @@ void CreateElementwiseOp(Program& p, const std::shared_ptr<ngraph::Node>& op, cl
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
 
-    auto outRank = op->get_output_shape(0).size();
+    auto outRank = op->get_output_partial_shape(0).rank().get_length();
     for (size_t i = 0; i < inputPrimitives.size(); ++i) {
-        auto inputShape = op->get_input_shape(i);
-        auto inputRank = inputShape.size();
+        auto inputShape = op->get_input_partial_shape(i);
+        auto inputRank = inputShape.rank().get_length();
         if (inputRank != outRank) {
+            if (inputShape.is_dynamic() || op->get_output_partial_shape(0).is_dynamic())
+                IE_THROW() << "unimplemented mixed in/out rank for eltwise";
             // Add reorder if changing number of dimensions requires changing format
             auto targetFormat = DefaultFormatForDims(outRank);
             if (targetFormat.value != DefaultFormatForDims(inputRank).value) {

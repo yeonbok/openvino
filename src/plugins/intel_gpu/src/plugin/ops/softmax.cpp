@@ -40,9 +40,10 @@ static void CreateSoftmaxOp(Program& p, const std::shared_ptr<ngraph::op::v1::So
     p.ValidateInputs(op, {1});
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
+    auto input_rank = op->get_input_partial_shape(0).rank().get_length();
     auto softmaxPrim = cldnn::softmax(layerName,
                                       inputPrimitives[0],
-                                      GetSoftmaxAxis(op->get_axis(), op->get_input_shape(0).size()),
+                                      GetSoftmaxAxis(op->get_axis(), input_rank),
                                       op->get_friendly_name());
     p.AddPrimitive(softmaxPrim);
     p.AddPrimitiveToProfiler(op);

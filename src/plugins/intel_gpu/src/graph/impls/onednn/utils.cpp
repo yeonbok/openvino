@@ -262,7 +262,6 @@ dnnl::memory::desc layout_to_memory_desc(cldnn::layout l, dnnl::memory::format_t
     } else if (target_fmt == dnnl::memory::format_tag::ab) {
         dims.push_back(l.batch());
         dims.push_back(l.count() / l.batch());
-        padded_dims = dims;
     } else if (flatten) {
         dims = flatten_tensor(l.size);
     } else {

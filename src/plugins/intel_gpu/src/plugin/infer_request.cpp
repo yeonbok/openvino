@@ -962,7 +962,7 @@ void InferRequest::prepare_output(const cldnn::primitive_id& outputName, Blob::P
 InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngine::TensorDesc& desc) {
     auto format = FormatFromLayout(desc.getLayout());
     auto dt = DataTypeFromPrecision(desc.getPrecision());
-    auto shape = tensor_from_dims(desc.getDims());
+    ov::PartialShape shape(desc.getDims());
 
     auto l = cldnn::layout(dt, format, shape);
 
@@ -990,7 +990,7 @@ InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngin
 Blob::Ptr InferRequest::reinterpret_device_blob(Blob::Ptr data, const TensorDesc& new_desc) {
     auto format = FormatFromLayout(new_desc.getLayout());
     auto dt = DataTypeFromPrecision(new_desc.getPrecision());
-    auto shape = tensor_from_dims(new_desc.getDims());
+    ov::PartialShape shape(new_desc.getDims());
 
     auto l = cldnn::layout(dt, format, shape);
 

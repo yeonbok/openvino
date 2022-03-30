@@ -17,7 +17,7 @@ namespace ov {
 namespace runtime {
 namespace intel_gpu {
 
-static void CreateCommonReshapeOp(Program& p, const std::shared_ptr<ngraph::Node>& op) {
+static void CreateCommonReshapeOp(Program& p, const std::shared_ptr<ngraph::Node>& op, bool use_second_input = false) {
     p.ValidateInputs(op, {1, 2});
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
@@ -51,7 +51,7 @@ static void CreateCommonReshapeOp(Program& p, const std::shared_ptr<ngraph::Node
         reshapeInputId = reorderId;
     }
 
-    if (op->get_input_size() == 1 || out_shape.is_static()) {
+    if (op->get_input_size() == 1 || out_shape.is_static() || !use_second_input) {
         auto reshapePrim = cldnn::reshape(layerName,
                                           reshapeInputId,
                                           out_shape,
@@ -72,7 +72,7 @@ static void CreateCommonReshapeOp(Program& p, const std::shared_ptr<ngraph::Node
 }
 
 static void CreateReshapeOp(Program& p, const std::shared_ptr<ngraph::op::v1::Reshape>& op) {
-    CreateCommonReshapeOp(p, op);
+    CreateCommonReshapeOp(p, op, true);
 }
 
 static void CreateSqueezeOp(Program& p, const std::shared_ptr<ngraph::op::v0::Squeeze>& op) {

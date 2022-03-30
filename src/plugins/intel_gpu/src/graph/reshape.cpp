@@ -24,7 +24,7 @@ layout reshape_inst::calc_output_layout(reshape_node const& node) {
     auto prim = node.get_primitive();
     auto input_layout = node.input().get_non_padded_output_layout();
 
-    if (input_layout.is_static() && (node.get_dependencies().size() == 2 && node.get_shape_ready())) {
+    if (input_layout.is_static()) {
         auto sizes = prim->output_shape;
         auto input_sizes = input_layout.get_dims();
         int64_t need_recalc = -1;
@@ -37,6 +37,10 @@ layout reshape_inst::calc_output_layout(reshape_node const& node) {
                 }
                 need_recalc = i;
                 continue;
+            }
+            // when output pattern is 0, then we need to copy corresponding dimension from input
+            if (sizes[i] == 0) {
+                sizes[i] = input_sizes[i];
             }
             shape_count *= sizes[i].get_length();
         }
@@ -110,6 +114,7 @@ static std::vector<int64_t> read_vector(cldnn::memory::ptr mem, cldnn::stream& s
 
 void reshape_inst::update_shape() {
     auto& node = const_cast<reshape_node&>(dynamic_cast<const reshape_node&>(_node));
+
     if (_node.get_dependencies().size() == 2) {
         auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
         // TODO: usm_device is copied to host on lock(), but we need to ensure that this is better, then

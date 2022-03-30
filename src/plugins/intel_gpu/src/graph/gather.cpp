@@ -36,6 +36,7 @@ layout gather_inst::calc_output_layout(gather_node const& node) {
 
         int64_t axis = desc->axis;
 
+
         auto axis_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64, ov::Shape{1}, static_cast<void*>(&axis));
         std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
         ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
