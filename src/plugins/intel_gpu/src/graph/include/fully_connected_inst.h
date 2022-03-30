@@ -58,7 +58,7 @@ public:
 
     bool bias_term() const { return !argument.bias.empty(); }
 
-    virtual event::ptr update_weights() override;
+    event::ptr update_weights() override;
 
     memory::ptr reordered_weights = nullptr;
 };
