@@ -36,18 +36,15 @@ static size_t get_post_ops_count(const program_node& node) {
             onednn_post_ops_count++;
         } else if (fo.is_type<quantize>()) {
             // pre-scale, pre-shift
-            if (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_input_scale
-                && fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_input_shift) {
+            const auto& q_param = fo.get_typed_fuse_params<kernel_selector::quantize_fuse_params>();
+            if (q_param->per_tensor_input_scale && q_param->per_tensor_input_shift) {
                 onednn_post_ops_count++;
             } else {
                 onednn_post_ops_count += 2;
             }
 
             // post-scale, post-shift
-            if (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->has_post_scale
-                && fo.get_typed_params<kernel_selector::quantize_fuse_params>()->has_post_shift
-                && fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_output_scale
-                && fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_output_shift) {
+            if (q_param->has_post_scale && q_param->has_post_shift && q_param->per_tensor_output_scale && q_param->per_tensor_output_shift) {
                 onednn_post_ops_count++;
             } else {
                 onednn_post_ops_count += 2;
@@ -55,9 +52,7 @@ static size_t get_post_ops_count(const program_node& node) {
 
             auto out_dt = fo.output_layout.data_type;
             auto output_type_is_int8 = out_dt == data_types::u8 || out_dt == data_types::i8;
-            auto out_range_usage = fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_output_range
-                                   && (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->out_lo
-                                   < fo.get_typed_params<kernel_selector::quantize_fuse_params>()->out_hi);
+            auto out_range_usage = q_param->per_tensor_output_range && (q_param->out_lo < q_param->out_hi);
 
             if (out_range_usage) {
                 // round
@@ -66,12 +61,12 @@ static size_t get_post_ops_count(const program_node& node) {
                 }
 
                 // clamp
-                if (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->has_clamp) {
+                if (q_param->has_clamp) {
                     onednn_post_ops_count++;
                 }
             } else {
                 // clamp
-                if (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->has_clamp) {
+                if (q_param->has_clamp) {
                     onednn_post_ops_count += 2;
                 }
                 // round

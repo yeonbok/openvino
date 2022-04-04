@@ -47,7 +47,6 @@ using kernel_scalar_arguments = kernel_selector::Scalars;
 using kernel_scalar_argument_types = kernel_selector::ScalarDescriptor::Types;
 
 using data_type = kernel_selector::Datatype;
-using kernel_type = kernel_selector::KernelType;
 using weights_type = kernel_selector::WeightsType;
 using activation_function = kernel_selector::ActivationFunction;
 using pool_type = kernel_selector::PoolType;

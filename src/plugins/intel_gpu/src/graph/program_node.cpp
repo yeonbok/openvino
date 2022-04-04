@@ -927,7 +927,7 @@ void program_node::init_onednn_primitive_attributes() {
             auto dep_idx = desc.dep_start_idx;
 
             // ********************************* Common case with output range usage ********************************* //
-            auto q_param = desc.get_typed_params<kernel_selector::quantize_fuse_params>();
+            const auto& q_param = desc.get_typed_fuse_params<kernel_selector::quantize_fuse_params>();
             if (q_param->per_tensor_output_range && q_param->out_lo < q_param->out_hi) {
                 // 1. pre-scale & pre-shift
                 {

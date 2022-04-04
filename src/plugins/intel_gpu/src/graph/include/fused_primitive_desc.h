@@ -24,7 +24,7 @@ struct fused_primitive_desc {
     std::shared_ptr<const PType> typed_desc() const { return std::static_pointer_cast<const PType>(desc); }
 
     template<typename T>
-    std::shared_ptr<T> get_typed_params() const {
+    std::shared_ptr<T> get_typed_fuse_params() const {
         auto p = std::dynamic_pointer_cast<T>(f_param);
         if (!p)
             throw std::runtime_error("Invalid dynamic cast of fused parameters!");
