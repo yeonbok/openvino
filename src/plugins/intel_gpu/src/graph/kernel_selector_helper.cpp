@@ -835,7 +835,7 @@ kernel_selector::activation_function get_kernel_selector_activation_param(activa
     }
 }
 
-void set_params(const prim_kernel_params& param_info, kernel_selector::params& params) {
+void set_params(const kernel_impl_params& param_info, kernel_selector::params& params) {
     const auto& program = param_info.prog;
     const auto& device_info = program.get_engine().get_device_info();
 

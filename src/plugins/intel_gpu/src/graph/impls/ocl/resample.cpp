@@ -110,7 +110,7 @@ struct resample_impl : typed_primitive_impl_ocl<resample> {
         for (auto i : arg.get_dependencies()) {
             input_layouts.push_back(i->get_output_layout());
         }
-        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+        kernel_impl_params param_info = kernel_impl_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
                                                            arg.get_primitive()->type_string(), input_layouts, output_layout,
                                                            arg.get_program(), arg.get_fused_primitives(),
                                                            arg.get_fused_activations_funcs(), arg.get_fused_activations_params());

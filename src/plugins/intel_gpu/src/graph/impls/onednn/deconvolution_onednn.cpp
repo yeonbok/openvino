@@ -85,7 +85,7 @@ protected:
 
         const auto& bias_layout = arg.bias_term() ?  arg.bias().get_output_layout() : layout(data_types::f32, format::any, tensor());
 
-        prim_kernel_params param_info = prim_kernel_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
+        kernel_impl_params param_info = kernel_impl_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
                                                            cldnn_prim->type_string(), input_layouts, arg.get_output_layout(),
                                                            arg.get_program(), arg.get_fused_primitives(),
                                                            arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),

@@ -108,7 +108,7 @@ kernel_selector::weights_tensor convert_weights_tensor(const layout& l, bool is_
 layout from_weights_tensor(const kernel_selector::weights_tensor& t);
 kernel_selector::activation_function get_kernel_selector_activation_param(activation_func activation_func);
 
-struct prim_kernel_params {
+struct kernel_impl_params {
     uint32_t prog_id;
     size_t unique_id;
     primitive_id prim_id;
@@ -136,7 +136,7 @@ struct prim_kernel_params {
     bool compensation_term;
     layout compensation_layout;
 
-    prim_kernel_params(uint32_t pid, size_t uid, primitive_id prim_id,
+    kernel_impl_params(uint32_t pid, size_t uid, primitive_id prim_id,
         std::string type_str, std::vector<layout>& in_layouts, layout out_layout,
         program& prog,
         const std::vector<cldnn::fused_primitive_desc>& fused_prims, const std::vector<activation_func>& fused_act_funcs,
@@ -176,7 +176,7 @@ inline void convert_activation_func_params(const p_type primitive, std::vector<k
     }
 }
 
-inline void convert_fused_activation_func_params(const prim_kernel_params& param_info, std::vector<kernel_selector::base_activation_params>& params) {
+inline void convert_fused_activation_func_params(const kernel_impl_params& param_info, std::vector<kernel_selector::base_activation_params>& params) {
     const auto& act_funcs = param_info.fused_act_funcs;
     const auto& act_params = param_info.activation_params;
     for (size_t i = 0; i < act_funcs.size(); i++) {
@@ -192,10 +192,10 @@ inline void convert_new_activation_func(const p_type primitive, std::vector<kern
                                    primitive->additional_params.b});
 }
 
-void set_params(const prim_kernel_params& param_info, kernel_selector::params& params);
+void set_params(const kernel_impl_params& param_info, kernel_selector::params& params);
 
 template <typename params_t>
-inline params_t get_default_params(const prim_kernel_params& param_info, uint32_t split = 1) {
+inline params_t get_default_params(const kernel_impl_params& param_info, uint32_t split = 1) {
     params_t params;
 
     set_params(param_info, params);
@@ -261,7 +261,7 @@ inline params_t get_default_params(const prim_kernel_params& param_info, uint32_
 }
 
 template <typename params_t>
-inline params_t get_weights_bias_default_params(const prim_kernel_params& param_info, uint32_t split = 1, uint32_t groups = 1,
+inline params_t get_weights_bias_default_params(const kernel_impl_params& param_info, uint32_t split = 1, uint32_t groups = 1,
                                                 bool has_group_dimension = false) {
     params_t params = get_default_params<params_t>(param_info, split);
     params.weights = convert_weights_tensor(param_info.weights_layout, has_group_dimension);
@@ -278,7 +278,7 @@ inline params_t get_weights_bias_default_params(const prim_kernel_params& param_
 }
 
 template <typename params_t>
-params_t get_weight_bias_zero_point_default_params(const prim_kernel_params& param_info, uint32_t split = 1, uint32_t groups = 1,
+params_t get_weight_bias_zero_point_default_params(const kernel_impl_params& param_info, uint32_t split = 1, uint32_t groups = 1,
                                                    bool has_group_dimension = false) {
     params_t params = get_weights_bias_default_params<params_t>(param_info, split, groups, has_group_dimension);
 
