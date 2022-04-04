@@ -36,18 +36,18 @@ static size_t get_post_ops_count(const program_node& node) {
             onednn_post_ops_count++;
         } else if (fo.is_type<quantize>()) {
             // pre-scale, pre-shift
-            if (fo.get_type_params<kernel_selector::quantize_fuse_params>()->per_tensor_input_scale
-                && fo.get_type_params<kernel_selector::quantize_fuse_params>()->per_tensor_input_shift) {
+            if (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_input_scale
+                && fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_input_shift) {
                 onednn_post_ops_count++;
             } else {
                 onednn_post_ops_count += 2;
             }
 
             // post-scale, post-shift
-            if (fo.get_type_params<kernel_selector::quantize_fuse_params>()->has_post_scale
-                && fo.get_type_params<kernel_selector::quantize_fuse_params>()->has_post_shift
-                && fo.get_type_params<kernel_selector::quantize_fuse_params>()->per_tensor_output_scale
-                && fo.get_type_params<kernel_selector::quantize_fuse_params>()->per_tensor_output_shift) {
+            if (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->has_post_scale
+                && fo.get_typed_params<kernel_selector::quantize_fuse_params>()->has_post_shift
+                && fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_output_scale
+                && fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_output_shift) {
                 onednn_post_ops_count++;
             } else {
                 onednn_post_ops_count += 2;
@@ -55,9 +55,9 @@ static size_t get_post_ops_count(const program_node& node) {
 
             auto out_dt = fo.output_layout.data_type;
             auto output_type_is_int8 = out_dt == data_types::u8 || out_dt == data_types::i8;
-            auto out_range_usage = fo.get_type_params<kernel_selector::quantize_fuse_params>()->per_tensor_output_range
-                                   && (fo.get_type_params<kernel_selector::quantize_fuse_params>()->out_lo
-                                   < fo.get_type_params<kernel_selector::quantize_fuse_params>()->out_hi);
+            auto out_range_usage = fo.get_typed_params<kernel_selector::quantize_fuse_params>()->per_tensor_output_range
+                                   && (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->out_lo
+                                   < fo.get_typed_params<kernel_selector::quantize_fuse_params>()->out_hi);
 
             if (out_range_usage) {
                 // round
@@ -66,12 +66,12 @@ static size_t get_post_ops_count(const program_node& node) {
                 }
 
                 // clamp
-                if (fo.get_type_params<kernel_selector::quantize_fuse_params>()->has_clamp) {
+                if (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->has_clamp) {
                     onednn_post_ops_count++;
                 }
             } else {
                 // clamp
-                if (fo.get_type_params<kernel_selector::quantize_fuse_params>()->has_clamp) {
+                if (fo.get_typed_params<kernel_selector::quantize_fuse_params>()->has_clamp) {
                     onednn_post_ops_count += 2;
                 }
                 // round

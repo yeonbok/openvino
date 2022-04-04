@@ -10,7 +10,7 @@
 #include "intel_gpu/graph/program.hpp"
 
 #include "kernel_selector_helper.h"
-#include "fused_primitive_info.h"
+#include "fused_primitive_desc.h"
 #include "meta_utils.h"
 
 #include <set>

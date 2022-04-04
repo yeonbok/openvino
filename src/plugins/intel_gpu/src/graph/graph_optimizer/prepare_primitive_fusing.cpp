@@ -1168,16 +1168,12 @@ void prepare_primitive_fusing::optimize_fused_ops(program& p) {
             auto& fp = *curr_itr;
             auto& fp_next = *fp_itr;
             if (fp.is_type<activation>() && fp_next.is_type<quantize>()) {
-                bool can_skip = fp.deps.empty();
-                if (fp.is_type<activation>()) {
-                    can_skip &= (fp.typed_desc<activation>()->activation_function == activation_func::relu);
-                    can_skip &= (fp.typed_desc<activation>()->additional_params.a == 0.0f);
-                }
-                if (fp.is_type<quantize>()) {
-                    can_skip &= (data_type_traits::is_i8_u8(fp.output_layout.data_type));
-                    can_skip &= (fp.get_type_params<kernel_selector::quantize_fuse_params>()->scale_shift_opt);
-                    can_skip &= !(fp.get_type_params<kernel_selector::quantize_fuse_params>()->has_pre_shift);
-                }
+                const auto& act_prim = fp.typed_desc<activation>();;
+                const auto& quant_param = fp_next.get_typed_params<kernel_selector::quantize_fuse_params>();
+
+                bool can_skip = fp.deps.empty() && data_type_traits::is_i8_u8(fp_next.output_layout.data_type);
+                can_skip &= ((act_prim->activation_function == activation_func::relu) && (act_prim->additional_params.a == 0.0f));
+                can_skip &= (quant_param->scale_shift_opt && !quant_param->has_pre_shift);
 
                 if (can_skip) {
                     remove_deps_of_node(fp);
