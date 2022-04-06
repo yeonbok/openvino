@@ -27,15 +27,11 @@ struct strided_slice_impl : typed_primitive_impl_ocl<strided_slice> {
 
 public:
     static primitive_impl* create(const strided_slice_node& arg) {
-        std::vector<layout> input_layouts;
-        for (auto i : arg.get_dependencies()) {
-            input_layouts.push_back(i->get_output_layout());
-        }
-        kernel_impl_params param_info = kernel_impl_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
-                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
-                                                           arg.get_program(), arg.get_fused_primitives(),
-                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
-
+        const auto& prim = arg.get_primitive();
+        const auto& param_info = kernel_impl_params(arg.get_program(), prim, arg.get_unique_id(),
+                                                    arg.get_input_layouts(), arg.get_output_layout(),
+                                                    arg.get_fused_primitives(),
+                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
         auto params = get_default_params<kernel_selector::strided_slice_params>(param_info);
         auto op_params = get_default_optional_params<kernel_selector::strided_slice_optional_params>(arg.get_program());
         const size_t dims_num = params.inputs[0].Dimentions();
@@ -61,12 +57,12 @@ public:
             params.striding_params.push_back(sizes);
         }
 
-        params.end_mask = arg.get_primitive()->end_mask;
+        params.end_mask = prim->end_mask;
         pad_vector_to_size(params.end_mask, dims_num, 1);
-        params.begin_mask = arg.get_primitive()->begin_mask;
+        params.begin_mask = prim->begin_mask;
         pad_vector_to_size(params.begin_mask, dims_num, 1);
-        params.new_axis_mask = arg.get_primitive()->new_axis_mask;
-        params.shrink_axis_mask = arg.get_primitive()->shrink_axis_mask;
+        params.new_axis_mask = prim->new_axis_mask;
+        params.shrink_axis_mask = prim->shrink_axis_mask;
         pad_vector_to_size(params.shrink_axis_mask, dims_num, 0);
 
         std::vector<size_t> logical_dims = params.inputs[0].LogicalDims();

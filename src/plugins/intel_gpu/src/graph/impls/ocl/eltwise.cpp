@@ -30,15 +30,12 @@ protected:
 
 public:
     static primitive_impl* create(const eltwise_node& arg) {
-        std::vector<layout> input_layouts;
-        for (auto i : arg.get_dependencies()) {
-            input_layouts.push_back(i->get_output_layout());
-        }
+        const auto& primitive = arg.get_primitive();
 
-        kernel_impl_params param_info = kernel_impl_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
-                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
-                                                           arg.get_program(), arg.get_fused_primitives(),
-                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
+       const auto& param_info = kernel_impl_params(arg.get_program(), primitive, arg.get_unique_id(),
+                                                    arg.get_input_layouts(), arg.get_output_layout(),
+                                                    arg.get_fused_primitives(),
+                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
 
         auto ew_params = get_default_params<kernel_selector::eltwise_params>(param_info);
         auto ew_optional_params =
@@ -48,7 +45,6 @@ public:
             ew_params.inputs.push_back(convert_data_tensor(arg.input(i).get_output_layout()));
         }
 
-        const auto& primitive = arg.get_primitive();
 
         ew_params.operations.push_back({{kernel_selector::eltwise_params::InputType::Buffer(0),
                                          kernel_selector::eltwise_params::InputType::Buffer(1)},

@@ -12,6 +12,7 @@
 #include "intel_gpu/primitives/scale.hpp"
 #include "intel_gpu/primitives/quantize.hpp"
 #include "intel_gpu/primitives/activation.hpp"
+#include "intel_gpu/primitives/primitive.hpp"
 
 #include "kernel_selector_params.h"
 #include "kernel_selector_common.h"
@@ -109,50 +110,49 @@ layout from_weights_tensor(const kernel_selector::weights_tensor& t);
 kernel_selector::activation_function get_kernel_selector_activation_param(activation_func activation_func);
 
 struct kernel_impl_params {
-    uint32_t prog_id;
+    const program& prog;
+    std::shared_ptr<const primitive> desc;
     size_t unique_id;
-    primitive_id prim_id;
-    std::string type_str;
     std::vector<layout> input_layouts;
     layout output_layout;
-    const program& prog;
-    //device_info dev_info;
-    //std::shared_ptr<kernel_selector::TuningCache> tuning_cache;
-    std::string forceImplementation;
-    std::vector<cldnn::fused_primitive_desc> fused_prims;
+    std::vector<cldnn::fused_primitive_desc> fused_desc;
     std::vector<activation_func> fused_act_funcs;
     std::vector<activation_additional_params> activation_params;
 
-    layout weights_layout;
-    layout bias_layout;
-    bool bias_term;
+    layout weights_layout = layout(data_types::f32, format::any, tensor());
 
-    bool weights_zero_points_term;
-    layout weights_zero_points_layout;
+    bool bias_term = false;
+    layout bias_layout = layout(data_types::f32, format::any, tensor());
 
-    bool activations_zero_points_term;
-    layout activations_zero_points_layout;
+    bool weights_zero_points_term = false;
+    layout weights_zero_points_layout = layout(data_types::f32, format::any, tensor());
 
-    bool compensation_term;
-    layout compensation_layout;
+    bool activations_zero_points_term = false;
+    layout activations_zero_points_layout = layout(data_types::f32, format::any, tensor());
 
-    kernel_impl_params(uint32_t pid, size_t uid, primitive_id prim_id,
-        std::string type_str, std::vector<layout>& in_layouts, layout out_layout,
-        program& prog,
-        const std::vector<cldnn::fused_primitive_desc>& fused_prims, const std::vector<activation_func>& fused_act_funcs,
-        const std::vector<activation_additional_params> act_params,
-        layout weights_layout = layout(data_types::f32, format::any, tensor()),
-        bool bias_term = false, layout bias_layout = layout(data_types::f32, format::any, tensor()),
-        bool weights_zero_points_term = false, layout weights_zero_points_layout = layout(data_types::f32, format::any, tensor()),
-        bool activations_zero_points_term = false, layout activations_zero_points_layout = layout(data_types::f32, format::any, tensor()),
-        bool compensation_term = false, layout compensation_layout = layout(data_types::f32, format::any, tensor()))
-        : prog_id(pid), unique_id(uid), prim_id(prim_id), type_str(type_str), input_layouts(in_layouts), output_layout(out_layout),
-          prog(prog),
-          fused_prims(fused_prims), fused_act_funcs(fused_act_funcs), activation_params(act_params),
-          weights_layout(weights_layout), bias_term(bias_term), bias_layout(bias_layout),
-          weights_zero_points_term(weights_zero_points_term), weights_zero_points_layout(weights_zero_points_layout),
-          activations_zero_points_term(activations_zero_points_term), activations_zero_points_layout(activations_zero_points_layout),
-          compensation_term(compensation_term), compensation_layout(compensation_layout) {}
+    bool compensation_term = false;
+    layout compensation_layout = layout(data_types::f32, format::any, tensor());
+
+    kernel_impl_params(program& _prog, std::shared_ptr<const primitive> _desc, size_t _uid,
+                       const std::vector<layout>& _int_layouts, layout _out_layout,
+                       const std::vector<cldnn::fused_primitive_desc>& _fused_descs,
+                       const std::vector<activation_func>& _fused_act_funcs, const std::vector<activation_additional_params>& _act_params,
+                       layout _weights_layout = layout(data_types::f32, format::any, tensor()),
+                       bool   _bias_term = false,                    layout _bias_layout = layout(data_types::f32, format::any, tensor()),
+                       bool   _weights_zero_points_term = false,     layout _weights_zero_points_layout = layout(data_types::f32, format::any, tensor()),
+                       bool   _activations_zero_points_term = false, layout _activations_zero_points_layout = layout(data_types::f32, format::any, tensor()),
+                       bool   _compensation_term = false,            layout _compensation_layout = layout(data_types::f32, format::any, tensor()))
+                       : prog(_prog), desc(_desc), unique_id(_uid),
+                         input_layouts(_int_layouts), output_layout(_out_layout),
+                         fused_desc(_fused_descs),
+                         fused_act_funcs(_fused_act_funcs), activation_params(_act_params),
+                         weights_layout(_weights_layout), bias_term(_bias_term), bias_layout(_bias_layout),
+                         weights_zero_points_term(_weights_zero_points_term), weights_zero_points_layout(_weights_zero_points_layout),
+                         activations_zero_points_term(_activations_zero_points_term), activations_zero_points_layout(_activations_zero_points_layout),
+                         compensation_term(_compensation_term), compensation_layout(_compensation_layout) {}
+
+    template <class PType>
+    std::shared_ptr<const PType> typed_desc() const { return std::static_pointer_cast<const PType>(desc); }
 };
 
 template <typename T = std::uint32_t>
@@ -205,18 +205,18 @@ inline params_t get_default_params(const kernel_impl_params& param_info, uint32_
 
     params.inputs[0] = convert_data_tensor(input_layout, split);
     params.outputs[0] = convert_data_tensor(output_layout, split);
-    params.layerID = param_info.prim_id;
+    params.layerID = param_info.desc->id;
 
     convert_fused_activation_func_params(param_info, params.activations);
     std::map<primitive_id, std::pair<size_t, kernel_selector::Datatype>> prim_id_type_map;
     size_t op_id = 0;
-    for (auto& fused_prim : param_info.fused_prims) {
+    for (auto& fused_prim : param_info.fused_desc) {
         kernel_selector::fused_operation_desc desc;
         desc.op_params = std::move(fused_prim.f_param);
 
         if (!desc.op_params) {
-            CLDNN_ERROR_MESSAGE(param_info.prim_id, "Invalid fused operation (" + param_info.prim_id + ") of type " +
-                                           param_info.type_str);
+            CLDNN_ERROR_MESSAGE(param_info.desc->id, "Invalid fused operation (" + param_info.desc->id + ") of type " +
+                                           param_info.desc->type_string());
         }
 
         desc.dep_idx_start = fused_prim.dep_start_idx;

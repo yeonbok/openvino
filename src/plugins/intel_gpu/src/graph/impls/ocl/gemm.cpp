@@ -24,15 +24,11 @@ struct gemm_impl : typed_primitive_impl_ocl<gemm> {
 
 public:
     static primitive_impl* create(const gemm_node& arg) {
-        std::vector<layout> input_layouts;
-        for (auto i : arg.get_dependencies()) {
-            input_layouts.push_back(i->get_output_layout());
-        }
-        kernel_impl_params param_info = kernel_impl_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
-                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
-                                                           arg.get_program(), arg.get_fused_primitives(),
-                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
-
+        auto desc = arg.get_primitive();
+        const auto& param_info = kernel_impl_params(arg.get_program(), desc, arg.get_unique_id(),
+                                                    arg.get_input_layouts(), arg.get_output_layout(),
+                                                    arg.get_fused_primitives(),
+                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
         auto gemm_params = get_default_params<kernel_selector::gemm_params>(param_info, 1);
         auto gemm_optional_params =
             get_default_optional_params<kernel_selector::gemm_optional_params>(arg.get_program());
@@ -41,7 +37,6 @@ public:
             gemm_params.inputs.push_back(convert_data_tensor(arg.input(i).get_output_layout()));
         }
 
-        auto desc = arg.get_primitive();
         gemm_params.alpha = desc->alpha;
         gemm_params.beta = desc->beta;
         gemm_params.transpose_input0 = desc->transpose_input0;

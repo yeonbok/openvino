@@ -78,19 +78,13 @@ protected:
         cldnn::format out_fmt = onednn::find_format(pd.weights_desc(0), grouped_weights);
         kernel_selector::WeightsLayout reqLayout = to_weights_layout(out_fmt, cldnn_prim->grouped_weights_shape);
 
-        std::vector<layout> input_layouts;
-        for (auto i : arg.get_dependencies()) {
-            input_layouts.push_back(i->get_output_layout());
-        }
-
         const auto& bias_layout = arg.bias_term() ?  arg.bias().get_output_layout() : layout(data_types::f32, format::any, tensor());
 
-        kernel_impl_params param_info = kernel_impl_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
-                                                           cldnn_prim->type_string(), input_layouts, arg.get_output_layout(),
-                                                           arg.get_program(), arg.get_fused_primitives(),
-                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
-                                                           weights_layout, arg.bias_term(), bias_layout);
-
+        const auto& param_info = kernel_impl_params(arg.get_program(), cldnn_prim, arg.get_unique_id(),
+                                                    arg.get_input_layouts(), arg.get_output_layout(),
+                                                    arg.get_fused_primitives(),
+                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
+                                                    weights_layout, arg.bias_term(), bias_layout);
         set_params(param_info, r_params);
         r_params.layerID = arg.id() + "_reorder_";
         r_params.input = convert_weights_tensor(weights_layout, cldnn_prim->grouped_weights_shape);

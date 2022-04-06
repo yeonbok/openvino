@@ -22,15 +22,10 @@ struct region_yolo_impl : typed_primitive_impl_ocl<region_yolo> {
     }
 
     static primitive_impl* create(const region_yolo_node& arg) {
-        std::vector<layout> input_layouts;
-        for (auto i : arg.get_dependencies()) {
-            input_layouts.push_back(i->get_output_layout());
-        }
-        kernel_impl_params param_info = kernel_impl_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
-                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
-                                                           arg.get_program(), arg.get_fused_primitives(),
-                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
-
+        const auto& param_info = kernel_impl_params(arg.get_program(), arg.get_primitive(), arg.get_unique_id(),
+                                                    arg.get_input_layouts(), arg.get_output_layout(),
+                                                    arg.get_fused_primitives(),
+                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
         auto ry_params = get_default_params<kernel_selector::region_yolo_params>(param_info);
         auto ry_optional_params =
             get_default_optional_params<kernel_selector::region_yolo_optional_params>(arg.get_program());

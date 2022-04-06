@@ -147,6 +147,14 @@ public:
     std::vector<program_node*> const& get_dependencies() const { return dependencies; }
     program_node& get_dependency(size_t idx) const { return *dependencies.at(idx); }
 
+    std::vector<layout> const get_input_layouts() const {
+        std::vector<layout> layouts;
+        for (const auto& i : dependencies) {
+            layouts.push_back(i->get_output_layout());
+        }
+        return layouts;
+    }
+
     // replaces idx-th dependency of 'this' with 'new_dep', calls program::remove_if_dangling(old_dep)
     void replace_dependency(size_t idx, program_node& new_dep);
     // searches for 'old_dep' in dependencies list of 'this' and replaces it with 'new_dep', calls

@@ -62,6 +62,7 @@ protected:
 public:
     static primitive_impl* create(const convolution_node& arg) {
         const auto& primitive = arg.get_primitive();
+
         const auto& weights_layout = arg.weights(0).get_output_layout();
         const auto& weights_size = weights_layout.size;
 
@@ -81,19 +82,14 @@ public:
         const auto& compensation_layout = arg.compensation_term() ? arg.compensation().get_output_layout()
                                                  : layout(data_types::f32, format::any, tensor());
 
-        std::vector<layout> input_layouts;
-        for (auto i : arg.get_dependencies()) {
-            input_layouts.push_back(i->get_output_layout());
-        }
-
-        kernel_impl_params param_info = kernel_impl_params(arg.get_program().get_id(), arg.get_unique_id(), arg.id(),
-                                                           arg.get_primitive()->type_string(), input_layouts, arg.get_output_layout(),
-                                                           arg.get_program(), arg.get_fused_primitives(),
-                                                           arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
-                                                           weights_layout, arg.bias_term(), bias_layout,
-                                                           arg.weights_zero_points_term(), weights_zero_points_layout,
-                                                           arg.activations_zero_points_term(), activations_zero_points_layout,
-                                                           arg.compensation_term(), compensation_layout);
+        const auto& param_info = kernel_impl_params(arg.get_program(), primitive, arg.get_unique_id(),
+                                                    arg.get_input_layouts(), arg.get_output_layout(),
+                                                    arg.get_fused_primitives(),
+                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
+                                                    weights_layout, arg.bias_term(), bias_layout,
+                                                    arg.weights_zero_points_term(), weights_zero_points_layout,
+                                                    arg.activations_zero_points_term(), activations_zero_points_layout,
+                                                    arg.compensation_term(), compensation_layout);
 
         auto conv_params = get_weight_bias_zero_point_default_params<kernel_selector::convolution_params>(
             param_info, split, 1, primitive->grouped_weights_shape);

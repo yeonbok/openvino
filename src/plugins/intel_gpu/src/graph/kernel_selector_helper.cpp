@@ -865,8 +865,8 @@ void set_params(const kernel_impl_params& param_info, kernel_selector::params& p
     auto impl_forcing_bo = program.get_options().get<build_option_type::force_implementations>();
     const auto& impl_forcing = impl_forcing_bo->forcing;
 
-    if (impl_forcing.count(param_info.prim_id) != 0) {
-        params.forceImplementation = impl_forcing.at(param_info.prim_id).kernel_name;
+    if (impl_forcing.count(param_info.desc->id) != 0) {
+        params.forceImplementation = impl_forcing.at(param_info.desc->id).kernel_name;
     }
 }
 
