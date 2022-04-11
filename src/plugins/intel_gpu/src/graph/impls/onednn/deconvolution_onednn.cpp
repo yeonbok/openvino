@@ -84,7 +84,7 @@ protected:
                                                     arg.get_input_layouts(), arg.get_output_layout(),
                                                     arg.get_fused_primitives(),
                                                     arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
-                                                    weights_layout, arg.bias_term(), bias_layout);
+                                                    arg.weights().get_output_layout(), arg.bias_term(), bias_layout);
         set_params(param_info, r_params);
         r_params.layerID = arg.id() + "_reorder_";
         r_params.input = convert_weights_tensor(weights_layout, cldnn_prim->grouped_weights_shape);
@@ -161,7 +161,7 @@ protected:
     }
 
 public:
-    static primitive_impl* create(const deconvolution_node& arg) {
+    static primitive_impl* create(const deconvolution_node& arg, const kernel_impl_params& impl_param) {
         auto& engine = arg.get_program().get_engine();
         auto desc = get_deconvolution_descriptor(arg);
         auto attr = get_primitive_attributes(arg);

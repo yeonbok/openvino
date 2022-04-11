@@ -65,7 +65,7 @@ protected:
                                                     arg.get_input_layouts(), arg.get_output_layout(),
                                                     arg.get_fused_primitives(),
                                                     arg.get_fused_activations_funcs(), arg.get_fused_activations_params(),
-                                                    weights_layout, arg.bias_term(), bias_layout);
+                                                    arg.weights().get_output_layout(), arg.bias_term(), bias_layout);
         kernel_selector::WeightsReorderParams weights_reorder_params;
         auto& reorderKS = kernel_selector::ReorderWeightsKernelSelctor::Instance();
         kernel_selector::reorder_weights_params r_params;
@@ -131,7 +131,7 @@ protected:
     }
 
 public:
-    static primitive_impl* create(const fully_connected_node& arg) {
+    static primitive_impl* create(const fully_connected_node& arg, const kernel_impl_params& impl_param) {
         auto& engine = arg.get_program().get_engine();
         auto desc = get_fully_connected_descriptor(arg);
         auto attr = arg.get_onednn_primitive_attributes();
