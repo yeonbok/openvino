@@ -15,14 +15,16 @@
 #include "intel_gpu/primitives/broadcast.hpp"
 #endif
 #include "intel_gpu/primitives/concatenation.hpp"
-#if 0 // TODO(taylor)
 #include "intel_gpu/primitives/convolution.hpp"
+#if 0 // TODO(taylor)
 #include "intel_gpu/primitives/crop.hpp"
 #include "intel_gpu/primitives/custom_gpu_primitive.hpp"
 #include "intel_gpu/primitives/deconvolution.hpp"
 #include "intel_gpu/primitives/depth_to_space.hpp"
 #include "intel_gpu/primitives/detection_output.hpp"
+#endif
 #include "intel_gpu/primitives/eltwise.hpp"
+#if 0 // TODO(andrew)
 #include "intel_gpu/primitives/experimental_detectron_roi_feature_extractor.hpp"
 #include "intel_gpu/primitives/experimental_detectron_topk_rois.hpp"
 #include "intel_gpu/primitives/fully_connected.hpp"
@@ -79,8 +81,8 @@
 #include "intel_gpu/primitives/grn.hpp"
 #include "intel_gpu/primitives/ctc_greedy_decoder.hpp"
 #include "intel_gpu/primitives/convert_color.hpp"
-#include "generic_layer.hpp"
 #endif
+#include "generic_layer.hpp"
 
 
 namespace cldnn {
@@ -104,8 +106,8 @@ REGISTER_OCL(border);
 REGISTER_OCL(broadcast);
 #endif
 REGISTER_OCL(concatenation);
-#if 0 // TODO(taylor)
 REGISTER_OCL(convolution);
+#if 0 // TODO(taylor)
 REGISTER_OCL(crop);
 REGISTER_OCL(custom_gpu_primitive);
 #endif
@@ -118,7 +120,9 @@ REGISTER_OCL(depth_to_space);
 REGISTER_OCL(detection_output);
 REGISTER_OCL(experimental_detectron_roi_feature_extractor);
 REGISTER_OCL(experimental_detectron_topk_rois);
+#endif
 REGISTER_OCL(eltwise);
+#if 0 // TODO(andrew)
 REGISTER_OCL(embed);
 REGISTER_OCL(fully_connected);
 REGISTER_OCL(gather);
@@ -170,7 +174,9 @@ REGISTER_OCL(strided_slice);
 REGISTER_OCL(tile);
 REGISTER_OCL(lstm_dynamic_input);
 REGISTER_OCL(lstm_dynamic_timeloop);
+#endif
 REGISTER_OCL(generic_layer);
+#if 0 // TODO(andrew)
 REGISTER_OCL(gather_tree);
 REGISTER_OCL(resample);
 REGISTER_OCL(grn);

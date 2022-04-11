@@ -16,7 +16,7 @@ primitive_type_id crop::type_id() {
 }
 
 layout crop_inst::calc_output_layout(crop_node const& node) {
-    assert(node.get_primitive()->output_data_types.empty() &&
+    assert(!node.get_primitive()->output_data_types.empty() &&
            "Output data type forcing is not supported for crop_node!");
     const auto& ref_in_sizes = node.get_primitive()->reference_input;
     const auto in_layout = node.input().get_output_layout();

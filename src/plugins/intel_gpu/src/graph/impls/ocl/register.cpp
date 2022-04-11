@@ -21,8 +21,8 @@ void register_implementations() {
     REGISTER_OCL(broadcast);
 #endif
     REGISTER_OCL(concatenation);
-#if 0
     REGISTER_OCL(convolution);
+#if 0
     REGISTER_OCL(crop);
     REGISTER_OCL(custom_gpu_primitive);
     REGISTER_OCL(deconvolution);
@@ -33,7 +33,9 @@ void register_implementations() {
     REGISTER_OCL(batch_to_space);
     REGISTER_OCL(experimental_detectron_roi_feature_extractor);
     REGISTER_OCL(experimental_detectron_topk_rois);
+#endif
     REGISTER_OCL(eltwise);
+#if 0 // TODO(andrew)
     REGISTER_OCL(fully_connected);
     REGISTER_OCL(gather);
     REGISTER_OCL(gather_elements);
@@ -84,7 +86,9 @@ void register_implementations() {
     REGISTER_OCL(tile);
     REGISTER_OCL(lstm_dynamic_input);
     REGISTER_OCL(lstm_dynamic_timeloop);
+#endif
     REGISTER_OCL(generic_layer);
+#if 0 // TODO(andrew)
     REGISTER_OCL(gather_tree);
     REGISTER_OCL(resample);
     REGISTER_OCL(grn);
