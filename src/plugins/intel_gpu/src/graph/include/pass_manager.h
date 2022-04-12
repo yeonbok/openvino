@@ -232,7 +232,7 @@ private:
     void run(program& p) override;
     bool output_size_handling_enabled;
 };
-#if 0 // TODO(andrew)
+
 class post_input_reorder : public base_pass {
 public:
     post_input_reorder() : base_pass("post_input_reorder") {}
@@ -265,7 +265,7 @@ private:
     void optimize_weights(T& node, program& p);
     reorder_factory& _rf;
 };
-#endif
+
 class propagate_constants : public base_pass {
 public:
     propagate_constants() : base_pass("propagate_constants") {}

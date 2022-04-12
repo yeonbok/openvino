@@ -22,19 +22,15 @@
 
 #include "roi_pooling_inst.h"
 #include "reorg_yolo_inst.h"
-#if 0 // TODO(taylor)
 #include "eltwise_inst.h"
-#endif
 #include "softmax_inst.h"
 #include "permute_inst.h"
 #include "custom_gpu_primitive_inst.h"
 #include "binary_convolution_inst.h"
 #include "resample_inst.h"
 #include "reshape_inst.h"
-#if 0 // TODO(andrew)
 #include "quantize_inst.h"
 #include "activation_inst.h"
-#endif
 #include "scale_inst.h"
 #include "depth_to_space_inst.h"
 #include "convolution_inst.h"
@@ -43,8 +39,6 @@
 #include "data_inst.h"
 #include "deconvolution_inst.h"
 #include "detection_output_inst.h"
-#include "fully_connected_inst.h"
-#include "gather_inst.h"
 #include "input_layout_inst.h"
 #include "shuffle_channels_inst.h"
 #include "arg_max_min_inst.h"
@@ -52,25 +46,22 @@
 #include "lstm_elt_inst.h"
 #include "lstm_gemm_inst.h"
 #include "mutable_data_inst.h"
-#include "normalize_inst.h"
 #include "pooling_inst.h"
 #include "border_inst.h"
 #include "primitive_inst.h"
 #include "prior_box_inst.h"
 #include "proposal_inst.h"
 #include "reorder_inst.h"
-#if 0 // TODO(andrew)
 #include "split_inst.h"
-#endif
 #include "mvn_inst.h"
-#if 0 // TODO(andrew)
 #include "gemm_inst.h"
-#endif
 #include "reduce_inst.h"
 #include "region_yolo_inst.h"
 #include "strided_slice_inst.h"
 #include "loop_inst.h"
-
+// TODO(Andrew): Will be removed after ocl register enabled
+#include "gather_inst.h"
+#include "normalize_inst.h"
 #include "to_string_utils.h"
 #include "runtime/cldnn_itt.hpp"
 #include "runtime/kernels_cache.hpp"
@@ -452,9 +443,7 @@ void program::build_program(bool is_internal) {
     init_graph();
     { pre_optimize_graph(is_internal); }
     run_graph_compilation();
-#if 0 // TODO(taylor)
     { post_optimize_graph(is_internal); }
-#endif
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
 #ifdef GPU_DEBUG_CONFIG
@@ -572,7 +561,7 @@ void program::pre_optimize_graph(bool is_internal) {
     // add optimization attributes for onednn primitives
     apply_opt_pass<add_onednn_optimization_attributes>();
 }
-#if 0 // TODO(taylor)
+
 void program::post_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PostOptimizeGraph");
     // input reorder for fully connected if necessary
@@ -583,7 +572,7 @@ void program::post_optimize_graph(bool is_internal) {
     apply_opt_pass<post_optimize_weights>(rf);
 
     apply_opt_pass<remove_redundant_reorders>(lo, false, true);  // TODO: do we need it at this place also?
-
+#if 0 // TODO(andrew)
     if (!is_internal && !options.get<build_option_type::partial_build_program>()->enabled()) {
         // ToDo remove hidden dependencies from propagate_constants pass
         apply_opt_pass<propagate_constants>();
@@ -594,8 +583,8 @@ void program::post_optimize_graph(bool is_internal) {
 
     // update loop input/output primitive mappings
     apply_opt_pass<update_loop_primitive_map>();
-}
 #endif
+}
 
 // mark if the node is constant assuming that all dependencies are marked properly
 void program::mark_if_constant(program_node& node) {
