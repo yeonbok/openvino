@@ -6,14 +6,11 @@
 
 #include "intel_gpu/graph/program.hpp"
 #include "layout_optimizer.h"
-#if 0 // TODO(taylor)
 #include "split_inst.h"
 #include "lstm_inst.h"
 #include "lstm_dynamic_inst.h"
-#endif
 #include "quantize_inst.h"
 #include "eltwise_inst.h"
-#include "reorder_inst.h"
 #include "convolution_inst.h"
 #include "program_node.h"
 #include <string>
@@ -73,14 +70,14 @@ public:
 private:
     void run(program& p) override;
 };
-#if 0 // TODO(taylor)
+
 class calculate_prior_boxes : public base_pass {
 public:
     calculate_prior_boxes() : base_pass("calculated_prior_boxes") {}
 private:
     void run(program& p) override;
 };
-#endif
+
 class compile_graph : public base_pass {
 public:
     compile_graph() : base_pass("compile_graph") {}
@@ -112,11 +109,9 @@ public:
 
 private:
     void run(program& p) override;
-#if 0 // TODO(taylor)
     void handle_split_node(program& p, split_node& node);
     void handle_lstm_node(program& p, lstm_node& node);
     void handle_dynamic_lstm_node(program& p, lstm_dynamic_node& node);
-#endif
     void set_outputs(program& p);
 };
 
