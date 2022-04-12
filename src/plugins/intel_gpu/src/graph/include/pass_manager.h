@@ -384,7 +384,7 @@ public:
     oooq_memory_dependencies() : memory_dependency_pass("oooq_memory_dependencies") {}
     void run(program& p) override;
 };
-
+#endif
 class update_loop_primitive_map : public base_pass {
 public:
     update_loop_primitive_map() : base_pass("update_loop_primitive_map") {}
@@ -392,7 +392,7 @@ public:
 private:
     void run(program& p) override;
 };
-#endif
+
 class add_onednn_optimization_attributes : public base_pass {
 public:
     add_onednn_optimization_attributes() : base_pass("add_onednn_optimization_attributes") {}

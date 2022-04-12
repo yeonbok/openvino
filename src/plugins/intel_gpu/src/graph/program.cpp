@@ -572,7 +572,7 @@ void program::post_optimize_graph(bool is_internal) {
     apply_opt_pass<post_optimize_weights>(rf);
 
     apply_opt_pass<remove_redundant_reorders>(lo, false, true);  // TODO: do we need it at this place also?
-#if 0 // TODO(andrew)
+
     if (!is_internal && !options.get<build_option_type::partial_build_program>()->enabled()) {
         // ToDo remove hidden dependencies from propagate_constants pass
         apply_opt_pass<propagate_constants>();
@@ -583,7 +583,6 @@ void program::post_optimize_graph(bool is_internal) {
 
     // update loop input/output primitive mappings
     apply_opt_pass<update_loop_primitive_map>();
-#endif
 }
 
 // mark if the node is constant assuming that all dependencies are marked properly
