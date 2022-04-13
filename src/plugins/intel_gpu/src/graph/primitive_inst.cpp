@@ -159,8 +159,10 @@ std::string primitive_inst::get_layout_key() {
     layout_key_str += "_" + kernel_selector::toString_v2(data_tensor);
 
     for (auto in : _node.get_dependencies()) {
-        auto data_tensor = convert_data_tensor(in->get_output_layout());
-        layout_key_str += "_" + kernel_selector::toString_v2(data_tensor);
+        if (!in->is_constant()) {
+            auto data_tensor = convert_data_tensor(in->get_output_layout());
+            layout_key_str += "_" + kernel_selector::toString_v2(data_tensor);
+        }
     }
     return layout_key_str;
 }
