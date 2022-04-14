@@ -22,8 +22,8 @@ void register_implementations() {
 #endif
     REGISTER_OCL(concatenation);
     REGISTER_OCL(convolution);
-#if 0
     REGISTER_OCL(crop);
+#if 0
     REGISTER_OCL(custom_gpu_primitive);
     REGISTER_OCL(deconvolution);
     REGISTER_OCL(deformable_conv);
@@ -35,8 +35,8 @@ void register_implementations() {
     REGISTER_OCL(experimental_detectron_topk_rois);
 #endif
     REGISTER_OCL(eltwise);
-#if 0 // TODO(andrew)
     REGISTER_OCL(fully_connected);
+#if 0 // TODO(andrew)
     REGISTER_OCL(gather);
     REGISTER_OCL(gather_elements);
     REGISTER_OCL(gather_nd);
@@ -66,7 +66,9 @@ void register_implementations() {
     REGISTER_OCL(reorder);
 #if 0 // TODO(andrew)
     REGISTER_OCL(reorg_yolo);
+#endif
     REGISTER_OCL(reshape);
+#if 0 // TODO(andrew)
     REGISTER_OCL(reverse_sequence);
     REGISTER_OCL(roi_align);
     REGISTER_OCL(roi_pooling);

@@ -181,11 +181,11 @@ TEST_P(fc_fp32_activation, basic) {
     auto p = GetParam();
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("weights", get_mem(get_weights_layout(p))),
-        data("bias", get_mem(get_bias_layout(p))),
-        fully_connected("fc_prim", "input", "weights", "bias", "", padding(), get_output_dim_size(p)),
-        activation("activation", "fc_prim", activation_func::abs),
-        reorder("reorder_bfyx", "activation", p.default_format, data_types::f32)
+        data("weights", {get_mem(get_weights_layout(p))}),
+        data("bias", {get_mem(get_bias_layout(p))}),
+        fully_connected("fc_prim", input_info("input"), "weights", "bias", "", padding(), get_output_dim_size(p)),
+        activation("activation", input_info("fc_prim"), activation_func::abs),
+        reorder("reorder_bfyx", input_info("activation"), p.default_format, data_types::f32)
     );
 
     tolerance = 1e-5f;
@@ -205,11 +205,11 @@ TEST_P(fc_fp32_bias, basic) {
     auto p = GetParam();
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("weights", get_mem(get_weights_layout(p))),
-        data("bias", get_mem(get_bias_layout(p))),
-        fully_connected("fc_prim", "input", "weights", "", "", padding(), get_output_dim_size(p)),
-        eltwise("bias_add", { "fc_prim", "bias" }, eltwise_mode::sum),
-        reorder("reorder_bfyx", "bias_add", p.default_format, data_types::f32)
+        data("weights", {get_mem(get_weights_layout(p))}),
+        data("bias", {get_mem(get_bias_layout(p))}),
+        fully_connected("fc_prim", input_info("input"), "weights", "", "", padding(), get_output_dim_size(p)),
+        eltwise("bias_add", { input_info("fc_prim"), input_info("bias") }, eltwise_mode::sum),
+        reorder("reorder_bfyx", input_info("bias_add"), p.default_format, data_types::f32)
     );
 
     tolerance = 1e-5f;
@@ -230,12 +230,12 @@ TEST_P(fc_int8_scale, basic) {
     auto p = GetParam();
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("weights", get_mem(get_weights_layout(p))),
-        data("bias", get_mem(get_bias_layout(p))),
-        data("scale_data", get_mem(get_per_channel_layout(p), 1.0f / p.kernel.count())),
-        fully_connected("fc_prim", "input", "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
-        scale("scale", "fc_prim", "scale_data"),
-        reorder("reorder_bfyx", "scale", p.default_format, data_types::f32)
+        data("weights", {get_mem(get_weights_layout(p))}),
+        data("bias", {get_mem(get_bias_layout(p))}),
+        data("scale_data", {get_mem(get_per_channel_layout(p), 1.0f / p.kernel.count())}),
+        fully_connected("fc_prim", input_info("input"), "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
+        scale("scale", input_info("fc_prim"), input_info("scale_data")),
+        reorder("reorder_bfyx", input_info("scale"), p.default_format, data_types::f32)
     );
 
     tolerance = 1e-5f;
@@ -246,12 +246,12 @@ TEST_P(fc_int8_scale, fp16_scale_out) {
     auto p = GetParam();
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("weights", get_mem(get_weights_layout(p))),
-        data("bias", get_mem(get_bias_layout(p))),
-        data("scale_data", get_mem(get_per_channel_layout(p), 1.0f / p.kernel.count())),
-        fully_connected("fc_prim", "input", "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
-        scale("scale", "fc_prim", "scale_data", optional_data_type{ data_types::f16 }),
-        reorder("reorder_bfyx", "scale", p.default_format, data_types::f32)
+        data("weights", {get_mem(get_weights_layout(p))}),
+        data("bias", {get_mem(get_bias_layout(p))}),
+        data("scale_data", {get_mem(get_per_channel_layout(p), 1.0f / p.kernel.count())}),
+        fully_connected("fc_prim", input_info("input"), "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
+        scale("scale", input_info("fc_prim"), input_info("scale_data"), optional_data_type{ data_types::f16 }),
+        reorder("reorder_bfyx", input_info("scale"), p.default_format, data_types::f32)
     );
 
     tolerance = 1e-5f;
@@ -272,15 +272,15 @@ TEST_P(fc_int8_quantize_u8, basic) {
     auto p = GetParam();
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("weights", get_mem(get_weights_layout(p))),
-        data("bias", get_mem(get_bias_layout(p))),
-        data("in_lo", get_mem(get_per_channel_layout(p), min_random, 0)),
-        data("in_hi", get_mem(get_per_channel_layout(p), 1, max_random)),
-        data("out_lo", get_mem(get_single_element_layout(p), 0)),
-        data("out_hi", get_mem(get_single_element_layout(p), 255)),
-        fully_connected("fc_prim", "input", "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
-        quantize("quantize", "fc_prim", "in_lo", "in_hi", "out_lo", "out_hi", 256, data_types::u8),
-        reorder("reorder_bfyx", "quantize", p.default_format, data_types::f32)
+        data("weights", {get_mem(get_weights_layout(p))}),
+        data("bias", {get_mem(get_bias_layout(p))}),
+        data("in_lo", {get_mem(get_per_channel_layout(p), min_random, 0)}),
+        data("in_hi", {get_mem(get_per_channel_layout(p), 1, max_random)}),
+        data("out_lo", {get_mem(get_single_element_layout(p), 0)}),
+        data("out_hi", {get_mem(get_single_element_layout(p), 255)}),
+        fully_connected("fc_prim", input_info("input"), "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
+        quantize("quantize", input_info("fc_prim"), input_info("in_lo"), input_info("in_hi"), input_info("out_lo"), input_info("out_hi"), 256, data_types::u8),
+        reorder("reorder_bfyx", input_info("quantize"), p.default_format, data_types::f32)
     );
 
     tolerance = 1.f;
@@ -301,17 +301,17 @@ TEST_P(fc_int8_scale_quantize_i8, basic) {
     auto p = GetParam();
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("weights", get_mem(get_weights_layout(p))),
-        data("bias", get_mem(get_bias_layout(p))),
-        data("in_lo", get_mem(get_per_channel_layout(p), min_random, 0)),
-        data("in_hi", get_mem(get_per_channel_layout(p), 1, max_random)),
-        data("out_lo", get_mem(get_single_element_layout(p), -127)),
-        data("out_hi", get_mem(get_single_element_layout(p), 127)),
-        data("scale_data", get_mem(get_per_channel_layout(p), 1.0f / p.kernel.count() / 255)),
-        fully_connected("fc_prim", "input", "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
-        scale("scale", "fc_prim", "scale_data"),
-        quantize("quantize", "scale", "in_lo", "in_hi", "out_lo", "out_hi", 255, data_types::i8),
-        reorder("reorder_bfyx", "quantize", p.default_format, data_types::f32)
+        data("weights", {get_mem(get_weights_layout(p))}),
+        data("bias", {get_mem(get_bias_layout(p))}),
+        data("in_lo", {get_mem(get_per_channel_layout(p), min_random, 0)}),
+        data("in_hi", {get_mem(get_per_channel_layout(p), 1, max_random)}),
+        data("out_lo", {get_mem(get_single_element_layout(p), -127)}),
+        data("out_hi", {get_mem(get_single_element_layout(p), 127)}),
+        data("scale_data", {get_mem(get_per_channel_layout(p), 1.0f / p.kernel.count() / 255)}),
+        fully_connected("fc_prim", input_info("input"), "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
+        scale("scale", input_info("fc_prim"), input_info("scale_data")),
+        quantize("quantize", input_info("scale"), input_info("in_lo"), input_info("in_hi"), input_info("out_lo"), input_info("out_hi"), 255, data_types::i8),
+        reorder("reorder_bfyx", input_info("quantize"), p.default_format, data_types::f32)
     );
 
     tolerance = 1e-5f;
@@ -332,18 +332,18 @@ TEST_P(fc_int8_scale_activation_quantize_i8, basic) {
     auto p = GetParam();
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("weights", get_mem(get_weights_layout(p))),
-        data("bias", get_mem(get_bias_layout(p))),
-        data("in_lo", get_mem(get_per_channel_layout(p), min_random, 0)),
-        data("in_hi", get_mem(get_per_channel_layout(p), 1, max_random)),
-        data("out_lo", get_mem(get_single_element_layout(p), -127)),
-        data("out_hi", get_mem(get_single_element_layout(p), 127)),
-        data("scale_data", get_mem(get_per_channel_layout(p), 1.0f / p.kernel.count() / 255)),
-        fully_connected("fc_prim", "input", "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
-        scale("scale", "fc_prim", "scale_data"),
-        activation("activation_scale", "scale", activation_func::exp),
-        quantize("quantize", "activation_scale", "in_lo", "in_hi", "out_lo", "out_hi", 255, data_types::i8),
-        reorder("reorder_bfyx", "quantize", p.default_format, data_types::f32)
+        data("weights", {get_mem(get_weights_layout(p))}),
+        data("bias", {get_mem(get_bias_layout(p))}),
+        data("in_lo", {get_mem(get_per_channel_layout(p), min_random, 0)}),
+        data("in_hi", {get_mem(get_per_channel_layout(p), 1, max_random)}),
+        data("out_lo", {get_mem(get_single_element_layout(p), -127)}),
+        data("out_hi", {get_mem(get_single_element_layout(p), 127)}),
+        data("scale_data", {get_mem(get_per_channel_layout(p), 1.0f / p.kernel.count() / 255)}),
+        fully_connected("fc_prim", input_info("input"), "weights", "bias", data_types::f32, "", padding(), get_output_dim_size(p)),
+        scale("scale", input_info("fc_prim"), input_info("scale_data")),
+        activation("activation_scale", input_info("scale"), activation_func::exp),
+        quantize("quantize", input_info("activation_scale"), input_info("in_lo"), input_info("in_hi"), input_info("out_lo"), input_info("out_hi"), 255, data_types::i8),
+        reorder("reorder_bfyx", input_info("quantize"), p.default_format, data_types::f32)
     );
 
     tolerance = 1e-5f;
@@ -374,13 +374,13 @@ TEST_P(fc_int8_inputs_fused_fp32_sum, basic) {
 
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("weights", get_mem(get_weights_layout(p))),
-        data("bias", get_mem(get_bias_layout(p))),
-        data("shift_data", get_mem(shift_layout, 1)),
-        fully_connected("fc_prim", "input", "weights", "bias", cldnn::data_types::f32, "", padding(), get_output_dim_size(p)),
-        eltwise("shift", { "fc_prim", "shift_data" }, eltwise_mode::sum, cldnn::data_types::f32),
-        crop("crop", "shift", get_output_layout(p).size, { 0, 0, 0, 0 }),
-        reorder("reorder_bfyx", "crop", p.default_format, data_types::f32)
+        data("weights", {get_mem(get_weights_layout(p))}),
+        data("bias", {get_mem(get_bias_layout(p))}),
+        data("shift_data", {get_mem(shift_layout, 1)}),
+        fully_connected("fc_prim", input_info("input"), "weights", "bias", cldnn::data_types::f32, "", padding(), get_output_dim_size(p)),
+        eltwise("shift", { input_info("fc_prim"), input_info("shift_data") }, eltwise_mode::sum, cldnn::data_types::f32),
+        crop("crop", input_info("shift"), get_output_layout(p).size, { 0, 0, 0, 0 }),
+        reorder("reorder_bfyx", input_info("crop"), p.default_format, data_types::f32)
     );
 
     tolerance = 1e-5f;

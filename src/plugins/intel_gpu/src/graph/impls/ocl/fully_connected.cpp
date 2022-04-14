@@ -50,11 +50,11 @@ public:
         const auto primitive = arg.get_primitive();
 
         if (primitive->input_size != 3)
-            fc_params.output = fc_params.output.FlattenFeatureAndSpatials();
+            fc_params.outputs[0] = fc_params.outputs[0].FlattenFeatureAndSpatials();
 
         bool is_quantized = true;
         for (auto& input : arg.get_dependencies())
-            is_quantized &= data_type_traits::is_quantized(input->get_output_layout().data_type);
+            is_quantized &= data_type_traits::is_quantized(input.first->get_output_layout().data_type);
 
         if (is_quantized) {
             fc_params.quantization = kernel_selector::QuantizationType::SYMMETRIC;

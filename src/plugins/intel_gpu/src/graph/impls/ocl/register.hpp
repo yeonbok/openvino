@@ -16,8 +16,8 @@
 #endif
 #include "intel_gpu/primitives/concatenation.hpp"
 #include "intel_gpu/primitives/convolution.hpp"
-#if 0 // TODO(taylor)
 #include "intel_gpu/primitives/crop.hpp"
+#if 0 // TODO(taylor)
 #include "intel_gpu/primitives/custom_gpu_primitive.hpp"
 #include "intel_gpu/primitives/deconvolution.hpp"
 #include "intel_gpu/primitives/depth_to_space.hpp"
@@ -27,7 +27,9 @@
 #if 0 // TODO(andrew)
 #include "intel_gpu/primitives/experimental_detectron_roi_feature_extractor.hpp"
 #include "intel_gpu/primitives/experimental_detectron_topk_rois.hpp"
+#endif
 #include "intel_gpu/primitives/fully_connected.hpp"
+#if 0 // TODO(andrew)
 #include "intel_gpu/primitives/gather.hpp"
 #include "intel_gpu/primitives/gather_nd.hpp"
 #include "intel_gpu/primitives/gather_elements.hpp"
@@ -57,7 +59,9 @@
 #include "intel_gpu/primitives/reorder.hpp"
 #if 0 // TODO(andrew)
 #include "intel_gpu/primitives/reorg_yolo.hpp"
+#endif
 #include "intel_gpu/primitives/reshape.hpp"
+#if 0 // TODO(andrew)
 #include "intel_gpu/primitives/reverse_sequence.hpp"
 #include "intel_gpu/primitives/roi_align.hpp"
 #include "intel_gpu/primitives/roi_pooling.hpp"
@@ -107,8 +111,8 @@ REGISTER_OCL(broadcast);
 #endif
 REGISTER_OCL(concatenation);
 REGISTER_OCL(convolution);
-#if 0 // TODO(taylor)
 REGISTER_OCL(crop);
+#if 0 // TODO(taylor)
 REGISTER_OCL(custom_gpu_primitive);
 #endif
 REGISTER_OCL(data);
@@ -124,7 +128,9 @@ REGISTER_OCL(experimental_detectron_topk_rois);
 REGISTER_OCL(eltwise);
 #if 0 // TODO(andrew)
 REGISTER_OCL(embed);
+#endif
 REGISTER_OCL(fully_connected);
+#if 0 // TODO(andrew)
 REGISTER_OCL(gather);
 REGISTER_OCL(gather_nd);
 REGISTER_OCL(gather_elements);
@@ -154,7 +160,9 @@ REGISTER_OCL(region_yolo);
 REGISTER_OCL(reorder);
 #if 0 // TODO(andrew)
 REGISTER_OCL(reorg_yolo);
+#endif
 REGISTER_OCL(reshape);
+#if 0 // TODO(andrew)
 REGISTER_OCL(reverse_sequence);
 REGISTER_OCL(roi_align);
 REGISTER_OCL(roi_pooling);

@@ -146,8 +146,6 @@ void crop_inst::on_execute() {
 }
 
 void crop_inst::reuse_input() {
-    for (auto i = 0; i < node.get_outputs_count(); ++i) {
-        _outputs[i] = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout(i));
-    }
+    _outputs = {_network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout())};
 }
 }  // namespace cldnn
