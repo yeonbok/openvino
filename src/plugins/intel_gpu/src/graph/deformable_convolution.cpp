@@ -69,7 +69,7 @@ layout deformable_interp_inst::calc_output_layout(deformable_interp_node const& 
 
     auto kernel_size = desc->kernel_size;
     auto input_type = input_layout.data_type;
-    auto output_type = !node.get_primitive()->output_data_types.empty() ? *node.get_primitive()->output_data_types.at(0) : input_type;
+    auto output_type = node.get_primitive()->output_data_types.at(0) ? *node.get_primitive()->output_data_types.at(0) : input_type;
 
     tensor output_size(input_layout.size.batch[0],
                        input_layout.size.feature[0]*kernel_size.spatial[0]*kernel_size.spatial[1],

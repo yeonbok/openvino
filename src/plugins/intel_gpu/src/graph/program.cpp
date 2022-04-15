@@ -59,9 +59,6 @@
 #include "region_yolo_inst.h"
 #include "strided_slice_inst.h"
 #include "loop_inst.h"
-// TODO(Andrew): Will be removed after ocl register enabled
-#include "gather_inst.h"
-#include "normalize_inst.h"
 #include "to_string_utils.h"
 #include "runtime/cldnn_itt.hpp"
 #include "runtime/kernels_cache.hpp"

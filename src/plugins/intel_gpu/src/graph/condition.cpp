@@ -23,7 +23,7 @@ primitive_type_id condition::type_id() {
     !* We can be sure, that this method was called AT LEAST once during graph compilation.*!
 */
 layout condition_inst::calc_output_layout(condition_node const& node) {
-    assert(!node.get_primitive()->output_data_types.empty() &&
+    assert(static_cast<bool>(node.get_primitive()->output_data_types.at(0)) == false &&
            "Output data type forcing is not supported for condition_node!");
     node.set_branches();
 

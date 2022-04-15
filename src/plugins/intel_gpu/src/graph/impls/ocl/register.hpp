@@ -7,29 +7,22 @@
 
 #include "intel_gpu/primitives/activation.hpp"
 #include "intel_gpu/primitives/arg_max_min.hpp"
-#if 0 // TODO(taylor)
 #include "intel_gpu/primitives/average_unpooling.hpp"
 #include "intel_gpu/primitives/batch_to_space.hpp"
 #include "intel_gpu/primitives/binary_convolution.hpp"
 #include "intel_gpu/primitives/border.hpp"
 #include "intel_gpu/primitives/broadcast.hpp"
-#endif
 #include "intel_gpu/primitives/concatenation.hpp"
 #include "intel_gpu/primitives/convolution.hpp"
 #include "intel_gpu/primitives/crop.hpp"
-#if 0 // TODO(taylor)
 #include "intel_gpu/primitives/custom_gpu_primitive.hpp"
 #include "intel_gpu/primitives/deconvolution.hpp"
 #include "intel_gpu/primitives/depth_to_space.hpp"
 #include "intel_gpu/primitives/detection_output.hpp"
-#endif
 #include "intel_gpu/primitives/eltwise.hpp"
-#if 0 // TODO(andrew)
 #include "intel_gpu/primitives/experimental_detectron_roi_feature_extractor.hpp"
 #include "intel_gpu/primitives/experimental_detectron_topk_rois.hpp"
-#endif
 #include "intel_gpu/primitives/fully_connected.hpp"
-#if 0 // TODO(andrew)
 #include "intel_gpu/primitives/gather.hpp"
 #include "intel_gpu/primitives/gather_nd.hpp"
 #include "intel_gpu/primitives/gather_elements.hpp"
@@ -43,31 +36,21 @@
 #include "intel_gpu/primitives/non_max_suppression.hpp"
 #include "intel_gpu/primitives/normalize.hpp"
 #include "intel_gpu/primitives/one_hot.hpp"
-#endif
 #include "intel_gpu/primitives/permute.hpp"
-#if 0 // TODO(taylor)
 #include "intel_gpu/primitives/pooling.hpp"
 #include "intel_gpu/primitives/pyramid_roi_align.hpp"
-#endif
 #include "intel_gpu/primitives/quantize.hpp"
-#if 0 // TODO(andrew)
 #include "intel_gpu/primitives/random_uniform.hpp"
 #include "intel_gpu/primitives/range.hpp"
 #include "intel_gpu/primitives/reduce.hpp"
 #include "intel_gpu/primitives/region_yolo.hpp"
-#endif
 #include "intel_gpu/primitives/reorder.hpp"
-#if 0 // TODO(andrew)
 #include "intel_gpu/primitives/reorg_yolo.hpp"
-#endif
 #include "intel_gpu/primitives/reshape.hpp"
-#if 0 // TODO(andrew)
 #include "intel_gpu/primitives/reverse_sequence.hpp"
 #include "intel_gpu/primitives/roi_align.hpp"
 #include "intel_gpu/primitives/roi_pooling.hpp"
-#endif
 #include "intel_gpu/primitives/scale.hpp"
-#if 0 // TODO(andrew)
 #include "intel_gpu/primitives/scatter_update.hpp"
 #include "intel_gpu/primitives/scatter_elements_update.hpp"
 #include "intel_gpu/primitives/scatter_nd_update.hpp"
@@ -85,7 +68,6 @@
 #include "intel_gpu/primitives/grn.hpp"
 #include "intel_gpu/primitives/ctc_greedy_decoder.hpp"
 #include "intel_gpu/primitives/convert_color.hpp"
-#endif
 #include "generic_layer.hpp"
 
 
