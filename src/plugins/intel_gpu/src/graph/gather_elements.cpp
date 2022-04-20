@@ -15,11 +15,11 @@ primitive_type_id gather_elements::type_id() {
     return &instance;
 }
 
-layout gather_elements_inst::calc_output_layout(gather_elements_node const& node) {
+layout gather_elements_inst::calc_output_layout(gather_elements_node const& node, kernel_impl_params const& impl_param) {
     auto op = node.get_primitive();
 
-    auto input_layout_origin = node.input(0).get_output_layout();
-    auto indices_layout_origin = node.input(1).get_output_layout();
+    auto input_layout_origin = impl_param.input_layouts.at(0);
+    auto indices_layout_origin = impl_param.input_layouts.at(1);
 
     auto input_layout = input_layout_origin.size.sizes(input_layout_origin.format);
     auto indices_layout = indices_layout_origin.size.sizes(indices_layout_origin.format);
@@ -47,8 +47,8 @@ std::string gather_elements_inst::to_string(gather_elements_node const& node) {
     gather_elements_info.add("input id", input.id());
     gather_elements_info.add("input shape", node.input(0).get_output_layout().size.to_string());
     gather_elements_info.add("indices shape", node.input(1).get_output_layout().size.to_string());
-    gather_elements_info.add("output format", calc_output_layout(node).format);
-    gather_elements_info.add("output shape", calc_output_layout(node).size.to_string());
+    gather_elements_info.add("output format", calc_output_layout(node, node.get_kernel_impl_params()).format);
+    gather_elements_info.add("output shape", calc_output_layout(node, node.get_kernel_impl_params()).size.to_string());
     gather_elements_info.add("axis", desc->axis);
 
     node_info->add("gather_elements info", gather_elements_info);

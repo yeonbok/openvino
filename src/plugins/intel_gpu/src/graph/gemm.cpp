@@ -17,11 +17,11 @@ primitive_type_id gemm::type_id() {
     return &instance;
 }
 
-layout gemm_inst::calc_output_layout(gemm_node const& node) {
+layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params const& impl_param) {
     auto prim = node.get_primitive();
 
-    auto input0_layout = node.input(0).get_output_layout();
-    auto input1_layout = node.input(1).get_output_layout();
+    auto input0_layout = impl_param.input_layouts.at(0);
+    auto input1_layout = impl_param.input_layouts.at(1);
     bool transpose_input0 = prim->transpose_input0;
     bool transpose_input1 = prim->transpose_input1;
 

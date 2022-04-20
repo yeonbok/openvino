@@ -38,16 +38,16 @@ static size_t GetNonEmptyDimsNumber(const layout& layout) {
     }
 }
 
-layout scatter_update_inst::calc_output_layout(scatter_update_node const& node) {
+layout scatter_update_inst::calc_output_layout(scatter_update_node const& node, kernel_impl_params const& impl_param) {
     auto desc = node.get_primitive();
 
     const int32_t axis = desc->axis;
-    const size_t indices_size = node.input(1).get_output_layout().size.count();
-    const size_t input_number_of_dims = node.input(0).get_output_layout().size.sizes().size();
-    const size_t updates_number_of_dims = node.input(2).get_output_layout().size.sizes().size();
-    const size_t nonempty_indices_dims = GetNonEmptyDimsNumber(node.input(1).get_output_layout());
+    const size_t indices_size = impl_param.input_layouts.at(1).size.count();
+    const size_t input_number_of_dims = impl_param.input_layouts.at(0).size.sizes().size();
+    const size_t updates_number_of_dims = impl_param.input_layouts.at(2).size.sizes().size();
+    const size_t nonempty_indices_dims = GetNonEmptyDimsNumber(impl_param.input_layouts.at(1));
 
-    auto input_layout = node.input(0).get_output_layout();
+    auto input_layout = impl_param.input_layouts.at(0);
 
     auto output_shape = input_layout.size;
     auto input_format = input_layout.format;
