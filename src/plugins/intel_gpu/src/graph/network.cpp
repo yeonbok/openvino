@@ -7,6 +7,7 @@
 #include "intel_gpu/primitives/data.hpp"
 #include "intel_gpu/primitives/mutable_data.hpp"
 #include "intel_gpu/primitives/input_layout.hpp"
+#include "intel_gpu/primitives/reshape.hpp"
 
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "intel_gpu/runtime/memory.hpp"
@@ -880,6 +881,7 @@ void network::allocate_primitive_instance(program_node const& node) {
     }
     if (std::dynamic_pointer_cast<assign_inst>(inst) || std::dynamic_pointer_cast<read_value_inst>(inst))
         _variable_state_primitives.push_back(inst);
+
     if (node.is_constant())
         transfer_memory_to_device(inst, node);
 }
@@ -888,6 +890,12 @@ void network::transfer_memory_to_device(std::shared_ptr<primitive_inst> instance
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "NetworkImpl::TransferMemory");
     auto& inst_mem = instance->output_memory();
     auto alloc_type = inst_mem.get_allocation_type();
+
+    auto users = node.get_users();
+    if (users.size() == 1
+        && users.front()->is_type<reshape>()
+        && users.front()->is_dynamic())
+            return;
 
     // Do not transfer memory if a user requires lockable memory.
     // If memory is used in both gpu and cpu implementations, primitive itself is responsible for correct allocation type

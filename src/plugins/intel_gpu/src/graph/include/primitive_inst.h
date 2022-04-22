@@ -172,7 +172,7 @@ protected:
     network& _network;
     program_node const& _node;
 
-    std::unique_ptr<primitive_impl> _impl;
+    std::shared_ptr<primitive_impl> _impl;
 
     // this is a set of dependencies in terms of memory, if execution of this primitive requires data from another one,
     // it should be added to this set
@@ -200,6 +200,8 @@ protected:
         true;  // by default all primitives has valid inputs, exception is input_layout (see input_layout_inst)
     bool _has_mutable_input = false;
     bool _mem_allocated = false;
+
+    size_t max_output_layout_size;
 
     memory::ptr allocate_output();
     static std::vector<std::shared_ptr<primitive_inst>> build_exec_deps(
