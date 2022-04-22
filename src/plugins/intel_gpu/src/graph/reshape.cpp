@@ -133,6 +133,73 @@ reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) :
         reuse_input();
 }
 
+static std::vector<int64_t> read_vector(cldnn::memory::ptr mem, cldnn::stream& stream) {
+    std::vector<int64_t> out_vecs;
+    if (mem->get_allocation_type() == allocation_type::usm_host || mem->get_allocation_type() == allocation_type::usm_shared) {
+        switch (mem->get_layout().data_type) {
+            case data_types::i32: {
+                int32_t* p_mem = reinterpret_cast<int32_t*>(mem->buffer_ptr());
+                for (int i=0; i < mem->count(); i++) {
+                    out_vecs.push_back(p_mem[i]);
+                }
+                break;
+            }
+            case data_types::i64: {
+                int64_t* p_mem = reinterpret_cast<int64_t*>(mem->buffer_ptr());
+                for (int i=0; i < mem->count(); i++) {
+                    out_vecs.push_back(p_mem[i]);
+                }
+                break;
+            }
+            default: IE_THROW() << "read_vector: unsupported data type";
+        }
+    } else {
+        switch (mem->get_layout().data_type) {
+            case data_types::i32: {
+                mem_lock<int32_t, mem_lock_type::read> lock{mem, stream};
+                out_vecs = std::move(std::vector<int64_t>(lock.begin(), lock.end()));
+            }
+            case data_types::i64: {
+                mem_lock<int64_t, mem_lock_type::read> lock{mem, stream};
+                out_vecs = std::move(std::vector<int64_t>(lock.begin(), lock.end()));
+            }
+            default: IE_THROW() << "read_vector: unsupported data type";
+        }
+    }
+    return out_vecs;
+}
+
+void reshape_inst::update_shape() {
+    if (!_network.shape_changed())
+        return;
+
+    auto& node = const_cast<reshape_node&>(dynamic_cast<const reshape_node&>(_node));
+
+    if (_node.get_dependencies().size() == 2) {
+        auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
+        // TODO: usm_device is copied to host on lock(), but we need to ensure that this is better, then
+        // keeping such constants on host (i.e. modifying transfer_memory_to_device)
+        // if (shape_mem->get_allocation_type() == allocation_type::usm_device) {
+        //     IE_THROW() << " lockable memory is required to update shape for reshape prim\n";
+        // }
+        auto reshape_prim = std::static_pointer_cast<reshape>(std::const_pointer_cast<primitive>(_node.get_primitive()));
+        reshape_prim->output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
+        node.set_shape_ready();
+    }
+
+    GPU_DEBUG_GET_INSTANCE(debug_config);
+    auto new_layout = _node.type()->calc_output_layout(_node);
+    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
+    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
+    GPU_DEBUG_IF(debug_config->verbose >= 4) {
+        GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
+    }
+    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
+        set_shape_change();
+    // TODO: Get rid of this const_cast
+    node.set_output_layout(new_layout);
+}
+
 void reshape_inst::on_execute() {
     if (!node.can_be_optimized())
         return;
