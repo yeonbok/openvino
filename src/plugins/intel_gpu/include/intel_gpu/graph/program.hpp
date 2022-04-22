@@ -29,6 +29,7 @@ class pass_manager;
 class base_pass;
 class program_wrapper;
 class kernels_cache;
+struct primitive_impl;
 
 
 struct program {
@@ -250,6 +251,8 @@ public:
 
     void remove_kernel(kernel_id id);
 
+    std::shared_ptr<LRUCache<std::string, std::shared_ptr<primitive_impl>>> get_primitive_impl_cache() const { return primitive_impl_cache; }
+
 private:
     uint32_t prog_id = 0;
     engine& _engine;
@@ -339,6 +342,8 @@ private:
     // old_node - node which will be replaced
     // new_node - node which will replace the old one
     void replace(program_node& old_node, program_node& new_node);
+
+    std::shared_ptr<LRUCache<std::string, std::shared_ptr<primitive_impl>>> primitive_impl_cache;
 };
 
 }  // namespace cldnn
