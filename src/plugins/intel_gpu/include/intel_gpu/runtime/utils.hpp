@@ -12,6 +12,12 @@
 #include <algorithm>
 #include <sstream>
 #include <vector>
+#include <list>
+#include <unordered_map>
+#include <mutex>
+#include <functional>
+
+#include <iostream>
 
 namespace cldnn {
 
@@ -183,4 +189,86 @@ inline std::string to_string(const T& v) {
 /// @}
 /// @endcond
 /// @}
+
+/// @brief LRU cache which remove the least recently used data when cache is full.
+template<typename TypeK, typename TypeD>
+class LRUCache {
+public:
+    struct CacheEntry {
+        TypeD   data;
+        size_t  size;   // the size of data. it is necessary to check total data size is limited to capacity
+    };
+
+private:
+    std::list<TypeK> order;
+    std::unordered_map<TypeK, std::pair<typename std::list<TypeK>::iterator, LRUCache::CacheEntry>> cache_entry_map;
+    size_t curr_data_size;
+    const size_t capacity;
+
+    std::mutex mtx;
+
+public:
+    explicit LRUCache(size_t caps) : curr_data_size(0), capacity(caps) {}
+
+    ~LRUCache() {
+        clear();
+    }
+
+    std::tuple<TypeD, bool> get(TypeK key, std::function<LRUCache::CacheEntry(void)> create_new_data = nullptr) {
+        std::lock_guard<std::mutex> lock(mtx);
+        TypeD data;
+        bool is_found = true;
+        if (cache_entry_map.find(key) == cache_entry_map.end()) {
+            if (create_new_data) {
+                auto new_entry = create_new_data();
+                add_new_entry(key, new_entry);
+                data = cache_entry_map[key].second.data;
+            }
+            is_found = false;
+        } else {
+            // Move current data to front of deque
+            order.erase(cache_entry_map[key].first);
+            order.push_front(key);
+            cache_entry_map[key].first = order.begin();
+            data = cache_entry_map[key].second.data;
+        }
+        return std::make_pair(data, is_found);
+    }
+
+    void clear() {
+        std::lock_guard<std::mutex> lock(mtx);
+        order.clear();
+        cache_entry_map.clear();
+        curr_data_size = 0;
+    }
+
+    size_t count() const {
+       return cache_entry_map.size();
+    }
+
+    size_t get_current_data_size() {
+        return curr_data_size;
+    }
+
+    std::list<TypeK> get_all_keys() const {
+        return order;
+    }
+
+private:
+    void add_new_entry(TypeK key, LRUCache::CacheEntry entry) {
+        if (cache_entry_map.find(key) == cache_entry_map.end()) {
+            if (curr_data_size > 0 && capacity < (curr_data_size + entry.size)) {
+                //  Remove cache at the end of order
+                curr_data_size -= cache_entry_map[order.back()].second.size;
+                cache_entry_map.erase(order.back());
+                order.pop_back();
+            }
+        } else {
+            order.erase(cache_entry_map[key].first);
+        }
+        order.push_front(key);
+        cache_entry_map[key] = std::make_pair(order.begin(), entry);
+        curr_data_size += entry.size;
+    }
+};
 }  // namespace cldnn
