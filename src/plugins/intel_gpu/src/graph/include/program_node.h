@@ -8,6 +8,7 @@
 #include "intel_gpu/primitives/activation.hpp"
 #include "intel_gpu/primitives/implementation_desc.hpp"
 #include "intel_gpu/graph/program.hpp"
+#include "intel_gpu/runtime/utils.hpp"
 
 #include "kernel_selector_helper.h"
 #include "fused_primitive_desc.h"
