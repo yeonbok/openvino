@@ -69,6 +69,7 @@
 #include "intel_gpu/primitives/grn.hpp"
 #include "intel_gpu/primitives/ctc_greedy_decoder.hpp"
 #include "intel_gpu/primitives/convert_color.hpp"
+#include "intel_gpu/primitives/non_zero.hpp"
 #include "generic_layer.hpp"
 
 
@@ -156,6 +157,8 @@ REGISTER_OCL(cum_sum);
 REGISTER_OCL(embedding_bag);
 REGISTER_OCL(extract_image_patches);
 REGISTER_OCL(convert_color);
+REGISTER_OCL(count_nonzero);
+REGISTER_OCL(gather_nonzero);
 
 #undef REGISTER_OCL
 
