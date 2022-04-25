@@ -93,20 +93,6 @@ std::string gather_nonzero_inst::to_string(gather_nonzero_node const& node) {
 }
 
 gather_nonzero_inst::typed_primitive_inst(network& network, gather_nonzero_node const& node) : parent(network, node, false) {}
-//     auto input_layout = node.input().get_output_layout();
-//     auto output_layout = node.get_output_layout();
-//     CLDNN_ERROR_DATA_TYPES_MISMATCH(node.id(),
-//                                     "Input layout data typr",
-//                                     input_layout.data_type,
-//                                     "output layout data type",
-//                                     output_layout.data_type,
-//                                     "");
-
-//     if (!node.can_be_optimized() && _node.get_output_layout().is_static())
-//         _output = allocate_output();
-//     else if (_exec_deps.size() > 0 && input_memory_ptr())
-//         reuse_input();
-// }
 
 void gather_nonzero_inst::update_shape() {
     auto& node = const_cast<gather_nonzero_node&>(dynamic_cast<const gather_nonzero_node&>(_node));
@@ -129,24 +115,5 @@ void gather_nonzero_inst::update_shape() {
     
     node.set_output_layout(new_layout);
 }
-
-// void gather_nonzero_inst::on_execute() {
-//     if (!node.can_be_optimized())
-//         return;
-
-//     if (_output && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
-//         return;
-
-//     reuse_input();
-// }
-
-// void gather_nonzero_inst::reuse_input() {
-//     build_deps();  // gather_nonzero need deps
-
-//     if (!input_memory_ptr())
-//         throw std::runtime_error("[GPU] Gather_nonzero can't reuse nullptr input memory");
-
-//     _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
-// }
 
 }  // namespace cldnn
