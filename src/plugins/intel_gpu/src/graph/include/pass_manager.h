@@ -208,6 +208,17 @@ private:
     layout_optimizer& _lo;
 };
 
+class prepare_primitive_fusing_2 : public base_pass {
+public:
+    explicit prepare_primitive_fusing_2(layout_optimizer& lo_ref) :
+        base_pass("prepare_primitive_fusing_2"), _lo(lo_ref) {}
+
+private:
+    void run(program& p) override;
+    void fuse_simple_primitives(program &p);
+    layout_optimizer& _lo;
+};
+
 class pre_replace_deconv : public base_pass {
 public:
     explicit pre_replace_deconv(layout_optimizer& lo_ref) :

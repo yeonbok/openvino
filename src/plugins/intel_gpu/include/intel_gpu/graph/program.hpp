@@ -201,6 +201,11 @@ public:
                     program_node& peer_node,
                     std::map<primitive_id, std::vector<std::pair<primitive_id, size_t>>>* fusing_history);
 
+    void fuse_nodes_through_optimized_reshape(program_node& fused_node,
+                    program_node& peer_node,
+                    program_node& reshape_node,
+                    std::map<primitive_id, std::vector<std::pair<primitive_id, size_t>>>* fusing_history);
+
     // returns if 'node' has been removed
     bool remove_if_dangling(program_node& node);
 

@@ -553,6 +553,10 @@ void program::pre_optimize_graph(bool is_internal) {
     // check if there exists some layout incompatibilities and add an reorder node if required
     apply_opt_pass<add_required_reorders>();
 
+    // Fuse prim after buffer fusing
+    if (!is_internal)
+        apply_opt_pass<prepare_primitive_fusing_2>(lo);
+
     // add optimization attributes for onednn primitives
     apply_opt_pass<add_onednn_optimization_attributes>();
 }
@@ -1032,6 +1036,126 @@ bool program::move_node(program_node& node,
     }
 
     return false;
+}
+
+void program::fuse_nodes_through_optimized_reshape(program_node &fused_node,
+                         program_node &quant_node,
+                         program_node &reshape_node,
+                         std::map<primitive_id, std::vector<std::pair<primitive_id, size_t>>>* fusing_history) {
+    if (!quant_node.is_type<quantize>()) return;
+    if (!reshape_node.can_be_optimized()) return;
+    quantize_node& q_node = quant_node.as<quantize>();
+
+    auto quant_layout = quant_node.get_output_layout();
+
+    fused_primitive_desc local_desc;
+    local_desc.node = get_node_ptr(quant_node.id());
+    local_desc.dep_start_idx = fused_node.get_dependencies().size();
+    local_desc.total_num_deps = quant_node.get_dependencies().size();
+    local_desc.output_layout = quant_layout;
+    local_desc.activation = activation_func::none;
+    if (!quant_node.get_fused_activations_funcs().empty()) {
+        if (quant_node.get_fused_activations_funcs().size() > 1)
+            CLDNN_ERROR_MESSAGE(quant_node.id(), "Fused primitive descriptor doesn't support > 1 activation functions in a peer node");
+
+        local_desc.activation = quant_node.get_fused_activations_funcs()[0];
+        local_desc.activation_params = quant_node.get_fused_activations_params()[0];
+    }
+
+    auto fusedPadding = fused_node.get_output_layout().data_padding;
+    cldnn::padding needed_padding = padding::max(quant_layout.data_padding,
+                                                 fusedPadding);
+
+    auto history_iter = fusing_history->find(quant_node.id());
+    if (history_iter != fusing_history->end()) {
+        for (auto& id : history_iter->second) {
+            local_desc.fused_deps.emplace(id.first, id.second);
+        }
+    }
+
+    for (size_t i = 0; i < quant_node.get_dependencies().size(); i++) {
+        auto& dep = quant_node.get_dependency(i);
+        if (dep.get_output_layout().size != q_node.get_output_layout().size &&
+            dep.get_output_layout().format != q_node.get_output_layout().format) {
+            std::cout << dep.get_output_layout().to_string() << std::endl;
+            std::cout << q_node.get_output_layout().to_string() << std::endl;
+            return;
+        }
+    }
+    // Add new dependencies to the fused_node
+    size_t deps_idx = 0;
+    for (size_t i = 0; i < quant_node.get_dependencies().size(); i++) {
+        auto& dep = quant_node.get_dependency(i);
+        if (dep.id() == reshape_node.id()) {
+            deps_idx++;
+            continue;
+        }
+
+        if (q_node.get_scale_shift_opt()) {
+            bool can_drop_input = false;
+            bool out_range_usage =
+                q_node.get_per_tensor_output_range() && q_node.get_output_lo_val() < q_node.get_output_hi_val();
+
+            // Drop input range if we use output per-tensor range or if clamp is used for input range
+            can_drop_input |= (i == 1 || i == 2) && (out_range_usage || (!out_range_usage && !q_node.get_need_clamp()));
+            // Drop output range - it's not used in scale-shift-opt quantize kernel
+            can_drop_input |= i == 3 || i == 4;
+            // Drop tensor with input scale when we have per-tensor parameter
+            can_drop_input |= i == 5 && q_node.get_per_tensor_input_scale();
+            // Drop tensor with input shift when we have per-tensor parameter or it's not needed at all
+            can_drop_input |= i == 6 && (!q_node.get_need_pre_shift() || q_node.get_per_tensor_input_shift());
+            // Drop tensor with output scale when we have per-tensor parameter or it's not needed at all
+            can_drop_input |= i == 7 && (!q_node.get_need_post_scale() || q_node.get_per_tensor_output_scale());
+            // Drop tensor with output shift when we have per-tensor parameter or it's not needed at all
+            can_drop_input |= i == 8 && (!q_node.get_need_post_shift() || q_node.get_per_tensor_output_shift());
+
+            if (can_drop_input)
+                continue;
+        }
+        // Just reshape the shape in place.
+        layout new_dep_layout = fused_node.get_output_layout();
+        new_dep_layout.data_type = dep.get_output_layout().data_type;
+        auto new_reshape = std::make_shared<reorder>(dep.id() + "_reorder", dep.id(), new_dep_layout);
+        auto& new_reshape_node = get_or_create(new_reshape);
+        new_reshape_node.set_output_layout(new_dep_layout, false);
+        new_reshape_node.can_be_optimized(true);
+        add_intermediate(new_reshape_node, q_node, i);
+        //fused_node.dependencies.push_back(&dep);
+        fused_node.dependencies.push_back(&new_reshape_node);
+        local_desc.deps.emplace_back(new_reshape_node.id(), deps_idx++);
+        new_reshape_node.users.push_back(&fused_node);
+    }
+    local_desc.total_num_deps = std::min(local_desc.total_num_deps, deps_idx);
+
+    fused_node.add_fused_primitive(local_desc);
+    // This shouldn't happen, but who knows...
+    if (quant_node.has_fused_primitives()) {
+        fused_node.add_fused_primitives(quant_node.get_fused_primitives());
+    }
+    add_optimized_primitive_info(quant_node.id(), { fused_node.id() });
+
+    for (auto& user : quant_node.users) {
+        size_t dep_idx = 0;
+        for (auto& dep : user->dependencies) {
+            if (dep->id() == quant_node.id())
+                break;
+            dep_idx++;
+        }
+        (*fusing_history)[user->id()].push_back(std::make_pair(quant_node.id(), dep_idx));
+    }
+
+    // Remove all edges connected with peer node
+    while (quant_node.get_dependencies().size() > 0) {
+        auto& dep = quant_node.get_dependency(quant_node.get_dependencies().size() - 1);
+        remove_connection(dep, quant_node);
+    }
+    replace_all_usages(quant_node, reshape_node);
+
+    // Update output layout. Recalculation is not needed.
+    fused_node.merge_output_padding(needed_padding);
+    // fused_node.set_output_layout(quant_layout, false);
+    //fused_node.recalc_output_layout(true);
+    return;
 }
 
 void program::fuse_nodes(program_node &fused_node,
