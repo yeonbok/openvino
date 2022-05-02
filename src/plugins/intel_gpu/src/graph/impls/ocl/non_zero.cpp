@@ -89,12 +89,20 @@ attach_count_nonzero_impl::attach_count_nonzero_impl() {
         std::make_tuple(data_types::f32, format::bfyx),
         std::make_tuple(data_types::f16, format::bfyx),
         std::make_tuple(data_types::i32, format::bfyx),
+        std::make_tuple(data_types::i8, format::bfyx),
+        std::make_tuple(data_types::u8, format::bfyx),
+
         std::make_tuple(data_types::f32, format::bfzyx),
         std::make_tuple(data_types::f16, format::bfzyx),
         std::make_tuple(data_types::i32, format::bfzyx),
+        std::make_tuple(data_types::i8, format::bfzyx),
+        std::make_tuple(data_types::u8, format::bfzyx),
+
         std::make_tuple(data_types::f32, format::bfwzyx),
         std::make_tuple(data_types::f16, format::bfwzyx),
         std::make_tuple(data_types::i32, format::bfwzyx),
+        std::make_tuple(data_types::i8, format::bfwzyx),
+        std::make_tuple(data_types::u8, format::bfwzyx),
     });
 }
 
@@ -103,12 +111,20 @@ attach_gather_nonzero_impl::attach_gather_nonzero_impl() {
         std::make_tuple(data_types::f32, format::bfyx),
         std::make_tuple(data_types::f16, format::bfyx),
         std::make_tuple(data_types::i32, format::bfyx),
+        std::make_tuple(data_types::i8, format::bfyx),
+        std::make_tuple(data_types::u8, format::bfyx),
+
         std::make_tuple(data_types::f32, format::bfzyx),
         std::make_tuple(data_types::f16, format::bfzyx),
         std::make_tuple(data_types::i32, format::bfzyx),
+        std::make_tuple(data_types::i8, format::bfzyx),
+        std::make_tuple(data_types::u8, format::bfzyx),
+
         std::make_tuple(data_types::f32, format::bfwzyx),
         std::make_tuple(data_types::f16, format::bfwzyx),
         std::make_tuple(data_types::i32, format::bfwzyx),
+        std::make_tuple(data_types::i8, format::bfwzyx),
+        std::make_tuple(data_types::u8, format::bfwzyx),
     });
 }
 
