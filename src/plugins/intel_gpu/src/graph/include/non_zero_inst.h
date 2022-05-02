@@ -26,12 +26,6 @@ public:
         CLDNN_ERROR_LESS_THAN(id(), "the number of dependencies", dependencies.size(), "1", 1, "ERROR: the node has no input");
         return get_dependency(0);
     }
-
-    bool is_in_place() const {
-        if (this->is_output() || !this->get_fused_activations_funcs().empty())
-            return false;
-        return (!this->get_output_layout().data_padding && !input().get_output_layout(false).data_padding);
-    }
 };
 
 using count_nonzero_node = typed_program_node<count_nonzero>;
@@ -45,13 +39,6 @@ public:
     static std::string to_string(count_nonzero_node const& node);
 
     typed_primitive_inst(network& network, count_nonzero_node const& node);
-
-private:
-    // void on_execute() override;
-
-    // void update_shape() override;
-
-    // void reuse_input();
 };
 
 using count_nonzero_inst = typed_primitive_inst<count_nonzero>;
@@ -67,15 +54,9 @@ struct typed_program_node<gather_nonzero> : public typed_program_node_base<gathe
 public:
     using parent::parent;
 
-    program_node& input(size_t index=0) const {
+    program_node& input(size_t index = 0) const {
         CLDNN_ERROR_LESS_THAN(id(), "the number of dependencies", dependencies.size(), "1", 1, "ERROR: the node has no input");
         return get_dependency(index);
-    }
-
-    bool is_in_place() const {
-        if (this->is_output() || !this->get_fused_activations_funcs().empty())
-            return false;
-        return (!this->get_output_layout().data_padding && !input().get_output_layout(false).data_padding);
     }
 
     void set_shape_ready() { _shape_ready = true; }
@@ -96,11 +77,7 @@ public:
     typed_primitive_inst(network& network, gather_nonzero_node const& node);
 
 private:
-    // void on_execute() override;
-
     void update_shape() override;
-
-    // void reuse_input();
 };
 
 using gather_nonzero_inst = typed_primitive_inst<gather_nonzero>;
