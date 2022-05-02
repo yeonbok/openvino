@@ -23,7 +23,6 @@ static void CreateNonZeroOp(Program& p, const std::shared_ptr<ngraph::Node>& op)
                                            inputPrimitives[0],
                                            op->get_friendly_name());
 
-    // cldnn::primitive_id gatherID = layerName + "_gather";
     auto primitive2 = cldnn::gather_nonzero(layerName,
                                             inputPrimitives[0],
                                             countID,
