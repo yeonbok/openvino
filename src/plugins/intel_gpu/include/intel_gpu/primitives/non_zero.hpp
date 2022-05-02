@@ -44,10 +44,6 @@ struct gather_nonzero : public primitive_base<gather_nonzero> {
                    const primitive_id& ext_prim_id = "",
                    const padding& output_padding = padding())
         : primitive_base(id, {data, output_shape}, ext_prim_id, output_padding) {}
-
-    /// @brief Requested memory shape.
-    ov::PartialShape output_shape = ov::PartialShape({ov::Dimension::dynamic(),ov::Dimension::dynamic(),1,1});
-
 };
 /// @}
 /// @}

@@ -59,6 +59,7 @@ public:
         return get_dependency(index);
     }
 
+    ov::PartialShape output_shape = ov::PartialShape({ov::Dimension::dynamic(), ov::Dimension::dynamic(), 1, 1});
     void set_shape_ready() { _shape_ready = true; }
     void reset_shape_ready() const { _shape_ready = false; }
     bool get_shape_ready() const { return _shape_ready; }

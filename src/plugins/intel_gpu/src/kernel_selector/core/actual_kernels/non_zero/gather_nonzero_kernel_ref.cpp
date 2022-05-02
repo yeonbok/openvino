@@ -23,8 +23,12 @@ ParamsKey GatherNonzeroKernelRef::GetSupportedKey() const {
     k.EnableOutputDataType(Datatype::INT32);
     k.EnableOutputDataType(Datatype::UINT32);
     k.EnableOutputDataType(Datatype::INT64);
-    k.EnableAllInputLayout();
-    k.EnableAllOutputLayout();
+    k.EnableInputLayout(DataLayout::bfyx);
+    k.EnableOutputLayout(DataLayout::bfyx);
+    k.EnableInputLayout(DataLayout::bfzyx);
+    k.EnableOutputLayout(DataLayout::bfzyx);
+    k.EnableInputLayout(DataLayout::bfwzyx);
+    k.EnableOutputLayout(DataLayout::bfwzyx);
     k.EnableTensorOffset();
     k.EnableTensorPitches();
     k.EnableBatching();
@@ -64,7 +68,7 @@ KernelsData GatherNonzeroKernelRef::GetKernelsData(const Params& params, const o
                        {Tensor::DataChannelName::Z, Tensor::DataChannelName::W},
                        {Tensor::DataChannelName::FEATURE, Tensor::DataChannelName::BATCH}};
     }
-    
+
     kernel.params.workGroups.local = GetOptimalLocalWorkGroupSizes(kernel.params.workGroups.global,
                                                                    params.engineInfo,
                                                                    newParams.inputs[0].GetLayout(),

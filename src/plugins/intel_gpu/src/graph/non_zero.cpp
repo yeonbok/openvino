@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 Intel Corporation
+// Copyright (C) 2022 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -24,7 +24,7 @@ primitive_type_id count_nonzero::type_id() {
 layout count_nonzero_inst::calc_output_layout(count_nonzero_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for count_nonzero_node!");
-    return layout{cldnn::data_types::i32, cldnn::format::bfyx, tensor{1,1,1,4}};
+    return layout{cldnn::data_types::i32, cldnn::format::bfyx, tensor{1, 1, 1, 4}};
 }
 
 std::string count_nonzero_inst::to_string(count_nonzero_node const& node) {
@@ -36,7 +36,7 @@ std::string count_nonzero_inst::to_string(count_nonzero_node const& node) {
 
     json_composite count_nonzero_info;
     count_nonzero_info.add("input id", input.id());
-    count_nonzero_info.add("output shape", tensor{1,1,1,4});
+    count_nonzero_info.add("output shape", tensor{1, 1, 1, 4});
 
     node_info->add("count_nonzero info", count_nonzero_info);
     node_info->dump(primitive_description);
@@ -71,8 +71,7 @@ primitive_type_id gather_nonzero::type_id() {
 layout gather_nonzero_inst::calc_output_layout(gather_nonzero_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for gather_nonzero_node!");
-    auto prim = node.get_primitive();
-    return layout{cldnn::data_types::i32, cldnn::format::bfyx, prim->output_shape};
+    return layout{cldnn::data_types::i32, cldnn::format::bfyx, node.output_shape};
 }
 
 std::string gather_nonzero_inst::to_string(gather_nonzero_node const& node) {
@@ -84,7 +83,7 @@ std::string gather_nonzero_inst::to_string(gather_nonzero_node const& node) {
 
     json_composite gather_nonzero_info;
     gather_nonzero_info.add("input id", input.id());
-    gather_nonzero_info.add("output shape", desc->output_shape);
+    gather_nonzero_info.add("output shape", node.output_shape);
 
     node_info->add("gather_nonzero info", gather_nonzero_info);
     node_info->dump(primitive_description);
@@ -96,12 +95,10 @@ gather_nonzero_inst::typed_primitive_inst(network& network, gather_nonzero_node 
 
 void gather_nonzero_inst::update_shape() {
     auto& node = const_cast<gather_nonzero_node&>(dynamic_cast<const gather_nonzero_node&>(_node));
-    if (_node.get_dependencies().size() == 2) {
-        auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
-        auto gather_nonzero_prim = std::static_pointer_cast<gather_nonzero>(std::const_pointer_cast<primitive>(_node.get_primitive()));
-        gather_nonzero_prim->output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
-        node.set_shape_ready();
-    }
+
+    auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
+    node.output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
+    node.set_shape_ready();
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
     auto new_layout = _node.type()->calc_output_layout(_node);
@@ -112,7 +109,7 @@ void gather_nonzero_inst::update_shape() {
     }
     if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
         set_shape_change();
-    
+
     node.set_output_layout(new_layout);
 }
 
