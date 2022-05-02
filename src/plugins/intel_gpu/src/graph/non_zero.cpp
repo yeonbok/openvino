@@ -60,6 +60,10 @@ static std::vector<int64_t> read_vector(cldnn::memory::ptr mem, cldnn::stream& s
     }
 }
 
+void count_nonzero_inst::on_execute() {
+    output_memory().fill(_network.get_stream(), 0);
+}
+
 // -----------------------------------------------
 // gather_nonzero
 // -----------------------------------------------
