@@ -75,7 +75,11 @@ primitive_type_id gather_nonzero::type_id() {
 layout gather_nonzero_inst::calc_output_layout(gather_nonzero_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for gather_nonzero_node!");
-    return layout{cldnn::data_types::i32, cldnn::format::bfyx, node.output_shape};
+    if (node.is_valid_output_layout()) {
+        return node.get_output_layout();
+    } else {
+        return layout{cldnn::data_types::i32, cldnn::format::bfyx, ov::PartialShape({ov::Dimension::dynamic(), ov::Dimension::dynamic(), 1, 1})};
+    }
 }
 
 std::string gather_nonzero_inst::to_string(gather_nonzero_node const& node) {
@@ -87,7 +91,7 @@ std::string gather_nonzero_inst::to_string(gather_nonzero_node const& node) {
 
     json_composite gather_nonzero_info;
     gather_nonzero_info.add("input id", input.id());
-    gather_nonzero_info.add("output shape", node.output_shape);
+    gather_nonzero_info.add("output layout", node.get_output_layout().to_string());
 
     node_info->add("gather_nonzero info", gather_nonzero_info);
     node_info->dump(primitive_description);
@@ -101,13 +105,11 @@ void gather_nonzero_inst::update_shape() {
     auto& node = const_cast<gather_nonzero_node&>(dynamic_cast<const gather_nonzero_node&>(_node));
 
     auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
-    node.output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
-    node.set_shape_ready();
-
-    GPU_DEBUG_GET_INSTANCE(debug_config);
-    auto new_layout = _node.type()->calc_output_layout(_node);
-    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
+    auto output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
+    auto new_layout = layout{cldnn::data_types::i32, cldnn::format::bfyx, output_shape};
+    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::i32, format::bfyx, tensor{});
     auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
+    GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_IF(debug_config->verbose >= 4) {
         GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
     }

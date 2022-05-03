@@ -53,7 +53,6 @@ struct typed_program_node<gather_nonzero> : public typed_program_node_base<gathe
         support_padding_all(true);
     }
 
-    mutable bool _shape_ready = false;
 public:
     using parent::parent;
 
@@ -61,11 +60,6 @@ public:
         CLDNN_ERROR_LESS_THAN(id(), "the number of dependencies", dependencies.size(), "1", 1, "ERROR: the node has no input");
         return get_dependency(index);
     }
-
-    ov::PartialShape output_shape = ov::PartialShape({ov::Dimension::dynamic(), ov::Dimension::dynamic(), 1, 1});
-    void set_shape_ready() { _shape_ready = true; }
-    void reset_shape_ready() const { _shape_ready = false; }
-    bool get_shape_ready() const { return _shape_ready; }
 };
 
 using gather_nonzero_node = typed_program_node<gather_nonzero>;
