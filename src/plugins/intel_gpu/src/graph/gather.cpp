@@ -18,8 +18,9 @@ primitive_type_id gather::type_id() {
     static primitive_type_base<gather> instance;
     return &instance;
 }
-
+#if 0
 layout gather_inst::calc_output_layout(gather_node const& node) {
+    auto start = std::chrono::high_resolution_clock::now();
     auto desc = node.get_primitive();
 
     auto input_layout = node.input(0).get_output_layout();
@@ -33,51 +34,97 @@ layout gather_inst::calc_output_layout(gather_node const& node) {
 
     {
         ov::op::v8::Gather op;
-        bool is_static = true;
-        for (auto i = 0; i < node.get_dependencies().size(); ++i) {
-            is_static &= node.get_dependency(i).get_output_layout().size.is_static();
-        }
+        std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+        std::vector<ov::PartialShape> input_shapes = {
+            node.get_dependency(0).get_output_layout().size,
+            node.get_dependency(1).get_output_layout().size,
+            ov::PartialShape{
+                1}  // axis input is removed on gather primitive creation, so we can't use get_dependency(2)
+        };
 
-        if (is_static) {
-            //std::cout << "is_static" << std::endl;
-            std::vector<cldnn::StaticShape> output_shapes = {cldnn::StaticShape()};
-            std::vector<cldnn::StaticShape> input_shapes;
-            for (size_t i = 0; i < 2; ++i) {
-                const auto partial_shape = node.get_dependency(i).get_output_layout().size;
-                input_shapes.push_back(partial_shape.get_shape());
-            }
-            input_shapes.push_back(cldnn::StaticShape{{1}});
-            int64_t axis = desc->axis;
+        int64_t axis = desc->axis;
 
-            auto axis_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64,
-                                                                             ov::Shape{1},
-                                                                             static_cast<void*>(&axis));
-            std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
-            ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
+        auto axis_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64,
+                ov::Shape{1},
+                static_cast<void*>(&axis));
+        std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
+        ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
+        auto duration = std::chrono::high_resolution_clock::now() - start;
+        std::cerr << "partial shape, " << node.id() <<  ", " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << ", us\n"; \
             return layout{output_type, output_format, output_shapes[0]};
-        } else {
-            //std::cout << "is_dynamic" << std::endl;
-            std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
-            std::vector<ov::PartialShape> input_shapes = {
-                node.get_dependency(0).get_output_layout().size,
-                node.get_dependency(1).get_output_layout().size,
-                ov::PartialShape{
-                    1}  // axis input is removed on gather primitive creation, so we can't use get_dependency(2)
-            };
-
-            int64_t axis = desc->axis;
-
-            auto axis_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64,
-                                                                             ov::Shape{1},
-                                                                             static_cast<void*>(&axis));
-            std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
-            ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
-            return layout{output_type, output_format, output_shapes[0]};
-        }
     }
 
+    auto duration = std::chrono::high_resolution_clock::now() - start;
+    std::cerr << "error, " << node.id() <<  ", " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << ", us\n"; \
     return layout{output_type, output_format, output_shape};
 }
+
+#else
+layout gather_inst::calc_output_layout(gather_node const& node) {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto desc = node.get_primitive();
+
+    auto input_layout = node.input(0).get_output_layout();
+    auto output_format = desc->output_format;
+    auto output_shape = desc->output_shape;
+
+    auto output_type = input_layout.data_type;
+    if (node.has_fused_primitives()) {
+        output_type = node.get_fused_output_layout().data_type;
+    }
+
+    {
+       ov::op::v8::Gather op;
+       bool is_static = true;
+       for (auto& input : node.get_dependencies()) {
+           is_static &= input->get_output_layout().is_static();
+       }
+
+       if (is_static) {
+           std::vector<cldnn::StaticShape> output_shapes = {cldnn::StaticShape()};
+           std::vector<cldnn::StaticShape> input_shapes;
+           for (size_t i = 0; i < 2; ++i) {
+               const auto partial_shape = node.get_dependency(i).get_output_layout().size;
+               input_shapes.push_back(partial_shape.get_shape());
+           }
+           input_shapes.push_back(cldnn::StaticShape{{1}});
+           int64_t axis = desc->axis;
+
+           auto axis_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64,
+                   ov::Shape{1},
+                   static_cast<void*>(&axis));
+           std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
+           ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
+           auto duration = std::chrono::high_resolution_clock::now() - start;
+           std::cerr << "static shape, " << node.id() <<  ", " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << ", us\n"; \
+               return layout{output_type, output_format, output_shapes[0]};
+       } else {
+           std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+           std::vector<ov::PartialShape> input_shapes = {
+               node.get_dependency(0).get_output_layout().size,
+               node.get_dependency(1).get_output_layout().size,
+               ov::PartialShape{
+                   1}  // axis input is removed on gather primitive creation, so we can't use get_dependency(2)
+           };
+
+           int64_t axis = desc->axis;
+
+           auto axis_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64,
+                   ov::Shape{1},
+                   static_cast<void*>(&axis));
+           std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
+           ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
+           auto duration = std::chrono::high_resolution_clock::now() - start;
+           std::cerr << "partial shape, " << node.id() <<  ", " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << ", us\n"; \
+               return layout{output_type, output_format, output_shapes[0]};
+       }
+    }
+
+    auto duration = std::chrono::high_resolution_clock::now() - start;
+    std::cerr << "error, " << node.id() <<  ", " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << ", us\n"; \
+        return layout{output_type, output_format, output_shape};
+}
+#endif
 
 std::string gather_inst::to_string(gather_node const& node) {
     auto desc = node.get_primitive();
