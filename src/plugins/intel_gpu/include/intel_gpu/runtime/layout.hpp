@@ -6,6 +6,7 @@
 
 #include "tensor.hpp"
 #include "half.hpp"
+#include "gpu_static_shape.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -327,6 +328,10 @@ struct layout {
     /// Constructs layout based on @p data_type and @p size information described by @ref tensor
     layout(data_types data_type, cldnn::format fmt, ov::PartialShape size, padding apadding = padding())
         : data_type(data_type), format(fmt), size(size), data_padding(apadding) { }
+
+    layout(data_types data_type, cldnn::format fmt, cldnn::StaticShape size, padding apadding = padding())
+        : data_type(data_type), format(fmt), size(size.to_partial_shape()), data_padding(apadding) {
+     }
 
     layout(data_types data_type, cldnn::format fmt, tensor size, padding apadding = padding())
         : data_type(data_type), format(fmt), data_padding(apadding) {
