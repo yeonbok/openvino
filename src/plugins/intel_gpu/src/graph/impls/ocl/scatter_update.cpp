@@ -15,7 +15,16 @@ using namespace cldnn;
 namespace cldnn {
 namespace ocl {
 kernel_selector::scatter_update_axis convert_axis(scatter_update::scatter_update_axis axis, const scatter_update_node& arg) {
-    switch (axis) {
+    auto rank = arg.input(0).get_output_layout().get_rank();
+    unsigned cldnn_axis = axis;
+    if (axis >= 2) {
+        auto spatial_axis = axis - 2;
+        const size_t default_dims = 4; // Default and minimum number of dimensions is 4
+        auto spatial_size = std::max(rank, default_dims) - 2;
+        cldnn_axis = spatial_size - spatial_axis - 1 + 2;
+    }
+
+    switch (cldnn_axis) {
         case scatter_update::along_x:
             return kernel_selector::scatter_update_axis::X;
         case scatter_update::along_y:
