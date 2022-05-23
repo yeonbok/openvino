@@ -8,6 +8,7 @@
 #include "intel_gpu/plugin/infer_request.hpp"
 #include "intel_gpu/plugin/compiled_model.hpp"
 #include "intel_gpu/plugin/async_infer_request.hpp"
+#include "intel_gpu/plugin/async_infer_request_legacy.hpp"
 #include "openvino/runtime/intel_gpu/properties.hpp"
 #include "intel_gpu/plugin/infer_request_legacy.hpp"
 
@@ -119,7 +120,6 @@ IInferRequestInternal::Ptr CompiledModel::CreateInferRequest() {
         }
     }
 
-    bool is_legacy = false;
     if (this->_plugin) {
         const auto& core = _plugin->GetCore();
         if (core && core->isNewAPI())
@@ -127,14 +127,17 @@ IInferRequestInternal::Ptr CompiledModel::CreateInferRequest() {
     }
     if (!internalRequest) {
         internalRequest = CreateInferRequestImpl(_networkInputs, _networkOutputs);
-        is_legacy = true;
+        internalRequest->setPointerToExecutableNetworkInternal(shared_from_this());
+        return std::make_shared<AsyncInferRequestLegacy>(std::static_pointer_cast<InferRequestLegacy>(internalRequest),
+                                                         m_taskExecutor,
+                                                         m_waitExecutor,
+                                                         _callbackExecutor);
     }
     internalRequest->setPointerToExecutableNetworkInternal(shared_from_this());
-    return std::make_shared<AsyncInferRequest>(internalRequest,
+    return std::make_shared<AsyncInferRequest>(std::static_pointer_cast<InferRequest>(internalRequest),
                                                m_taskExecutor,
                                                m_waitExecutor,
-                                               _callbackExecutor,
-                                               is_legacy);
+                                               _callbackExecutor);
 }
 
 std::shared_ptr<ngraph::Function> CompiledModel::GetExecGraphInfo() {

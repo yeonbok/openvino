@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-#include "intel_gpu/plugin/async_infer_request.hpp"
+#include "intel_gpu/plugin/async_infer_request_legacy.hpp"
 #include "intel_gpu/plugin/itt.hpp"
 #include <memory>
 
@@ -10,7 +10,7 @@ namespace ov {
 namespace runtime {
 namespace intel_gpu {
 
-AsyncInferRequest::AsyncInferRequest(const InferRequest::Ptr &inferRequest,
+AsyncInferRequestLegacy::AsyncInferRequestLegacy(const InferRequestLegacy::Ptr &inferRequest,
                                      const InferenceEngine::ITaskExecutor::Ptr& taskExecutor,
                                      const InferenceEngine::ITaskExecutor::Ptr& waitExecutor,
                                      const InferenceEngine::ITaskExecutor::Ptr& callbackExecutor)
@@ -20,7 +20,7 @@ AsyncInferRequest::AsyncInferRequest(const InferRequest::Ptr &inferRequest,
     if (!_inferRequest->use_external_queue()) {
         _pipeline.push_back({taskExecutor,
                     [this] {
-                        OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "AsyncInferRequest::PreprocessingAndStartPipeline");
+                        OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "AsyncInferRequestLegacy::PreprocessingAndStartPipeline");
                         _inferRequest->setup_stream_graph();
                         _inferRequest->preprocess();
                         _inferRequest->enqueue();
@@ -29,13 +29,13 @@ AsyncInferRequest::AsyncInferRequest(const InferRequest::Ptr &inferRequest,
     } else {
         _pipeline.push_back({ _waitExecutor,
                         [this] {
-                            OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "AsyncInferRequest::WaitPipeline");
+                            OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "AsyncInferRequestLegacy::WaitPipeline");
                             _inferRequest->wait_notify();
                         } });
     }
 }
 
-void AsyncInferRequest::Infer_ThreadUnsafe() {
+void AsyncInferRequestLegacy::Infer_ThreadUnsafe() {
     if (_inferRequest->use_external_queue()) {
         _inferRequest->setup_stream_graph();
         _inferRequest->preprocess_notify();
@@ -44,7 +44,7 @@ void AsyncInferRequest::Infer_ThreadUnsafe() {
     Parent::Infer_ThreadUnsafe();
 }
 
-void AsyncInferRequest::StartAsync_ThreadUnsafe() {
+void AsyncInferRequestLegacy::StartAsync_ThreadUnsafe() {
     if (_inferRequest->use_external_queue()) {
         _inferRequest->setup_stream_graph();
         _inferRequest->preprocess_notify();
@@ -53,7 +53,7 @@ void AsyncInferRequest::StartAsync_ThreadUnsafe() {
     Parent::StartAsync_ThreadUnsafe();
 }
 
-AsyncInferRequest::~AsyncInferRequest() {
+AsyncInferRequestLegacy::~AsyncInferRequestLegacy() {
     StopAndWait();
 }
 
