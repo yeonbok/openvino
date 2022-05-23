@@ -304,6 +304,11 @@ tensor layout::get_tensor() const {
     if (default_fmt.dimension() > dims.size()) {
         dims.insert(dims.end(), default_fmt.dimension() - dims.size(), 1);
     }
+
+    while (dims.size() > default_fmt.dimension()) {
+        dims.pop_back();
+    }
+
     tensor t(default_fmt, dims);
     return t;
 }
