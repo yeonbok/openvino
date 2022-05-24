@@ -24,22 +24,11 @@ static void CreateScatterUpdateOp(Program& p, const std::shared_ptr<ngraph::op::
         IE_THROW() << "Unsupported parameter nodes type in " << op->get_friendly_name() << " (" << op->get_type_name() << ")";
     }
     int32_t axis = axes_constant->cast_vector<int32_t>()[0];
-    auto getScatterUpdateAxis = [&](int axis) {
-        switch (axis) {
-            case 0: return cldnn::scatter_update::scatter_update_axis::along_b;
-            case 1: return cldnn::scatter_update::scatter_update_axis::along_f;
-            case 2: return cldnn::scatter_update::scatter_update_axis::along_x;
-            case 3: return cldnn::scatter_update::scatter_update_axis::along_y;
-            case 4: return cldnn::scatter_update::scatter_update_axis::along_z;
-            case 5: return cldnn::scatter_update::scatter_update_axis::along_w;
-            default: IE_THROW() << "Unsupported ScatterUpdate axis: " << axis;
-        }
-    };
     auto primitive = cldnn::scatter_update(layerName,
                                            inputPrimitives[0],
                                            inputPrimitives[1],
                                            inputPrimitives[2],
-                                           getScatterUpdateAxis(axis),
+                                           axis,
                                            op->get_friendly_name());
 
     p.AddPrimitive(primitive);

@@ -14,9 +14,9 @@ using namespace cldnn;
 
 namespace cldnn {
 namespace ocl {
-kernel_selector::scatter_update_axis convert_axis(scatter_update::scatter_update_axis axis, const scatter_update_node& arg) {
+kernel_selector::scatter_update_axis convert_axis(const int axis, const scatter_update_node& arg) {
     auto rank = arg.input(0).get_output_layout().get_rank();
-    unsigned cldnn_axis = axis;
+    auto cldnn_axis = axis;
     if (axis >= 2) {
         auto spatial_axis = axis - 2;
         const size_t default_dims = 4; // Default and minimum number of dimensions is 4
@@ -25,20 +25,13 @@ kernel_selector::scatter_update_axis convert_axis(scatter_update::scatter_update
     }
 
     switch (cldnn_axis) {
-        case scatter_update::along_x:
-            return kernel_selector::scatter_update_axis::X;
-        case scatter_update::along_y:
-            return kernel_selector::scatter_update_axis::Y;
-        case scatter_update::along_z:
-            return kernel_selector::scatter_update_axis::Z;
-        case scatter_update::along_w:
-            return kernel_selector::scatter_update_axis::W;
-        case scatter_update::along_f:
-            return kernel_selector::scatter_update_axis::FEATURE;
-        case scatter_update::along_b:
-            return kernel_selector::scatter_update_axis::BATCH;
-        default:
-            CLDNN_ERROR_MESSAGE(arg.id(), "Unsupported Axis");
+        case 0: return kernel_selector::scatter_update_axis::BATCH;
+        case 1: return kernel_selector::scatter_update_axis::FEATURE;
+        case 2: return kernel_selector::scatter_update_axis::X;
+        case 3: return kernel_selector::scatter_update_axis::Y;
+        case 4: return kernel_selector::scatter_update_axis::Z;
+        case 5: return kernel_selector::scatter_update_axis::W;
+        default: CLDNN_ERROR_MESSAGE(arg.id(), "Unsupported Axis");
     }
     return kernel_selector::scatter_update_axis::X;
 }
