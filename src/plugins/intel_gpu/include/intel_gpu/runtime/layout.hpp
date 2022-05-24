@@ -350,8 +350,7 @@ struct layout {
     }
 
     friend bool operator==(const layout& lhs, const layout& rhs) {
-        auto check_layout = (lhs.is_dynamic() || rhs.is_dynamic()) ? (lhs.size == rhs.size) : (lhs.get_dims() == rhs.get_dims());
-        return lhs.data_type == rhs.data_type && lhs.format == rhs.format && check_layout && lhs.data_padding == rhs.data_padding;
+        return lhs.data_type == rhs.data_type && lhs.format == rhs.format && lhs.size == rhs.size && lhs.data_padding == rhs.data_padding;
     }
 
     friend bool operator!=(const layout& lhs, const layout& rhs) {
