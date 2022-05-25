@@ -22,7 +22,6 @@ primitive_type_id strided_slice::type_id() {
 layout strided_slice_inst::calc_output_layout(strided_slice_node const& node) {
     auto desc = node.get_primitive();
     auto input_layout = node.input(0).get_output_layout();
-
     ov::op::v1::StridedSlice op;
     std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
     std::vector<ov::PartialShape> input_shapes = {
