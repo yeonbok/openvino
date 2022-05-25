@@ -23,9 +23,8 @@ layout gather_inst::calc_output_layout(gather_node const& node) {
     auto input_layout = node.input(0).get_output_layout();
     auto output_type = input_layout.data_type;
 
-    {
+    if (desc->batch_dim == 0) {
         auto output_format = desc->output_format;
-
         ov::op::v8::Gather op;
         std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
         std::vector<ov::PartialShape> input_shapes = {
@@ -36,7 +35,6 @@ layout gather_inst::calc_output_layout(gather_node const& node) {
 
         int64_t axis = desc->axis;
 
-
         auto axis_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64, ov::Shape{1}, static_cast<void*>(&axis));
         std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
         ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
@@ -46,7 +44,6 @@ layout gather_inst::calc_output_layout(gather_node const& node) {
     auto shape = desc->output_shape.to_shape();
     std::vector<tensor::value_type> dims_converted(shape.begin(), shape.end());
     // extend shape to 4d
-    for (size_t i = dims_converted.size(); i < 4; i++)
         dims_converted.push_back(1);
 
     format output_format = input_layout.format;

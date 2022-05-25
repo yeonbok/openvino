@@ -31,23 +31,39 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node) {
 
     auto output_type = node.get_primitive()->output_data_type ? *node.get_primitive()->output_data_type : input_node_layout.data_type;
 
-    ov::PartialShape out_pshape;
-    auto format = input_node_layout.format;
-    for (size_t i = 0; i < node.inputs_count(); i++) {
-        if (i == primary_input_idx)
-            continue;
+    auto get_output_layout = [&](){
+        auto format = input_node_layout.format;
+        if (input_node_layout.is_static()) {
+            auto size = input_node_layout.get_tensor();
+            for (size_t i = 0; i < node.inputs_count(); i++) {
+                if (i == primary_input_idx)
+                    continue;
 
-        auto l = node.input(i).get_non_padded_output_layout();
-        if (!ov::PartialShape::broadcast_merge_into(out_pshape, l.size, ov::op::AutoBroadcastSpec(ov::op::AutoBroadcastType::NUMPY))) {
-            IE_THROW() << "incorrect input shapes\n";
+                auto l = node.input(i).get_non_padded_output_layout();
+                size = tensor::max(size, l.get_tensor());
+                if (l.format == format::b_fs_zyx_fsv16)  // use optimized 5D
+                    format = format::b_fs_zyx_fsv16;
+                else if (l.format == format::bs_fs_zyx_bsv16_fsv16)
+                    format = format::bs_fs_zyx_bsv16_fsv16;
+            }
+            return layout(output_type, format, size);
+        } else {
+            ov::PartialShape out_pshape;
+            for (size_t i = 0; i < node.inputs_count(); i++) {
+                auto l = node.input(i).get_non_padded_output_layout();
+                if (!ov::PartialShape::broadcast_merge_into(out_pshape, l.size, ov::op::AutoBroadcastSpec(ov::op::AutoBroadcastType::NUMPY))) {
+                    IE_THROW() << "incorrect input shapes\n";
+                }
+                if (l.format == format::b_fs_zyx_fsv16)  // use optimized 5D
+                    format = format::b_fs_zyx_fsv16;
+                else if (l.format == format::bs_fs_zyx_bsv16_fsv16)
+                    format = format::bs_fs_zyx_bsv16_fsv16;
+            }
+            return layout(output_type, format, out_pshape);
         }
+    };
 
-        if (l.format == format::b_fs_zyx_fsv16)  // use optimized 5D
-            format = format::b_fs_zyx_fsv16;
-        else if (l.format == format::bs_fs_zyx_bsv16_fsv16)
-            format = format::bs_fs_zyx_bsv16_fsv16;
-    }
-    auto output_layout = layout(output_type, format, out_pshape);
+    auto output_layout = get_output_layout();
 
     auto mode = node.get_primitive()->mode;
     // list of operations supported for integer types
