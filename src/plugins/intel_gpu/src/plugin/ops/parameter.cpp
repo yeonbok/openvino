@@ -154,7 +154,6 @@ static void CreateParameterOp(Program& p, const std::shared_ptr<ngraph::op::v0::
 
         if (networkInputLayout.format == cldnn::format::nv12 && networkInputLayout.get_tensor().batch[0] > 1) {
             networkInputLayout.set_tensor({ 1, TensorValue(inputDims[3]), TensorValue(inputDims[2]), TensorValue(inputDims[1]) });
-
             std::vector<cldnn::primitive_id> inputs;
             for (size_t i = 0; i < inputDims[0].get_length(); ++i) {
                 std::string batched_name = inputName + "_" + std::to_string(i);
