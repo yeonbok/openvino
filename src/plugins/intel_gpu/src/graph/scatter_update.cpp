@@ -65,7 +65,7 @@ layout scatter_update_inst::calc_output_layout(scatter_update_node const& node) 
             "Undefined behavior ScatterUpdate: indices size must not be larger than the output size along the Axis.");
     }
 
-    if (nonempty_indices_dims + static_cast<size_t>(axis) > updates_number_of_dims) {
+    if (static_cast<size_t>(axis) > updates_number_of_dims) {
         CLDNN_ERROR_MESSAGE(node.id(),
             "Undefined behavior ScatterUpdate: indices dimention must not be larger than the updates[:Axis] dimentional size.");
     }
