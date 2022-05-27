@@ -63,9 +63,6 @@ struct gather_nonzero_impl : typed_primitive_impl_ocl<gather_nonzero> {
 
 public:
     static primitive_impl* create(const gather_nonzero_node& arg) {
-        // if (arg.can_be_optimized()) {
-        //     return new gather_nonzero_impl(arg, {});
-        // }
         const auto& prim = arg.get_primitive();
         const auto& param_info = kernel_impl_params(arg.get_program(), prim, arg.get_unique_id(),
                                                     arg.get_input_layouts(), arg.get_output_layout(),
