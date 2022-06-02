@@ -25,7 +25,7 @@ struct gemm_impl : typed_primitive_impl_ocl<gemm> {
     }
 
 public:
-    static primitive_impl* create(const gemm_node& arg, const kernel_impl_params& impl_param) {
+    static primitive_impl* create(const gemm_node& arg, std::shared_ptr<kernel_impl_params> impl_param) {
         auto desc = arg.get_primitive();
         auto get_gemm_input_layouts = [desc](const std::vector<layout>& input_layouts, const layout& output_layout) {
             auto gemm_specific_pshape = [](ov::PartialShape& pshape) {
@@ -103,15 +103,15 @@ public:
             }
             return layout;
         };
-        const auto input_layouts = get_gemm_input_layouts(impl_param.input_layouts, impl_param.output_layout);
-        const auto output_layout = get_gemm_output_layout(input_layouts, impl_param.output_layout);
+        const auto input_layouts = get_gemm_input_layouts(impl_param->input_layouts, impl_param->output_layout);
+        const auto output_layout = get_gemm_output_layout(input_layouts, impl_param->output_layout);
         // TODO(Andrew): Set input_layouts/output_layout to impl_param
-        auto gemm_params = get_default_params<kernel_selector::gemm_params>(impl_param, 1);
+        auto gemm_params = get_default_params<kernel_selector::gemm_params>(*impl_param, 1);
         auto gemm_optional_params =
             get_default_optional_params<kernel_selector::gemm_optional_params>(arg.get_program());
 
         for (size_t i = 1; i < arg.inputs_count(); i++) {
-            gemm_params.inputs.push_back(convert_data_tensor(impl_param.input_layouts[i]));
+            gemm_params.inputs.push_back(convert_data_tensor(impl_param->input_layouts[i]));
         }
 
         gemm_params.alpha = desc->alpha;
@@ -120,7 +120,7 @@ public:
         gemm_params.transpose_input1 = desc->transpose_input1;
 
         bool is_quantized = true;
-        for (auto& input : impl_param.input_layouts)
+        for (auto& input : impl_param->input_layouts)
             is_quantized &= data_type_traits::is_quantized(input.data_type);
 
         if (is_quantized) {
