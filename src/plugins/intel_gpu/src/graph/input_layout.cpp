@@ -59,13 +59,7 @@ void input_layout_inst::set_data(memory::ptr mem) {
 
     _has_valid_input = true;
     _output_changed = true;
-    auto check_shape_changed = [&]() {
-        if (ol.is_dynamic())
-            return mem->get_layout() != ol;
-        else
-            return mem->get_layout().get_layout_with_dims() != ol.get_layout_with_dims();
-    };
-    _shape_changed = check_shape_changed();
+    _shape_changed = mem->get_layout() != ol;
 
     if (_shape_changed) {
         node.invalidate_users();
