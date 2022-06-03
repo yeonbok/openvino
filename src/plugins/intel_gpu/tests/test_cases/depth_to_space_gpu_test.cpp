@@ -231,7 +231,7 @@ TEST(depth_to_space_fp32_gpu, d112960540_bs2) {
     auto output = outputs.at("depth_to_space").get_memory();
     cldnn::mem_lock<FLOAT16> output_ptr (output, get_test_stream());
 
-    std::vector<uint16_t> perm = { 0,4,5,2,1,3 };
+    std::vector<uint16_t> perm = { 0,3,4,1,5,2 };
 
     topology topology_ref;
     topology_ref.add(input_layout("Input0", input1->get_layout()));
