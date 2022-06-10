@@ -18,6 +18,20 @@
 #include <algorithm>
 
 using namespace cldnn;
+#define START_PERF(name) \
+{ \
+    if (std::getenv("OOOQ") != nullptr) { \
+        tmp_time = std::chrono::high_resolution_clock::now();\
+    }\
+}
+
+#define END_PERF(name) \
+{ \
+    if (std::getenv("OOOQ") != nullptr) { \
+        std::cerr << #name << "," << std::chrono::duration_cast<std::chrono::microseconds>( \
+            std::chrono::high_resolution_clock::now() - tmp_time).count() << "\n";\
+    }\
+}
 
 namespace {
 
@@ -70,6 +84,7 @@ protected:
 }  // namespace
 
 void oooq_memory_dependencies::run(program& p) {
+    auto tmp_time = std::chrono::high_resolution_clock::now();
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "CLDNN::pass::OooqMemoryDependencies");
     // For oooq memory dependencies nodes A and B can't share memory if
     // processing_num(A) < processing_num(B) and there is no path from A to B.
@@ -77,15 +92,22 @@ void oooq_memory_dependencies::run(program& p) {
 
     // First create transitive closure of the graph,
     // giving us mapping of node to set of all users that can be reached from this node.
+    START_PERF(point1)
     auto& processing_order = p.get_processing_order();
-
-    // maps program nodes to bimap vector ids
-    auto user_map = std::map<program_node*, unsigned int>();
-    unsigned int processing_order_idx = 0;
-    for (auto node : processing_order) {
-        user_map[node] = processing_order_idx++;
+    std::list<program_node*> processing_order_except_const;
+    for (auto n : processing_order) {
+        if (!n->is_constant()) {
+            processing_order_except_const.push_back(n);
+        }
     }
 
+    // maps program nodes to bimap vector ids
+    auto user_map = std::unordered_map<program_node*, unsigned int>();
+    unsigned int processing_order_idx = 0;
+    for (auto node : processing_order_except_const) {
+        user_map[node] = processing_order_idx++;
+    }
+    END_PERF(point1)
     unsigned int num_nodes = static_cast<unsigned int>(user_map.size());
 
     // full cross ref [node<->node] bitmap.
@@ -94,6 +116,7 @@ void oooq_memory_dependencies::run(program& p) {
     std::vector<bits_64> user_bitmap(num_nodes, bits_64(num_nodes));
     bits_64 suspect_nodes(num_nodes);
 
+    START_PERF(point2)
     // init bitmaps from direct node users
     for (const auto& node : user_map) {
         for (const auto& user : node.first->get_users()) {
@@ -111,6 +134,7 @@ void oooq_memory_dependencies::run(program& p) {
         }
     }
 
+    END_PERF(point2)
     // Iteratively extend the users set by adding closure over existing users until no change occurs.
     bool changed = true;
     while (changed) {
@@ -119,7 +143,7 @@ void oooq_memory_dependencies::run(program& p) {
             auto& users = user_bitmap[n];
 
             // iterate over all users
-            for (unsigned int user_id = 0; user_id < num_nodes; user_id++) {
+            for (unsigned int user_id = n + 1; user_id < num_nodes; user_id++) {
                 // if we have this user set, then add its sub-users to the map
                 if (users.is_set(user_id)) {
                     changed |= users._or(user_bitmap[user_id]);
@@ -134,13 +158,16 @@ void oooq_memory_dependencies::run(program& p) {
     };
 
     unsigned int A = 0;
-    auto itr_A = processing_order.begin();
+    auto itr_A = processing_order_except_const.begin();
 
-    while (itr_A != processing_order.end()) {
+    while (itr_A != processing_order_except_const.end()) {
+        START_PERF(point3_1)
         if (suspect_nodes.is_set(A)) {
             std::vector<std::pair<program_node*, unsigned int>> deps;
             for (const auto& dep : (*itr_A)->get_dependencies()) {
-                deps.emplace_back(dep, user_map.at(dep));
+                if (!dep->is_constant()) {
+                    deps.emplace_back(dep, user_map.at(dep));
+                }
             }
 
             std::sort(deps.begin(), deps.end(),
@@ -159,9 +186,13 @@ void oooq_memory_dependencies::run(program& p) {
                 }
             }
         }
+        END_PERF(point3_1)
+        START_PERF(point3_2)
         unsigned int B = ++A;
         auto itr_B = ++itr_A;
-        while (itr_B != processing_order.end()) {
+        // below loop is time consuming.
+        while (itr_B != processing_order_except_const.end()) {
+            //std::cout << "itr_B : " << (*itr_B)->id() << std::endl;
             if (!are_connected(A, B)) {
                 add_memory_dependency(*itr_A, *itr_B);
                 add_memory_dependency(*itr_B, *itr_A);
@@ -169,5 +200,7 @@ void oooq_memory_dependencies::run(program& p) {
             itr_B++;
             B++;
         }
+        END_PERF(point3_2)
+        //std::cout << "================" << std::endl;
     }
 }

@@ -45,6 +45,17 @@
 #include <chrono>
 #include <thread>
 #endif
+#define PRINT_TIME2(func) \
+{ \
+    if (std::getenv("PROFILE2") != nullptr) { \
+        auto start = std::chrono::high_resolution_clock::now(); \
+        func; \
+        auto duration = std::chrono::high_resolution_clock::now() - start; \
+        std::cerr << #func << "," << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << " us\n"; \
+    } else { \
+        func; \
+    } \
+}
 
 namespace cldnn {
 
@@ -256,13 +267,13 @@ network::network(program::ptr program, stream::ptr stream, bool is_internal, boo
         wait_for_the_turn();
     }
 
-    allocate_primitives();
-    configure_primitives_second_output();
-    check_names();
-    build_insts_deps();
-    build_exec_order();
-    validate_primitives();
-    add_default_output_chains();
+    PRINT_TIME2(allocate_primitives());
+    PRINT_TIME2(configure_primitives_second_output());
+    PRINT_TIME2(check_names());
+    PRINT_TIME2(build_insts_deps());
+    PRINT_TIME2(build_exec_order());
+    PRINT_TIME2(validate_primitives());
+    PRINT_TIME2(add_default_output_chains());
 }
 
 network::network(engine& engine,

@@ -89,6 +89,30 @@
 #ifdef __unix__
 #include <sys/resource.h>
 #endif
+#define PRINT_TIME2(func) \
+{ \
+    if (std::getenv("PROFILE2") != nullptr) { \
+        auto start = std::chrono::high_resolution_clock::now(); \
+        func; \
+        auto duration = std::chrono::high_resolution_clock::now() - start; \
+        std::cerr << #func << "," << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << " us\n"; \
+    } else { \
+        func; \
+    } \
+}
+
+
+#define PRINT_TIME(func) \
+{ \
+    if (std::getenv("PROFILE") != nullptr) { \
+        auto start = std::chrono::high_resolution_clock::now(); \
+        func; \
+        auto duration = std::chrono::high_resolution_clock::now() - start; \
+        std::cerr << "prog " << prog_id << "," << #func << "," << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() << " us\n"; \
+    } else { \
+        func; \
+    } \
+}
 
 using namespace ov::runtime::intel_gpu;
 
@@ -114,7 +138,7 @@ program::program(engine& engine_ref,
     if (no_optimizations) {
         init_graph();
     } else {
-        build_program(is_internal);
+        PRINT_TIME2(build_program(is_internal));
     }
 }
 
@@ -152,7 +176,7 @@ void program::init_primitives() {
 }
 
 void program::compile() {
-    _kernels_cache->build_all();
+    PRINT_TIME(_kernels_cache->build_all());
 }
 
 void program::init_kernels() {
@@ -468,14 +492,14 @@ void program::build_program(bool is_internal) {
 
 void program::init_graph() {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::InitGraph");
-    apply_opt_pass<graph_initializations>();
+    PRINT_TIME(apply_opt_pass<graph_initializations>());
 
-    apply_opt_pass<calculate_prior_boxes>();
+    PRINT_TIME(apply_opt_pass<calculate_prior_boxes>());
 
-    apply_opt_pass<mark_nodes>();
+    PRINT_TIME(apply_opt_pass<mark_nodes>());
 }
 
-void program::run_graph_compilation() { apply_opt_pass<compile_graph>(); }
+void program::run_graph_compilation() { PRINT_TIME(apply_opt_pass<compile_graph>()); }
 
 void program::pre_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PreOptimizeGraph");
@@ -484,14 +508,14 @@ void program::pre_optimize_graph(bool is_internal) {
         load_tuning_cache();
 
     // trim to outputs
-    apply_opt_pass<trim_to_outputs>();  // ToDo remove hidden dependencies from trimm pass
+    PRINT_TIME(apply_opt_pass<trim_to_outputs>());  // ToDo remove hidden dependencies from trimm pass
 
     // handle symmetric and asymmetric padding for input
-    apply_opt_pass<handle_input_padding>();
+    PRINT_TIME(apply_opt_pass<handle_input_padding>());
 
-    processing_order.calculate_BFS_processing_order();  // this method makes sense only for OOOQ (out of order execution queue)
+    PRINT_TIME(processing_order.calculate_BFS_processing_order());  // this method makes sense only for OOOQ (out of order execution queue)
 
-    apply_opt_pass<reverse_optional_nodes_outputs>();
+    PRINT_TIME(apply_opt_pass<reverse_optional_nodes_outputs>());
 
     bool output_size_handling_enabled = analyze_output_size_handling_need();
     for (auto& node : processing_order) {
@@ -500,7 +524,7 @@ void program::pre_optimize_graph(bool is_internal) {
     }
 
     if (options.get<build_option_type::optimize_data>()->enabled()) {
-        apply_opt_pass<prepare_quantization>();
+        PRINT_TIME(apply_opt_pass<prepare_quantization>());
     }
 
     layout_optimizer lo(output_size_handling_enabled);
@@ -508,65 +532,65 @@ void program::pre_optimize_graph(bool is_internal) {
 
     reorder_factory rf;
     if (options.get<build_option_type::optimize_data>()->enabled()) {
-        apply_opt_pass<prepare_primitive_fusing_through>();
+        PRINT_TIME(apply_opt_pass<prepare_primitive_fusing_through>());
 
-        apply_opt_pass<pre_replace_deconv>(lo);
+        PRINT_TIME(apply_opt_pass<pre_replace_deconv>(lo));
 
-        apply_opt_pass<prepare_primitive_fusing>(lo);
+        PRINT_TIME(apply_opt_pass<prepare_primitive_fusing>(lo));
 
-        apply_opt_pass<reorder_inputs>(lo, rf);
+        PRINT_TIME(apply_opt_pass<reorder_inputs>(lo, rf));
         // Ideally this should be done before fusing to simplify logic and make the pass more powerful,
         // but after format selection to select correct alignment.
         // Unfortunately those passes currently happen in reverse order.
-        apply_opt_pass<concat_input_order>();
+        PRINT_TIME(apply_opt_pass<concat_input_order>());
 
         // TODO this code should be moved to post compilation after kernel selector will support handling reorder bias
-        apply_opt_pass<pre_optimize_bias>(rf);
+        PRINT_TIME(apply_opt_pass<pre_optimize_bias>(rf));
 
         // passes regarding conv + eltwise optimizations
 
         // shrinking eltwise if users are conv 1x1 with stride > 1 optimization
-        apply_opt_pass<eltwise_shrinking>();
+        PRINT_TIME(apply_opt_pass<eltwise_shrinking>());
 
         // trying to set stride to 1x1 by shrinking convolutions before eltwise if doable
-        apply_opt_pass<eltwise_remove_stride>();
+        PRINT_TIME(apply_opt_pass<eltwise_remove_stride>());
     }
 
-    apply_opt_pass<strided_slice_optimize>();
+    PRINT_TIME(apply_opt_pass<strided_slice_optimize>());
 
-    apply_opt_pass<handle_reshape>();
+    PRINT_TIME(apply_opt_pass<handle_reshape>());
 
-    apply_opt_pass<prepare_padding>(output_size_handling_enabled);
+    PRINT_TIME(apply_opt_pass<prepare_padding>(output_size_handling_enabled));
 
-    apply_opt_pass<remove_redundant_reorders>(lo, options.get<build_option_type::optimize_data>()->enabled());
+    PRINT_TIME(apply_opt_pass<remove_redundant_reorders>(lo, options.get<build_option_type::optimize_data>()->enabled()));
 
     if (!is_internal) {
         // ToDo remove hidden dependencies from propagate_constants pass
-        apply_opt_pass<propagate_constants>();
+        PRINT_TIME(apply_opt_pass<propagate_constants>());
     }
 
     // try to fuse buffers (i.e. depth_concat in bfyx format) after padding calculations
     if (options.get<build_option_type::optimize_data>()->enabled()) {
-        apply_opt_pass<prepare_buffer_fusing>();
+        PRINT_TIME(apply_opt_pass<prepare_buffer_fusing>());
     }
 
     // check if there exists some layout incompatibilities and add an reorder node if required
-    apply_opt_pass<add_required_reorders>();
+    PRINT_TIME(apply_opt_pass<add_required_reorders>());
 
     // add optimization attributes for onednn primitives
-    apply_opt_pass<add_onednn_optimization_attributes>();
+    PRINT_TIME(apply_opt_pass<add_onednn_optimization_attributes>());
 }
 
 void program::post_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PostOptimizeGraph");
     // input reorder for fully connected if necessary
-    apply_opt_pass<post_input_reorder>();
+    PRINT_TIME(apply_opt_pass<post_input_reorder>());
 
     reorder_factory rf;
     layout_optimizer lo;
-    apply_opt_pass<post_optimize_weights>(rf);
+    PRINT_TIME(apply_opt_pass<post_optimize_weights>(rf));
 
-    apply_opt_pass<remove_redundant_reorders>(lo, false, true);  // TODO: do we need it at this place also?
+    PRINT_TIME(apply_opt_pass<remove_redundant_reorders>(lo, false, true));  // TODO: do we need it at this place also?
 
 #ifdef GPU_DEBUG_CONFIG
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -575,14 +599,14 @@ void program::post_optimize_graph(bool is_internal) {
     if (!is_internal && !options.get<build_option_type::partial_build_program>()->enabled()) {
 #endif
         // ToDo remove hidden dependencies from propagate_constants pass
-        apply_opt_pass<propagate_constants>();
+        PRINT_TIME(apply_opt_pass<propagate_constants>());
     }
 
     if (options.get<build_option_type::optimize_data>()->enabled())
-        apply_opt_pass<remove_redundant_reorders>(lo, false, true, true);  // pass to remove output reorders while all others graph optimizations were done
+        PRINT_TIME(apply_opt_pass<remove_redundant_reorders>(lo, false, true, true));
 
     // update loop input/output primitive mappings
-    apply_opt_pass<update_loop_primitive_map>();
+    PRINT_TIME(apply_opt_pass<update_loop_primitive_map>());
 }
 
 // mark if the node is constant assuming that all dependencies are marked properly
@@ -704,9 +728,9 @@ void program::prepare_memory_dependencies() {
     if (!get_engine().configuration().use_memory_pool)
         return;
 
-    apply_opt_pass<basic_memory_dependencies>();
-    apply_opt_pass<skipped_branch_memory_dependencies>();
-    apply_opt_pass<oooq_memory_dependencies>();
+    PRINT_TIME(apply_opt_pass<basic_memory_dependencies>());
+    PRINT_TIME(apply_opt_pass<skipped_branch_memory_dependencies>());
+    PRINT_TIME(apply_opt_pass<oooq_memory_dependencies>());
 }
 
 std::string program::get_memory_dependencies_string() const {
@@ -1542,7 +1566,7 @@ std::pair<int64_t, int64_t> program::get_estimated_device_mem_usage() {
         } else if (node->is_type<mutable_data>() && node->get_dependencies().empty()) {
             continue;
         } else {
-            allocated_mem_ptrs.insert(primitive_inst::allocate_output(engine, pool, *node, false));
+            allocated_mem_ptrs.insert(primitive_inst::allocate_output(engine, pool, *node, 0, false));
         }
     }
 
