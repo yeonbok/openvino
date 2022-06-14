@@ -26,7 +26,12 @@ layout reduce_inst::calc_output_layout(reduce_node const& node) {
     auto output_type = input_layout.data_type;
     auto mode = desc->mode;
     auto reduce_axes = desc->axes;
-    auto in_dims = input_layout.get_tensor().sizes();
+    auto in_dims = input_layout.get_dims();
+
+    for (size_t a = 0; a < reduce_axes.size(); a++) {
+        reduce_axes[a] = (reduce_axes[a] > 1)? (in_dims.size() - reduce_axes[a] + 1)
+            : reduce_axes[a];
+    }
 
     for (size_t a = 0; a < reduce_axes.size(); a++) {
         in_dims[reduce_axes[a]] = 1;
@@ -40,7 +45,8 @@ layout reduce_inst::calc_output_layout(reduce_node const& node) {
             if (!index_to_remove)
                 updated_dims.push_back(in_dims[b_f_index]);
         }
-        for (size_t x_w_index = format_dim - 1; x_w_index >= 2; x_w_index--) {
+
+        for (size_t x_w_index = 2; x_w_index < format_dim; x_w_index++) {
             bool index_to_remove = std::find(reduce_axes.begin(), reduce_axes.end(), x_w_index) != reduce_axes.end();
             if (!index_to_remove)
                 updated_dims.push_back(in_dims[x_w_index]);
@@ -48,12 +54,15 @@ layout reduce_inst::calc_output_layout(reduce_node const& node) {
 
         if (input_format.dimension() == 4 && reduce_axes.size() == 1)
             updated_dims.push_back(1);
-        if (updated_dims.size() > 2)
-            std::reverse(updated_dims.begin() + 2, updated_dims.end());
 
         // Fill updated dims to format_dim size
-        while (updated_dims.size() < format_dim)
-            updated_dims.push_back(1);
+        while (updated_dims.size() < format_dim) {
+            if (updated_dims.size() > 2) {
+                updated_dims.insert(std::next(updated_dims.begin(), 2), 1);
+            } else {
+                updated_dims.push_back(1);
+            }
+        }
 
         in_dims = std::move(updated_dims);
     }
@@ -70,12 +79,15 @@ layout reduce_inst::calc_output_layout(reduce_node const& node) {
     if (node.has_fused_primitives())
         output_type = node.get_fused_output_layout().data_type;
 
-    if (format_dim == 6)
-        return layout{output_type, input_format, tensor(batch(in_dims[0]), feature(in_dims[1]), spatial(in_dims[2], in_dims[3], in_dims[4], in_dims[5]))};
-    else if (format_dim == 5)
-        return layout{output_type, input_format, tensor(batch(in_dims[0]), feature(in_dims[1]), spatial(in_dims[2], in_dims[3], in_dims[4]))};
-    else
-        return layout{output_type, input_format, tensor(batch(in_dims[0]), feature(in_dims[1]), spatial(in_dims[2], in_dims[3]))};
+    ov::Shape shape;
+    if (format_dim == 6) {
+        shape = ov::Shape{in_dims[0], in_dims[1], in_dims[2], in_dims[3], in_dims[4], in_dims[5]};
+    } else if (format_dim == 5) {
+        shape = ov::Shape{in_dims[0], in_dims[1], in_dims[2], in_dims[3], in_dims[4]};
+    } else {
+        shape = ov::Shape{in_dims[0], in_dims[1], in_dims[2], in_dims[3]};
+    }
+    return layout{output_type, input_format, ov::PartialShape(shape)};
 }
 
 std::string reduce_inst::to_string(reduce_node const& node) {

@@ -76,7 +76,8 @@ public:
 
         auto input_layout = impl_param->input_layouts[0];
         gather_params.axis = convert_axis(prim->axis, input_layout.get_rank());
-        gather_params.batch_dim = size_t(prim->batch_dim);
+        gather_params.batch_dim = (prim->batch_dim >= 0) ? prim->batch_dim
+                        : (indices_shape.rank().get_length() + prim->batch_dim);
         gather_params.support_neg_ind = prim->support_neg_ind;
 
         gather_params.inputs.push_back(convert_data_tensor(impl_param->input_layouts[1]));
