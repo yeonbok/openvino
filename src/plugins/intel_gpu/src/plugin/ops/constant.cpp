@@ -117,9 +117,9 @@ static void CreateConstantOp(Program& p, const std::shared_ptr<ngraph::op::v0::C
         } else if (ngraph::is_type<ngraph::op::v0::PRelu>(outOp) && node.get_index() == 1) {
             // PReLU slope tensor reshape policy
             //
-            // 1. 1-dim slope is handled by 'getConstTensor'.
-            //   ex) [1] --> [1, 1, 1, 1]
-            //       [N] --> [1, N, 1, 1]
+            // 1. 1-dim slope is handled by replacing the output shape of constant with the input shape of PReLU.
+            //   ex) [1] --> [1, 1]
+            //       [N] --> [1, N]
             //
             // 2. Multi-dims slope tensor is handled by the numpy broadcasting rule that is defined at
             //    'https://docs.openvino.ai/latest/openvino_docs_ops_broadcast_rules.html'.
