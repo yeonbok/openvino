@@ -22,10 +22,15 @@ layout gather_inst::calc_output_layout(gather_node const& node) {
     auto desc = node.get_primitive();
     auto input_layout = node.input(0).get_output_layout();
     auto output_type = input_layout.data_type;
+    auto output_format = desc->output_format;
 
-    if (desc->batch_dim == 0) {
-        auto output_format = desc->output_format;
+    if (node.has_fused_primitives()) {
+        output_type = node.get_fused_output_layout().data_type;
+    }
+
+    {
         ov::op::v8::Gather op;
+        op.set_batch_dims(desc->batch_dim);
         std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
         std::vector<ov::PartialShape> input_shapes = {
             node.get_dependency(0).get_output_layout().size,
@@ -46,7 +51,7 @@ layout gather_inst::calc_output_layout(gather_node const& node) {
     // extend shape to 4d
         dims_converted.push_back(1);
 
-    format output_format = input_layout.format;
+    output_format = input_layout.format;
     if (dims_converted.size() == 5) {
         switch (input_layout.format) {
         case format::bfyx:
