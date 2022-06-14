@@ -25,17 +25,13 @@ struct count_nonzero_impl : typed_primitive_impl_ocl<count_nonzero> {
         return make_unique<count_nonzero_impl>(*this);
     }
 
-    static primitive_impl* create(const count_nonzero_node& arg) {
+    static primitive_impl* create(const count_nonzero_node& arg, std::shared_ptr<kernel_impl_params> impl_param) {
         // if (arg.can_be_optimized()) {
         //     return new count_nonzero_impl(arg, {});
         // }
         const auto& prim = arg.get_primitive();
-        const auto& param_info = kernel_impl_params(arg.get_program(), prim, arg.get_unique_id(),
-                                                    arg.get_input_layouts(), arg.get_output_layout(),
-                                                    arg.get_fused_primitives(),
-                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
 
-        auto nonzero_params = get_default_params<kernel_selector::count_nonzero_params>(param_info);
+        auto nonzero_params = get_default_params<kernel_selector::count_nonzero_params>(*impl_param);
         auto nonzero_optional_params =
             get_default_optional_params<kernel_selector::count_nonzero_optional_params>(arg.get_program());
 
@@ -62,20 +58,17 @@ struct gather_nonzero_impl : typed_primitive_impl_ocl<gather_nonzero> {
     }
 
 public:
-    static primitive_impl* create(const gather_nonzero_node& arg) {
+    static primitive_impl* create(const gather_nonzero_node& arg, std::shared_ptr<kernel_impl_params> impl_param) {
         // if (arg.can_be_optimized()) {
         //     return new gather_nonzero_impl(arg, {});
         // }
         const auto& prim = arg.get_primitive();
-        const auto& param_info = kernel_impl_params(arg.get_program(), prim, arg.get_unique_id(),
-                                                    arg.get_input_layouts(), arg.get_output_layout(),
-                                                    arg.get_fused_primitives(),
-                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
-        auto nonzero_params = get_default_params<kernel_selector::gather_nonzero_params>(param_info);
+
+        auto nonzero_params = get_default_params<kernel_selector::gather_nonzero_params>(*impl_param);
         auto nonzero_optional_params =
             get_default_optional_params<kernel_selector::gather_nonzero_optional_params>(arg.get_program());
 
-        nonzero_params.inputs.push_back(convert_data_tensor(arg.input(1).get_output_layout()));
+        nonzero_params.inputs.push_back(convert_data_tensor(impl_param->input_layouts[1]));
 
         auto& kernel_selector = kernel_selector::gather_nonzero_kernel_selector::Instance();
         auto best_kernels = kernel_selector.GetBestKernels(nonzero_params, nonzero_optional_params);

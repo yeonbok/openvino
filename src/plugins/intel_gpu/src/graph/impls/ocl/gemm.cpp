@@ -103,9 +103,9 @@ public:
             }
             return layout;
         };
-        const auto input_layouts = get_gemm_input_layouts(impl_param->input_layouts, impl_param->output_layout);
-        const auto output_layout = get_gemm_output_layout(input_layouts, impl_param->output_layout);
-        // TODO(Andrew): Set input_layouts/output_layout to impl_param
+        impl_param->input_layouts = get_gemm_input_layouts(impl_param->input_layouts, impl_param->output_layout);
+        impl_param->output_layout = get_gemm_output_layout(impl_param->input_layouts, impl_param->output_layout);
+
         auto gemm_params = get_default_params<kernel_selector::gemm_params>(*impl_param, 1);
         auto gemm_optional_params =
             get_default_optional_params<kernel_selector::gemm_optional_params>(arg.get_program());
