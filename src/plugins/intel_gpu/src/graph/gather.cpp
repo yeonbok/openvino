@@ -30,8 +30,9 @@ layout gather_inst::calc_output_layout(gather_node const& node) {
         output_type = node.get_fused_output_layout().data_type;
     }
 
-    if (desc->batch_dim == 0) {
+    {
         ov::op::v8::Gather op;
+        op.set_batch_dims(desc->batch_dim);
         std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
         std::vector<ov::PartialShape> input_shapes = {
             node.get_dependency(0).get_output_layout().size,

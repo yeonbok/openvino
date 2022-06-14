@@ -80,10 +80,12 @@ public:
             get_default_optional_params<kernel_selector::gather_optional_params>(arg.get_program());
 
         auto input_layout = arg.get_dependency(0).get_output_layout();
-        gather_params.axis = convert_axis(prim->axis, input_layout.get_rank());
-        gather_params.batch_dim = size_t(prim->batch_dim);
-        gather_params.support_neg_ind = prim->support_neg_ind;
+        auto indices_shape = arg.get_dependency(1).get_output_layout().size;
 
+        gather_params.axis = convert_axis(prim->axis, input_layout.get_rank());
+        gather_params.batch_dim = (prim->batch_dim >= 0) ? prim->batch_dim
+                        : (indices_shape.rank().get_length() + prim->batch_dim);
+        gather_params.support_neg_ind = prim->support_neg_ind;
         gather_params.inputs.push_back(convert_data_tensor(arg.input(1).get_output_layout()));
 
         auto& kernel_selector = kernel_selector::gather_kernel_selector::Instance();
