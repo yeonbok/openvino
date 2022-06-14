@@ -22,7 +22,7 @@ static void CreateScatterUpdateOp(Program& p, const std::shared_ptr<ngraph::op::
     if (!axes_constant) {
         IE_THROW() << "Unsupported parameter nodes type in " << op->get_friendly_name() << " (" << op->get_type_name() << ")";
     }
-    int32_t axis = axes_constant->cast_vector<int32_t>()[0];
+    size_t axis = axes_constant->cast_vector<size_t>()[0];
     auto primitive = cldnn::scatter_update(layerName,
                                            inputPrimitives[0],
                                            inputPrimitives[1],

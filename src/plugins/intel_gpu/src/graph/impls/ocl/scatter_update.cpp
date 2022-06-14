@@ -14,7 +14,7 @@ using namespace cldnn;
 
 namespace cldnn {
 namespace ocl {
-kernel_selector::scatter_update_axis convert_axis(const int axis, const scatter_update_node& arg) {
+kernel_selector::scatter_update_axis convert_axis(const size_t axis, const scatter_update_node& arg) {
     auto rank = arg.input(0).get_output_layout().get_rank();
     auto cldnn_axis = axis;
     if (axis >= 2) {

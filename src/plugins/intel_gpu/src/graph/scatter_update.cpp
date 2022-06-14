@@ -41,7 +41,7 @@ static size_t GetNonEmptyDimsNumber(const layout& layout) {
 layout scatter_update_inst::calc_output_layout(scatter_update_node const& node) {
     auto desc = node.get_primitive();
 
-    const int32_t axis = desc->axis;
+    const size_t axis = desc->axis;
     const size_t indices_size = node.input(1).get_output_layout().count();
     const size_t input_number_of_dims = node.input(0).get_output_layout().get_tensor().sizes().size();
     const size_t updates_number_of_dims = node.input(2).get_output_layout().get_tensor().sizes().size();
@@ -57,7 +57,7 @@ layout scatter_update_inst::calc_output_layout(scatter_update_node const& node) 
         output_type = node.get_fused_output_layout().data_type;
     }
 
-    if (static_cast<size_t>(axis) < 0 || static_cast<size_t>(axis) >= input_number_of_dims)
+    if (axis >= input_number_of_dims)
         CLDNN_ERROR_MESSAGE(node.id(), "Incorrect axis value for ScatterUpdate: Axis must be positive and less than the input tensor dimension.");
 
     if (indices_size > static_cast<size_t>(output_shape.sizes()[axis])) {
@@ -65,7 +65,7 @@ layout scatter_update_inst::calc_output_layout(scatter_update_node const& node) 
             "Undefined behavior ScatterUpdate: indices size must not be larger than the output size along the Axis.");
     }
 
-    if (static_cast<size_t>(axis) > updates_number_of_dims) {
+    if (axis > updates_number_of_dims) {
         CLDNN_ERROR_MESSAGE(node.id(),
             "Undefined behavior ScatterUpdate: indices dimention must not be larger than the updates[:Axis] dimentional size.");
     }
