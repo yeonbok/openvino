@@ -82,33 +82,6 @@ tensor::value_type layout::ifm() const {
     return dims[dim_idx];
 }
 
-format layout::get_default_format(size_t rank, bool is_weights, bool is_grouped) {
-    auto default_fmt = cldnn::format::bfyx;
-    if (is_weights) {
-        if (is_grouped) {
-            if (rank == 5) {
-                default_fmt = cldnn::format::goiyx;
-            } else if (rank == 6) {
-                default_fmt = cldnn::format::goizyx;
-            }
-        } else {
-            if (rank == 4) {
-                default_fmt = cldnn::format::oiyx;
-            } else if (rank == 5) {
-                default_fmt = cldnn::format::oizyx;
-            }
-        }
-    } else {
-        if (rank == 5) {
-            default_fmt = cldnn::format::bfzyx;
-        } else if (rank == 6) {
-            default_fmt = cldnn::format::bfwzyx;
-        }
-    }
-
-    return default_fmt;
-}
-
 std::vector<tensor::value_type> layout::get_dims() const {
     if (is_dynamic())
         throw std::runtime_error("[GPU] get_dims() is called for dynamic shape");
@@ -122,7 +95,7 @@ std::vector<tensor::value_type> layout::get_padded_dims() const {
     if (is_dynamic())
         throw std::runtime_error("[GPU] get_dims() is called for dynamic shape");
 
-    auto default_fmt = get_default_format(format.dimension(), format::is_weights_format(format), format::is_grouped(format));
+    auto default_fmt = format::get_default_format(format.dimension(), format::is_weights_format(format), format::is_grouped(format));
     auto t = get_tensor();
     auto padded_size = t.add(data_padding.lower_size()).add(data_padding.upper_size());
     return padded_size.sizes(default_fmt);
@@ -316,7 +289,7 @@ tensor layout::get_tensor() const {
     auto shape = size.to_shape();
     std::vector<tensor::value_type> dims(shape.begin(), shape.end());
 
-    auto default_fmt = get_default_format(format.dimension(), format::is_weights_format(format), format::is_grouped(format));
+    auto default_fmt = format::get_default_format(format.dimension(), format::is_weights_format(format), format::is_grouped(format));
     tensor t(default_fmt, dims);
     return t;
 }

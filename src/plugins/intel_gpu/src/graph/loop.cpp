@@ -116,7 +116,7 @@ layout loop_inst::calc_output_layout(loop_node const & node) {
         const size_t ndim = loop_output_layout.get_rank();
         auto shape = loop_output_layout.get_dims();
         shape[axis_to_iterate_throgh] = static_cast<int32_t>(node.get_max_iteration());
-        loop_output_layout = layout{loop_output_layout.data_type, loop_output_layout.format, tensor(layout::get_default_format(ndim), shape)};
+        loop_output_layout = layout{loop_output_layout.data_type, loop_output_layout.format, tensor(format::get_default_format(ndim), shape)};
     }
     return loop_output_layout;
 }

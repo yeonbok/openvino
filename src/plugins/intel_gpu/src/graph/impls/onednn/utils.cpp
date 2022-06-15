@@ -160,8 +160,8 @@ int64_t get_f_offset(cldnn::layout l, dnnl::memory::desc&& desc) {
     auto f_padding = l.data_padding.lower_size().feature[0];
     if (f_padding != 0) {
         offset = f_padding;
-        for (size_t i = 0; i < l.size.spatial.size(); ++i) {
-            offset *= l.size.spatial[i];
+        for (size_t i = 0; i < l.get_spatial_rank(); ++i) {
+            offset *= l.spatial(i);
         }
     }
 
@@ -267,7 +267,7 @@ dnnl::memory::desc layout_to_memory_desc(cldnn::layout l, dnnl::memory::format_t
         dims = flatten_tensor(l.size);
     } else {
         auto rank = cldnn::format::dimension(l.format);
-        dims = convert_tensor(l.size, rank, cldnn::format::is_grouped(l.format));
+        dims = convert_tensor(l.get_tensor(), rank, cldnn::format::is_grouped(l.format));
     }
     padded_dims = dims;
     pad_dims(padded_dims, l.format);

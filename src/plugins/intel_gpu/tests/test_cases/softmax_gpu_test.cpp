@@ -826,7 +826,7 @@ TEST(softmax_gpu_bfyx_f32, normalize_b) {
             batch_num = 3, buf_size = x_size*y_size * batch_num * feature_num;
     auto& engine = get_test_engine();
 
-    auto input = engine.allocate_memory({ data_types::f32, format::bfyx,{ batch_num, feature_num, x_size , y_size } });
+    auto input = engine.allocate_memory({ data_types::f32, format::bfyx, tensor{ batch_num, feature_num, x_size , y_size } });
     topology topology;
     topology.add(input_layout("input", input->get_layout()));
     topology.add(softmax("softmax", "input", softmax::normalize_b));

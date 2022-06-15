@@ -166,10 +166,10 @@ std::pair<bool, bool> program_helpers::are_layouts_identical(layout const& l1, l
         return {false, false};
 
     // If data is actually 1d along f and dense, the layouts are identical
-    if (l1.data_type == l2.data_type && l1.size == l2.size && !l1_pad && !l2_pad && l1.size.batch[0] == 1 &&
-        ((l1.format.spatial_num() == 2 && l1.size.spatial[0] == 1 && l1.size.spatial[1] == 1) ||
-        ((l1.format.spatial_num() == 3 && l1.size.spatial[0] == 1 && l1.size.spatial[1] == 1 && l1.size.spatial[2] == 1))) &&
-        (offset_last_element_l1 + 1 == l1.size.feature[0] && offset_last_element_l2 + 1 == l2.size.feature[0]))
+    if (l1.data_type == l2.data_type && l1.size == l2.size && !l1_pad && !l2_pad && l1.batch() == 1 &&
+        ((l1.get_spatial_rank() == 2 && l1.spatial(0) == 1 && l1.spatial(1) == 1) ||
+        ((l1.get_spatial_rank() == 3 && l1.spatial(0) == 1 && l1.spatial(1) == 1 && l1.spatial(2) == 1))) &&
+        (offset_last_element_l1 + 1 == l1.feature() && offset_last_element_l2 + 1 == l2.feature()))
         return {false, true};
 
     auto l1_pitch = l1.get_pitches();
@@ -192,8 +192,8 @@ std::pair<bool, bool> program_helpers::are_layouts_identical(layout const& l1, l
 }
 
 bool onednn_add_fusing_helpers::is_full_tensor(const layout& l) {
-    if (l.size.spatial[0] > 1 || l.size.spatial[1] > 1 || (l.get_spatial_rank() == 3 && l.size.spatial[2] > 1)
-        || l.size.batch[0] > 1) {
+    if (l.spatial(0) > 1 || l.spatial(1) > 1 || (l.get_spatial_rank() == 3 && l.spatial(2) > 1)
+        || l.batch() > 1) {
         return true;
     }
     return false;

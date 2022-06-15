@@ -70,7 +70,7 @@ public:
                   sh_in[3] + cd_lt[3] + cd_rb[3]};
         auto& engine = get_test_engine();
         auto input_data = generate_random_1d<T>(mult(sh_in), -9, 9, 1);
-        auto input = engine.allocate_memory({T_dt, format::bfyx, {sh_in[0], sh_in[1], sh_in[3], sh_in[2]}});
+        auto input = engine.allocate_memory({T_dt, format::bfyx, tensor{sh_in[0], sh_in[1], sh_in[3], sh_in[2]}});
         set_values(input, input_data);
 
         topology target_topology;
@@ -178,7 +178,7 @@ TEST(border_gpu, bsv16fsv16_without_reorder) {
     auto& engine = get_test_engine();
 
     auto input_data = generate_random_1d<T>(mult(sh_in), -9, 9, 1);
-    auto input = engine.allocate_memory({T_dt, format::bfyx, {sh_in[0], sh_in[1], sh_in[3], sh_in[2]}});
+    auto input = engine.allocate_memory({T_dt, format::bfyx, tensor{sh_in[0], sh_in[1], sh_in[3], sh_in[2]}});
     set_values(input, input_data);
 
     auto index_bfyx = [=](std::array<int, 4> s, int b, int f, int y, int x) {
@@ -201,7 +201,7 @@ TEST(border_gpu, bsv16fsv16_without_reorder) {
                 for (int x = 0; x < sh_in[3]; x++)
                     input_data_b16f16[index_bsv16fsv16(sh_in, b, f, y, x)] = input_data[index_bfyx(sh_in, b, f, y, x)];
 
-    auto input_b16f16 = engine.allocate_memory({T_dt, format::bs_fs_yx_bsv16_fsv16, {sh_in[0], sh_in[1], sh_in[3], sh_in[2]}});
+    auto input_b16f16 = engine.allocate_memory({T_dt, format::bs_fs_yx_bsv16_fsv16, tensor{sh_in[0], sh_in[1], sh_in[3], sh_in[2]}});
     set_values(input_b16f16, input_data_b16f16);
 
     topology target_topology;
@@ -254,7 +254,7 @@ TEST(border_gpu, zyx_bsv16fsv16) {
               sh_in[4] + cd_lt[4] + cd_rb[4]};
     auto& engine = get_test_engine();
     auto input_data = generate_random_1d<T>(mult(sh_in), -9, 9, 1);
-    auto input = engine.allocate_memory({T_dt, format::bfzyx, {sh_in[0], sh_in[1], sh_in[4], sh_in[3], sh_in[2]}});
+    auto input = engine.allocate_memory({T_dt, format::bfzyx, tensor{sh_in[0], sh_in[1], sh_in[4], sh_in[3], sh_in[2]}});
     set_values(input, input_data);
 
     topology target_topology;

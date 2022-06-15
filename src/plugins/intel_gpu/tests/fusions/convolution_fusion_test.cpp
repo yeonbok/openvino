@@ -3793,7 +3793,7 @@ class implicit_crop_concat_bfyx_input_tensor : public ImplicitCropConcatTestOneD
 TEST_P(implicit_crop_concat_bfyx_input_tensor, basic) {
     auto p = GetParam();
 
-    tensor crop_output = get_input_layout(p).size;
+    tensor crop_output = get_input_layout(p).get_tensor();
     crop_output.feature[0] = 1;
     auto crop_offset1 = tensor(batch(0), feature(0), spatial(0, 0));
     auto crop_offset2 = tensor(batch(0), feature(1), spatial(0, 0));

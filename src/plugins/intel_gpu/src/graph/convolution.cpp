@@ -214,12 +214,12 @@ layout convolution_inst::calc_output_layout(convolution_node const& node) {
     auto group = desc->groups;
     int32_t number_of_features = 0;
     if (desc->grouped_weights_shape && !format::is_grouped(weights_layout.format)) {
-        number_of_features = weights_layout.size.feature[0] * static_cast<int32_t>(group);
+        number_of_features = weights_layout.feature() * static_cast<int32_t>(group);
     } else {
         if (format::is_grouped(weights_layout.format)) {
-            number_of_features = weights_layout.size.batch[0] * static_cast<int32_t>(group);
+            number_of_features = weights_layout.batch() * static_cast<int32_t>(group);
         } else {
-            number_of_features = weights_layout.size.batch[0];
+            number_of_features = weights_layout.batch();
         }
     }
 

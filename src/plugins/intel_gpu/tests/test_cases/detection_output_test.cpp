@@ -417,11 +417,11 @@ public:
 
         auto& engine = get_test_engine();
         cldnn::memory::ptr input_location = engine.allocate_memory({ type_to_data_type<T>::value, format::bfyx,
-                                                                   { this->num_of_images, this->num_priors * num_loc_classes * 4, 1, 1 } });
+                                                                   tensor{ this->num_of_images, this->num_priors * num_loc_classes * 4, 1, 1 } });
         cldnn::memory::ptr input_confidence = engine.allocate_memory({ type_to_data_type<T>::value, format::bfyx,
-                                                                     { this->num_of_images, this->num_priors * this->num_classes, 1, 1 } });
+                                                                     tensor{ this->num_of_images, this->num_priors * this->num_classes, 1, 1 } });
         cldnn::memory::ptr input_prior_box = engine.allocate_memory({ type_to_data_type<T>::value, format::bfyx,
-                                                                    { 1, 2, 1, this->num_priors * 4 } });
+                                                                    tensor{ 1, 2, 1, this->num_priors * 4 } });
 
         this->init_buffers(input_prior_box, input_confidence, input_location, share_location);
 
@@ -447,10 +447,10 @@ public:
         EXPECT_EQ(outputs.size(), size_t(1));
         EXPECT_EQ(outputs.begin()->first, "detection_output");
 
-        EXPECT_EQ(outputs.begin()->second.get_memory()->get_layout().size.batch[0], 1);
-        EXPECT_EQ(outputs.begin()->second.get_memory()->get_layout().size.feature[0], 1);
-        EXPECT_EQ(outputs.begin()->second.get_memory()->get_layout().size.spatial[1], keep_top_k * this->num_of_images);
-        EXPECT_EQ(outputs.begin()->second.get_memory()->get_layout().size.spatial[0], 7);
+        EXPECT_EQ(outputs.begin()->second.get_memory()->get_layout().batch(), 1);
+        EXPECT_EQ(outputs.begin()->second.get_memory()->get_layout().feature(), 1);
+        EXPECT_EQ(outputs.begin()->second.get_memory()->get_layout().spatial(1), keep_top_k * this->num_of_images);
+        EXPECT_EQ(outputs.begin()->second.get_memory()->get_layout().spatial(0), 7);
 
         auto output_prim = outputs.begin()->second.get_memory();
 

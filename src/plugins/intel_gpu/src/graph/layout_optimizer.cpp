@@ -808,7 +808,7 @@ static bool is_node_for_onednn(deconvolution_node const& node) {
                             (input_layout.data_type == data_types::f16 && output_layout.data_type == data_types::f16);
 
     bool onednn_valid_params = onednn_valid_dt &&
-                               input_layout.size.feature[0] >= 16 &&
+                               input_layout.feature() >= 16 &&
                                prim->groups == 1 &&
                                get_post_ops_count(node) <= 32 &&
                                input_layout.data_type == output_layout.data_type;
@@ -845,10 +845,9 @@ static bool is_node_for_onednn(program_node& node, fully_connected_node const& f
 
     auto fc_prim = fc_node.get_primitive();
     size_t rank = cldnn::format::dimension(out_layout.format);
-    auto size = out_layout.size;
     // OneDnn doesn't support spatial dimensions for output
     for (int i = 0; i < rank - 2 - (fc_prim->input_size == 3 ? 1 : 0); i++) {
-        if (size.spatial[i] != 1) {
+        if (out_layout.spatial(i) != 1) {
             return false;
         }
     }
@@ -1607,13 +1606,13 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
             size_t in2_batched_size;
             if (has_input2) {
                 auto in2_l = node.get_dependency(2).get_output_layout();
-                in2_batched_size = in2_l.count() / (in2_l.size.spatial[0] * in2_l.size.spatial[1]);
+                in2_batched_size = in2_l.count() / (in2_l.spatial(0) * in2_l.spatial(1));
             }
-            size_t size_k = gemm_prim->transpose_input0 ? in0_l.size.spatial[1] : in0_l.size.spatial[0];
+            size_t size_k = gemm_prim->transpose_input0 ? in0_l.spatial(1) : in0_l.spatial(0);
 
-            size_t in0_batched_size = in0_l.count() / (in0_l.size.spatial[0] * in0_l.size.spatial[1]);
-            size_t in1_batched_size = in1_l.count() / (in1_l.size.spatial[0] * in1_l.size.spatial[1]);
-            size_t out_batched_size = out_l.count() / (out_l.size.spatial[0] * out_l.size.spatial[1]);
+            size_t in0_batched_size = in0_l.count() / (in0_l.spatial(0) * in0_l.spatial(1));
+            size_t in1_batched_size = in1_l.count() / (in1_l.spatial(0) * in1_l.spatial(1));
+            size_t out_batched_size = out_l.count() / (out_l.spatial(0) * out_l.spatial(1));
 
             auto valid_input_batch = in0_batched_size != 1 && (in1_batched_size == in0_batched_size || in1_batched_size == 1);
             auto valid_output_batch = in0_batched_size > in1_batched_size ? out_batched_size == in0_batched_size :
@@ -1732,7 +1731,7 @@ format layout_optimizer::get_preferred_format(program_node& node) {
             }
         } else if (layout.format.spatial_num() == 3 && (layout.data_type == data_types::i8 || layout.data_type == data_types::u8)) {
             if (use_onednn_impls) {
-                expected = (layout.size.batch[0] >= 32) ? format::bs_fs_zyx_bsv32_fsv32 : format::b_fs_zyx_fsv32;
+                expected = (layout.batch() >= 32) ? format::bs_fs_zyx_bsv32_fsv32 : format::b_fs_zyx_fsv32;
             } else {
                 expected = format::b_fs_zyx_fsv16;
             }
