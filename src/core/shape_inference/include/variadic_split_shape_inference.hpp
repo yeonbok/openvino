@@ -21,6 +21,9 @@ void shape_infer(const VariadicSplit* op,
     using DimType = typename std::iterator_traits<typename T::iterator>::value_type;
     constexpr bool is_dynamic_shape = std::is_base_of<ov::PartialShape, T>::value;
 
+    if (input_shapes.size() != 3) {
+        std::cout << "error?" << std::endl;
+    }
     NODE_VALIDATION_CHECK(op, (input_shapes.size() == 3));
 
     output_shapes.clear();
@@ -34,6 +37,9 @@ void shape_infer(const VariadicSplit* op,
                           " instead.");
 
     if (split_lengths_pshape.is_static()) {
+        if (split_lengths_pshape.size() != 1) {
+            std::cout << "error" << std::endl;
+        }
         NODE_VALIDATION_CHECK(op,
                               split_lengths_pshape.size() == 1,
                               "Split lengths should be a 1-D tensor. Got ",
@@ -84,7 +90,15 @@ void shape_infer(const VariadicSplit* op,
                     split_lengths[negative_one_idx] = dimension_at_axis.get_length() - sum_of_splits;
                     sum_of_splits += split_lengths[negative_one_idx];
                 }
+                std::cout << "variadic_split_shape_inference : " << op->get_friendly_name() << std::endl;
                 if (data_shape[axis].is_static()) {
+                    std::cout << "axis = " << axis << std::endl;
+                    for (auto d : data_shape) {
+                        std::cout << d << " " << std::endl;
+                    }
+                    if (sum_of_splits != data_shape[axis].get_length()) {
+                        std::cout << "error!" << std::endl;
+                    }
                     NODE_VALIDATION_CHECK(op,
                                           sum_of_splits == data_shape[axis].get_length(),
                                           "Total length of splits: ",

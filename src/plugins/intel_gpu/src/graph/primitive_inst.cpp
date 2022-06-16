@@ -7,6 +7,7 @@
 #include "mutable_data_inst.h"
 #include "generic_layer_inst.h"
 #include "input_layout_inst.h"
+#include "crop_inst.h"
 #include "reshape_inst.h"
 #include "arg_max_min_inst.h"
 #include "experimental_detectron_roi_feature_extractor_inst.hpp"
@@ -117,6 +118,10 @@ void primitive_inst::update_shape() {
     if (!_network.shape_changed())
         return;
 
+    std::cout << "############### update_shape : " << _node.id() << std::endl;
+    if (_node.is_type<crop>()) {
+        std::cout << "its crop" << std::endl;
+    }
     auto new_layout = _node.type()->calc_output_layout(_node);
 
     auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
@@ -130,6 +135,8 @@ void primitive_inst::update_shape() {
 
     // TODO: Get rid of this const_cast
     const_cast<program_node&>(_node).set_output_layout(new_layout);
+    std::cout << "       shape is changed? " << _shape_changed << std::endl;
+    std::cout << "        was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
 }
 
 void primitive_inst::realloc_if_needed() {
@@ -167,6 +174,7 @@ void primitive_inst::update_impl() {
         };
 
         auto layout_key = get_layout_key();
+        std::cout << "####### update_impl : (layout key : " << layout_key << std::endl;
         if (layout_key != "") {
             auto cache = _network.get_program()->get_primitive_impl_cache();
             bool is_hit = false;
@@ -267,6 +275,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         std::lock_guard<std::mutex> lock(m);
         PRINT_TIME(update_shape());
         if (shape_changed()) {
+            std::cout << "shape is changed!" << std::endl;
             PRINT_TIME(update_impl());
             PRINT_TIME(update_weights());
             PRINT_TIME(realloc_if_needed());

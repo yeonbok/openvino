@@ -72,12 +72,13 @@ struct broadcast : public primitive_base<broadcast> {
     ///                        dimension values.
     /// @param output_padding  Optional padding for output from primitive.
     broadcast(const primitive_id& id,
-              const primitive_id& input,
+              std::vector<primitive_id> inputs,
               const tensor& broadcast_sizes,
               const std::vector<uint16_t>& broadcast_axes = {},
               const primitive_id& ext_prim_id = "",
-              const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding),
+              const padding& output_padding = padding(),
+              std::shared_ptr<ov::Node> original_node = nullptr)
+        : primitive_base(id, inputs, ext_prim_id, output_padding, optional_data_type(), original_node),
           broadcast_sizes(broadcast_sizes),
           broadcast_axes(broadcast_axes) {}
 

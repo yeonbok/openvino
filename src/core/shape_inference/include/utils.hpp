@@ -103,6 +103,7 @@ inline bool get_data_as_shape(
     if (constant_data.count(idx)) {
         shape = T(ov::opset1::Constant(constant_data.at(idx)).cast_vector<size_t>());
     } else {
+        std::cout << " --- get shape_as_static_shape" << std::endl;
         const auto& constant = ov::as_type_ptr<ov::opset1::Constant>(op->get_input_node_shared_ptr(idx));
         NODE_VALIDATION_CHECK(op, constant != nullptr, "Static shape inference lacks constant data on port ", idx);
         shape = T(constant->cast_vector<size_t>());
@@ -118,6 +119,8 @@ inline bool get_data_as_shape<ov::PartialShape>(
         shape = ov::PartialShape(ov::opset1::Constant(constant_data.at(idx)).cast_vector<int64_t>());
         return true;
     } else {
+        std::cout << " --- evaluate_as_partial_shape" << std::endl;
+        std::cout << " --- trying to get " << idx << "-th input value" << std::endl;
         return ov::evaluate_as_partial_shape(op->input_value(idx), shape);
     }
 }

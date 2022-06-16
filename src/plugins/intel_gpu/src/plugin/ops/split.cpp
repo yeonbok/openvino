@@ -18,19 +18,21 @@ static void CreateCommonSplitOp(Program& p, const std::shared_ptr<ngraph::Node>&
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
 
-    auto inputDims = op->get_input_shape(0);
+    //auto inputDims = op->get_input_shape(0);
+    auto inputDims = op->get_input_partial_shape(0);
     InferenceEngine::SizeVector startOffset(inputDims.size());
 
     bool is_single_out_split = op->get_output_size() == 1;
 
     for (size_t i = 0; i < op->get_output_size(); i++) {
         std::string outLayerName = layerName + (is_single_out_split ? "" : "." + std::to_string(i));
-        const auto outLayerDims = op->get_output_shape(i);
+        const auto outLayerDims = op->get_output_partial_shape(i);
         NGRAPH_SUPPRESS_DEPRECATED_START
         if (outLayerDims.size() != startOffset.size()) {
             IE_THROW() << "Invalid dimesions in split layer: " << op->get_friendly_name()
                                << " output: " <<  op->get_output_tensor_name(i);
         }
+        #if 0
         for (size_t i = 0; i < inputDims.size(); i++) {
             if ((outLayerDims[i] + startOffset[i]) > inputDims[i]) {
                 IE_THROW() << "Invalid dimesions in split layer: " << op->get_friendly_name()
@@ -38,22 +40,25 @@ static void CreateCommonSplitOp(Program& p, const std::shared_ptr<ngraph::Node>&
             }
         }
         NGRAPH_SUPPRESS_DEPRECATED_END
+        #endif
 
-        auto outTensor = tensor_from_dims(outLayerDims, 1);
+        //auto outTensor = tensor_from_dims(outLayerDims, 1);
         auto offsetTensor = tensor_from_dims(startOffset, 0);
-
-        auto cropPrim = cldnn::crop(outLayerName, inputPrimitives[0], outTensor, offsetTensor, op->get_friendly_name());
+        // for dynamic execution, there is no reference output
+        auto cropPrim = cldnn::crop(outLayerName, inputPrimitives, offsetTensor, op->get_friendly_name(), {},
+                                    i, op->get_output_size(), op);
         p.primitiveIDs[outLayerName] = outLayerName;
 
         p.AddPrimitive(cropPrim);
         p.profilingIDs.push_back(outLayerName);
         p.InitProfileInfo(outLayerName, "Crop");
-
+#if 0
         for (size_t i = 0; i < inputDims.size(); i++) {
             if (outLayerDims[i] != inputDims[i]) {
                 startOffset[i] += outLayerDims[i];
             }
         }
+#endif
     }
 
     // set split as not_run

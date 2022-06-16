@@ -20,12 +20,16 @@ static void CreateCommonBroadcastOp(Program& p, const std::shared_ptr<ngraph::No
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
 
-    auto inputShape = op->get_input_shape(0);
-    auto outputShape = op->get_output_shape(0);
-    auto inputRank = inputShape.size();
-    auto outputRank = outputShape.size();
+    //auto inputShape = op->get_input_partial_shape(0);
+    //auto outputShape = op->get_output_partial_shape(0);
 
+    // I am not sure why the shape of the Constant is not recognized :(
+    // But the value can be read.
+    //auto input_const = ov::as_type<ov::op::v0::Constant>(op->get_input_node_ptr(0))->get_vector<int32_t>();
+#if 0
     auto inputPrimitive = inputPrimitives[0];
+    auto inputRank = inputShape.rank().get_length();
+    auto outputRank = outputShape.rank().get_length();
 
     if (inputRank != outputRank) {
         // Add reorder if changing number of dimensions requires changing format
@@ -64,7 +68,7 @@ static void CreateCommonBroadcastOp(Program& p, const std::shared_ptr<ngraph::No
 
                 int ones_count = std::max(next_axis - prev_axis - 1, 0);
                 tmp_shape.insert(tmp_shape.begin() + currentRank, ones_count, 1ul);
-                tmp_shape.push_back(outputShape[axis]);
+                tmp_shape.push_back(outputShape[axis]); // TODO
 
                 currentRank += ones_count + 1;
             }
@@ -77,12 +81,29 @@ static void CreateCommonBroadcastOp(Program& p, const std::shared_ptr<ngraph::No
 
         inputPrimitive = reshapeName;
     }
-
     auto broadcastPrim = cldnn::broadcast(layerName,
                                           inputPrimitive,
-                                          tensor_from_dims(op->get_output_shape(0)),
+                                          tensor_from_dims({1, 1, 1, 1}),
                                           {},
                                           op->get_friendly_name());
+#endif
+#if 0
+    broadcast(const primitive_id& id,
+              std::vector<primitive_id>& inputs,
+              const tensor& broadcast_sizes,
+              const std::vector<uint16_t>& broadcast_axes = {},
+              const primitive_id& ext_prim_id = "",
+              const padding& output_padding = padding(),
+              std::shared_ptr<ov::Node> original_node = nullptr)
+#endif
+    auto broadcastPrim = cldnn::broadcast(layerName,
+                                          inputPrimitives,
+                                          //tensor_from_dims(op->get_output_shape(0)),
+                                          tensor_from_dims({1, 1, 1, 1}),
+                                          {},
+                                          op->get_friendly_name(),
+                                          cldnn::padding(),
+                                          op);
 
     p.AddPrimitive(broadcastPrim);
     p.AddPrimitiveToProfiler(op);

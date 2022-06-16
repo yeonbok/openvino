@@ -55,7 +55,9 @@ void CreateGatherOpBase(Program& p, const std::shared_ptr<T>& op, const int64_t 
                                     op->get_output_partial_shape(0),
                                     batch_dim,
                                     support_neg_ind,
-                                    op->get_friendly_name());
+                                    op->get_friendly_name(),
+                                    cldnn::padding(),
+                                    op);
 
     p.AddPrimitive(gatherPrim);
     p.AddPrimitiveToProfiler(op);

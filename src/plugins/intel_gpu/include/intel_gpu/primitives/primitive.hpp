@@ -15,6 +15,7 @@
 #include <iostream>
 #include <memory>
 #include <utility>
+#include "openvino/core/node.hpp"
 
 namespace cldnn {
 /// @addtogroup cpp_api C++ API
@@ -40,13 +41,15 @@ public:
               const std::vector<primitive_id>& input,
               const primitive_id& ext_prim_id = "",
               const padding& output_padding = padding(),
-              const optional_data_type output_data_type = optional_data_type())
+              const optional_data_type output_data_type = optional_data_type(),
+              std::shared_ptr<ov::Node> ov_op = nullptr)
         : type(type),
           id(id),
           ext_prim_id(ext_prim_id),
           output_padding(output_padding),
           output_data_type(output_data_type),
-          input(input) {}
+          input(input),
+          ov_op(ov_op) {}
 
     virtual ~primitive() = default;
 
@@ -97,6 +100,8 @@ public:
     /// @brief List of ids of input primitives.
     primitive_id_arr input;
 
+    std::shared_ptr<ov::Node> ov_op;
+
 protected:
     virtual std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const { return {}; }
     class condition;
@@ -111,8 +116,9 @@ protected:
                             const std::vector<primitive_id>& input,
                             const primitive_id& ext_prim_id = "",
                             const padding& output_padding = padding(),
-                            optional_data_type output_data_type = optional_data_type())
-        : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type) {}
+                            optional_data_type output_data_type = optional_data_type(),
+                            std::shared_ptr<ov::Node> ov_op = nullptr)
+        : primitive(PType::type_id(), id, input, ext_prim_id, output_padding, output_data_type, ov_op) {}
 };
 
 struct primitive_info {

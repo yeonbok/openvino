@@ -36,9 +36,10 @@ struct gather : public primitive_base<gather> {
            const int64_t batch_dim = 0,
            const bool support_neg_ind = false,
            const primitive_id& ext_prim_id = "",
-           const padding& output_padding = padding()
+           const padding& output_padding = padding(),
+           std::shared_ptr<ov::Node> ov_node = nullptr
            )
-        : primitive_base(id, {dict, idx}, ext_prim_id, output_padding), axis(axis), output_format(output_format),
+        : primitive_base(id, {dict, idx}, ext_prim_id, output_padding, optional_data_type(), ov_node), axis(axis), output_format(output_format),
                          output_shape(output_shape), batch_dim(batch_dim), support_neg_ind(support_neg_ind) {}
 
     /// @brief Gathering axis

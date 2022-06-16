@@ -318,6 +318,10 @@ void prepare_buffer_fusing::run(program& p) {
         program_helpers::do_for_types<crop>(*node, [&p, is_debug](crop_node& node) {
             // if the node is marked as network output, prevent optimizations which would affect a form of its output,
             // unless debug flag is set
+
+            // (taylor) temp trial: TODO fix later
+            if (node.get_dependencies().size() > 1)
+                return;
             if (node.is_output() && !is_debug)
                 return;
 

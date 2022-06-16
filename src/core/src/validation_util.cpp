@@ -1306,6 +1306,7 @@ pair<HostTensorPtr, HostTensorPtr> ngraph::evaluate_both_bounds(const Output<Nod
 bool ov::evaluate_as_partial_shape(const Output<Node>& output, PartialShape& pshape) {
     HostTensorPtr lb, ub;
     std::tie(lb, ub) = evaluate_both_bounds(output);
+    std::cout << "lb = " << lb << " up = " << ub << std::endl;
     bool shape_defined = false;
     if (lb && ub) {
         auto lower_bound = std::make_shared<op::v0::Constant>(lb)->cast_vector<int64_t>();

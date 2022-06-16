@@ -61,6 +61,11 @@ static void createClDnnConstant(Program& p, const ngraph::Shape& constDims, cons
 
 static void CreateConstantOp(Program& p, const std::shared_ptr<ngraph::op::v0::Constant>& op) {
     ngraph::Shape constDims = op->get_shape();
+#if 1
+    if (constDims.size() == 0) { // taylor (just trial)
+        constDims.push_back(op->get_vector<int32_t>().size());
+    }
+#endif
     auto constUsers = op->get_output_target_inputs(0);
     size_t numConstUsers = constUsers.size();
 
@@ -219,7 +224,7 @@ void createClDnnConstant(Program& p, const ngraph::Shape& constDims, const std::
         } else {
             std::memcpy(&buf[0], &data[0], bufSize);
         }
-        p.AddPrimitive(cldnn::data(initialconstPrimID, mem, op->get_friendly_name()));
+        p.AddPrimitive(cldnn::data(initialconstPrimID, mem, op->get_friendly_name(), op));
         p.blobMemCache[std::make_pair(data, newDims)] = initialconstPrimID;
         constPrimID = initialconstPrimID;
     }

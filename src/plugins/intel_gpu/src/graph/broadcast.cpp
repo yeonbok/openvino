@@ -10,6 +10,10 @@
 #include <string>
 #include <vector>
 #include <set>
+#include "broadcast_shape_inference.hpp"
+#include <ngraph/opsets/opset3.hpp>
+#include <ngraph/pattern/op/label.hpp>
+//#include <ngraph/pattern/op/pattern.hpp>
 
 namespace cldnn {
 primitive_type_id broadcast::type_id() {
@@ -20,10 +24,53 @@ primitive_type_id broadcast::type_id() {
 layout broadcast_inst::calc_output_layout(broadcast_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for broadcast_node!");
-    auto input_layout = node.input().get_output_layout();
     auto desc = node.get_primitive();
+    //ov::op::v3::Broadcast op;
+    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+    std::vector<ov::PartialShape> input_shapes = {
+        node.input().get_output_layout().size,
+        node.get_dependency(1).get_output_layout().size,
+        // this is not correct. It should be the shape. Also the output tensor of gather should have result value.
+    };
+    std::cout << node.id() << std::endl;
+    std::cout << "        1st input layout : " << node.get_dependency(1).get_output_layout().to_string() << std::endl;
+    bool any_input_dynamic = false;
+    for (auto i : input_shapes) {
+        if (i.is_dynamic()) any_input_dynamic = true;
+    }
+    auto ov_broadcast = ov::as_type_ptr<ov::op::v3::Broadcast>(node.get_ov_op()).get();
+    auto ov_broadcast_ptr = const_cast<ov::op::v3::Broadcast*>(ov_broadcast);
+    //std::shared_ptr<ov::op::v3::Broadcast> ov_broadcast_ptr_shared_ptr(ov_broadcast_ptr);
+    shape_infer(ov_broadcast_ptr, input_shapes, output_shapes);
+    return {node.input().get_output_layout().data_type, node.input().get_output_layout().format, output_shapes[0]};
+}
 
-    return {input_layout.data_type, input_layout.format, desc->broadcast_sizes};
+static std::vector<int64_t> read_vector(cldnn::memory::ptr mem, cldnn::stream& stream) {
+    switch (mem->get_layout().data_type) {
+        case data_types::i32: {
+            mem_lock<int32_t, mem_lock_type::read> lock{mem, stream};
+            return std::vector<int64_t>(lock.begin(), lock.end());
+        }
+        case data_types::i64: {
+            mem_lock<int64_t, mem_lock_type::read> lock{mem, stream};
+            return std::vector<int64_t>(lock.begin(), lock.end());
+        }
+        default: IE_THROW() << "read_vector: unsupported data type";
+    }
+}
+
+void broadcast_inst::update_shape() {
+    auto& node = const_cast<broadcast_node&>(dynamic_cast<const broadcast_node&>(_node));
+
+    auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
+    auto output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
+    auto new_layout = layout{cldnn::data_types::i32, cldnn::format::bfyx, output_shape};
+    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::i32, format::bfyx, tensor{});
+    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
+    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
+        set_shape_change();
+
+    node.set_output_layout(new_layout);
 }
 
 std::string broadcast_inst::to_string(broadcast_node const& node) {
@@ -53,6 +100,7 @@ std::string broadcast_inst::to_string(broadcast_node const& node) {
 }
 
 broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& node) : parent(network, node) {
+    #if 0
     auto input_layout = node.input().get_output_layout();
 
     const auto& output_sizes = argument.broadcast_sizes;
@@ -117,5 +165,6 @@ broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& nod
                                            "input sizes",
                                            input_sizes_to_compare,
                                            "Invalid broadcast size: not dividable by input size");
+    #endif
 }
 }  // namespace cldnn
