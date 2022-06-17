@@ -33,7 +33,8 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node) {
 
     auto get_output_layout = [&](){
         auto format = input_node_layout.format;
-        if (input_node_layout.is_static()) {
+        //if (input_node_layout.is_static()) {
+        if (0) {
             auto size = input_node_layout.get_tensor();
             for (size_t i = 0; i < node.inputs_count(); i++) {
                 if (i == primary_input_idx)
@@ -121,6 +122,7 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node) {
         t.spatial[0] = (input_node_layout.spatial(0) - 1) / eltw->stride[0].spatial[0] + 1;
         t.spatial[1] = (input_node_layout.spatial(1) - 1) / eltw->stride[0].spatial[1] + 1;
         t.spatial[2] = (input_node_layout.spatial(2) - 1) / eltw->stride[0].spatial[2] + 1;
+        std::cout << "here!" << std::endl;
 
         return layout(input_node_layout.data_type, input_node_layout.format, t);
     }

@@ -43,7 +43,7 @@ layout crop_inst::calc_output_layout(crop_node const& node) {
 
     if (node.get_dependencies().size() == 3) {
         auto ov_op = ov::as_type_ptr<ov::op::v1::VariadicSplit>(node.get_ov_op()).get();
-        #if 1
+        #if 0
         //auto input_op = ov_op->get_input_node_shared_ptr(0).get();
         std::vector<int64_t> axis_values;
         std::vector<int64_t> split_lengths;
