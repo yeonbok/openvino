@@ -494,6 +494,7 @@ struct layout {
 private:
     /// The size of the @ref memory (excluding padding)
     ov::PartialShape size;
+    ov::PartialShape transform(cldnn::format new_fmt) const;
 };
 
 inline ::std::ostream& operator<<(::std::ostream& os, const layout& p) {
