@@ -32,8 +32,6 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node) {
         node.get_dependency(1).get_output_layout().size,
         // this is not correct. It should be the shape. Also the output tensor of gather should have result value.
     };
-    std::cout << node.id() << std::endl;
-    std::cout << "        1st input layout : " << node.get_dependency(1).get_output_layout().to_string() << std::endl;
     bool any_input_dynamic = false;
     for (auto i : input_shapes) {
         if (i.is_dynamic()) any_input_dynamic = true;

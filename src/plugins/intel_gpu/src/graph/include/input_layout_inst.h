@@ -29,7 +29,7 @@ class typed_primitive_inst<input_layout> : public typed_primitive_inst_base<inpu
 
 public:
     static layout calc_output_layout(input_layout_node const& node) {
-        std::cout << node.get_primitive()->layout.to_string() << std::endl;
+//        std::cout << node.get_primitive()->layout.to_string() << std::endl;
         return node.get_primitive()->layout;
     }
     static std::string to_string(input_layout_node const& node);
