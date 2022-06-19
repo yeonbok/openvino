@@ -1509,7 +1509,7 @@ std::pair<int64_t, int64_t> program::get_estimated_device_mem_usage() {
         // TODO: Ultimate solution will be the "estimation without actual allocation" mechanism for this issue,
         // which is also expected for better estimation performance
         int64_t max_global_mem_size = engine.get_device_info().max_global_mem_size;
-        int64_t total_host_alloc_size = out_size + host_alloc + engine.get_used_device_memory(allocation_type::usm_host);
+        int64_t total_host_alloc_size = out_size + host_alloc + engine.get_used_device_memory(allocation_type::usm_device);
         if (engine.get_device_info().dev_type == cldnn::device_type::integrated_gpu)
             total_host_alloc_size += engine.get_used_device_memory(allocation_type::usm_device);
         if ((cur_vmem != -1 && total_host_alloc_size > cur_vmem * 0.5) || (total_host_alloc_size >= max_global_mem_size)) {

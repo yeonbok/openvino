@@ -223,9 +223,11 @@ kernels_cache::kernels_cache(engine& engine, uint32_t prog_id, const std::vector
 kernel_id kernels_cache::set_kernel_source(
     const std::shared_ptr<kernel_string>& kernel_string,
     bool dump_custom_program) {
+    static size_t kid = 0;
     std::lock_guard<std::mutex> lock(_mutex);
     // we need unique id in order to avoid conflict across topologies.
-    const auto kernel_num = _kernels.size() + _kernels_code.size();
+//    const auto kernel_num = _kernels.size() + _kernels_code.size();
+    const auto kernel_num = _kernels.size() + (kid++);
     kernel_id id = kernel_string->entry_point + "_" + std::to_string(kernel_num);
 
     auto res = _kernels_code.emplace(kernel_string, id, dump_custom_program);
@@ -342,6 +344,8 @@ void kernels_cache::build_batch(const engine& build_engine, const batch_program&
                     cl_context context = cl_build_engine.get_cl_context().get();
                     kernel::ptr kernel = kernels_factory::create(_engine, context, kern, entry_point);
                     const auto& kmap = std::make_pair(k_id->second, kernel);
+//                    std::cout << k_id->second << std::endl;
+//                    std::cout << "_kernels size = " << _kernels.size() << std::endl;
                     _kernels.insert(kmap);
                 } else {
                     throw std::runtime_error("Could not find entry point");
@@ -416,6 +420,7 @@ void kernels_cache::build_all() {
     auto _task_executor = _engine.get_task_executor();
     std::exception_ptr exception;
     std::vector<InferenceEngine::Task> tasks;
+#if 0
     for (int idx = 0; idx < batches.size(); idx++) {
         auto& batch = batches[idx];
         tasks.push_back([this, &_build_engine, &batch, &exception] {
@@ -428,7 +433,11 @@ void kernels_cache::build_all() {
     }
     _task_executor->runAndWait(tasks);
     tasks.clear();
-
+#endif
+    for (int idx = 0; idx < batches.size(); idx++) {
+        auto& batch = batches[idx];
+        build_batch(*_build_engine, batch);
+    }
     if (exception) {
         std::rethrow_exception(exception);
     }

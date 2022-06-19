@@ -123,6 +123,7 @@ memory::ptr memory_pool::get_from_non_padded_pool(const layout& layout,
                                                   allocation_type type) {
     auto it = _non_padded_pool.lower_bound(layout.bytes_count());
     while (it != _non_padded_pool.end()) {
+
         if (it->second._network_id == network_id &&
             it->second._type == type &&
             it->second._memory->get_layout().format != format::fs_b_yx_fsv32 &&
@@ -134,9 +135,14 @@ memory::ptr memory_pool::get_from_non_padded_pool(const layout& layout,
             auto ret_mem = _engine->reinterpret_buffer(*it->second._memory, layout);
             return ret_mem;
         } else {
+            //std::cout << " : Not hit " << id << " for ";
+            //std::cout << it->second._memory->size() << " bytes entry)" << std::endl;
+            //std::cout << "     has_conflicts ? " << has_conflict(it->second._users, restrictions, network_id)
+            //          << std::endl;
             ++it;
         }
     }
+    //std::cout << " Failed to reuse existing entry ! alloc new " << std::endl;
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_IF(debug_config->verbose >= 2) {
         GPU_DEBUG_COUT << "[" << id << ": output]" << std::endl;

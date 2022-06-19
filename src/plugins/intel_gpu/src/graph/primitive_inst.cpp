@@ -118,12 +118,8 @@ void primitive_inst::update_shape() {
     if (!_network.shape_changed())
         return;
 
-    std::cout << "############### update_shape : " << _node.id() << std::endl;
-    if (_node.is_type<crop>()) {
-        std::cout << "its crop" << std::endl;
-    }
+//    std::cout << "############### update_shape : " << _node.id() << std::endl;
     auto new_layout = _node.type()->calc_output_layout(_node);
-
     auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
     auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
     GPU_DEBUG_IF(debug_config->verbose >= 4) {
@@ -135,8 +131,8 @@ void primitive_inst::update_shape() {
 
     // TODO: Get rid of this const_cast
     const_cast<program_node&>(_node).set_output_layout(new_layout);
-    std::cout << "       shape is changed? " << _shape_changed << std::endl;
-    std::cout << "        was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
+//    std::cout << "       shape is changed? " << _shape_changed << std::endl;
+//    std::cout << "            was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
 }
 
 void primitive_inst::realloc_if_needed() {
@@ -148,7 +144,18 @@ void primitive_inst::realloc_if_needed() {
         GPU_DEBUG_IF(debug_config->verbose >= 4) {
             GPU_DEBUG_COUT << "realloc memory for node: " << id() << std::endl;
         }
+        if (_output) {
+         //   std::cout << "[realloc: " << _node.id() << "] original mem: " << _output << " (" << _output->size()
+         //             << "), total : " << _network.get_engine().get_used_device_memory(allocation_type::usm_device) <<std::endl;
+            _network.get_memory_pool().release_memory(_output.get(), _node.id(), get_network_id());
+        } else {
+          //  std::cout << "[realloc: " << _node.id() << "] original mem: " << _output
+          //            << "), total : " << _network.get_engine().get_used_device_memory(allocation_type::usm_device) <<std::endl;
+        }
         _output = allocate_output();
+        //std::cout << "          " << _node.id() << "  new mem: " << _output << " (" << _output->size() << ")"
+        //          << "), total : " << _network.get_engine().get_used_device_memory(allocation_type::usm_device) <<std::endl;
+        //_network.get_memory_pool().dump_pool();
     } else {
         _output = _network.get_engine().reinterpret_buffer(*_output, _node.get_output_layout());
     }
@@ -174,11 +181,13 @@ void primitive_inst::update_impl() {
         };
 
         auto layout_key = get_layout_key();
-        std::cout << "####### update_impl : (layout key : " << layout_key << std::endl;
+//        std::cout << "####### update_impl : (layout key : " << layout_key << std::endl;
         if (layout_key != "") {
             auto cache = _network.get_program()->get_primitive_impl_cache();
             bool is_hit = false;
             std::shared_ptr<cldnn::primitive_impl> origin_impl;
+            auto lru_entry = cache->get_lru_element();
+            bool lru_element_popped = false;
             PRINT_TIME(std::tie(origin_impl, is_hit) = cache->get(layout_key, [&]() {
                 cldnn::LRUCache<std::string, std::shared_ptr<cldnn::primitive_impl>>::CacheEntry new_entry;
                 auto new_impl = std::move(_node.type()->choose_impl(_node));
@@ -187,11 +196,16 @@ void primitive_inst::update_impl() {
                 new_entry.size = 1;
                 new_entry.data = std::move(new_impl);
                 return new_entry;
-            }));
-
+            }, &lru_element_popped));
             _impl = std::move(origin_impl->clone());
             if (is_hit) {
                 PRINT_TIME(_impl->init_kernels());
+            } else if (lru_element_popped) {
+                auto kernel_ids = lru_entry->get_kernel_ids();
+                for (auto k : kernel_ids) {
+//                    std::cout << "lru element popped! " << k << std::endl; 
+                    _network.get_program()->remove_kernel_entry(k);
+                }
             }
         } else {
             PRINT_TIME(_impl = std::move(_node.type()->choose_impl(_node)));
@@ -275,7 +289,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         std::lock_guard<std::mutex> lock(m);
         PRINT_TIME(update_shape());
         if (shape_changed()) {
-            std::cout << "shape is changed!" << std::endl;
+//            std::cout << "shape is changed!" << std::endl;
             PRINT_TIME(update_impl());
             PRINT_TIME(update_weights());
             PRINT_TIME(realloc_if_needed());

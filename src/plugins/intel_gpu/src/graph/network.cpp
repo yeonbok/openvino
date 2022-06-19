@@ -3,7 +3,6 @@
 //
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
 #include "intel_gpu/primitives/data.hpp"
 #include "intel_gpu/primitives/mutable_data.hpp"
 #include "intel_gpu/primitives/input_layout.hpp"
@@ -637,7 +636,6 @@ std::map<primitive_id, network_output> network::execute(const std::vector<event:
     return result;
 }
 
-
 void network::execute_impl(const std::vector<event::ptr>& events) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "NetworkImpl::Execute");
     // Wait for previous execution completion
@@ -645,7 +643,11 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_IF(debug_config->verbose >= 1)
         GPU_DEBUG_COUT << "----------------------------------------------" << std::endl;
-
+    std::cout << "?######################################### Execute network #######################################" << std::endl;
+    if (get_program()->get_vm_rss().second > 20000) {
+        std::cout << "Stop execution1!!" << std::endl;
+        throw std::runtime_error("trial");
+    }
     _shape_changed = false;
     std::vector<memory::ptr> in_out_mem;
     for (auto& inst : _inputs) {

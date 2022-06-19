@@ -213,15 +213,21 @@ public:
     ~LRUCache() {
         clear();
     }
-
-    std::tuple<TypeD, bool> get(TypeK key, std::function<LRUCache::CacheEntry(void)> create_new_data = nullptr) {
+    TypeD get_lru_element() {
+        if (order.size()) {
+            return cache_entry_map[order.back()].second.data;
+        } else {
+            return nullptr;
+        }
+    }
+    std::tuple<TypeD, bool> get(TypeK key, std::function<LRUCache::CacheEntry(void)> create_new_data = nullptr, bool* last_element_popped = nullptr) {
         std::lock_guard<std::mutex> lock(mtx);
         TypeD data;
         bool is_found = true;
         if (cache_entry_map.find(key) == cache_entry_map.end()) {
             if (create_new_data) {
                 auto new_entry = create_new_data();
-                add_new_entry(key, new_entry);
+                add_new_entry(key, new_entry, last_element_popped);
                 data = cache_entry_map[key].second.data;
             }
             is_found = false;
@@ -255,13 +261,15 @@ public:
     }
 
 private:
-    void add_new_entry(TypeK key, LRUCache::CacheEntry entry) {
+    void add_new_entry(TypeK key, LRUCache::CacheEntry entry, bool* popped_last_element) {
+        *popped_last_element = false;
         if (cache_entry_map.find(key) == cache_entry_map.end()) {
             if (curr_data_size > 0 && capacity < (curr_data_size + entry.size)) {
                 //  Remove cache at the end of order
                 curr_data_size -= cache_entry_map[order.back()].second.size;
                 cache_entry_map.erase(order.back());
                 order.pop_back();
+                *popped_last_element = true;
             }
         } else {
             order.erase(cache_entry_map[key].first);

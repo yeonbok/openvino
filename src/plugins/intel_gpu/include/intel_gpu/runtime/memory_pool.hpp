@@ -6,6 +6,7 @@
 
 #include "layout.hpp"
 #include "memory_caps.hpp"
+#include "memory.hpp"
 
 #include <vector>
 #include <set>
@@ -125,6 +126,30 @@ public:
     void clear_pool();
     void clear_pool_for_network(uint32_t network_id);
     void release_memory(memory* memory, const primitive_id& id, uint32_t network_id);
+    void dump_pool() {
+        std::cout << "** non padded pool **" << std::endl;
+        for (auto m : _non_padded_pool) {
+            std::cout << m.first << " bytes : " << m.second._users.size() << " users" << std::endl;
+            for (auto u : m.second._users) {
+                std::cout << "     " << u._id << std::endl;
+            }
+        }
+        std::cout << "** padded pool **" << std::endl;
+        for (auto m : _padded_pool) {
+            std::cout << m.first.to_string() << " : " << std::endl;
+            for (auto l : m.second) {
+                std::cout << "   " << l._memory->size() << "bytes : " << l._users.size() << " users" << std::endl;
+                for (auto u : l._users) {
+                    std::cout << "       " << u._id << std::endl;
+                }
+            }
+        }
+        std::cout << "** no reusable epool **" << std::endl;
+        for (auto m : _no_reusable_pool) {
+            std::cout << m.first << " bytes : " << m.second._users.size() << " users" << std::endl;
+        }
+
+    }
 };
 
 }  // namespace cldnn

@@ -391,7 +391,7 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
                 return true;
             };
 
-            size_t inputChannels;
+            size_t inputChannels = 0;
             if (!fillStaticChannel(node->get_input_partial_shape(0), inputChannels)) {
                 return true;
             }

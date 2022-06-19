@@ -3,10 +3,17 @@
 //
 
 #pragma once
+#include <ios>
+#include <fstream>
+#include <unistd.h>
+#include <iostream>
+#include <string>
+
 
 #include "intel_gpu/runtime/engine.hpp"
 #include "intel_gpu/runtime/stream.hpp"
 #include "build_options.hpp"
+#include "runtime/kernels_cache.hpp"
 
 #include <list>
 #include <string>
@@ -241,7 +248,32 @@ public:
     // returns {-1, -1} if it failed to estimate by allocating given batch size
     std::pair<int64_t/*const alloc*/, int64_t/*general alloc*/> get_estimated_device_mem_usage();
 
+    std::pair<double, double> get_vm_rss() const {
+        std::ifstream stat_stream("/proc/self/stat", std::ios_base::in);
+        unsigned long vsize;
+        long long rss;
+        std::string pid, comm, state, ppid, pgrp, session, tty_nr;
+        std::string tpgid, flags, minflt, cminflt, majflt, cmajflt;
+        std::string utime, stime, cutime, cstime, priority, nice;
+        std::string O, itrealvalue, starttime;
+
+        stat_stream >> pid >> comm >> state >> ppid >> pgrp >> session >> tty_nr
+            >> tpgid >> flags >> minflt >> cminflt >> majflt >> cmajflt
+            >> utime >> stime >> cutime >> cstime >> priority >> nice
+            >> O >> itrealvalue >> starttime >> vsize >> rss; // don't care about the rest
+
+        stat_stream.close();
+
+        long page_size_kb = sysconf(_SC_PAGE_SIZE) / 1024; // in case x86-64 is configured to use 2MB pages
+        auto vm_usage     = vsize / (1024.0*1024.0);
+        auto resident_set = rss * page_size_kb / 1024.0;
+        std::cout << "VM: " << vm_usage << " MB; RSS: " << resident_set << " MB" << std::endl;
+        return std::make_pair(vm_usage, resident_set);
+    }
     std::shared_ptr<LRUCache<std::string, std::shared_ptr<primitive_impl>>> get_primitive_impl_cache() const { return primitive_impl_cache; }
+    void remove_kernel_entry(std::string kernel_entry) {
+        _kernels_cache->remove_kernel_entry(kernel_entry);
+    }
 
 private:
     uint32_t prog_id = 0;
