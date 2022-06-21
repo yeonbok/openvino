@@ -21,16 +21,15 @@ static void CreateCommonBroadcastOp(Program& p,
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
 
-    auto inputShape = op->get_input_partial_shape(0);
-    auto outputShape = op->get_output_partial_shape(0);
-
     // I am not sure why the shape of the Constant is not recognized :(
     // But the value can be read.
     // auto input_const = ov::as_type<ov::op::v0::Constant>(op->get_input_node_ptr(0))->get_vector<int32_t>();
-    if (inputShape.is_static() && outputShape.is_static()) {
+    if (op->get_input_partial_shape(0).is_static() && op->get_output_partial_shape(0).is_static()) {
+        auto inputShape = op->get_input_shape(0);
+        auto outputShape = op->get_output_shape(0);
         auto inputPrimitive = inputPrimitives[0];
-        auto inputRank = inputShape.rank().get_length();
-        auto outputRank = outputShape.rank().get_length();
+        auto inputRank = inputShape.size();
+        auto outputRank = outputShape.size();
 
         if (inputRank != outputRank) {
             // Add reorder if changing number of dimensions requires changing format
@@ -69,7 +68,7 @@ static void CreateCommonBroadcastOp(Program& p,
 
                     int ones_count = std::max(next_axis - prev_axis - 1, 0);
                     tmp_shape.insert(tmp_shape.begin() + currentRank, ones_count, 1ul);
-                    tmp_shape.push_back(outputShape.get_shape()[axis]);  // TODO
+                    tmp_shape.push_back(outputShape[axis]);  // TODO
 
                     currentRank += ones_count + 1;
                 }
@@ -84,12 +83,13 @@ static void CreateCommonBroadcastOp(Program& p,
         }
         auto broadcastPrim =
             cldnn::broadcast(layerName, {inputPrimitive}, tensor_from_dims(op->get_output_shape(0)), {}, op->get_friendly_name());
+        p.AddPrimitive(broadcastPrim);
         p.AddPrimitiveToProfiler(op);
         return;
     } else {  // dynamic shape
         auto broadcastPrim = cldnn::broadcast(layerName,
                                               inputPrimitives,
-                                              tensor_from_dims({0, 0, 0, 0}),
+                                              tensor_from_dims({0, 0, 0, 0, 0, 0}),
                                               {},
                                               op->get_friendly_name(),
                                               cldnn::padding(),

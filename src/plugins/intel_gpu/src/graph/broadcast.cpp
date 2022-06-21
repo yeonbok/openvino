@@ -46,6 +46,9 @@ static std::vector<int64_t> read_vector(cldnn::memory::ptr mem, cldnn::stream& s
 }
 
 void broadcast_inst::update_shape() {
+    if (!_network.shape_changed())
+        return;
+
     auto& node = const_cast<broadcast_node&>(dynamic_cast<const broadcast_node&>(_node));
 
     auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
@@ -86,7 +89,10 @@ std::string broadcast_inst::to_string(broadcast_node const& node) {
 }
 
 broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& node) : parent(network, node) {
-    #if 0
+    auto sizes = node.get_primitive()->broadcast_sizes.sizes();
+    if (sizes[0] == 0 && sizes[1] == 0 && sizes[2] == 0 && sizes[3] == 0 && sizes[4] == 0 && sizes[5] == 0)
+        return;
+
     auto input_layout = node.input().get_output_layout();
 
     const auto& output_sizes = argument.broadcast_sizes;
@@ -151,6 +157,5 @@ broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& nod
                                            "input sizes",
                                            input_sizes_to_compare,
                                            "Invalid broadcast size: not dividable by input size");
-    #endif
 }
 }  // namespace cldnn
