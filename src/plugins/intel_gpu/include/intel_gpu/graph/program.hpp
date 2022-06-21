@@ -13,7 +13,6 @@
 #include "intel_gpu/runtime/engine.hpp"
 #include "intel_gpu/runtime/stream.hpp"
 #include "build_options.hpp"
-#include "runtime/kernels_cache.hpp"
 
 #include <list>
 #include <string>
@@ -271,9 +270,7 @@ public:
         return std::make_pair(vm_usage, resident_set);
     }
     std::shared_ptr<LRUCache<std::string, std::shared_ptr<primitive_impl>>> get_primitive_impl_cache() const { return primitive_impl_cache; }
-    void remove_kernel_entry(std::string kernel_entry) {
-        _kernels_cache->remove_kernel_entry(kernel_entry);
-    }
+    void remove_kernels_cache_entry(std::string kernel_entry);
 
 private:
     uint32_t prog_id = 0;

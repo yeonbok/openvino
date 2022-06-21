@@ -1469,6 +1469,10 @@ void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
 #endif
 }
 
+void program::remove_kernels_cache_entry(std::string kernel_entry) {
+    _kernels_cache->remove_kernel_entry(kernel_entry);
+}
+
 std::pair<int64_t, int64_t> program::get_estimated_device_mem_usage() {
     auto max_alloc_size = get_engine().get_device_info().max_alloc_mem_size;
     memory_pool pool(get_engine());

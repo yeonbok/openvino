@@ -204,7 +204,7 @@ void primitive_inst::update_impl() {
                 auto kernel_ids = lru_entry->get_kernel_ids();
                 for (auto k : kernel_ids) {
 //                    std::cout << "lru element popped! " << k << std::endl; 
-                    _network.get_program()->remove_kernel_entry(k);
+                    _network.get_program()->remove_kernels_cache_entry(k);
                 }
             }
         } else {

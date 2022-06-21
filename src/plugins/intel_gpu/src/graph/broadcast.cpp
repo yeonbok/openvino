@@ -10,10 +10,6 @@
 #include <string>
 #include <vector>
 #include <set>
-#include "broadcast_shape_inference.hpp"
-#include <ngraph/opsets/opset3.hpp>
-#include <ngraph/pattern/op/label.hpp>
-//#include <ngraph/pattern/op/pattern.hpp>
 
 namespace cldnn {
 primitive_type_id broadcast::type_id() {
@@ -25,22 +21,14 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for broadcast_node!");
     auto desc = node.get_primitive();
-    //ov::op::v3::Broadcast op;
-    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
-    std::vector<ov::PartialShape> input_shapes = {
-        node.input().get_output_layout().size,
-        node.get_dependency(1).get_output_layout().size,
-        // this is not correct. It should be the shape. Also the output tensor of gather should have result value.
-    };
-    bool any_input_dynamic = false;
-    for (auto i : input_shapes) {
-        if (i.is_dynamic()) any_input_dynamic = true;
+    if (desc->broadcast_sizes.sizes()[0] != 0) {
+        // static
+        auto input_layout = node.input().get_output_layout();
+        return {input_layout.data_type, input_layout.format, desc->broadcast_sizes};
+    } else {
+        // dynamic
+        return {node.input().get_output_layout().data_type, node.input().get_output_layout().format, ov::PartialShape()};
     }
-    auto ov_broadcast = ov::as_type_ptr<ov::op::v3::Broadcast>(node.get_ov_op()).get();
-    auto ov_broadcast_ptr = const_cast<ov::op::v3::Broadcast*>(ov_broadcast);
-    //std::shared_ptr<ov::op::v3::Broadcast> ov_broadcast_ptr_shared_ptr(ov_broadcast_ptr);
-    shape_infer(ov_broadcast_ptr, input_shapes, output_shapes);
-    return {node.input().get_output_layout().data_type, node.input().get_output_layout().format, output_shapes[0]};
 }
 
 static std::vector<int64_t> read_vector(cldnn::memory::ptr mem, cldnn::stream& stream) {

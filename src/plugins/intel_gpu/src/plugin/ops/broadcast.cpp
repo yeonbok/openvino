@@ -2,111 +2,103 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-#include "intel_gpu/plugin/program.hpp"
-#include "intel_gpu/plugin/common_utils.hpp"
-
 #include "ngraph/op/broadcast.hpp"
-#include "ngraph/op/constant.hpp"
 
+#include "intel_gpu/plugin/common_utils.hpp"
+#include "intel_gpu/plugin/program.hpp"
 #include "intel_gpu/primitives/broadcast.hpp"
 #include "intel_gpu/primitives/reorder.hpp"
 #include "intel_gpu/primitives/reshape.hpp"
+#include "ngraph/op/constant.hpp"
 
 namespace ov {
 namespace runtime {
 namespace intel_gpu {
 
-static void CreateCommonBroadcastOp(Program& p, const std::shared_ptr<ngraph::Node>& op, const ngraph::AxisSet axis_mapping) {
+static void CreateCommonBroadcastOp(Program& p,
+                                    const std::shared_ptr<ngraph::Node>& op,
+                                    const ngraph::AxisSet axis_mapping) {
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
 
-    //auto inputShape = op->get_input_partial_shape(0);
-    //auto outputShape = op->get_output_partial_shape(0);
+    auto inputShape = op->get_input_partial_shape(0);
+    auto outputShape = op->get_output_partial_shape(0);
 
     // I am not sure why the shape of the Constant is not recognized :(
     // But the value can be read.
-    //auto input_const = ov::as_type<ov::op::v0::Constant>(op->get_input_node_ptr(0))->get_vector<int32_t>();
-#if 0
-    auto inputPrimitive = inputPrimitives[0];
-    auto inputRank = inputShape.rank().get_length();
-    auto outputRank = outputShape.rank().get_length();
+    // auto input_const = ov::as_type<ov::op::v0::Constant>(op->get_input_node_ptr(0))->get_vector<int32_t>();
+    if (inputShape.is_static() && outputShape.is_static()) {
+        auto inputPrimitive = inputPrimitives[0];
+        auto inputRank = inputShape.rank().get_length();
+        auto outputRank = outputShape.rank().get_length();
 
-    if (inputRank != outputRank) {
-        // Add reorder if changing number of dimensions requires changing format
-        auto targetFormat = DefaultFormatForDims(outputRank);
-        if (targetFormat.value != DefaultFormatForDims(inputRank).value) {
-            auto reorderName = layerName + "_cldnn_in_reorder";
-            auto targetDatatype = DataTypeFromPrecision(op->get_input_element_type(0));
-            auto reorderPrim = cldnn::reorder(reorderName,
-                                              inputPrimitive,
-                                              targetFormat,
-                                              targetDatatype,
-                                              std::vector<float>(),
-                                              cldnn::reorder_mean_mode::subtract,
-                                              op->get_friendly_name());
-            p.AddPrimitive(reorderPrim);
-            p.AddInnerPrimitiveToProfiler(reorderName, layerName, op);
+        if (inputRank != outputRank) {
+            // Add reorder if changing number of dimensions requires changing format
+            auto targetFormat = DefaultFormatForDims(outputRank);
+            if (targetFormat.value != DefaultFormatForDims(inputRank).value) {
+                auto reorderName = layerName + "_cldnn_in_reorder";
+                auto targetDatatype = DataTypeFromPrecision(op->get_input_element_type(0));
+                auto reorderPrim = cldnn::reorder(reorderName,
+                                                  inputPrimitive,
+                                                  targetFormat,
+                                                  targetDatatype,
+                                                  std::vector<float>(),
+                                                  cldnn::reorder_mean_mode::subtract,
+                                                  op->get_friendly_name());
+                p.AddPrimitive(reorderPrim);
+                p.AddInnerPrimitiveToProfiler(reorderName, layerName, op);
 
-            inputPrimitive = reorderName;
-        }
-
-        auto reshapeName = layerName + "_cldnn_in_reshape";
-
-        // Extend input dimensions with ones
-        if (axis_mapping.empty()) {
-            // If axis_mapping is not specified, then we prepend shape with neccesary count of 1-s
-            inputShape.insert(inputShape.begin(), outputRank - inputRank, 1ul);
-        } else {
-            // If axis_mapping is specified, then ones are inserted according to it.
-            ngraph::Shape tmp_shape;
-            int prev_axis = -1;
-            int next_axis = -1;
-            size_t currentRank = 0;
-            for (auto& axis : axis_mapping) {
-                prev_axis = next_axis;
-                next_axis = static_cast<int>(axis);
-
-                int ones_count = std::max(next_axis - prev_axis - 1, 0);
-                tmp_shape.insert(tmp_shape.begin() + currentRank, ones_count, 1ul);
-                tmp_shape.push_back(outputShape[axis]); // TODO
-
-                currentRank += ones_count + 1;
+                inputPrimitive = reorderName;
             }
-            inputShape = tmp_shape;
+
+            auto reshapeName = layerName + "_cldnn_in_reshape";
+
+            // Extend input dimensions with ones
+            if (axis_mapping.empty()) {
+                // If axis_mapping is not specified, then we prepend shape with neccesary count of 1-s
+                inputShape.insert(inputShape.begin(), outputRank - inputRank, 1ul);
+            } else {
+                // If axis_mapping is specified, then ones are inserted according to it.
+                ngraph::Shape tmp_shape;
+                int prev_axis = -1;
+                int next_axis = -1;
+                size_t currentRank = 0;
+                for (auto& axis : axis_mapping) {
+                    prev_axis = next_axis;
+                    next_axis = static_cast<int>(axis);
+
+                    int ones_count = std::max(next_axis - prev_axis - 1, 0);
+                    tmp_shape.insert(tmp_shape.begin() + currentRank, ones_count, 1ul);
+                    tmp_shape.push_back(outputShape.get_shape()[axis]);  // TODO
+
+                    currentRank += ones_count + 1;
+                }
+                inputShape = tmp_shape;
+            }
+
+            auto reshapePrim = cldnn::reshape(reshapeName, inputPrimitive, inputShape, op->get_friendly_name());
+            p.AddPrimitive(reshapePrim);
+            p.AddInnerPrimitiveToProfiler(reshapeName, layerName, op);
+
+            inputPrimitive = reshapeName;
         }
+        auto broadcastPrim =
+            cldnn::broadcast(layerName, {inputPrimitive}, tensor_from_dims(op->get_output_shape(0)), {}, op->get_friendly_name());
+        p.AddPrimitiveToProfiler(op);
+        return;
+    } else {  // dynamic shape
+        auto broadcastPrim = cldnn::broadcast(layerName,
+                                              inputPrimitives,
+                                              tensor_from_dims({0, 0, 0, 0}),
+                                              {},
+                                              op->get_friendly_name(),
+                                              cldnn::padding(),
+                                              op);
 
-        auto reshapePrim = cldnn::reshape(reshapeName, inputPrimitive, inputShape, op->get_friendly_name());
-        p.AddPrimitive(reshapePrim);
-        p.AddInnerPrimitiveToProfiler(reshapeName, layerName, op);
-
-        inputPrimitive = reshapeName;
+        p.AddPrimitive(broadcastPrim);
+        p.AddPrimitiveToProfiler(op);
+        return;
     }
-    auto broadcastPrim = cldnn::broadcast(layerName,
-                                          inputPrimitive,
-                                          tensor_from_dims({1, 1, 1, 1}),
-                                          {},
-                                          op->get_friendly_name());
-#endif
-#if 0
-    broadcast(const primitive_id& id,
-              std::vector<primitive_id>& inputs,
-              const tensor& broadcast_sizes,
-              const std::vector<uint16_t>& broadcast_axes = {},
-              const primitive_id& ext_prim_id = "",
-              const padding& output_padding = padding(),
-              std::shared_ptr<ov::Node> original_node = nullptr)
-#endif
-    auto broadcastPrim = cldnn::broadcast(layerName,
-                                          inputPrimitives,
-                                          //tensor_from_dims(op->get_output_shape(0)),
-                                          tensor_from_dims({1, 1, 1, 1}),
-                                          {},
-                                          op->get_friendly_name(),
-                                          cldnn::padding(),
-                                          op);
-
-    p.AddPrimitive(broadcastPrim);
-    p.AddPrimitiveToProfiler(op);
 }
 
 static void CreateBroadcastOp(Program& p, const std::shared_ptr<ngraph::op::v1::Broadcast>& op) {
@@ -114,12 +106,14 @@ static void CreateBroadcastOp(Program& p, const std::shared_ptr<ngraph::op::v1::
     if (op->get_broadcast_spec().m_type == ngraph::op::AutoBroadcastType::NONE && op->get_input_size() == 3) {
         auto axis_mapping_node = std::dynamic_pointer_cast<ngraph::op::v0::Constant>(op->get_input_node_shared_ptr(2));
         if (!axis_mapping_node)
-            IE_THROW() << "Unsupported parameter nodes type in " << op->get_friendly_name() << " (" << op->get_type_name() << ")";
+            IE_THROW() << "Unsupported parameter nodes type in " << op->get_friendly_name() << " ("
+                       << op->get_type_name() << ")";
 
         auto axis_mapping = axis_mapping_node->get_axis_set_val();
         CreateCommonBroadcastOp(p, op, axis_mapping);
     } else {
-        // TODO: check if axis_mapping is not needed in these cases and prepending input shape with ones works fine in all cases
+        // TODO: check if axis_mapping is not needed in these cases and prepending input shape with ones works fine in
+        // all cases
         CreateCommonBroadcastOp(p, op, {});
     }
 }
@@ -130,7 +124,8 @@ static void CreateBroadcastOp(Program& p, const std::shared_ptr<ngraph::op::v3::
     if (op->get_input_size() == 3) {
         auto axis_mapping_node = std::dynamic_pointer_cast<ngraph::op::v0::Constant>(op->get_input_node_shared_ptr(2));
         if (!axis_mapping_node)
-            IE_THROW() << "Unsupported parameter nodes type in " << op->get_friendly_name() << " (" << op->get_type_name() << ")";
+            IE_THROW() << "Unsupported parameter nodes type in " << op->get_friendly_name() << " ("
+                       << op->get_type_name() << ")";
 
         axis_mapping = axis_mapping_node->get_axis_set_val();
     }
