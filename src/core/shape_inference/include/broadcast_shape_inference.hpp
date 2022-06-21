@@ -164,7 +164,6 @@ void broadcase_base_shape_infer(
     const ov::op::util::BroadcastBase* op,
     const std::vector<T>& input_shapes,
     std::vector<T>& output_shapes,
-    bool from_cldnn = false,
     const std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>>& constant_data = {}) {
 
     // shape node should produce a one dimensional shape.
@@ -190,12 +189,9 @@ void broadcase_base_shape_infer(
     const bool is_target_shape_known = target_shape.is_static();
 
     T output_shape;
-    
-    bool output_shape_defined = false;
-    if (!from_cldnn)
-        output_shape_defined =  get_data_as_shape<T>(1, op, output_shape, constant_data);
+    bool output_shape_defined = get_data_as_shape<T>(1, op, output_shape, constant_data);
 
-    if (!output_shape_defined && !from_cldnn) {
+    if (!output_shape_defined) {
         if (auto concat = ov::as_type_ptr<ov::opset1::Concat>(op->get_input_node_shared_ptr(1))) {
             const auto concat_inputs = concat->input_values();
             if (concat->get_output_partial_shape(0).is_static() && concat->get_shape().size() == 1 &&
@@ -212,11 +208,6 @@ void broadcase_base_shape_infer(
             }
         }
     }
-
-    //if (!output_shape_defined && from_cldnn){
-    //    ov::evaluate_as_partial_shape(target_shape, output_shape);
-    //    output_shape_defined = true;
-    //}
 
     if (mode.m_type == BroadcastType::NONE) {
         if (output_shape_defined) {
@@ -278,7 +269,6 @@ template <class T>
 void shape_infer(const ov::op::v3::Broadcast* op,
                  const std::vector<T>& input_shapes,
                  std::vector<T>& output_shapes,
-                 bool from_cldnn = false,
                  const std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>>& constant_data = {}) {
     NODE_VALIDATION_CHECK(op, output_shapes.size() == 1);
     auto& mode = op->get_broadcast_spec();
@@ -287,14 +277,11 @@ void shape_infer(const ov::op::v3::Broadcast* op,
                               input_shapes.size() == 3,
                               "axes_mapping input should be provided if explicit mode is used");
     } else {
-        if (input_shapes.size() != 2) {
-            std::cout << "error!" << std::endl;
-        }
         NODE_VALIDATION_CHECK(op,
                               input_shapes.size() == 2,
                               "axes_mapping input should not be provided for mode other than explicit");
     }
-    broadcase_base_shape_infer(op, input_shapes, output_shapes, from_cldnn, constant_data);
+    broadcase_base_shape_infer(op, input_shapes, output_shapes, constant_data);
 }
 }  // namespace v3
 
@@ -303,11 +290,10 @@ template <class T>
 void shape_infer(const ov::op::v1::Broadcast* op,
                  const std::vector<T>& input_shapes,
                  std::vector<T>& output_shapes,
-                 bool from_cldnn = false,
                  const std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>>& constant_data = {}) {
     NODE_VALIDATION_CHECK(op, output_shapes.size() == 1 && (input_shapes.size() == 2 || input_shapes.size() == 3));
 
-    broadcase_base_shape_infer(op, input_shapes, output_shapes, from_cldnn, constant_data);
+    broadcase_base_shape_infer(op, input_shapes, output_shapes, constant_data);
 }
 }  // namespace v1
 
