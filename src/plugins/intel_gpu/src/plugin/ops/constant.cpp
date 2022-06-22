@@ -61,7 +61,7 @@ static void createClDnnConstant(Program& p, const ngraph::Shape& constDims, cons
 
 static void CreateConstantOp(Program& p, const std::shared_ptr<ngraph::op::v0::Constant>& op) {
     ngraph::Shape constDims = op->get_shape();
-#if 1
+#if 0
     if (constDims.size() == 0) { // taylor (just trial)
         constDims.push_back(op->get_vector<int32_t>().size());
     }

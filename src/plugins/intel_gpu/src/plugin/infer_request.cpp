@@ -53,7 +53,9 @@ void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, ov::runtime::
     size_t offset = (bi == nullptr) ? 0 : bi->buf_offset;
 
     auto layout = src->get_layout();
+    std::cout << layout.to_string() << std::endl;
     auto size = layout.get_tensor();
+    std::cout << "n ? " << n << std::endl;
 
     auto locked_dst = dst->buffer();
     auto dst_ptr = locked_dst.as<dst_dt*>();
@@ -62,6 +64,7 @@ void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, ov::runtime::
     }
     cldnn::mem_lock<src_dt> src_lock{ src, stream };
     src_dt* src_ptr = src_lock.data();
+    std::cout << "result blob ptr: " << src_ptr << std::endl;
     dst_ptr += offset;
 
     if (layout.data_padding) {
@@ -80,6 +83,7 @@ void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, ov::runtime::
         }
     } else {
         for (size_t i = 0; i < n; i++) {
+//            std::cout << "i[" << i << "] : " << src_ptr[i] << std::endl;
             dst_ptr[i] = src_ptr[i];
         }
     }
@@ -778,6 +782,7 @@ void InferRequest::wait() {
     // wait for completion & collect outputs as requested by the model
     for (auto& no : _networkOutputs) {
         std::string outputID = m_graph->MapOutputName(no.first);
+        std::cout << "newtorkOutput " << no.first << " : " << outputID << std::endl;
         auto outputMemory = internal_outputs.at(outputID).get_memory();
 
         auto node = findOutputByNodeName(no.first);
@@ -949,7 +954,7 @@ void InferRequest::copy_output_data(cldnn::memory::ptr src, Blob::Ptr dst, buf_i
     case Precision::I8:   copyResultToOutputBlob<int8_t, int8_t>(src, dst, bi, stream);  break;
     case Precision::U16:  copyResultToOutputBlob<float, uint16_t>(src, dst, bi, stream);  break;
     case Precision::U32:  copyResultToOutputBlob<int32_t, uint32_t>(src, dst, bi, stream);  break;
-    case Precision::U64:  copyResultToOutputBlob<int32_t, uint64_t>(src, dst, bi, stream);  break;
+    case Precision::U64:  copyResultToOutputBlob<int64_t, uint64_t>(src, dst, bi, stream);  break;
     case Precision::U8:   copyResultToOutputBlob<uint8_t, uint8_t>(src, dst, bi, stream);  break;
     default: IE_THROW(NotImplemented) << "The plugin does not support output " << dst->getTensorDesc().getPrecision() << " precision";
     }
@@ -1105,12 +1110,12 @@ void InferRequest::allocate_outputs() {
         }
 
         outputsMap[no.first] = outputID;
-        if (desc.getPrecision() == Precision::I16 || desc.getPrecision() == Precision::U16 ||
-            desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64 ||
+        if (desc.getPrecision() == Precision::I16 || desc.getPrecision() == Precision::U16 || desc.getPrecision() == Precision::I32 ||
+            desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64 || desc.getPrecision() == Precision::I64 ||
             desc.getPrecision() == Precision::FP64) {
             TensorDesc device_blob_desc = desc;
 
-            if (desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64)
+            if (desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64 || desc.getPrecision() == Precision::I64)
                 device_blob_desc.setPrecision(Precision::I32);
             else
                 device_blob_desc.setPrecision(Precision::FP32);
@@ -1221,15 +1226,16 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
                     } else {
                         convertAndCopy<double, float>(inputBlob.get(), ptr.data());
                     }
-                } else if (prec == Precision::U64 || prec == Precision::U32 || prec == Precision::I64) {
-                    cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
+                } else if (prec == Precision::U64 || prec == Precision::I64) {
+                    cldnn::mem_lock<int64_t> ptr{ inputMem, stream };
                     if (prec == Precision::U64) {
-                        convertAndCopy<uint64_t, int32_t>(inputBlob.get(), ptr.data());
+                        convertAndCopy<uint64_t, int64_t>(inputBlob.get(), ptr.data());
                     } else if (prec == Precision::I64) {
-                        convertAndCopy<int64_t, int32_t>(inputBlob.get(), ptr.data());
-                    } else {
-                        convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
+                        convertAndCopy<int64_t, int64_t>(inputBlob.get(), ptr.data());
                     }
+                } else if (prec == Precision::U32) {
+                    cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
+                    convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
                 } else {
                     auto src_lock = inputBlob->cbuffer();
                     auto src_ptr = src_lock.as<uint8_t*>();
