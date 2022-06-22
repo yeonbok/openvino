@@ -44,7 +44,10 @@ protected:
             args.inputs.push_back(instance.soft_nms_sigma_mem());
         }
 
-        args.output = instance.output_memory_ptr();
+        for (size_t i = 0; i < instance.outputs_memory_count(); i++) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
+
         if (instance.has_second_output())
             args.inputs.push_back(instance.second_output_mem());
         if (instance.has_third_output())

@@ -101,7 +101,7 @@ struct non_max_suppression_basic : public testing::Test {
 
 using nms_types = testing::Types<float, half_t>;
 TYPED_TEST_SUITE(non_max_suppression_basic, nms_types);
-
+#if 0
 TYPED_TEST(non_max_suppression_basic, basic) {
     auto& engine = tests::get_test_engine();
 
@@ -259,7 +259,124 @@ TYPED_TEST(non_max_suppression_basic, optional_outputs) {
     cldnn::mem_lock<int> third_output_ptr(valid_outputs_mem, get_test_stream());
     ASSERT_EQ(expected_out_num, third_output_ptr[0]);
 }
+#endif
+TYPED_TEST(non_max_suppression_basic, basic_kelvin) {
+    auto& engine = tests::get_test_engine();
 
+    topology topo;
+    topo.add(input_layout("boxes", this->boxes_layout));
+    topo.add(input_layout("scores", this->scores_layout));
+    topo.add(non_max_suppression("nms", input_info("boxes", 0), input_info("scores", 0), 6, false, true));
+
+    build_options bo;
+    bo.set_option(build_option::optimize_data(true));
+
+    cldnn::network net{ engine, topo, bo };
+
+    auto boxes_mem = this->get_boxes_memory(engine);
+    auto scores_mem = this->get_scores_memory(engine);
+
+    net.set_input_data("boxes", boxes_mem);
+    net.set_input_data("scores", scores_mem);
+
+    auto result = net.execute();
+
+    std::vector<int> expected_out = {
+        this->pad, this->pad, this->pad,
+        this->pad, this->pad, this->pad,
+        this->pad, this->pad, this->pad,
+        this->pad, this->pad, this->pad,
+        this->pad, this->pad, this->pad,
+        this->pad, this->pad, this->pad
+    };
+
+    auto out_mem = result.at("nms").get_memory();
+    cldnn::mem_lock<int> out_ptr(out_mem, get_test_stream());
+
+    ASSERT_EQ(expected_out.size(), out_ptr.size());
+    for (size_t i = 0; i < expected_out.size(); ++i) {
+        EXPECT_EQ(expected_out[i], out_ptr[i]) << "at i = " << i;
+    }
+}
+/*
+TYPED_TEST(non_max_suppression_basic, optional_outputs_kelvin) {
+    auto& engine = tests::get_test_engine();
+
+    auto num_per_class_mem = engine.allocate_memory(layout(data_types::f32, format::bfyx, tensor(batch(1))));
+    tests::set_values(num_per_class_mem, { 1.f });
+
+    topology topo;
+    topo.add(input_layout("boxes", this->boxes_layout));
+    topo.add(input_layout("scores", this->scores_layout));
+    topo.add(data("num_per_class", num_per_class_mem));
+
+    memory::ptr selected_scores_mem = this->get_selected_scores_mem(engine);
+    memory::ptr valid_outputs_mem = this->get_valid_outputs_mem(engine);
+
+    topo.add(mutable_data("selected_scores", selected_scores_mem));
+    topo.add(mutable_data("valid_outputs", valid_outputs_mem));
+
+    topo.add(non_max_suppression("nms", "boxes", "scores",
+        this->batch_size * this->classes_num * 1, false, true,
+                                "num_per_class", cldnn::primitive_id(),
+                                cldnn::primitive_id(), cldnn::primitive_id(),
+                                "selected_scores", "valid_outputs"));
+
+    build_options bo;
+    bo.set_option(build_option::optimize_data(true));
+
+    cldnn::network net{ engine, topo, bo };
+
+    auto boxes_mem = this->get_boxes_memory(engine);
+    auto scores_mem = this->get_scores_memory(engine);
+
+    net.set_input_data("boxes", boxes_mem);
+    net.set_input_data("scores", scores_mem);
+
+    auto result = net.execute();
+
+    std::vector<int> expected_out = {
+        0, 0, 2,
+        0, 1, 0,
+        1, 0, 2,
+        1, 1, 2,
+    };
+    const int expected_out_num = static_cast<int>(expected_out.size()) / 3;
+
+    std::vector<float> expected_second_out = {
+        0.f, 0.f, 0.9f,
+        0.f, 1.f, 0.9f,
+        1.f, 0.f, 0.8f,
+        1.f, 1.f, 0.3f,
+    };
+
+    auto out_mem = result.at("nms").get_memory();
+    cldnn::mem_lock<int> out_ptr(out_mem, get_test_stream());
+
+    ASSERT_EQ(expected_out.size(), out_ptr.size());
+    for (size_t i = 0; i < expected_out.size(); ++i) {
+        EXPECT_EQ(expected_out[i], out_ptr[i]) << "at i = " << i;
+    }
+
+    if (selected_scores_mem->get_layout().data_type == data_types::f32) {
+        cldnn::mem_lock<float> second_output_ptr(selected_scores_mem, get_test_stream());
+
+        for (size_t i = 0; i < expected_second_out.size(); ++i) {
+            EXPECT_FLOAT_EQ(expected_second_out[i], second_output_ptr[i]);
+        }
+    } else {
+        cldnn::mem_lock<half_t> second_output_ptr(selected_scores_mem, get_test_stream());
+
+        for (size_t i = 0; i < expected_second_out.size(); ++i) {
+            EXPECT_NEAR(expected_second_out[i], half_to_float(second_output_ptr[i]), 0.0002f);
+        }
+    }
+
+    cldnn::mem_lock<int> third_output_ptr(valid_outputs_mem, get_test_stream());
+    ASSERT_EQ(expected_out_num, third_output_ptr[0]);
+}
+*/
+#if 0
 TYPED_TEST(non_max_suppression_basic, iou_threshold) {
     auto& engine = tests::get_test_engine();
 
@@ -430,3 +547,4 @@ TYPED_TEST(non_max_suppression_basic, soft_nms_sigma) {
         EXPECT_EQ(expected_out[i], out_ptr[i]) << "at i = " << i;
     }
 }
+#endif
