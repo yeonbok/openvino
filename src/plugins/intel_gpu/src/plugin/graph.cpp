@@ -48,7 +48,7 @@ Graph::Graph(InferenceEngine::CNNNetwork& network, gpu::ClContext::Ptr context, 
     , m_config(config)
     , m_stream_id(stream_id)
     , m_state(0) {
-    m_program = std::make_shared<Program>(network, GetEngine(), m_config);
+    PRINT_TIME(m_program = std::make_shared<Program>(network, GetEngine(), m_config), "#", false);
     if (m_program->m_max_batch > 1)
         m_config.max_dynamic_batch = m_program->m_max_batch;
     Build();
@@ -113,7 +113,7 @@ std::shared_ptr<cldnn::network> Graph::BuildNetwork(std::shared_ptr<cldnn::progr
         auto &engine = m_program->GetEngine();
         network = std::make_shared<cldnn::network>(program, engine.create_stream(externalQueue), m_stream_id);
     } else {
-        network = std::make_shared<cldnn::network>(program, m_stream_id);
+        PRINT_TIME(network = std::make_shared<cldnn::network>(program, m_stream_id), "#", false);
     }
 
 

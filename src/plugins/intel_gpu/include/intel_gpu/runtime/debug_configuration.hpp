@@ -17,6 +17,18 @@
 // Macro below is inserted to avoid unused variable warning when GPU_DEBUG_CONFIG is OFF
 #define GPU_DEBUG_GET_INSTANCE(name) auto name = cldnn::debug_configuration::get_instance(); (void)(name);
 
+#define PRINT_TIME(func, indent, is_internal) \
+{\
+    if (std::getenv("PRINT_TIME") && !is_internal) { \
+        auto start = std::chrono::high_resolution_clock::now(); \
+        func; \
+        auto duration = std::chrono::high_resolution_clock::now() - start; \
+        std::cout << indent << " " << #func <<  " : " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count() \
+                  << " micro sec (" << __FILE__ << ":" << __LINE__ << ")" << std::endl; \
+    } else { \
+        func; \
+    } \
+}
 
 namespace cldnn {
 

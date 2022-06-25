@@ -340,8 +340,20 @@ std::shared_ptr<cldnn::program> Program::BuildProgram(const std::vector<std::sha
         options.set_option(cldnn::build_option::partial_build_program(true));
     }
     PrepareBuild(networkInputs, networkOutputs);
-    for (const auto& op : ops) {
-        CreateSingleLayerPrimitive(*m_topology, op);
+    {
+        if (std::getenv("PRINT_TIME")) {
+            auto start = std::chrono::high_resolution_clock::now();
+            for (const auto& op : ops) {
+                CreateSingleLayerPrimitive(*m_topology, op);
+            }
+            auto duration = std::chrono::high_resolution_clock::now() - start;
+            std::cout << "----" << " " << "CreateTopology" <<  " : " << std::chrono::duration_cast<std::chrono::microseconds>(duration).count()
+                      << " micro sec (" << __FILE__ << ":" << __LINE__ << ")" << std::endl;
+        } else {
+            for (const auto& op : ops) {
+                CreateSingleLayerPrimitive(*m_topology, op);
+            }
+        }
     }
     if (createTopologyOnly) {
         return {};

@@ -114,7 +114,7 @@ program::program(engine& engine_ref,
     if (no_optimizations) {
         init_graph();
     } else {
-        build_program(is_internal);
+        PRINT_TIME(build_program(is_internal), "--", is_internal);
     }
 }
 
@@ -132,7 +132,7 @@ program::program(engine& engine_ref,
                                                                       kernel_selector::KernelBase::get_db().get_batch_header_str()));
     pm = std::unique_ptr<pass_manager>(new pass_manager(*this));
     prepare_nodes(nodes);
-    build_program(is_internal);
+    PRINT_TIME(build_program(is_internal), "##", is_internal);
 }
 
 program::~program() {
@@ -437,9 +437,9 @@ void program::set_options() {
 }
 
 void program::build_program(bool is_internal) {
-    init_graph();
+    PRINT_TIME(init_graph(), "----", is_internal);
     { pre_optimize_graph(is_internal); }
-    run_graph_compilation();
+    PRINT_TIME(run_graph_compilation(), "----", is_internal);
     { post_optimize_graph(is_internal); }
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -454,13 +454,13 @@ void program::build_program(bool is_internal) {
             return;
         }
 
-        compile();
-        init_kernels();
+        PRINT_TIME(compile(), "----", is_internal);
+        PRINT_TIME(init_kernels(), "----", is_internal);
     }
 
     if (!is_internal) {
         prim_info = get_current_stage_info();
-        transfer_memory_to_device();
+        PRINT_TIME(transfer_memory_to_device(), "----", is_internal);
     }
 
     cleanup();
@@ -484,14 +484,14 @@ void program::pre_optimize_graph(bool is_internal) {
         load_tuning_cache();
 
     // trim to outputs
-    apply_opt_pass<trim_to_outputs>();  // ToDo remove hidden dependencies from trimm pass
+    PRINT_TIME(apply_opt_pass<trim_to_outputs>(), "----", is_internal);  // ToDo remove hidden dependencies from trimm pass
 
     // handle symmetric and asymmetric padding for input
-    apply_opt_pass<handle_input_padding>();
+    PRINT_TIME(apply_opt_pass<handle_input_padding>(), "----", is_internal);
 
-    processing_order.calculate_BFS_processing_order();  // this method makes sense only for OOOQ (out of order execution queue)
+    PRINT_TIME(processing_order.calculate_BFS_processing_order(), "----", is_internal);  // this method makes sense only for OOOQ (out of order execution queue)
 
-    apply_opt_pass<reverse_optional_nodes_outputs>();
+    PRINT_TIME(apply_opt_pass<reverse_optional_nodes_outputs>(), "----", is_internal);
 
     bool output_size_handling_enabled = analyze_output_size_handling_need();
     for (auto& node : processing_order) {
@@ -500,7 +500,7 @@ void program::pre_optimize_graph(bool is_internal) {
     }
 
     if (options.get<build_option_type::optimize_data>()->enabled()) {
-        apply_opt_pass<prepare_quantization>();
+        PRINT_TIME(apply_opt_pass<prepare_quantization>(), "----", is_internal);
     }
 
     layout_optimizer lo(output_size_handling_enabled);
@@ -508,37 +508,38 @@ void program::pre_optimize_graph(bool is_internal) {
 
     reorder_factory rf;
     if (options.get<build_option_type::optimize_data>()->enabled()) {
-        apply_opt_pass<prepare_primitive_fusing_through>();
+        PRINT_TIME(apply_opt_pass<prepare_primitive_fusing_through>(), "----", is_internal);
 
-        apply_opt_pass<pre_replace_deconv>(lo);
+        PRINT_TIME(apply_opt_pass<pre_replace_deconv>(lo), "----", is_internal);
 
-        apply_opt_pass<prepare_primitive_fusing>(lo);
+        PRINT_TIME(apply_opt_pass<prepare_primitive_fusing>(lo), "----", is_internal);
 
-        apply_opt_pass<reorder_inputs>(lo, rf);
+        PRINT_TIME(apply_opt_pass<reorder_inputs>(lo, rf), "----", is_internal);
         // Ideally this should be done before fusing to simplify logic and make the pass more powerful,
         // but after format selection to select correct alignment.
         // Unfortunately those passes currently happen in reverse order.
-        apply_opt_pass<concat_input_order>();
+        PRINT_TIME(apply_opt_pass<concat_input_order>(), "----", is_internal);
 
         // TODO this code should be moved to post compilation after kernel selector will support handling reorder bias
-        apply_opt_pass<pre_optimize_bias>(rf);
+        PRINT_TIME(apply_opt_pass<pre_optimize_bias>(rf), "----", is_internal);
 
         // passes regarding conv + eltwise optimizations
 
         // shrinking eltwise if users are conv 1x1 with stride > 1 optimization
-        apply_opt_pass<eltwise_shrinking>();
+        PRINT_TIME(apply_opt_pass<eltwise_shrinking>(), "----", is_internal);
 
         // trying to set stride to 1x1 by shrinking convolutions before eltwise if doable
-        apply_opt_pass<eltwise_remove_stride>();
+        PRINT_TIME(apply_opt_pass<eltwise_remove_stride>(), "----", is_internal);
     }
 
-    apply_opt_pass<strided_slice_optimize>();
+    PRINT_TIME(apply_opt_pass<strided_slice_optimize>(), "----", is_internal);
 
-    apply_opt_pass<handle_reshape>();
+    PRINT_TIME(apply_opt_pass<handle_reshape>(), "----", is_internal);
 
-    apply_opt_pass<prepare_padding>(output_size_handling_enabled);
+    PRINT_TIME(apply_opt_pass<prepare_padding>(output_size_handling_enabled), "----", is_internal);
 
-    apply_opt_pass<remove_redundant_reorders>(lo, options.get<build_option_type::optimize_data>()->enabled());
+    PRINT_TIME(apply_opt_pass<remove_redundant_reorders>(lo, options.get<build_option_type::optimize_data>()->enabled()),
+        "----", is_internal);
 
     if (!is_internal) {
         // ToDo remove hidden dependencies from propagate_constants pass
@@ -560,13 +561,13 @@ void program::pre_optimize_graph(bool is_internal) {
 void program::post_optimize_graph(bool is_internal) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "ProgramImpl::PostOptimizeGraph");
     // input reorder for fully connected if necessary
-    apply_opt_pass<post_input_reorder>();
+    PRINT_TIME(apply_opt_pass<post_input_reorder>(), "----", is_internal);
 
     reorder_factory rf;
     layout_optimizer lo;
-    apply_opt_pass<post_optimize_weights>(rf);
+    PRINT_TIME(apply_opt_pass<post_optimize_weights>(rf), "----", is_internal);
 
-    apply_opt_pass<remove_redundant_reorders>(lo, false, true);  // TODO: do we need it at this place also?
+    PRINT_TIME(apply_opt_pass<remove_redundant_reorders>(lo, false, true), "----", is_internal);  // TODO: do we need it at this place also?
 
 #ifdef GPU_DEBUG_CONFIG
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -575,14 +576,15 @@ void program::post_optimize_graph(bool is_internal) {
     if (!is_internal && !options.get<build_option_type::partial_build_program>()->enabled()) {
 #endif
         // ToDo remove hidden dependencies from propagate_constants pass
-        apply_opt_pass<propagate_constants>();
+        PRINT_TIME(apply_opt_pass<propagate_constants>(), "----", is_internal);
     }
 
     if (options.get<build_option_type::optimize_data>()->enabled())
-        apply_opt_pass<remove_redundant_reorders>(lo, false, true, true); // pass to remove output reorders while all others graph optimizations were done
+        PRINT_TIME(apply_opt_pass<remove_redundant_reorders>(lo, false, true, true), "----", is_internal);
+        // pass to remove output reorders while all others graph optimizations were done
 
     // update loop input/output primitive mappings
-    apply_opt_pass<update_loop_primitive_map>();
+    PRINT_TIME(apply_opt_pass<update_loop_primitive_map>(), "----", is_internal);
 }
 
 // mark if the node is constant assuming that all dependencies are marked properly
@@ -704,9 +706,9 @@ void program::prepare_memory_dependencies() {
     if (!get_engine().configuration().use_memory_pool)
         return;
 
-    apply_opt_pass<basic_memory_dependencies>();
-    apply_opt_pass<skipped_branch_memory_dependencies>();
-    apply_opt_pass<oooq_memory_dependencies>();
+    PRINT_TIME(apply_opt_pass<basic_memory_dependencies>(), "----", false);
+    PRINT_TIME(apply_opt_pass<skipped_branch_memory_dependencies>(), "----", false);
+    PRINT_TIME(apply_opt_pass<oooq_memory_dependencies>(), "----", false);
 }
 
 std::string program::get_memory_dependencies_string() const {

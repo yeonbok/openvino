@@ -256,13 +256,13 @@ network::network(program::ptr program, stream::ptr stream, bool is_internal, boo
         wait_for_the_turn();
     }
 
-    allocate_primitives();
-    configure_primitives_second_output();
-    check_names();
-    build_insts_deps();
-    build_exec_order();
-    validate_primitives();
-    add_default_output_chains();
+    PRINT_TIME(allocate_primitives(), "----", is_internal);
+    PRINT_TIME(configure_primitives_second_output(), "----", is_internal);
+    PRINT_TIME(check_names(), "----", is_internal);
+    PRINT_TIME(build_insts_deps(), "----", is_internal);
+    PRINT_TIME(build_exec_order(), "----", is_internal);
+    PRINT_TIME(validate_primitives(), "----", is_internal);
+    PRINT_TIME(add_default_output_chains(), "----", is_internal);
 }
 
 network::network(engine& engine,
