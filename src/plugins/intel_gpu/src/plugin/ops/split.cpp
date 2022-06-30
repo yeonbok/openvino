@@ -52,10 +52,13 @@ static void CreateCommonSplitOp(Program& p, const std::shared_ptr<ngraph::Node>&
         p.AddPrimitive(cropPrim);
         p.profilingIDs.push_back(outLayerName);
         p.InitProfileInfo(outLayerName, "Crop");
-#if 0
-        for (size_t i = 0; i < inputDims.size(); i++) {
-            if (outLayerDims[i] != inputDims[i]) {
-                startOffset[i] += outLayerDims[i];
+#if 1
+        if (outLayerDims.is_static()) {
+            for (size_t i = 0; i < inputDims.size(); i++) {
+                if (outLayerDims[i] != inputDims[i]) {
+                   // TODO : how to set this offset in dynamic shape? 
+                    startOffset[i] += outLayerDims.to_shape()[i];
+                }
             }
         }
 #endif

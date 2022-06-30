@@ -83,18 +83,27 @@ static void CreateReduceOp(Program& p, const std::shared_ptr<ngraph::Node>& op, 
     p.AddPrimitive(reducePrim);
 
     auto resultLayerName = layerName;
-    auto out_dims = op->get_output_shape(0).size();
-    if (out_dims == 3 && !keep_dims && rank >= 4) {
+    //auto out_dims = op->get_output_shape(0).size();
+    auto out_dims_partial = op->get_output_partial_shape(0).size();
+    std::cout << out_dims_partial << std::endl;
+    #if 0
+    if (out_dims_partial == 3 && !keep_dims && rank >= 4) {
+        //p.AddPrimitive(reducePrim);
+        p.AddInnerPrimitiveToProfiler(layerName, reducePrim, op);
         resultLayerName = layerName + "_reshape";
+        //auto reshape_prim = cldnn::reshape(resultLayerName, layerName, op->get_output_partial_shape(0), op->get_friendly_name());
         auto reshape_prim = cldnn::reshape(resultLayerName, layerName, op->get_output_partial_shape(0), op->get_friendly_name());
         p.AddPrimitive(reshape_prim);
         p.AddPrimitiveToProfiler(op, resultLayerName);
+        return;
     }
+    #endif
 
+    p.AddInnerPrimitiveToProfiler(layerName, reducePrim, op);
     auto reorderLayerName = layerName + "_reorder";
     cldnn::format out_format = cldnn::format::any;
     auto out_dt = DataTypeFromPrecision(op->get_output_element_type(0));
-    if (!keep_dims && rank > 4) {
+    if (!keep_dims && rank >= 4) {
         if (rank - rawAxes.size() == 6)
             out_format = cldnn::format::bfwzyx;
         else if (rank - rawAxes.size() == 5)
@@ -104,8 +113,9 @@ static void CreateReduceOp(Program& p, const std::shared_ptr<ngraph::Node>& op, 
 
         auto reorder_prim = cldnn::reorder(reorderLayerName,
                                            resultLayerName,
-                                           out_format,
-                                           out_dt,
+                                           //out_format,
+                                           //out_dt,
+                                           cldnn::layout(out_dt, out_format, op->get_output_partial_shape(0)),
                                            std::vector<float>(),
                                            cldnn::reorder_mean_mode::subtract,
                                            op->get_friendly_name());

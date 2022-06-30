@@ -161,10 +161,10 @@ Program::Program(InferenceEngine::CNNNetwork& network, std::shared_ptr<cldnn::en
         if (dyn_shape_batch_found) {
             m_config.max_dynamic_batch = batch_dim.begin()->second.second;
         } else {
-            if (!batch_dim.empty() && shapes.empty()) {
+//            if (!batch_dim.empty() && shapes.empty()) {
                 // more than on dynamic dim or dynamic rank
-                IE_THROW() << "Only dynamic batch is supported!";
-            }
+//                IE_THROW() << "Only dynamic batch is supported!";
+//            }
         }
     }
 

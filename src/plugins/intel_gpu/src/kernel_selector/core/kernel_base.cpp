@@ -74,7 +74,10 @@ Datatype KernelBase::GetUnitType(const base_params& params) const {
 JitConstants KernelBase::MakeBaseParamsJitConstants(const base_params& params) const {
     auto unitType = GetUnitType(params);
 
+    auto layerid = params.layerID;
+    layerid.erase(std::remove_if(layerid.begin(), layerid.end(), [](const char c) { return (c == ':') || (c == '.'); }), layerid.end()); 
     JitConstants jit{
+        MakeJitConstant("ORIG_PRIM_NAME", layerid),
         MakeJitConstant("FP64_SUPPORTED", params.engineInfo.bFP64Support),
         MakeJitConstant("FP16_SUPPORTED", params.engineInfo.bFP16Support),
         MakeJitConstant("FP16_UNIT_USED", IsTypeUsedIn(Datatype::F16, params)),

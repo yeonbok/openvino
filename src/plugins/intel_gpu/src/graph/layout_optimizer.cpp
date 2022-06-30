@@ -87,7 +87,7 @@ std::pair<std::shared_ptr<reorder>, bool> reorder_factory::get_reorder(primitive
 ) {
     if (in_layout == out_layout)
         return std::make_pair(nullptr, true);
-
+    std::cout << "get_reorder HIT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
     cache_key ckey{ src_id, out_layout, needs_split_reorder };
     auto itr = _cached_reorders.find(ckey);
     if (itr != _cached_reorders.end())

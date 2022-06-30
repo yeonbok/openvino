@@ -366,6 +366,10 @@ void prepare_buffer_fusing::run(program& p) {
                     // oneDNN doesn't support paddings
                     if (usr->get_preferred_impl_type() == impl_types::onednn)
                         return;
+                    if (usr->is_type<reorder>()) {
+                        //std::cout << usr->id() << " reorder user! can be optimized" << usr->can_be_optimized() << std::endl;
+                        return;
+                    }
                 }
 
                 if (format == format::bfyx && crop_layout.batch() == input_layout.batch() &&

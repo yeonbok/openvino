@@ -15,7 +15,7 @@
 #include <vector>
 #include <list>
 #include <utility>
-
+#include "reorder_inst.h"
 namespace cldnn {
 namespace ocl {
 
@@ -135,7 +135,6 @@ protected:
         auto split = get_split();
 
         stream& stream = instance.get_network().get_stream();
-
         // we iterate over split first in order to be able parallelism with OOOQ mechanism.
         for (size_t k = 0; k < _kernels.size(); ++k) {
             for (decltype(split) i = 0; i < split; i++) {

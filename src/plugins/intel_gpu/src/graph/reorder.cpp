@@ -159,7 +159,10 @@ layout reorder_inst::calc_output_layout(reorder_node const& node) {
         // TODO Shouldn't transform be called every time ifmt != ofmt?
         return layout(odt, ofmt, input_layout.get_tensor().transform(ofmt, 1), op);
     } else {
-        return layout(odt, ofmt, input_layout.size, op);
+        if (node.get_primitive()->output_shape.size())
+            return layout(odt, ofmt, node.get_primitive()->output_shape, op);
+        else
+            return layout(odt, ofmt, input_layout.size, op);
     }
 }
 
@@ -186,8 +189,10 @@ std::string reorder_inst::to_string(reorder_node const& node) {
 
 reorder_inst::typed_primitive_inst(network& network, reorder_node const& node)
     : parent(network, node, !node.can_be_optimized() && !node.is_dynamic()) {
-    if (node.can_be_optimized())
+    if (node.can_be_optimized()) {
+        //std::cout << "Node " << node.id() << "can be optimized! reuse input!!!" << std::endl;
         reuse_input();
+    }
 
     auto input_layout = node.input().get_output_layout();
 
@@ -205,17 +210,31 @@ reorder_inst::typed_primitive_inst(network& network, reorder_node const& node)
 }
 
 void reorder_inst::on_execute() {
-    if (node.can_be_optimized())
+    //std::cout << node.id() << " : on_execute : " << std::endl;;
+    if (node.can_be_optimized()) {
+        //std::cout << "--- reuse_input!" << std::endl;
         reuse_input();
+    }
 }
 
 void reorder_inst::reuse_input() {
-    if (static_cast<bool>(_output) && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
+    if (static_cast<bool>(_output) && _network.get_engine().is_the_same_buffer(output_memory(), input_memory())) {
         return;
+    }
 
     build_deps();
 
     if (node.requires_reinterpret()) {
+        #if 0
+        if (node.get_output_layout().get_rank() == 3) {
+            _output = input_memory_ptr();
+        } else {
+            _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
+            const auto& input_mem = input_memory();
+            std::cout << node.id() << "require reinterprete! : " << input_mem.buffer_ptr() << "=>" << _output << std::endl;
+        }
+        #endif
+        //_output = input_memory_ptr();
         _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
     } else {
         _output = input_memory_ptr();

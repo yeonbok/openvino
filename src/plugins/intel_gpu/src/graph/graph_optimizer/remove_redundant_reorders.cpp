@@ -278,6 +278,7 @@ void remove_redundant_reorders::run(program& p) {
         for (auto& user : dep.get_users()) {
             if (user->is_type<reorder>() &&
                 user != node &&
+                !node->is_output() &&
                 !user->is_output() &&
                 user->get_fused_activations_funcs().empty()) {
                 auto l1 = node->get_output_layout();

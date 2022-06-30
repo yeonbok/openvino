@@ -65,7 +65,6 @@ KERNEL (concatenation_gpu_ref)(__global INPUT0_TYPE* input, __global OUTPUT_TYPE
     uint out_w = w;
     uint out_f = f;
     uint out_b = b;
-
 #if CONCAT_X
     out_x += output_offset_in_concat_axis;
 #elif CONCAT_Y
@@ -84,6 +83,9 @@ KERNEL (concatenation_gpu_ref)(__global INPUT0_TYPE* input, __global OUTPUT_TYPE
 
     uint input_offset  = FUNC_CALL(get_input_index)(b, f, w, z, y, x);
     uint output_offset = FUNC_CALL(get_output_index)(out_b, out_f, out_w, out_z, out_y, out_x);
+    #if ORIG_PRIM_NAME == concatLSTMSequence_1502
+        //printf("input (b:%d, f:%d, w:%d, z:%d, y:%d, x:%d / offset: %d) : %f => out_b %d, out_y %d, out_w %d, out_z %d, out_y %d, out_x %d (offset: %d)\n", b, f, w, z, y, x, input_offset, input[input_offset], out_b, out_f, out_w, out_z, out_y, out_x, output_offset);
+    #endif
 
     output[output_offset] = TO_OUTPUT_TYPE(ACTIVATION(input[input_offset], ACTIVATION_PARAMS));
 }

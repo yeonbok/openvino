@@ -32,7 +32,9 @@ public:
     bool has_mean() const { return !typed_desc()->mean.empty(); }
 
     bool requires_reinterpret() const { return req_reinterpr; }
-    void requires_reinterpret(bool val) { req_reinterpr = (optimized && val); }
+    void requires_reinterpret(bool val) {
+        req_reinterpr = (optimized && val);
+    }
 
     void set_input_layout(layout const& lo) { input_layout = lo; }
 

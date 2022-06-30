@@ -46,7 +46,8 @@ struct reorder : public primitive_base<reorder> {
           output_format(output_layout.format),
           mean(""),
           subtract_per_feature(values_to_subtract),
-          mean_mode(mode) {}
+          mean_mode(mode),
+          output_shape(output_layout.size) {}
 
     /// @brief Constructs reorder primitive which takes mean subtract values from another primitive.
     /// @param id This primitive id.
@@ -63,7 +64,8 @@ struct reorder : public primitive_base<reorder> {
           output_format(output_layout.format),
           mean(mean),
           subtract_per_feature(0),
-          mean_mode(mode) {}
+          mean_mode(mode),
+          output_shape(output_layout.size) {}
 
     /// @brief Constructs reorder primitive with directly provided mean subtract values.
     /// @param id This primitive id.
@@ -148,6 +150,8 @@ struct reorder : public primitive_base<reorder> {
     std::vector<float> subtract_per_feature;
     /// @brief Mode of mean execution
     reorder_mean_mode mean_mode;
+
+    ov::PartialShape output_shape = {};
 
 protected:
     std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {

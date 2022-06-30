@@ -110,7 +110,7 @@ std::string crop_inst::to_string(crop_node const& node) {
 
     json_composite crop_info;
     crop_info.add("reference input size", ref_in_sizes.to_string());
-    crop_info.add("offset", offsets.to_string());
+    crop_info.add("offset", offsets.to_string()) ;// this one
 
     node_info->add("crop info", crop_info);
     node_info->dump(primitive_description);
