@@ -113,10 +113,12 @@ layout loop_inst::calc_output_layout(loop_node const & node) {
     layout loop_output_layout = (*target)->get_output_layout();
     const int64_t axis_to_iterate_throgh = output_mapping.axis;
     if (axis_to_iterate_throgh != -1) {
-        const size_t ndim = loop_output_layout.get_rank();
-        auto shape = loop_output_layout.get_dims();
+        //const size_t ndim = loop_output_layout.get_rank();
+        //auto shape = loop_output_layout.get_dims();
+        auto shape = loop_output_layout.size;
         shape[axis_to_iterate_throgh] = static_cast<int32_t>(node.get_max_iteration());
-        loop_output_layout = layout{loop_output_layout.data_type, loop_output_layout.format, tensor(format::get_default_format(ndim), shape)};
+        //loop_output_layout = layout{loop_output_layout.data_type, loop_output_layout.format, tensor(format::get_default_format(ndim), shape)};
+        loop_output_layout = layout{loop_output_layout.data_type, loop_output_layout.format, shape};
     }
     return loop_output_layout;
 }
