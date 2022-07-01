@@ -200,11 +200,11 @@ inline uint8 FUNC(reshape_5_to_5)(uint o, uint i, uint z, uint y, uint x,
 {
     const uint src_pitch_x = 1;
     const uint src_pitch_y = src_pitch_x * src_size_x;
-    const uint src_pitch_f = src_pitch_y * src_size_y;
-    const uint src_pitch_z = src_pitch_f * src_size_z;
-    const uint src_pitch_b = src_pitch_z * src_size_z;
+    const uint src_pitch_z = src_pitch_y * src_size_y;
+    const uint src_pitch_f = src_pitch_z * src_size_z;
+    const uint src_pitch_b = src_pitch_f * src_size_f;
 
-    uint flat_idx = x * src_pitch_x + y * src_pitch_y + i * src_pitch_f + o * src_pitch_b;
+    uint flat_idx = x * src_pitch_x + y * src_pitch_y + z * src_pitch_z + i * src_pitch_f + o * src_pitch_b;
 
     uint dst_x = flat_idx % dst_size_x;
     flat_idx /= dst_size_x;

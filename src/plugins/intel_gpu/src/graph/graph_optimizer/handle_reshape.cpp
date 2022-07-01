@@ -39,7 +39,6 @@ void handle_reshape::run(program& p) {
 
             auto are_layouts_identical = program_helpers::are_layouts_identical(input_lay, output_lay);
             if (are_layouts_identical.first) {
-                std::cout << node.id() << " removed here! 1" << std::endl;
                 if (node.input().is_type<reorder>()) {
                     p.add_optimized_primitive_info(node.id());
                     node.can_be_optimized(true);
