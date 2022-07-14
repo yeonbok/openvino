@@ -464,6 +464,10 @@ std::vector<cldnn::tensor::value_type> convert_dimensions(const std::vector<cldn
 }
 
 ov::PartialShape layout::transform(cldnn::format new_fmt) const {
+    if (format == new_fmt) {
+        return size;
+    }
+
     cldnn::tensor::value_type default_size = -1;
     auto shape = size.to_shape();
     std::vector<tensor::value_type> dims(shape.begin(), shape.end());
@@ -557,8 +561,16 @@ ov::PartialShape layout::transform(cldnn::format new_fmt) const {
         }
     }
 
-    auto new_dims = convert_dimensions(new_sizes, default_fmt.internal_order(), new_fmt.order());
+    for (size_t i = 0; i < new_order.size(); i++) {
+        auto c = new_order[i];//bfxywz
+        if (c == '?')
+            continue;
+        if (new_sizes[i] == -1) {
+            new_sizes[i] = 1;
+        }
+    }
 
+    auto new_dims = convert_dimensions(new_sizes, default_fmt.internal_order(), new_fmt.order());
     for (int idx = (new_dims.size() - 1); idx >= 0; idx--) {
         if (new_dims[idx] == -1)
             new_dims.erase((new_dims.begin() + idx));
