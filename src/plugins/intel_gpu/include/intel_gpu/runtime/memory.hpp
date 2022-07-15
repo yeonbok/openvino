@@ -173,14 +173,14 @@ inline std::vector<T> read_vector(cldnn::memory::ptr mem, const cldnn::stream& s
     if (mem->get_allocation_type() == allocation_type::usm_host || mem->get_allocation_type() == allocation_type::usm_shared) {
         switch (mem->get_layout().data_type) {
             case data_types::i32: {
-                auto p_mem = reinterpret_cast<int32_t*>(mem->buffer_ptr());
+                int32_t* p_mem = reinterpret_cast<int32_t*>(mem->buffer_ptr());
                 for (size_t i = 0; i < mem->count(); i++) {
                     out_vecs.push_back(static_cast<T>(p_mem[i]));
                 }
                 break;
             }
             case data_types::i64: {
-                auto p_mem = reinterpret_cast<int64_t*>(mem->buffer_ptr());
+                int64_t* p_mem = reinterpret_cast<int64_t*>(mem->buffer_ptr());
                 for (size_t i = 0; i < mem->count(); i++) {
                     out_vecs.push_back(static_cast<T>(p_mem[i]));
                 }

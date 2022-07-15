@@ -58,7 +58,7 @@ public:
             get_default_optional_params<kernel_selector::reverse_optional_params>(arg.get_program());
 
         auto constLayout = arg.input(1).get_output_layout();
-        auto oldShape = constLayout.get_partial_shape();
+        const auto oldShape = constLayout.get_partial_shape();
         auto newShape = getConstPartialShape(oldShape.to_shape());
         if (oldShape != newShape) {
             constLayout = layout{newShape, constLayout.data_type, constLayout.format};
