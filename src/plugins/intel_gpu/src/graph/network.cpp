@@ -24,6 +24,7 @@
 #include "primitive_inst.h"
 #include "input_layout_inst.h"
 #include "mutable_data_inst.h"
+#include "reshape_inst.h"
 #include "condition_inst.h"
 #include "loop_inst.h"
 #include "kernel_selector_helper.h"
@@ -659,6 +660,11 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         _shape_changed = false;
         std::vector<memory::ptr> in_out_mem;
         for (auto& inst : _inputs) {
+            if (inst->get_node().is_dynamic()) {
+                std::cout << "Input is dynamic!" << std::endl;
+                return;
+            }
+
             if (inst->output_memory_ptr())
                 in_out_mem.push_back(inst->output_memory_ptr());
             if (inst->shape_changed())
@@ -903,6 +909,12 @@ void network::transfer_memory_to_device(std::shared_ptr<primitive_inst> instance
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "NetworkImpl::TransferMemory");
     auto& inst_mem = instance->output_memory();
     auto alloc_type = inst_mem.get_allocation_type();
+
+    auto users = node.get_users();
+    if (users.size() == 1
+        && users.front()->is_type<reshape>()
+        && users.front()->is_dynamic())
+            return;
 
     // Do not transfer memory if a user requires lockable memory.
     // If memory is used in both gpu and cpu implementations, primitive itself is responsible for correct allocation type

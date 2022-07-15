@@ -210,7 +210,7 @@ void primitive_inst::realloc_if_needed() {
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
     auto actual_layout = _impl_params->output_layout;
-    OPENVINO_ASSERT(actual_layout.is_static(), "[GPU] Can't realloc mem for dynamic layout");
+    OPENVINO_ASSERT(!actual_layout.is_dynamic(), "[GPU] Can't realloc mem for dynamic layout");
 
     // input_layout node is supposed to always use external memory in dynamic case
     if (_node.is_type<input_layout>())
@@ -298,38 +298,23 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         }
     }
 
-
     OPENVINO_ASSERT(_impl_params->output_layout.is_static(),
                     "[GPU] Can't execute ", primitive_id, " primitive as output layout is dynamic in runtime");
 
     OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
 
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
-    if (is_dynamic() || has_mutable_input() || is_output())
+    if (is_dynamic() || has_mutable_input() || is_output()) {
         set_arguments();
+    }
 
     on_execute();
 
-    GPU_DEBUG_IF(debug_config->verbose >= 1) {
-        std::ostringstream in_addr;
-        // buffer_ptr() only support usm_memory
-        for (size_t i = 0; i < this->dependencies().size(); i++) {
-            auto in_mem = dep_memory_ptr(i);
-            if (in_mem) {
-                in_addr << in_mem->buffer_ptr();
-                if (i < this->dependencies().size() - 1) {
-                    in_addr << ", ";
-                }
-            }
-        }
-        auto out_mem = output_memory_ptr();
-        auto out_alloc_type = out_mem ? out_mem->get_allocation_type() : allocation_type::unknown;
-        auto out_ptr = out_mem ? out_mem->buffer_ptr() : nullptr;
+    OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
 
-        GPU_DEBUG_COUT << id() << ": execute. Memory type: "
-                       << out_alloc_type << ", in_usm("
-                       << in_addr.str() << "), out_usm("
-                       << out_ptr << ")" << std::endl;
+    GPU_DEBUG_IF(debug_config->verbose >= 1) {
+        GPU_DEBUG_COUT << "Execute " << id() << ", memory type: "
+                       << output_memory().get_allocation_type() << std::endl;
     }
 
     if (_exec_deps.empty() && dependencies.empty())
@@ -508,7 +493,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
     };
 
     auto layout = impl_params.output_layout;
-    OPENVINO_ASSERT(layout.is_static(), "[GPU] Can't allocate output for dynamic layout");
+    OPENVINO_ASSERT(!layout.is_dynamic(), "[GPU] Can't allocate output for dynamic layout");
     auto device_mem_acc = [&](size_t a, const cldnn::layout& l) {
         // Input shape may be dynamic is some cases (shape_of). It means that output shape of node doesn't depend on input shape
         // and out memory can be allocated on program build stage.

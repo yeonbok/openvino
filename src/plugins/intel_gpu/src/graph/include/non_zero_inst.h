@@ -75,6 +75,9 @@ public:
     static std::string to_string(gather_nonzero_node const& node);
 
     typed_primitive_inst(network& network, gather_nonzero_node const& node);
+
+private:
+    void update_shape() override;
 };
 
 using gather_nonzero_inst = typed_primitive_inst<gather_nonzero>;
