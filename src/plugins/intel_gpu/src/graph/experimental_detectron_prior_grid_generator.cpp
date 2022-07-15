@@ -21,14 +21,14 @@ layout experimental_detectron_prior_grid_generator_inst::calc_output_layout(
     if (desc->flatten) {
         return layout(data_layout.data_type,
                       format::bfyx,
-                      {static_cast<int>(desc->featmap_width * desc->featmap_height * data_layout.batch()), 4, 1, 1});
+                      tensor{static_cast<int>(desc->featmap_width * desc->featmap_height * data_layout.batch()), 4, 1, 1});
     } else {
         return layout(data_layout.data_type,
                       format::bfyx,
-                      {static_cast<int>(desc->featmap_height),
-                       static_cast<int>(desc->featmap_width),
-                       4,
-                       static_cast<int>(data_layout.batch())});
+                      tensor{static_cast<int>(desc->featmap_height),
+                             static_cast<int>(desc->featmap_width),
+                             4,
+                             static_cast<int>(data_layout.batch())});
     }
 }
 
