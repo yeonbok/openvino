@@ -52,7 +52,7 @@ void convertAndCopy(const InferenceEngine::Blob* src, dst_t* dst) {
 }
 
 template<typename src_dt, typename dst_dt>
-void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, ov::runtime::intel_gpu::buf_info* bi, cldnn::stream& stream) {
+void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, ov::intel_gpu::buf_info* bi, cldnn::stream& stream) {
     size_t n = (bi == nullptr) ? dst->size() : bi->buf_size;
     size_t offset = (bi == nullptr) ? 0 : bi->buf_offset;
 
@@ -800,7 +800,7 @@ void InferRequest::wait() {
         auto node = findOutputByNodeName(no.first);
 
         auto out_partial_shape = node->get_output_partial_shape(0);
-        auto out_rank = out_partial_shape.rank().get_length();
+        size_t out_rank = out_partial_shape.rank().get_length();
 
         if (_outputs.find(no.first) == _outputs.end()) {
             auto mem_dims = outputMemory->get_layout().get_partial_shape().to_shape();
@@ -1299,7 +1299,7 @@ InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngin
     auto dt = DataTypeFromPrecision(desc.getPrecision());
     ov::PartialShape shape(desc.getDims());
 
-    auto l = cldnn::layout(dt, format, shape);
+    auto l = cldnn::layout(shape, dt, format);
 
     if (m_graph->GetEngine()->use_unified_shared_memory()) {
         auto blobPtr = std::make_shared<RemoteUSMbuffer>(m_graph->GetContext(),
@@ -1337,7 +1337,7 @@ Blob::Ptr InferRequest::reinterpret_device_blob(Blob::Ptr data, const TensorDesc
     auto dt = DataTypeFromPrecision(new_desc.getPrecision());
     ov::PartialShape shape(new_desc.getDims());
 
-    auto l = cldnn::layout(dt, format, shape);
+    auto l = cldnn::layout(shape, dt, format);
 
     auto remote_blob = data->as<gpu::ClBlob>();
     if (!remote_blob)

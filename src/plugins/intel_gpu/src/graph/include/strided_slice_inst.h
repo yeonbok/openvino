@@ -70,7 +70,10 @@ public:
 
     program_node& input(size_t index = 0) const { return get_dependency(index); }
 
-    std::vector<memory::ptr> const_mem = {};
+
+    std::vector<size_t> get_shape_infer_dependencies() const override {
+        return {1, 2, 3};
+    }
 };
 
 using strided_slice_node = typed_program_node<strided_slice>;
@@ -86,8 +89,6 @@ public:
     static std::string to_string(strided_slice_node const& node);
 
     typed_primitive_inst(network& network, strided_slice_node const& desc);
-
-    void update_shape() override;
 };
 
 using strided_slice_inst = typed_primitive_inst<strided_slice>;

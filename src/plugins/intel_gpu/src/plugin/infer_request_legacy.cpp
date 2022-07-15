@@ -48,7 +48,7 @@ void copyToFloat(float* dst, const InferenceEngine::Blob* src) {
 }
 
 template<typename src_dt, typename dst_dt>
-void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, ov::runtime::intel_gpu::buf_info_legacy* bi, cldnn::stream& stream) {
+void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, ov::intel_gpu::buf_info_legacy* bi, cldnn::stream& stream) {
     size_t n = (bi == nullptr) ? dst->size() : bi->buf_size;
     size_t offset = (bi == nullptr) ? 0 : bi->buf_offset;
 
@@ -65,12 +65,12 @@ void copyResultToOutputBlob(cldnn::memory::ptr src, Blob::Ptr dst, ov::runtime::
     dst_ptr += offset;
 
     if (layout.data_padding) {
-        for (size_t b = 0; b < size.batch[0]; b++) {
-            for (size_t f = 0; f < size.feature[0]; f++) {
-                for (size_t w = 0; w < size.spatial[3]; w++) {
-                    for (size_t z = 0; z < size.spatial[2]; z++) {
-                        for (size_t y = 0; y < size.spatial[1]; y++) {
-                            for (size_t x = 0; x < size.spatial[0]; x++) {
+        for (int b = 0; b < size.batch[0]; b++) {
+            for (int f = 0; f < size.feature[0]; f++) {
+                for (int w = 0; w < size.spatial[3]; w++) {
+                    for (int z = 0; z < size.spatial[2]; z++) {
+                        for (int y = 0; y < size.spatial[1]; y++) {
+                            for (int x = 0; x < size.spatial[0]; x++) {
                                 *dst_ptr++ = src_ptr[layout.get_linear_offset(cldnn::tensor(b, f, x, y, z, w))];
                             }
                         }
@@ -90,7 +90,7 @@ inline void checkAlloc(const Blob::Ptr& blob, const std::string& err_str) {
     if (!blob->is<gpu::ClBlob>()) {
         not_allocated = (blob->buffer() == nullptr);
     } else {
-        not_allocated = !ov::runtime::intel_gpu::getBlobImpl(blob->as<gpu::ClBlob>())->is_allocated();
+        not_allocated = !ov::intel_gpu::getBlobImpl(blob->as<gpu::ClBlob>())->is_allocated();
     }
     if (not_allocated) {
         IE_THROW(NotAllocated) << err_str;
@@ -120,7 +120,7 @@ void checkInputBlob(const Blob::Ptr &blob,
             checkAlloc(nv12_ptr->y(), str_input_not_allocated);
             checkAlloc(nv12_ptr->uv(), str_input_not_allocated);
         } else if (auto batched_ptr = blob->as<BatchedBlob>()) {
-            for (auto i = 0; i < batched_ptr->size(); i++) {
+            for (size_t i = 0; i < batched_ptr->size(); i++) {
                 auto nv12_ptr = getNV12BlobOrException(batched_ptr, i);
                 checkAlloc(nv12_ptr->y(), str_input_not_allocated);
                 checkAlloc(nv12_ptr->uv(), str_input_not_allocated);
@@ -174,7 +174,6 @@ bool same_host_mem(cldnn::memory::ptr memPtr, uint8_t* hostPtr) {
 }  // namespace
 
 namespace ov {
-namespace runtime {
 namespace intel_gpu {
 
 // ----------------------------------------------------------------------------------------- //
@@ -813,7 +812,9 @@ void InferRequestLegacy::enqueue_dynamic() {
                 const Blob::Ptr inputBlob = item.second;
 
                 auto inputLayout = m_graph->GetInputLayouts().at(inputName);
-                inputLayout.size[0] = mask;
+                auto ps = inputLayout.get_partial_shape();
+                ps[0] = mask;
+                inputLayout.set_partial_shape(ps);
                 copy_input_data(m_graph->GetNetwork(nb), inputName, inputLayout, *inputBlob, &batchInputs[inputName][nb]);
             }
             internal_outputs_dynamic[nb] = m_graph->GetNetwork(nb)->execute();
@@ -1231,5 +1232,4 @@ InferenceEngine::Blob::Ptr InferRequestLegacy::create_device_blob(const Inferenc
 }
 
 }  // namespace intel_gpu
-}  // namespace runtime
 }  // namespace ov

@@ -75,9 +75,10 @@ public:
             get_default_optional_params<kernel_selector::gather_optional_params>(arg.get_program());
 
         auto input_layout = impl_param->input_layouts[0];
+        auto indices_shape = impl_param->input_layouts[1].get_partial_shape();
         gather_params.axis = convert_axis(prim->axis, input_layout.get_rank());
         gather_params.batch_dim = (prim->batch_dim >= 0) ? prim->batch_dim
-                        : (indices_shape.rank().get_length() + prim->batch_dim);
+                                                         : (indices_shape.rank().get_length() + prim->batch_dim);
         gather_params.support_neg_ind = prim->support_neg_ind;
 
         gather_params.inputs.push_back(convert_data_tensor(impl_param->input_layouts[1]));
