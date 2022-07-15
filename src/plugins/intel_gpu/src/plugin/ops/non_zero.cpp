@@ -10,7 +10,6 @@
 #include "intel_gpu/primitives/non_zero.hpp"
 
 namespace ov {
-namespace runtime {
 namespace intel_gpu {
 
 static void CreateNonZeroOp(Program& p, const std::shared_ptr<ngraph::Node>& op) {
@@ -36,5 +35,4 @@ static void CreateNonZeroOp(Program& p, const std::shared_ptr<ngraph::Node>& op)
 REGISTER_FACTORY_IMPL(v3, NonZero);
 
 }  // namespace intel_gpu
-}  // namespace runtime
 }  // namespace ov

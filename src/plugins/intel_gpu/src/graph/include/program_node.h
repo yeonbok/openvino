@@ -404,6 +404,17 @@ public:
         cur_id = 0;
     }
 
+    bool is_dynamic() const;
+
+    virtual std::vector<size_t> get_shape_infer_dependencies() const {
+        // Default impl will request all deps for shape infer
+        // It means that update_shape impl will wait for all memory deps
+        std::vector<size_t> res(get_dependencies().size());
+        std::iota(std::begin(res), std::end(res), 0);
+        return res;
+    }
+
+
 protected:
     size_t unique_id = 0;
     static thread_local size_t cur_id;

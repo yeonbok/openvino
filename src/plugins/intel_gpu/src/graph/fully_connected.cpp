@@ -112,7 +112,7 @@ layout fully_connected_inst::calc_output_layout(fully_connected_node const& node
         output_size = ov::PartialShape{batch, feature, weights_layout.batch()};
     }
 
-    return layout(output_type, output_format, output_size);
+    return layout(output_size, output_type, output_format);
 }
 
 std::string fully_connected_inst::to_string(fully_connected_node const& node) {

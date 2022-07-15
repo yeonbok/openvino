@@ -32,10 +32,10 @@ void strided_slice_optimize::run(program& p) {
                     node->remove_dependency(i);
 
             auto node_layout = strided_slice_node.get_output_layout();
-            auto node_size = node_layout.get_tensor().sizes(format::bfyx);
+            auto output_dims_sizes = node_layout.get_shape();
 
-            auto is_shift_possible = [&](const std::vector<int32_t>& dims) -> bool {
-                if (dims.empty())
+            auto is_shift_possible = [&](const ov::PartialShape& dims) -> bool {
+                if (dims.rank().get_length() == 0)
                     CLDNN_ERROR_MESSAGE(node->id(), "Error while adding new axis: node has incorrect dimensions");
 
                 if (dims[dims.size() - 1] == 1)
@@ -45,7 +45,6 @@ void strided_slice_optimize::run(program& p) {
                 return false;
             };
 
-            std::vector<int32_t> output_dims_sizes = node_size;
             if (std::find(new_axis_mask.begin(), new_axis_mask.end(), 1) != new_axis_mask.end()) {
                 for (size_t i = 0; i < new_axis_mask.size(); ++i) {
                     if (new_axis_mask[new_axis_mask.size() - i - 1] == 1) {
@@ -58,18 +57,18 @@ void strided_slice_optimize::run(program& p) {
                 }
             }
 
-            auto reshape_prim = std::make_shared<reshape>(
-                "reshape_" + node->id(),
-                node->get_dependency(0).get_primitive()->id,
-                tensor(output_dims_sizes[0], output_dims_sizes[1], output_dims_sizes[3], output_dims_sizes[2]));
+            std::vector<int64_t> pattern(output_dims_sizes.begin(), output_dims_sizes.end());
+
+            auto reshape_prim = std::make_shared<reshape>("reshape_" + node->id(),
+                                                          node->get_dependency(0).get_primitive()->id,
+                                                          false,
+                                                          pattern);
 
             auto& reshape_prim_node = p.get_or_create(reshape_prim);
 
-            layout output_layout = { node_layout.data_type, node_layout.format, reshape_prim->output_shape };
-            reshape_prim_node.set_output_layout(output_layout);
-
             p.add_intermediate(reshape_prim_node, *node, 0, true);
             p.extract_and_remove(*node);
+            reshape_prim_node.calc_output_layout();
         }
     }
 }

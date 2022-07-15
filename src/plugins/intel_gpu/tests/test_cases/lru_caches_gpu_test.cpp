@@ -23,7 +23,7 @@ TEST(LRUCache_test, basic01)
     }
 
     std::vector<bool> expected_hitted = {false, false, false, false, true, true, false};
-    for (int i = 0; i < input_values.size(); i++) {
+    for (size_t i = 0; i < input_values.size(); i++) {
         auto& in = input_values[i];
         int data = 0;
         bool hitted = true;
@@ -89,7 +89,7 @@ TEST(LRUCache_test, basic02) {
 
     std::vector<bool> expected_hitted = {false, false, false, false, true, true, true, false};
 
-    for (int i = 0; i < inputs.size(); i++) {
+    for (size_t i = 0; i < inputs.size(); i++) {
         auto& in = inputs[i];
         std::shared_ptr<LRUCacheTestData> p_data;
         bool hitted = true;
@@ -112,5 +112,3 @@ TEST(LRUCache_test, basic02) {
         EXPECT_EQ(key, expected_keys[idx--]);
     }
 }
-
-

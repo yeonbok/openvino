@@ -494,7 +494,6 @@ struct layout {
     std::string to_string() const;
 
     bool is_dynamic() const;
-    bool is_static() const;
 
     ov::PartialShape get_partial_shape() const;
 
@@ -503,6 +502,8 @@ struct layout {
     tensor get_tensor() const;
 
     void set_tensor(const tensor& size);
+
+    void set_partial_shape(const ov::PartialShape& size);
 
     // Returns true if other layout can be reinterpreted without need of reordering
     bool compatible(const layout& other) const;
