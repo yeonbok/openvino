@@ -13,23 +13,20 @@ KERNEL (permute_ref)(
 #endif
     )
 {
-#if IS_FSV
-    //gws(f, x * y, z * w * b)
+#ifdef FSV_BLOCK_SIZE
+    //gws(fsv * x, y * z, fs * b)
     const uint gid_0 = get_global_id(0);
     const uint gid_1 = get_global_id(1);
     const uint gid_2 = get_global_id(2);
-    const uint f = gid_0;
-    const uint x = gid_1 / INPUT0_SIZE_Y;
+    const uint fsv = gid_0 % FSV_BLOCK_SIZE;
+    const uint x = gid_0 / FSV_BLOCK_SIZE;
     const uint y = gid_1 % INPUT0_SIZE_Y;
-    #if INPUT0_DIMS == 4
-        const uint b = gid_2;
-    #elif INPUT0_DIMS == 5
-        const uint b = gid_2 / INPUT0_SIZE_Z;
-        const uint z = gid_2 % INPUT0_SIZE_Z;
-    #else
-        const uint b = gid_2 / (INPUT0_SIZE_W * INPUT0_SIZE_Z) % INPUT0_BATCH_NUM;
-        const uint z = gid_2 / INPUT0_SIZE_W % INPUT0_SIZE_Z;
-        const uint w = gid_2 % INPUT0_SIZE_W;
+    const uint b = gid_2 % INPUT0_BATCH_NUM;
+    const uint fs = gid_2 / INPUT0_BATCH_NUM;
+    const uint f = fs * FSV_BLOCK_SIZE + fsv;
+
+    #if INPUT0_DIMS == 5
+        const uint z = gid_1 / INPUT0_SIZE_Y;
     #endif
 #else
     //gws(x, y * z * w, b*f)

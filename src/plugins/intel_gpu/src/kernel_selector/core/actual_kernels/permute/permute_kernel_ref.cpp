@@ -5,6 +5,7 @@
 #include "permute_kernel_ref.h"
 #include "kernel_selector_utils.h"
 #include <string>
+static size_t block_size = 0;
 namespace kernel_selector {
 ParamsKey PermuteKernelRef::GetSupportedKey() const {
     ParamsKey k;
@@ -29,15 +30,18 @@ ParamsKey PermuteKernelRef::GetSupportedKey() const {
     return k;
 }
 
-bool is_fsv(const kernel_selector::Tensor::DataLayout layout) {
+size_t is_aligned_fsv(const kernel_selector::Tensor::DataLayout layout, size_t feature_size) {
     switch (layout) {
+    case Tensor::DataLayout::b_fs_yx_fsv4:
+        return ((feature_size % 4) == 0) ? 4 : 0;
     case Tensor::DataLayout::b_fs_yx_fsv16:
     case Tensor::DataLayout::b_fs_zyx_fsv16:
+        return ((feature_size % 16) == 0) ? 16 : 0;
     case Tensor::DataLayout::b_fs_yx_fsv32:
     case Tensor::DataLayout::b_fs_zyx_fsv32:
-        return true;
+        return ((feature_size % 32) == 0) ? 32 : 0;
     default:
-        return false;
+        return 0;
     }
 }
 
@@ -45,22 +49,26 @@ CommonDispatchData PermuteKernelRef::SetDefault(const permute_params& params) co
     CommonDispatchData dispatchData;
     auto in_layout = params.inputs[0].GetLayout();
     auto out_layout = params.outputs[0].GetLayout();
-    std::vector<std::vector<Tensor::DataChannelName>> dims_by_gws = {{Tensor::DataChannelName::X},
+
+    const auto& in =  params.inputs[0];
+    block_size = is_aligned_fsv(in_layout, in.Feature().v);
+    if (block_size) {
+        dispatchData.gws = {block_size * in.X().v, in.Y().v * in.Z().v, (in.Feature().v/block_size) * in.Batch().v};
+        dispatchData.lws = {block_size, 1, 1};
+    } else {
+        std::vector<std::vector<Tensor::DataChannelName>> dims_by_gws = {{Tensor::DataChannelName::X},
                                                                      {Tensor::DataChannelName::Y, Tensor::DataChannelName::Z, Tensor::DataChannelName::W},
                                                                      {Tensor::DataChannelName::FEATURE, Tensor::DataChannelName::BATCH}};
 
-    const auto& in =  params.inputs[0];
-    if (is_fsv(in_layout))
-        dispatchData.gws = {in.Feature().v, in.X().v * in.Y().v, in.Z().v * in.W().v * in.Batch().v};
-    else
         dispatchData.gws = {in.X().v, in.Y().v * in.Z().v * in.W().v, in.Feature().v * in.Batch().v};
-    dispatchData.lws = GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo, in_layout, out_layout, dims_by_gws);
+        dispatchData.lws = GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo, in_layout, out_layout, dims_by_gws);
+    }
+
 
     return dispatchData;
 }
 bool PermuteKernelRef::Validate(const Params& p, const optional_params& o) const {
     if (!Parent::Validate(p, o)) return false;
-
     return true;
 }
 
@@ -168,7 +176,8 @@ JitConstants PermuteKernelRef::GetJitConstants(const permute_params& params, con
     }
 
     jit.AddConstant(MakeJitConstant("IN_IDX", "INPUT0_GET_INDEX(" + input_order + ")"));
-    jit.AddConstant(MakeJitConstant("IS_FSV", is_fsv(params.inputs[0].GetLayout())));
+    if (block_size)
+        jit.AddConstant(MakeJitConstant("FSV_BLOCK_SIZE", block_size));
     if (reorder_to_different_dim) {
         auto reordered_order = GetReorderedOutputOrder(params, permute_out_idx, dim_change);
         jit.AddConstant(MakeJitConstant("OUT_IDX", "OUTPUT_GET_INDEX(" + reordered_order + ")"));
