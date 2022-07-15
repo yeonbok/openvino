@@ -16,6 +16,8 @@
 #include <functional>
 #include <set>
 
+#include <openvino/core/partial_shape.hpp>
+
 namespace cldnn {
 /// @addtogroup cpp_api C++ API
 /// @{
@@ -325,7 +327,21 @@ private:
 struct layout {
     /// Constructs layout based on @p data_type and @p size information described by @ref tensor
     layout(data_types data_type, cldnn::format fmt, tensor size, padding apadding = padding())
-        : data_type(data_type), format(fmt), data_padding(apadding), size(size) {}
+        : data_type(data_type)
+        , format(fmt)
+        , data_padding(apadding) {
+            auto sizes = fmt == format::any ? size.sizes() : size.sizes(format::get_default_format(fmt.dimension(),
+                                                                                                   format::is_weights_format(fmt),
+                                                                                                   format::is_grouped(fmt)));
+            ov::Shape shape(sizes.begin(), sizes.end());
+            this->size = ov::PartialShape(shape);
+        }
+
+    layout(ov::PartialShape size, data_types data_type, cldnn::format fmt, padding apadding = padding())
+        : data_type(data_type)
+        , format(fmt)
+        , data_padding(apadding)
+        , size(size) { }
 
     layout(const layout& other) = default;
 
@@ -340,7 +356,15 @@ struct layout {
     }
 
     friend bool operator==(const layout& lhs, const layout& rhs) {
-        return lhs.data_type == rhs.data_type && lhs.format == rhs.format && lhs.size == rhs.size && lhs.data_padding == rhs.data_padding;
+        auto get_pshape = [&](const layout& l){
+            if (l.format != cldnn::format::any && l.size.size() < l.format.dimension()) {
+                auto dims = l.get_dims();
+                return ov::PartialShape(ov::Shape(dims.begin(), dims.end()));
+            }
+            return l.size;
+        };
+        auto check_pshape = (lhs.is_dynamic() || rhs.is_dynamic()) ? (lhs.size == rhs.size) : (get_pshape(lhs) == get_pshape(rhs));
+        return lhs.data_type == rhs.data_type && lhs.format == rhs.format && check_pshape && lhs.data_padding == rhs.data_padding;
     }
 
     friend bool operator!=(const layout& lhs, const layout& rhs) {
@@ -352,8 +376,8 @@ struct layout {
             return (lhs.data_type < rhs.data_type);
         if (lhs.format != rhs.format)
             return (lhs.format < rhs.format);
-        if (lhs.size < rhs.size)
-            return (lhs.size < rhs.size);
+        if (lhs.count() < rhs.count())
+            return (lhs.count() < rhs.count());
         return (lhs.data_padding < rhs.data_padding);
     }
 
@@ -421,13 +445,17 @@ struct layout {
 
     bool is_static() const;
 
+    ov::PartialShape get_partial_shape() const;
+
+    ov::Shape get_shape() const;
+
     tensor get_tensor() const;
 
     void set_tensor(const tensor& size);
 
 private:
     /// The size of the @ref memory (excluding padding)
-    tensor size;
+    ov::PartialShape size;
 };
 
 inline ::std::ostream& operator<<(::std::ostream& os, const layout& p) {

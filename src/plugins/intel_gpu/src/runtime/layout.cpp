@@ -26,18 +26,12 @@ tensor::value_type layout::get_dim(size_t idx) const {
 tensor::value_type layout::batch() const {
     auto dims = get_dims();
     const size_t dim_idx = 0;
-    if (!format::is_weights_format(format) && dims[dim_idx] != size.batch[0]) {
-        throw std::runtime_error("batch mismatch: " + std::to_string(dims[dim_idx]) + " vs " + std::to_string(size.batch[0]));
-    }
     return dims[dim_idx];
 }
 
 tensor::value_type layout::feature() const {
     auto dims = get_dims();
     const size_t dim_idx = 1;
-    if (!format::is_weights_format(format) && dims[dim_idx] != size.feature[0]) {
-        throw std::runtime_error("feature mismatch: " + std::to_string(dims[dim_idx]) + " vs " + std::to_string(size.feature[0]));
-    }
     return dims[dim_idx];
 }
 
@@ -46,9 +40,6 @@ tensor::value_type layout::spatial(size_t spatial_idx) const {
         return 1;
     auto dims = get_dims();
     const size_t dim_idx = (format::is_grouped(format) ? 3 : 2) + (format.spatial_num() - 1 - spatial_idx);
-    if (dims[dim_idx] != size.spatial[spatial_idx]) {
-        throw std::runtime_error("spatials mismatch: " + std::to_string(dims[dim_idx]) + " vs " + std::to_string(size.spatial[spatial_idx]));
-    }
     return dims[dim_idx];
 }
 
@@ -61,9 +52,6 @@ tensor::value_type layout::group() const {
     if (!format::is_grouped(format))
         return 1;
 
-    if (dims[0] != size.group[0]) {
-        throw std::runtime_error("groups mismatch: " + std::to_string(dims[0]) + " vs " + std::to_string(size.group[0]));
-    }
     return dims[0];
 }
 
@@ -87,13 +75,24 @@ tensor::value_type layout::ifm() const {
 }
 
 std::vector<tensor::value_type> layout::get_dims() const {
-    auto default_fmt = format::get_default_format(format.dimension(), format::is_weights_format(format), format::is_grouped(format));
-    return size.sizes(default_fmt);
+    if (is_dynamic())
+        throw std::runtime_error("[GPU] get_dims() is called for dynamic shape");
+    auto shape = size.to_shape();
+    std::vector<tensor::value_type> res(shape.begin(), shape.end());
+
+    if (res.size() < format.dimension())
+        res.insert(res.end(), format.dimension() - res.size(), 1);
+
+    return res;
 }
 
 std::vector<tensor::value_type> layout::get_padded_dims() const {
+    if (is_dynamic())
+        throw std::runtime_error("[GPU] get_padded_dims() is called for dynamic shape");
+
     auto default_fmt = format::get_default_format(format.dimension(), format::is_weights_format(format), format::is_grouped(format));
-    auto padded_size = size.add(data_padding.lower_size()).add(data_padding.upper_size());
+    auto t = get_tensor();
+    auto padded_size = t.add(data_padding.lower_size()).add(data_padding.upper_size());
     return padded_size.sizes(default_fmt);
 }
 
@@ -125,14 +124,17 @@ static format to_weights_format(format f, bool is_grouped) {
 }
 
 layout layout::convert_to_weights_layout(bool is_grouped) const {
-    auto dims = size.sizes(format);
     auto fmt = to_weights_format(format, is_grouped);
 
-    return layout{data_type, fmt, tensor{fmt, dims}};
+    return layout{size, data_type, fmt};
 }
 
 std::vector<tensor::value_type> layout::get_ordered_dims() const {
-    return size.sizes(format);
+    if (is_dynamic())
+        throw std::runtime_error("[GPU] get_ordered_dims() is called for dynamic shape");
+
+    auto t = get_tensor();
+    return t.sizes(format);
 }
 
 std::vector<size_t> layout::get_dims_order() const {
@@ -155,30 +157,60 @@ size_t layout::count() const {
     if (is_dynamic())
         throw std::runtime_error("[GPU] Count is called for dynamic shape");
 
-    return size.count();
+    return ov::shape_size(size.to_shape());
 }
 
 bool layout::is_dynamic() const {
-    return false;
+    return size.is_dynamic();
 }
 
 bool layout::is_static() const {
-    return true;
+    return !is_dynamic();
+}
+
+ov::PartialShape layout::get_partial_shape() const {
+    return size;
+}
+
+ov::Shape layout::get_shape() const {
+    return size.to_shape();
 }
 
 tensor layout::get_tensor() const {
     if (is_dynamic())
         throw std::runtime_error("[GPU] get_tensor() is called for dynamic shape");
 
-    return size;
+    auto shape = size.to_shape();
+    std::vector<tensor::value_type> dims(shape.begin(), shape.end());
+
+    auto default_fmt = format::get_default_format(format.dimension(), format::is_weights_format(format), format::is_grouped(format));
+    if (default_fmt.dimension() > dims.size()) {
+        dims.insert(dims.end(), default_fmt.dimension() - dims.size(), 1);
+    }
+
+    while (dims.size() > default_fmt.dimension()) {
+        dims.pop_back();
+    }
+
+    tensor t(default_fmt, dims);
+    return t;
 }
 
 void layout::set_tensor(const tensor& size) {
-    this->size = size;
+    auto sizes = format == format::any ? size.sizes() : size.sizes(format::get_default_format(format.dimension(),
+                                                                                              format::is_weights_format(format),
+                                                                                              format::is_grouped(format)));
+    ov::Shape shape(sizes.begin(), sizes.end());
+    this->size = ov::PartialShape(shape);
 }
 
 tensor layout::get_buffer_size() const {
-    return size.add(data_padding.lower_size()).add(data_padding.upper_size());
+    if (is_dynamic())
+        throw std::runtime_error("[GPU] get_buffer_size() is called for dynamic shape");
+
+    auto t = get_tensor();
+
+    return t.add(data_padding.lower_size()).add(data_padding.upper_size());
 }
 
 tensor layout::get_pitches() const {
@@ -193,21 +225,23 @@ size_t layout::get_linear_offset(tensor element) const {
     auto l_padd = data_padding.lower_size();
     auto u_padd = data_padding.upper_size();
 
+    auto t = get_tensor();
+
     if ((element.batch[0] < 0 && -element.batch[0] > l_padd.batch[0]) ||
         (element.feature[0] < 0 && -element.feature[0] > l_padd.feature[0]) ||
         (element.spatial[0] < 0 && -element.spatial[0] > l_padd.spatial[0]) ||
         (element.spatial[1] < 0 && -element.spatial[1] > l_padd.spatial[1]) ||
         (element.spatial[2] < 0 && -element.spatial[2] > l_padd.spatial[2]) ||
         (element.spatial[3] < 0 && -element.spatial[3] > l_padd.spatial[3]) ||
-        (element.batch[0] >= size.batch[0] + u_padd.batch[0]) ||
-        (element.feature[0] >= size.feature[0] + u_padd.feature[0]) ||
-        (element.spatial[0] >= size.spatial[0] + u_padd.spatial[0]) ||
-        (element.spatial[1] >= size.spatial[1] + u_padd.spatial[1]) ||
-        (element.spatial[2] >= size.spatial[2] + u_padd.spatial[2]) ||
-        (element.spatial[3] >= size.spatial[3] + u_padd.spatial[3]))
+        (element.batch[0] >= t.batch[0] + u_padd.batch[0]) ||
+        (element.feature[0] >= t.feature[0] + u_padd.feature[0]) ||
+        (element.spatial[0] >= t.spatial[0] + u_padd.spatial[0]) ||
+        (element.spatial[1] >= t.spatial[1] + u_padd.spatial[1]) ||
+        (element.spatial[2] >= t.spatial[2] + u_padd.spatial[2]) ||
+        (element.spatial[3] >= t.spatial[3] + u_padd.spatial[3]))
         throw std::invalid_argument("Requested to calculate linear offset for an element which lies outside of the buffer range.");
 
-    auto padded_size = size + l_padd + u_padd;
+    auto padded_size = t + l_padd + u_padd;
     auto padded_element = element + l_padd;
 
     return padded_size.get_linear_offset(padded_element, format);
