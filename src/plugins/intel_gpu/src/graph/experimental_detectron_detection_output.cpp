@@ -20,7 +20,7 @@ layout experimental_detectron_detection_output_inst::calc_output_layout(
     const layout data_layout = node.input().get_output_layout();
     auto desc = node.get_primitive();
 
-    return layout(data_layout.data_type, format::bfyx, {static_cast<int>(desc->max_detections_per_image), 4, 1, 1});
+    return layout(data_layout.data_type, format::bfyx, tensor{static_cast<int>(desc->max_detections_per_image), 4, 1, 1});
 }
 
 std::string experimental_detectron_detection_output_inst::to_string(
