@@ -46,6 +46,7 @@ class typed_primitive_inst<permute> : public typed_primitive_inst_base<permute> 
 
 public:
     static layout calc_output_layout(permute_node const& node, kernel_impl_params const& impl_param);
+    template<typename ShapeType>
     static std::vector<layout> calc_output_layouts(permute_node const& node, kernel_impl_params const& impl_param);
     static std::string to_string(permute_node const& node);
 

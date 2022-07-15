@@ -78,7 +78,6 @@ private:
     bool m_useProfiling = false;
     bool m_useStreams = false;
     bool m_useExternalQueue = false;
-    bool is_allocated = false;
     std::shared_ptr<Graph> m_graph;
 
     // dynamic batch stuff
@@ -92,24 +91,27 @@ private:
 
     InferenceEngine::Blob::Ptr create_host_blob(const InferenceEngine::TensorDesc& desc,
                                                 std::shared_ptr<InferenceEngine::IAllocator> alloc = nullptr);
-    InferenceEngine::Blob::Ptr create_device_blob(const InferenceEngine::TensorDesc& desc, const cldnn::layout& layout);
+    InferenceEngine::Blob::Ptr create_device_blob(const InferenceEngine::TensorDesc& desc);
+
     void copy_output_data(cldnn::memory::ptr outputMemory, InferenceEngine::Blob::Ptr bptr, buf_info* bi = nullptr);
     void copy_input_data(std::shared_ptr<cldnn::network> network, const cldnn::primitive_id &inputName,
                          const cldnn::layout& inputLayout, const InferenceEngine::Blob &inputBlob,
                          buf_info* bi = nullptr);
 
-
     InferenceEngine::Blob::Ptr create_shared_device_blob(const InferenceEngine::TensorDesc& desc, const cldnn::layout& layout, void* usm_host_mem);
     void allocate_inputs();
     void allocate_outputs();
+    void allocate_inputs_dynamic();
+    void allocate_outputs_dynamic();
 
-    void set_input(const std::string& name, const InferenceEngine::Blob::Ptr& data);
-    void set_output(const std::string& name, const InferenceEngine::Blob::Ptr& data);
     InferenceEngine::Blob::Ptr reinterpret_device_blob(InferenceEngine::Blob::Ptr data, const InferenceEngine::TensorDesc& new_desc);
 
     std::map<cldnn::primitive_id, cldnn::network_output> internal_outputs;
     std::vector<std::map<cldnn::primitive_id, cldnn::network_output>> internal_outputs_dynamic;
     Graph::variable_states_map variables_states_;
+
+    std::unordered_map<std::string, std::shared_ptr<const ov::Node>> modelInputsMap;
+    std::unordered_map<std::string, std::shared_ptr<const ov::Node>> modelOutputsMap;
 };
 
 }  // namespace intel_gpu

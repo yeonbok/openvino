@@ -26,7 +26,7 @@ static void CreateCommonSplitOp(Program& p, const std::shared_ptr<ngraph::Node>&
         std::string outLayerName = layerName + (is_single_out_split ? "" : "." + std::to_string(i));
         const auto outLayerDims = op->get_output_partial_shape(i);
         NGRAPH_SUPPRESS_DEPRECATED_START
-        if (outLayerDims.size() != start_offset.size()) {
+        if (outLayerDims.size() != startOffset.size()) {
             IE_THROW() << "Invalid dimesions in split layer: " << op->get_friendly_name()
                                << " output: " <<  op->get_output_tensor_name(i);
         }

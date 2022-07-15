@@ -100,7 +100,7 @@ bool is_any_user_cpu(const std::list<const program_node*>& users) {
 
 uint32_t primitive_inst::get_network_id() const { return _network.get_id(); }
 
-oid primitive_inst::check_memory_to_set(const memory& mem, const layout& layout) const {
+void primitive_inst::check_memory_to_set(const memory& mem, const layout& layout) const {
     OPENVINO_ASSERT((mem.get_layout() == layout) || layout.is_dynamic(), "[GPU] Unexpected layout of input memory");
 
     // check shared image/buffer compatibility, if applicable
@@ -163,7 +163,7 @@ void primitive_inst::update_shape() {
         }
     }
 
-    if (!input_shape_changed && !_node.generates_dynamic_output() && _impl_params->output_layout.is_static())
+    if (!input_shape_changed && !_node.generates_dynamic_output() && !_impl_params->output_layout.is_dynamic())
         return;
 
     auto memory_deps = _node.get_const_memory_deps();
@@ -191,9 +191,9 @@ void primitive_inst::update_shape() {
     layout new_layout = layout(data_types::f32, format::bfyx, tensor());
     new_layout.data_padding = padding::max(_node.get_primitive()->output_padding, new_layout.data_padding);
 
-    auto out_layouts = _node.type()->calc_output_layouts(_node, *params);
+    auto out_layouts = _node.type()->calc_output_layouts(_node, *_impl_params);
     if (out_layouts.empty())
-        new_layout = _node.type()->calc_output_layout(_node, *params);
+        new_layout = _node.type()->calc_output_layout(_node, *_impl_params);
     else
         new_layout = out_layouts[0];
 
@@ -214,7 +214,7 @@ void primitive_inst::realloc_if_needed() {
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
     auto actual_layout = _impl_params->output_layout;
-    OPENVINO_ASSERT(actual_layout.is_static(), "[GPU] Can't realloc mem for dynamic layout");
+    OPENVINO_ASSERT(!actual_layout.is_dynamic(), "[GPU] Can't realloc mem for dynamic layout");
 
     if (!_output
         || ((_output->get_layout().count() < actual_layout.count())
@@ -295,71 +295,21 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         }
     }
 
-    OPENVINO_ASSERT(_impl_params->output_layout.is_static(),
+    OPENVINO_ASSERT(!_impl_params->output_layout.is_dynamic(),
                     "[GPU] Can't execute ", primitive_id, " primitive as output layout is dynamic in runtime");
-
-    OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
-
-    // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
-    if (is_dynamic() || has_mutable_input() || is_output()) {
-        set_arguments();
-    if (check)
-        check_memory_to_set(*mem_new, ol);
-
-    if (_node.is_constant()) {
-        mem_new->copy_from(_network.get_stream(), *_output);
-    } else {
-        _output = mem_new;
-    }
-}
-
-event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
-    const auto primitive_id = id();
-    CLDNN_ERROR_BOOL(primitive_id,
-                     "Invalid/unset input",
-                     !_has_valid_input,
-                     "Cannot execute primitive " + primitive_id + " with invalid/unset input");
-
-    static std::mutex m;
-    {
-        // Lock for program nodes
-        // To be removed once concurrency issue for program node is resolved
-        std::lock_guard<std::mutex> lock(m);
-        PRINT_TIME(update_shape());
-        if (shape_changed()) {
-            PRINT_TIME(update_impl());
-            PRINT_TIME(update_weights());
-            PRINT_TIME(realloc_if_needed());
-        }
->>>>>>> 3d8b16617d... Fix reshape to run dynamic shape
-    }
 
     on_execute();
 
-    GPU_DEBUG_IF(debug_config->verbose >= 1) {
-        std::ostringstream in_addr;
-        // buffer_ptr() only support usm_memory
-        for (size_t i = 0; i < this->dependencies().size(); i++) {
-            auto in_mem = dep_memory_ptr(i);
-            if (in_mem) {
-                in_addr << in_mem->buffer_ptr();
-                if (i < this->dependencies().size() - 1) {
-                    in_addr << ", ";
-                }
-            }
-        }
-        auto out_mem = output_memory_ptr();
-        auto out_alloc_type = out_mem ? out_mem->get_allocation_type() : allocation_type::unknown;
-        auto out_ptr = out_mem ? out_mem->buffer_ptr() : nullptr;
+    OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
 
-        GPU_DEBUG_COUT << id() << ": execute. Memory type: "
-                       << out_alloc_type << ", in_usm("
-                       << in_addr.str() << "), out_usm("
-                       << out_ptr << ")" << std::endl;
+    GPU_DEBUG_IF(debug_config->verbose >= 1) {
+        GPU_DEBUG_COUT << "Execute " << id() << ", memory type: "
+                       << output_memory().get_allocation_type() << std::endl;
     }
 
-    if (_exec_deps.empty())
-        return _impl->execute(events, *this);
+    // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
+    if (is_dynamic() || has_mutable_input() || is_output())
+        set_arguments();
 
     auto queue_type = get_network().get_stream().get_queue_type();
     if (queue_type == queue_types::out_of_order) {
@@ -535,7 +485,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
     };
 
     auto layout = impl_params.output_layout;
-    OPENVINO_ASSERT(layout.is_static(), "[GPU] Can't allocate output for dynamic layout");
+    OPENVINO_ASSERT(!layout.is_dynamic(), "[GPU] Can't allocate output for dynamic layout");
     auto device_mem_acc = [&](size_t a, const cldnn::layout& l) {
         return a + l.bytes_count();
     };

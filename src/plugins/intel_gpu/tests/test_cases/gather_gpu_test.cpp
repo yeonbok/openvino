@@ -319,8 +319,8 @@ TEST(gather8_gpu_fp16, d323_axisY_bdim_m1) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 3, 2, 2, 4, 3} }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f32, format::bfyx, tensor{ 3, 2, 1, 3 } }); // Indexes
+    auto input1 = engine.allocate_memory({ ov::PartialShape{3, 2, 3, 4, 2}, data_types::f16, format::bfzyx }); // Dictionary
+    auto input2 = engine.allocate_memory({ ov::PartialShape{3, 2, 3}, data_types::f32, format::bfyx }); // Indexes
     int64_t axis = 3;
     int64_t batch_dim = -1;
     bool negative_indexes = true;
@@ -408,6 +408,8 @@ TEST(gather8_gpu_fp16, d323_axisY_bdim_m1) {
         133.f, 134.f, 129.f, 130.f, 131.f, 132.f,
         141.f, 142.f, 137.f, 138.f, 139.f, 140.f
     };
+
+    ASSERT_EQ(expected_results.size(), output->count());
 
     for (size_t i = 0; i < expected_results.size(); ++i) {
         EXPECT_EQ(expected_results[i], float16_to_float32(output_ptr[i]));
@@ -538,8 +540,8 @@ TEST(gather7_gpu_fp16, d323_axisY_bdim_m1) {
 
     auto& engine = get_test_engine();
 
-    auto input1 = engine.allocate_memory({ data_types::f16, format::bfzyx, tensor{ 3, 2, 2, 4, 3} }); // Dictionary
-    auto input2 = engine.allocate_memory({ data_types::f32, format::bfyx, tensor{ 3, 2, 1, 3 } }); // Indexes
+    auto input1 = engine.allocate_memory({ ov::PartialShape{3, 2, 3, 4, 2}, data_types::f16, format::bfzyx }); // Dictionary
+    auto input2 = engine.allocate_memory({ ov::PartialShape{3, 2, 3}, data_types::f32, format::bfyx }); // Indexes
     int64_t axis = 3;
     int64_t batch_dim = -1;
 

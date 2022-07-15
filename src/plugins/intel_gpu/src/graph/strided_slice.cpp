@@ -40,14 +40,13 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
     auto output_format = format::get_default_format(desc->out_size.size());
     if (!node.const_mem.empty()) {
         ov::op::v1::StridedSlice op;
-        std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
         std::vector<ov::PartialShape> input_shapes = {
             node.get_dependency(0).get_output_layout().get_partial_shape(),
             node.get_dependency(1).get_output_layout().get_partial_shape(),
             node.get_dependency(2).get_output_layout().get_partial_shape(),
             node.get_dependency(3).get_output_layout().get_partial_shape()
         };
-
+        std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
         auto begin_mask = desc->begin_mask;
         auto end_mask = desc->end_mask;
         auto new_axis_mask = desc->new_axis_mask;
@@ -90,7 +89,7 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
         ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
         return {layout{output_shapes[0], input_layout.data_type, output_format}};
     }
-    return layout{input_layout.data_type, output_format, output_shapes[0]};
+    return {layout{desc->out_size, input_layout.data_type, output_format}};
 }
 
 void strided_slice_inst::update_shape() {

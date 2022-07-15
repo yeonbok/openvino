@@ -42,6 +42,7 @@ layout permute_inst::calc_output_layout(permute_node const& node, kernel_impl_pa
     return layout(output_shape, input_layout.data_type, input_layout.format, op);
 }
 
+template<typename ShapeType>
 std::vector<layout> permute_inst::calc_output_layouts(permute_node const& node, kernel_impl_params const& impl_param) {
     assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
            "Output data type forcing is not supported for permute_node!");

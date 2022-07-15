@@ -58,20 +58,21 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, 
     auto prim = node.get_primitive();
     auto input_layout = node.input().get_non_padded_output_layout();
 
-    ov::PartialShape pattern_shape = node.get_dependencies().size() == 2 ? node.get_dependency(1).get_output_layout().get_partial_shape()
-                                                                         : ov::Shape{ prim->output_pattern.size() };
+    ShapeType pattern_shape = impl_param.input_layouts.size() == 2 ? impl_param.get_input_layout(1).get<ShapeType>()
+                                                           : ShapeType(ov::Shape{ prim->output_pattern.size() });
+
     if (input_layout.is_dynamic()) {
         auto rank = pattern_shape.rank().get_length();
         return { layout{ov::PartialShape::dynamic(rank),
                         input_layout.data_type,
-                        input_layout.format.adjust_to_rank(rank)} };
+                        input_layout.format.adjust_to_rank(input_layout.format, input_layout.get_partial_shape().size())} };
     }
     auto& memory_deps = impl_param.memory_deps;
     // On program build stage for the cases with pattern being stored in a runtime tensor
     // we return output_partial_shape taken from the original model intead of something like PartialShape::dynamic(rank)
     // as ngraph may refine output shape using interval arithmetic
     if (memory_deps.empty() && prim->output_pattern.empty()) {
-        return { layout{prim->output_shape, input_layout.data_type, input_layout.format.adjust_to_rank(prim->output_shape.size())} };
+        return { layout{prim->output_shape, input_layout.data_type, format::adjust_to_rank(input_layout.format, prim->output_partial_shape.size())} };
     }
 
     ov::op::v1::Reshape op;
@@ -109,7 +110,7 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, 
         shape_infer(&op, input_shapes, output_shapes, const_data);
     }
 
-    return { layout{output_shapes[0], input_layout.data_type, input_layout.format.adjust_to_rank(output_shapes[0].size())} };
+    return { layout{output_shapes[0], input_layout.data_type, format::adjust_to_rank(input_layout.format, output_shapes[0].size())} };
 }
 
 std::string reshape_inst::to_string(reshape_node const& node) {
@@ -138,19 +139,25 @@ reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) :
                                     "output layout data type",
                                     output_layout.data_type,
                                     "");
-    CLDNN_ERROR_NOT_EQUAL(node.id(),
-                          "Output layout count",
-                          output_layout.count(),
-                          "input layout count",
-                          input_layout.count(),
-                          "Output layout of reshape primitive changes size of input buffer");
+    if (output_layout.is_static())
+        CLDNN_ERROR_NOT_EQUAL(node.id(),
+                              "Output layout count",
+                              output_layout.count(),
+                              "input layout count",
+                              input_layout.count(),
+                              "Output layout of reshape primitive changes size of input buffer");
 
     // if reshape operated in-place, postpone creation of the output until network run,
     // then create new memory object as the reinterpreted output of the previous primitive
-    if (!node.can_be_optimized())
-        _output = allocate_output();
-    else
-        reuse_input();
+    if (_node.get_output_layout().is_static()) {
+        if (!node.can_be_optimized())
+            _output = allocate_output();
+        else
+            reuse_input();
+    } else {
+        if (_exec_deps.size() > 0 && input_memory_ptr())
+            reuse_input();
+    }
 }
 
 void reshape_inst::on_execute() {
