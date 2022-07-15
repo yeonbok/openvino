@@ -7,7 +7,6 @@
 #include <memory>
 
 namespace ov {
-namespace runtime {
 namespace intel_gpu {
 
 AsyncInferRequestLegacy::AsyncInferRequestLegacy(const InferRequestLegacy::Ptr &inferRequest,
@@ -58,5 +57,4 @@ AsyncInferRequestLegacy::~AsyncInferRequestLegacy() {
 }
 
 }  // namespace intel_gpu
-}  // namespace runtime
 }  // namespace ov

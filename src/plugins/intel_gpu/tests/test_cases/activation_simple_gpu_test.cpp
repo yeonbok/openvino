@@ -351,7 +351,7 @@ TEST(activation_f32_fw_gpu, softsign_basic_yxfb) {
 TEST(activation_f16_fw_gpu, softsign_basic_yxfb) {
     auto& engine = get_test_engine();
 
-    auto input = engine.allocate_memory({data_types::f16, format::yxfb, {1, 1, 2, 2}});
+    auto input = engine.allocate_memory({data_types::f16, format::yxfb, tensor{1, 1, 2, 2}});
     set_values(input, {FLOAT16(1.0f), FLOAT16(2.0f), FLOAT16(3.0f), FLOAT16(4.5f)});
     VF<FLOAT16> output_vec = {FLOAT16(0.5f), FLOAT16(0.66650391f), FLOAT16(0.75f), FLOAT16(0.81835938f)};
 
@@ -1680,9 +1680,9 @@ INSTANTIATE_TEST_SUITE_P(activation_blocked_tests,
 TEST(activation_gpu, basic_dynamic) {
     auto& engine = get_test_engine();
 
-    layout in1_actual_layout = {data_types::f32, format::bfyx, ov::PartialShape{ 1, 1, 5, 4 }};
-    layout in2_actual_layout = {data_types::f32, format::bfyx, ov::PartialShape{ 1, 1, 2, 2 }};
-    layout in_dynamic_layout = {data_types::f32, format::bfyx, ov::PartialShape{ 1, 1, ov::Dimension(1, 10), ov::Dimension(1, 10) }};
+    layout in1_actual_layout = {ov::PartialShape{ 1, 1, 5, 4 }, data_types::f32, format::bfyx};
+    layout in2_actual_layout = {ov::PartialShape{ 1, 1, 2, 2 }, data_types::f32, format::bfyx};
+    layout in_dynamic_layout = {ov::PartialShape{ 1, 1, ov::Dimension(1, 10), ov::Dimension(1, 10) }, data_types::f32, format::bfyx};
     auto input1 = engine.allocate_memory(in1_actual_layout);
     auto input2 = engine.allocate_memory(in2_actual_layout);
     set_values(input1,

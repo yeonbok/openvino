@@ -153,9 +153,9 @@ static void CreateParameterOp(Program& p, const std::shared_ptr<ngraph::op::v0::
         }
 
         if (networkInputLayout.format == cldnn::format::nv12 && networkInputLayout.get_tensor().batch[0] > 1) {
-            networkInputLayout.set_tensor({ 1, TensorValue(inputDims[3]), TensorValue(inputDims[2]), TensorValue(inputDims[1]) });
+            networkInputLayout.set_partial_shape({ 1, inputDims[3], inputDims[2], inputDims[1] });
             std::vector<cldnn::primitive_id> inputs;
-            for (size_t i = 0; i < inputDims[0].get_length(); ++i) {
+            for (int64_t i = 0; i < inputDims[0].get_length(); ++i) {
                 std::string batched_name = inputName + "_" + std::to_string(i);
                 p.inputLayouts.insert({ inputInfo->name() + "_" + std::to_string(i), networkInputLayout });
                 inputs.emplace_back(batched_name);
@@ -163,8 +163,7 @@ static void CreateParameterOp(Program& p, const std::shared_ptr<ngraph::op::v0::
                 p.AddPrimitiveToProfiler(op);
             }
         } else {
-            networkInputLayout.set_tensor({ TensorValue(inputDims[0]), TensorValue(inputDims[3]),
-                                            TensorValue(inputDims[2]), TensorValue(inputDims[1]) });
+            networkInputLayout.set_partial_shape({ inputDims[0], inputDims[3], inputDims[2], inputDims[1] });
 
             p.inputLayouts.insert({ inputInfo->name(), networkInputLayout });
             p.AddPrimitive(cldnn::input_layout(inputName, networkInputLayout, inputInfo->name()));
@@ -181,9 +180,10 @@ static void CreateParameterOp(Program& p, const std::shared_ptr<ngraph::op::v0::
             }
             int height = inputDims[2].get_length();
             int width = inputDims[3].get_length();
+            size_t batch = inputDims[0].get_length();
             std::vector<cldnn::primitive_id> reorders;
 
-            for (size_t i = 0; i < inputDims[0]; i++) {
+            for (size_t i = 0; i < batch; i++) {
                 auto preprocessPrimID = "reorder:" + inputName + std::to_string(i) + Program::m_preProcessTag;
                 std::string y_name = inputName + "_Y" + std::to_string(i);
                 std::string uv_name = inputName + "_UV" + std::to_string(i);

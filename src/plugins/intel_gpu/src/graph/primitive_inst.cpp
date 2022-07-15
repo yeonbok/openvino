@@ -98,19 +98,36 @@ bool is_any_user_cpu(const std::list<const program_node*>& users) {
 uint32_t primitive_inst::get_network_id() const { return _network.get_id(); }
 
 void primitive_inst::update_shape() {
-    // Do nothing for static nodes
-    // if (!_node.is_dynamic())
-    //     return;
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
     if (!_network.shape_changed())
         return;
 
-    auto new_layout = _node.type()->calc_output_layout(_node);
-<<<<<<< HEAD
-    // TODO: Get rid of this const_cast ASAP
-    std::cerr << id() << " update shape: " << new_layout.get_partial_shape() << std::endl;
-=======
+    std::map<int, memory::ptr> memory_deps;
+    for (auto& i : _node.get_shape_infer_dependencies()) {
+        auto& dep = _node.get_dependency(i);
+        if (dep.is_type<data>()) {
+            memory_deps.insert({i, dep.as<data>().get_attached_memory_ptr()});
+            continue;
+        }
+        auto dep_id = dep.id();
+        if (_network.has_event(dep.id())) {
+            const auto& ev = _network.get_primitive_event(dep_id);
+            _network.get_stream().wait_for_events({ev});
+            GPU_DEBUG_IF(debug_config->verbose >= 4) {
+                GPU_DEBUG_COUT << id() << " wait for " << i << " dependency\n";
+            }
+        }
+        auto dep_mem = _network.get_output_memory(dep_id);
+        memory_deps.insert({i, dep_mem});
+    }
+
+    layout new_layout = layout(data_types::f32, format::bfyx, tensor());
+    auto out_layouts = _node.type()->calc_output_layouts(_node, memory_deps);
+    if (out_layouts.empty())
+        new_layout = _node.type()->calc_output_layout(_node);
+    else
+        new_layout = out_layouts[0];
 
     auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
     auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
@@ -122,7 +139,6 @@ void primitive_inst::update_shape() {
         set_shape_change();
 
     // TODO: Get rid of this const_cast
->>>>>>> 5aa7b6b998... [GPU] Code cleanup
     const_cast<program_node&>(_node).set_output_layout(new_layout);
 }
 

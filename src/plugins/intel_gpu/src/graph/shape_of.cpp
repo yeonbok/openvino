@@ -27,7 +27,7 @@ layout shape_of_inst::calc_output_layout(shape_of_node const& node) {
         dt = node.get_fused_output_layout().data_type;
     }
 
-    return layout{dt, format::bfyx, ov::PartialShape{prim->output_rank}};
+    return layout{ov::PartialShape{static_cast<int64_t>(prim->output_rank)}, dt, format::bfyx};
 }
 
 std::string shape_of_inst::to_string(shape_of_node const& node) {

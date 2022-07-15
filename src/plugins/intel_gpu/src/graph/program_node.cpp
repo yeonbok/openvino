@@ -99,7 +99,7 @@ std::unique_ptr<json_composite> program_node::desc_to_json() const {
     json_composite output_layout_info;
     output_layout_info.add("data type", dt_to_str(output_layout.data_type));
     output_layout_info.add("format", fmt_to_str(output_layout.format));
-    output_layout_info.add("size", output_layout.get_tensor().to_string());
+    output_layout_info.add("size", output_layout.to_string());
 
     json_composite padding_info;
     padding_info.add("lower size", output_layout.data_padding.lower_size().to_string());
@@ -229,7 +229,6 @@ layout program_node::calc_output_layout() const {
     auto params = get_kernel_impl_params();
     auto out_layouts = type()->calc_output_layouts(*this, *params);
     if (!out_layouts.empty()) {
-        std::cerr << id() << " out layout: " << out_layouts[0].to_string() << std::endl;
         return out_layouts[0];
     }
 
@@ -259,7 +258,7 @@ layout program_node::get_output_layout() const {
 
 layout program_node::get_non_padded_output_layout(bool invalidate_users_if_changed) {
     auto out_layout = get_output_layout(invalidate_users_if_changed);
-    auto result = layout({out_layout.data_type, out_layout.format, out_layout.get_tensor()});
+    auto result = layout({out_layout.get_partial_shape(), out_layout.data_type, out_layout.format});
     return result;
 }
 
