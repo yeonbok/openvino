@@ -251,7 +251,6 @@ TEST_P(paritial_shape_test, check_get_dim_test) {
     auto input_vec = p.ten.sizes();
 
     auto l = layout(p.dt, p.fmt, p.ten);
-    auto out_tensor = l.get_tensor();
 
     auto expected_dims = p.ten.sizes(format::get_default_format(
                                         p.fmt.dimension(),

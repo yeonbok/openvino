@@ -51,7 +51,7 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node) {
             ov::PartialShape out_pshape;
             for (size_t i = 0; i < node.inputs_count(); i++) {
                 auto l = node.input(i).get_non_padded_output_layout();
-                if (!ov::PartialShape::broadcast_merge_into(out_pshape, l.size, ov::op::AutoBroadcastSpec(ov::op::AutoBroadcastType::NUMPY))) {
+                if (!ov::PartialShape::broadcast_merge_into(out_pshape, l.get_partial_shape(), ov::op::AutoBroadcastSpec(ov::op::AutoBroadcastType::NUMPY))) {
                     IE_THROW() << "incorrect input shapes\n";
                 }
                 if (l.format == format::b_fs_zyx_fsv16)  // use optimized 5D
@@ -59,7 +59,7 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node) {
                 else if (l.format == format::bs_fs_zyx_bsv16_fsv16)
                     format = format::bs_fs_zyx_bsv16_fsv16;
             }
-            return layout(output_type, format, out_pshape);
+            return layout(out_pshape, output_type, format);
         }
     };
 
@@ -257,7 +257,6 @@ eltwise_inst::typed_primitive_inst(network& network, eltwise_node const& node) :
     //                                   "Eltwise output_x",
     //                                   out_x,
     //                                   "");
-
 }
 
 void eltwise_inst::check_inputs_count(eltwise_node const& node) {

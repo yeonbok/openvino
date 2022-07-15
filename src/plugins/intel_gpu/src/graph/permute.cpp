@@ -26,7 +26,7 @@ layout permute_inst::calc_output_layout(permute_node const& node) {
     auto permute_order = node.get_primitive()->permute_order;
     ov::PartialShape output_shape;
 
-    auto input_shape = input_layout.size;
+    auto input_shape = input_layout.get_partial_shape();
 
     for (size_t x = 0; x < permute_order.size(); x++) {
         output_shape.push_back(input_shape[permute_order[x]]);
@@ -38,7 +38,7 @@ layout permute_inst::calc_output_layout(permute_node const& node) {
         input_layout.data_type = node.get_fused_output_layout().data_type;
     }
 
-    return layout(input_layout.data_type, input_layout.format, output_shape, op);
+    return layout(output_shape, input_layout.data_type, input_layout.format, op);
 }
 
 std::string permute_inst::to_string(permute_node const& node) {

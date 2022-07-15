@@ -54,9 +54,9 @@ public:
 class permute_eltwise_loop: public LoopFusingTest {};
 TEST_P(permute_eltwise_loop, basic) {
     auto p = GetParam();
-    auto num_iteration_mem = engine.allocate_memory({data_types::i64, format::bfyx, ov::PartialShape{1, 1, 1, 1}});
-    auto trip_count_mem = engine.allocate_memory({data_types::i64, format::bfyx, ov::PartialShape{1, 1, 1, 1}});
-    auto initial_condition_mem = engine.allocate_memory({data_types::i64, format::bfyx, ov::PartialShape{1, 1, 1, 1}});
+    auto num_iteration_mem = engine.allocate_memory({data_types::i64, format::bfyx, {1, 1, 1, 1}});
+    auto trip_count_mem = engine.allocate_memory({data_types::i64, format::bfyx, {1, 1, 1, 1}});
+    auto initial_condition_mem = engine.allocate_memory({data_types::i64, format::bfyx, {1, 1, 1, 1}});
     set_values(num_iteration_mem, {0});
     set_values(trip_count_mem, {p.loop_trip_count});
     set_values(initial_condition_mem, {1});

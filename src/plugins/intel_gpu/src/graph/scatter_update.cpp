@@ -15,29 +15,6 @@ primitive_type_id scatter_update::type_id() {
     return &instance;
 }
 
-static size_t GetNonEmptyDimsNumber(const layout& layout) {
-    if (layout.count() != 1) {
-        // Count the number of "one size" dimensions starting with X to Batch
-        size_t one_size_dims = 0;
-        std::vector<int32_t> dims;
-        if (layout.format == cldnn::format::bfwzyx)
-            dims = layout.get_tensor().sizes(format::bfwzyx);
-        else if (layout.format == cldnn::format::bfzyx)
-            dims = layout.get_tensor().sizes(format::bfzyx);
-        else
-            dims = layout.get_tensor().sizes(format::bfyx);
-        for (size_t i = 0; i < dims.size(); i++) {
-            if (dims[dims.size() - 1 - i] == 1)
-                one_size_dims++;
-            else
-                break;
-        }
-        return dims.size() - one_size_dims;
-    } else {
-        return 1;
-    }
-}
-
 layout scatter_update_inst::calc_output_layout(scatter_update_node const& node) {
     auto desc = node.get_primitive();
 
@@ -45,7 +22,6 @@ layout scatter_update_inst::calc_output_layout(scatter_update_node const& node) 
     const size_t indices_size = node.input(1).get_output_layout().count();
     const size_t input_number_of_dims = node.input(0).get_output_layout().get_tensor().sizes().size();
     const size_t updates_number_of_dims = node.input(2).get_output_layout().get_tensor().sizes().size();
-    const size_t nonempty_indices_dims = GetNonEmptyDimsNumber(node.input(1).get_output_layout());
 
     auto input_layout = node.input(0).get_output_layout();
 

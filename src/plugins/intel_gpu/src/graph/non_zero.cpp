@@ -78,7 +78,7 @@ layout gather_nonzero_inst::calc_output_layout(gather_nonzero_node const& node) 
     if (node.is_valid_output_layout()) {
         return node.get_output_layout();
     } else {
-        return layout{cldnn::data_types::i32, cldnn::format::bfyx, ov::PartialShape({ov::Dimension::dynamic(), ov::Dimension::dynamic(), 1, 1})};
+        return layout{ov::PartialShape({ov::Dimension::dynamic(), ov::Dimension::dynamic(), 1, 1}), cldnn::data_types::i32, cldnn::format::bfyx};
     }
 }
 
@@ -106,7 +106,7 @@ void gather_nonzero_inst::update_shape() {
 
     auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
     auto output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
-    auto new_layout = layout{cldnn::data_types::i32, cldnn::format::bfyx, output_shape};
+    auto new_layout = layout{output_shape, cldnn::data_types::i32, cldnn::format::bfyx};
     auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::i32, format::bfyx, tensor{});
     auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
     GPU_DEBUG_GET_INSTANCE(debug_config);

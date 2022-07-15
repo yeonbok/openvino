@@ -73,15 +73,7 @@
 #include "intel_gpu/primitives/space_to_batch.hpp"
 #include "intel_gpu/primitives/strided_slice.hpp"
 #include "intel_gpu/primitives/tile.hpp"
-#include "intel_gpu/primitives/resample.hpp"
-#include "intel_gpu/primitives/gather_tree.hpp"
-#include "intel_gpu/primitives/lstm_dynamic_input.hpp"
-#include "intel_gpu/primitives/lstm_dynamic_timeloop.hpp"
-#include "intel_gpu/primitives/grn.hpp"
-#include "intel_gpu/primitives/ctc_greedy_decoder.hpp"
-#include "intel_gpu/primitives/convert_color.hpp"
 #include "intel_gpu/primitives/non_zero.hpp"
-#include "generic_layer.hpp"
 
 namespace cldnn {
 namespace ocl {
