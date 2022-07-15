@@ -23,33 +23,6 @@
 namespace ov {
 namespace intel_gpu {
 
-static cldnn::tensor getConstTensor(const ngraph::Shape constDims) {
-    cldnn::tensor constTensor;
-    switch (constDims.size()) {
-    case 6: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]),
-                                        TensorValue(constDims[5]), TensorValue(constDims[4]),
-                                        TensorValue(constDims[3]), TensorValue(constDims[2]));
-        break;
-    case 5: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]),
-                                        TensorValue(constDims[4]), TensorValue(constDims[3]), TensorValue(constDims[2]));
-        break;
-    case 4: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]),
-                                        TensorValue(constDims[3]), TensorValue(constDims[2]));
-        break;
-    case 3: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]),
-                                        1, TensorValue(constDims[2]));
-        break;
-    case 2: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]), 1, 1);
-        break;
-    case 1: constTensor = cldnn::tensor(1, TensorValue(constDims[0]), 1, 1);
-        break;
-    case 0: constTensor = cldnn::tensor(1, 1, 1, 1);
-        break;
-    default: IE_THROW() << "Invalid constant blob dimensions";
-    }
-    return constTensor;
-}
-
 struct ConstProperties {
     bool needsBatchInterpretation;
     bool swapOI;
@@ -167,9 +140,8 @@ void createClDnnConstant(Program& p, const ngraph::Shape& constDims, const std::
         }
     }
 
-    cldnn::layout constLayout = cldnn::layout(DataTypeFromPrecision(op->get_output_element_type(0)),
-                                              constFormat,
-                                              constTensor);
+    cldnn::layout constLayout = cldnn::layout(ov::PartialShape(constDims), DataTypeFromPrecision(op->get_output_element_type(0)),
+                                              constFormat);
 
     cldnn::primitive_id initialconstPrimID = layer_type_name_ID(op);
     cldnn::primitive_id constPrimID;

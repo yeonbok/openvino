@@ -351,7 +351,7 @@ TEST(activation_f32_fw_gpu, softsign_basic_yxfb) {
 TEST(activation_f16_fw_gpu, softsign_basic_yxfb) {
     auto& engine = get_test_engine();
 
-    auto input = engine.allocate_memory({data_types::f16, format::yxfb, {1, 1, 2, 2}});
+    auto input = engine.allocate_memory({data_types::f16, format::yxfb, tensor{1, 1, 2, 2}});
     set_values(input, {FLOAT16(1.0f), FLOAT16(2.0f), FLOAT16(3.0f), FLOAT16(4.5f)});
     VF<FLOAT16> output_vec = {FLOAT16(0.5f), FLOAT16(0.66650391f), FLOAT16(0.75f), FLOAT16(0.81835938f)};
 
@@ -1671,81 +1671,83 @@ TEST_P(activation_random_test, random) {
     auto param = GetParam();
     execute_compare(param, true);
 }
+INSTANTIATE_TEST_SUITE_P(activation_blocked_tests,
+                         activation_random_test,
+                         testing::ValuesIn(
+                            std::vector<activation_random_test_params>{
+                                { data_types::i8,  format::b_fs_yx_fsv32,        { 1, 32, 5, 5}, activation_func::relu, {}, {}},
+                                { data_types::i8,  format::bs_fs_yx_bsv32_fsv32, {32, 32, 5, 5}, activation_func::relu, {}, {}},
+                                { data_types::f16, format::bs_fs_yx_bsv32_fsv16, {32, 32, 5, 5}, activation_func::relu, {}, {}},
+                                { data_types::i8,  format::bs_fs_yx_bsv32_fsv32, {16, 16, 5, 5}, activation_func::relu, {}, {}},
+                                { data_types::f16, format::bs_fs_yx_bsv32_fsv16, {16, 16, 5, 5}, activation_func::relu, {}, {}},
+                            }
+                        ));
 
-const auto reluParams = testing::ValuesIn(std::vector<activation_random_test_params>{
-    {data_types::i8, format::b_fs_yx_fsv32, {1, 32, 5, 5}, activation_func::relu, {}, {}},
-    {data_types::i8, format::bs_fs_yx_bsv32_fsv32, {32, 32, 5, 5}, activation_func::relu, {}, {}},
-    {data_types::f16, format::bs_fs_yx_bsv32_fsv16, {32, 32, 5, 5}, activation_func::relu, {}, {}},
-    {data_types::i8, format::bs_fs_yx_bsv32_fsv32, {16, 16, 5, 5}, activation_func::relu, {}, {}},
-    {data_types::f16, format::bs_fs_yx_bsv32_fsv16, {16, 16, 5, 5}, activation_func::relu, {}, {}},
-});
+TEST(activation_gpu, basic_dynamic) {
+    auto& engine = get_test_engine();
 
-INSTANTIATE_TEST_SUITE_P(relu_activation_blocked_tests, activation_random_test, reluParams);
+    layout in1_actual_layout = {ov::PartialShape{ 1, 1, 5, 4 }, data_types::f32, format::bfyx};
+    layout in2_actual_layout = {ov::PartialShape{ 1, 1, 2, 2 }, data_types::f32, format::bfyx};
+    layout in_dynamic_layout = {ov::PartialShape{ 1, 1, ov::Dimension(1, 10), ov::Dimension(1, 10) }, data_types::f32, format::bfyx};
+    auto input1 = engine.allocate_memory(in1_actual_layout);
+    auto input2 = engine.allocate_memory(in2_actual_layout);
+    set_values(input1,
+    { 1.0f, 0.0f, -3.0f, 4.0f, 5.0f,
+      0.0f, 2.0f, 3.0f, 4.0f, -6.0f,
+      3.0f, -3.0f, 3.0f, 0.0f, 1.0f,
+      1.0f, 1.0f, 1.0f, -1.0f, 0.0f });
+    set_values(input2,
+    { -1.0f, -3.0f,
+      1.0f, 2.0f });
+    VF<float> output_vec1 = {
+        1.0f, 0.0f, 0.0f, 4.0f, 5.0f,
+        0.0f, 2.0f, 3.0f, 4.0f, 0.0f,
+        3.0f, 0.0f, 3.0f, 0.0f, 1.0f,
+        1.0f, 1.0f, 1.0f, 0.0f, 0.0f };
+    VF<float> output_vec2 = {
+        0.0f, 0.0f,
+        1.0f, 2.0f };
 
-const std::vector<data_types> dataTypes = {data_types::f16, data_types::f32};
-const std::vector<format::type> types = {format::bfyx,
-                                         format::bfzyx,
-                                         format::yxfb,
-                                         format::byxf,
-                                         format::fyxb,
-                                         format::b_fs_yx_fsv2,
-                                         format::b_fs_zyx_fsv2,
-                                         format::bs_fs_yx_bsv32_fsv32,
-                                         format::bs_fs_yx_bsv32_fsv16};
+    topology topology(
+        input_layout("input", in_dynamic_layout),
+        activation("relu", "input", activation_func::relu));
+    network network(engine, topology);
+    // run with first set of data
+    {
+        network.set_input_data("input", input1);
+        auto outputs = network.execute();
+        EXPECT_EQ(outputs.size(), size_t(1));
+        EXPECT_EQ(outputs.begin()->first, "relu");
 
-// TODO: need to investigate input for commented activation functions
-const std::vector<activation_func> activationFunctions = {activation_func::none,
-                                                          activation_func::logistic,
-                                                          activation_func::gelu,
-                                                          activation_func::hyperbolic_tan,
-                                                          activation_func::relu,
-                                                          activation_func::relu_negative_slope,
-                                                          activation_func::clamp,
-                                                          activation_func::softrelu,
-                                                          activation_func::abs,
-                                                          activation_func::linear,
-                                                          activation_func::square,
-//                                                          activation_func::sqrt,
-                                                          activation_func::elu,
-                                                          activation_func::sin,
-//                                                          activation_func::asin,
-                                                          activation_func::sinh,
-//                                                          activation_func::asinh,
-                                                          activation_func::cos,
-//                                                          activation_func::acos,
-                                                          activation_func::cosh,
-//                                                          activation_func::acosh,
-//                                                          activation_func::log,
-//                                                          activation_func::log2,
-                                                          activation_func::exp,
-                                                          activation_func::tan,
-                                                          activation_func::atan,
-//                                                          activation_func::atanh,
-                                                          activation_func::floor,
-                                                          activation_func::ceil,
-                                                          activation_func::negative,
-                                                          activation_func::negation,
-                                                          activation_func::pow,
-                                                          activation_func::reciprocal,
-                                                          activation_func::erf,
-                                                          activation_func::hard_sigmoid,
-                                                          activation_func::hsigmoid,
-                                                          activation_func::selu,
-                                                          activation_func::sign,
-                                                          activation_func::softplus,
-                                                          activation_func::swish,
-                                                          activation_func::hswish,
-                                                          activation_func::mish,
-                                                          activation_func::round_half_to_even,
-                                                          activation_func::round_half_away_from_zero,
-                                                          activation_func::gelu_tanh,
-                                                          activation_func::softsign};
+        auto output_memory = outputs.at("relu").get_memory();
+        auto output_layout = output_memory->get_layout();
+        cldnn::mem_lock<float> output_ptr(output_memory, get_test_stream());
 
-const std::vector<tensor> inputShapes = {
-    {1, 32, 5, 5},
-    {32, 32, 5, 5},
-    {16, 16, 5, 5},
-};
+        int y_size = output_layout.spatial(1);
+        int x_size = output_layout.spatial(0);
+        int f_size = output_layout.feature();
+        int b_size = output_layout.batch();
+        EXPECT_EQ(output_layout.format, format::bfyx);
+        EXPECT_EQ(y_size, 5);
+        EXPECT_EQ(x_size, 4);
+        EXPECT_EQ(f_size, 1);
+        EXPECT_EQ(b_size, 1);
+
+        for (size_t i = 0; i < output_vec1.size(); ++i) {
+            EXPECT_FLOAT_EQ(output_vec1[i], output_ptr[i]) << " i=" << i;
+        }
+    }
+
+    // run with second set of data
+    {
+        network.set_input_data("input", input2);
+        auto outputs = network.execute();
+        EXPECT_EQ(outputs.size(), size_t(1));
+        EXPECT_EQ(outputs.begin()->first, "relu");
+
+        auto output_memory = outputs.at("relu").get_memory();
+        auto output_layout = output_memory->get_layout();
+        cldnn::mem_lock<float> output_ptr(output_memory, get_test_stream());
 
 const auto fpFunctionsParams = ::testing::Combine(::testing::ValuesIn(dataTypes),
                                                   ::testing::ValuesIn(types),

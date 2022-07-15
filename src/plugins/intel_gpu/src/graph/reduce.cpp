@@ -49,7 +49,7 @@ layout reduce_inst::calc_output_layout(reduce_node const& node, kernel_impl_para
         in_dims[reduce_axes[a]] = 1;
     }
 
-    std::vector<int32_t> updated_dims;
+    ov::Shape updated_dims;
     if (!desc->keep_dims) {
         // Get unreduced from b-f and x-w range
         for (size_t b_f_index = 0; b_f_index < 2; b_f_index++) {
@@ -87,12 +87,7 @@ layout reduce_inst::calc_output_layout(reduce_node const& node, kernel_impl_para
     if (impl_param.has_fused_primitives())
         output_type = impl_param.get_fused_output_layout().data_type;
 
-    if (format_dim == 6)
-        return layout{output_type, input_format, tensor(batch(in_dims[0]), feature(in_dims[1]), spatial(in_dims[2], in_dims[3], in_dims[4], in_dims[5]))};
-    else if (format_dim == 5)
-        return layout{output_type, input_format, tensor(batch(in_dims[0]), feature(in_dims[1]), spatial(in_dims[2], in_dims[3], in_dims[4]))};
-    else
-        return layout{output_type, input_format, tensor(batch(in_dims[0]), feature(in_dims[1]), spatial(in_dims[2], in_dims[3]))};
+    return layout{ov::PartialShape(in_dims), output_type, input_format};
 }
 
 std::string reduce_inst::to_string(reduce_node const& node) {

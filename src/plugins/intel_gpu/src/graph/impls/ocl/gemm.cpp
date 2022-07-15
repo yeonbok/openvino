@@ -111,15 +111,15 @@ public:
             }
             return layout;
         };
-        const auto input_layouts = get_gemm_input_layouts(impl_param->input_layouts, impl_param->output_layout);
-        const auto output_layout = get_gemm_output_layout(input_layouts, impl_param->output_layout);
+        const auto input_layouts = get_gemm_input_layouts(impl_param.input_layouts, impl_param.output_layout);
+        const auto output_layout = get_gemm_output_layout(input_layouts, impl_param.output_layout);
 
         auto first_fused_input_idx = input_layouts.size();
-        const auto fused_descs = impl_param->fused_desc;
+        const auto fused_descs = impl_param.fused_desc;
         if (fused_descs.size() > 0) {
             first_fused_input_idx = fused_descs[0].dep_start_idx;
         }
-        auto gemm_params = get_default_params<kernel_selector::gemm_params>(*impl_param, 1);
+        auto gemm_params = get_default_params<kernel_selector::gemm_params>(impl_param, 1);
         auto gemm_optional_params =
             get_default_optional_params<kernel_selector::gemm_optional_params>(arg.get_program());
 

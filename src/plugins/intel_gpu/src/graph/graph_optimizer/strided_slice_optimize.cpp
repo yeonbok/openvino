@@ -70,6 +70,7 @@ void strided_slice_optimize::run(program& p) {
 
             p.add_intermediate(reshape_prim_node, *node, 0, true);
             p.extract_and_remove(*node);
+            reshape_prim_node.calc_output_layout();
         }
     }
 }
