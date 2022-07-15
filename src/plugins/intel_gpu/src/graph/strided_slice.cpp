@@ -99,10 +99,8 @@ void strided_slice_inst::update_shape() {
     GPU_DEBUG_IF(debug_config->verbose >= 4) {
         GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
     }
-    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
-        set_shape_change();
-    // TODO: Get rid of this const_cast
-    node.set_output_layout(new_layout);
+    auto out_size = cldnn::tensor(output_format, dims_converted);
+    return layout{input_layout.data_type, output_format, out_size};
 }
 
 std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& node, kernel_impl_params const& impl_param,

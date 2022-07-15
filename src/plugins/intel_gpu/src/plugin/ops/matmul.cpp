@@ -138,7 +138,7 @@ static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::Mat
         bool reshape_fc = shape_a_aligned.size() > 3;
 
         auto reshape_to_2d = [&](const ov::PartialShape& shape, std::string inputName, size_t features, std::string suffix) -> std::string {
-            auto total = std::accumulate(shape.begin(), shape.end(), 1, [](int b, const ov::Dimension& a){ return b * a.get_length(); });
+            size_t total = std::accumulate(shape.begin(), shape.end(), 1, [](int b, const ov::Dimension& a){ return b * a.get_length(); });
             std::vector<size_t> reshapeSize = { total / features, features };
 
             if (total != reshapeSize[0] * reshapeSize[1])
