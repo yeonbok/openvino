@@ -453,6 +453,16 @@ struct layout {
 
     void set_tensor(const tensor& size);
 
+    // Returns true if other layout can be reinterpreted without need of reordering
+    bool compatible(const layout& other) const;
+
+    // Returns true if other layout is identical to this.
+    // Note: layouts can only be considered identical if data size described by both layouts match (so no data are genereted
+    // nor dropped). If layouts describe two buffers with different size, consider them not to be identical even if
+    // smaller buffer can be considered to hold subsequence of larger buffer,  this behavior is required to force buffer allocation
+    // for smaller buffer which, currently, should always be performed
+    bool identical(const layout& other) const;
+
 private:
     /// The size of the @ref memory (excluding padding)
     ov::PartialShape size;
