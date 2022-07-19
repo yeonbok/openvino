@@ -263,6 +263,7 @@ network::network(program::ptr program, stream::ptr stream, bool is_internal, boo
     build_exec_order();
     validate_primitives();
     add_default_output_chains();
+//    get_memory_pool().dump_pool();
 }
 
 network::network(engine& engine,
@@ -683,6 +684,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         }
 
         execute_primitive(inst, events);
+//      get_stream().finish();
 
         GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
             get_stream().finish();

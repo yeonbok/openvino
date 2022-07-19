@@ -82,8 +82,20 @@ struct broadcast : public primitive_base<broadcast> {
           broadcast_sizes(broadcast_sizes),
           broadcast_axes(broadcast_axes) {}
 
+    broadcast(const primitive_id& id,
+              std::vector<primitive_id> inputs,
+              const ov::PartialShape& broadcast_sizes,
+              const std::vector<uint16_t>& broadcast_axes = {},
+              const primitive_id& ext_prim_id = "",
+              const padding& output_padding = padding(),
+              std::shared_ptr<ov::Node> original_node = nullptr)
+        : primitive_base(id, inputs, ext_prim_id, output_padding, optional_data_type(), original_node),
+          broadcast_sizes_partial(broadcast_sizes),
+          broadcast_axes(broadcast_axes) {}
+
     /// @brief Expected sizes of output from broadcast primitive.
     tensor broadcast_sizes;
+    ov::PartialShape broadcast_sizes_partial;
     /// @brief Array of axes positions from output shape (0-based, from left to right)
     ///        along which broadcast should happen.
     std::vector<uint16_t> broadcast_axes;

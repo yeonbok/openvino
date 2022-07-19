@@ -83,5 +83,8 @@ KERNEL (concatenation_gpu_ref)(__global INPUT0_TYPE* input, __global OUTPUT_TYPE
 
     uint input_offset  = FUNC_CALL(get_input_index)(b, f, w, z, y, x);
     uint output_offset = FUNC_CALL(get_output_index)(out_b, out_f, out_w, out_z, out_y, out_x);
+#if ORIG_PRIM_NAME == 99999
+    printf("output[%d] = %f\n", output_offset, ACTIVATION(input[input_offset], ACTIVATION_PARAMS));
+#endif
     output[output_offset] = TO_OUTPUT_TYPE(ACTIVATION(input[input_offset], ACTIVATION_PARAMS));
 }

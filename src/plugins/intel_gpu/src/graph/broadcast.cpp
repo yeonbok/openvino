@@ -21,7 +21,11 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for broadcast_node!");
     auto desc = node.get_primitive();
-    if (desc->broadcast_sizes.sizes()[0] != 0) {
+    if (desc->broadcast_sizes_partial.get_shape().size() != 0) {
+        // static
+        auto input_layout = node.input().get_output_layout();
+        return {input_layout.data_type, input_layout.format, desc->broadcast_sizes_partial};
+    } else if (desc->broadcast_sizes.sizes()[0] != 0) {
         // static
         auto input_layout = node.input().get_output_layout();
         return {input_layout.data_type, input_layout.format, desc->broadcast_sizes};

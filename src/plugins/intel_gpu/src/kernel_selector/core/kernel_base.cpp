@@ -75,8 +75,13 @@ JitConstants KernelBase::MakeBaseParamsJitConstants(const base_params& params) c
     auto unitType = GetUnitType(params);
 
     auto layerid = params.layerID;
-    layerid.erase(std::remove_if(layerid.begin(), layerid.end(), [](const char c) { return (c == ':') || (c == '.'); }), layerid.end()); 
+    layerid.erase(std::remove_if(layerid.begin(), layerid.end(), [](const char c) { return (c == ':') || (c == '.') || (c == '/'); }),
+                                                                        layerid.end());
     JitConstants jit{
+//        MakeJitConstant("multiplyLSTMSequence_1502Multiply_1399", 99999999),
+        MakeJitConstant("concatLSTMSequence_1502", 99999),
+        MakeJitConstant("selectLSTMSequence_1364tensor_iterator2Select_4142", 88888),
+        MakeJitConstant("selectLSTMSequence_1364tensor_iterator1Select_4142", 77777),
         MakeJitConstant("ORIG_PRIM_NAME", layerid),
         MakeJitConstant("FP64_SUPPORTED", params.engineInfo.bFP64Support),
         MakeJitConstant("FP16_SUPPORTED", params.engineInfo.bFP16Support),

@@ -312,7 +312,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
     if (_exec_deps.empty())
         return _impl->execute(events, *this);
-
+    std::cout << "Execute " << id() << std::endl;;
     std::vector<event::ptr> dependencies;
     auto queue_type = get_network().get_stream().get_queue_type();
     if (queue_type == queue_types::out_of_order) {
@@ -324,6 +324,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                 // wrong or synchronization failed.
                 auto ev = get_network().get_primitive_event(id);
                 dependencies.emplace_back(ev);
+//                std::cout << "--- added dep for " << id << std::endl;
             } catch (const std::out_of_range& oor) {
                 std::string temp = std::string("internal CLDNN error: execution order corrupted.") + std::string("\n") +
                                 std::string(oor.what() + std::string("\n"));
@@ -498,6 +499,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
                 _node.id(),
                 _node.get_memory_dependencies(),
                 alloc_type,
+    //            false);
                 true);
     }
 }

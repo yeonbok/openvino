@@ -275,6 +275,7 @@ ocl_stream::ocl_stream(const ocl_engine &engine)
     ocl::command_queues_builder queue_builder;
     queue_builder.set_profiling(config.enable_profiling);
     queue_builder.set_out_of_order((config.queue_type == queue_types::out_of_order));
+//    queue_builder.set_out_of_order(false);
 
     if (sync_method == sync_methods::none && config.queue_type == queue_types::out_of_order) {
         throw std::runtime_error("[CLDNN] Unexpected sync method (none) is specified for out_of_order queue");
@@ -355,7 +356,7 @@ event::ptr ocl_stream::enqueue_kernel(kernel& kernel,
                                       const kernel_arguments_desc& args_desc,
                                       const kernel_arguments_data& /* args */,
                                       std::vector<event::ptr> const& deps,
-                                      bool is_output) {
+                                      bool is_output, bool enforce_barrier) {
     auto& ocl_kernel = downcast<ocl::ocl_kernel>(kernel);
 
     auto& kern = ocl_kernel.get_handle();
@@ -372,14 +373,16 @@ event::ptr ocl_stream::enqueue_kernel(kernel& kernel,
         }
         dep_events_ptr = &dep_events;
     } else if (sync_method == sync_methods::barriers) {
-        sync_events(deps, is_output);
+//        std::cout << "----- Sync event" << std::endl;
+        sync_events(deps, is_output, enforce_barrier);
     }
 
     cl::Event ret_ev;
 
     bool set_output_event = sync_method == sync_methods::events || is_output;
-
+//    std::cout << "    set_output_event : " << set_output_event << std::endl;
     try {
+//        std::cout << "----- Enqueued kernel" << std::endl;
         _command_queue.enqueueNDRangeKernel(kern, cl::NullRange, global, local, dep_events_ptr, set_output_event ? &ret_ev : nullptr);
     } catch (cl::Error const& err) {
         throw ocl_error(err);
@@ -472,21 +475,33 @@ void ocl_stream::wait_for_events(const std::vector<event::ptr>& events) {
     }
 }
 
-void ocl_stream::sync_events(std::vector<event::ptr> const& deps, bool is_output) {
+void ocl_stream::sync_events(std::vector<event::ptr> const& deps, bool is_output, bool enforce_barrier) {
     bool needs_barrier = false;
     for (auto& dep : deps) {
         auto* ocl_base_ev = downcast<ocl_base_event>(dep.get());
+//        std::cout << " -----------------------sync events for dep. " << std::endl;
+//        std::cout << "                   Stamp for dep : " << ocl_base_ev->get_queue_stamp() << std::endl;
+//        std::cout << "                   last barrier : " << _last_barrier << std::endl;
+//        std::cout << "                   needs_barrier : " << needs_barrier << std::endl;
         if (ocl_base_ev->get_queue_stamp() > _last_barrier) {
             needs_barrier = true;
         }
+        //if (ocl_base_ev->get_queue_stamp() == 69)
+//        if (enforce_barrier) {
+//            needs_barrier = true; // test taylor
+//            std::cout << "                   enforce_barrier : " << needs_barrier << std::endl;
+//        }
     }
 
     if (needs_barrier) {
+//        std::cout << "---- Enqueued barrier (" << _queue_counter + 1 << std::endl;
         try {
-            if (is_output)
+            if (is_output) {
                 _command_queue.enqueueBarrierWithWaitList(nullptr, &_last_barrier_ev);
-            else
+            } else {
                 _command_queue.enqueueBarrierWithWaitList(nullptr, nullptr);
+//                std::cout << "!!!!! enqueued barrier " << res << std::endl;
+            }
         } catch (cl::Error const& err) {
             throw ocl_error(err);
         }

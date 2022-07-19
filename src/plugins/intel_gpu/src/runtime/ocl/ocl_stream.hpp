@@ -70,7 +70,7 @@ public:
                               const kernel_arguments_desc& args_desc,
                               const kernel_arguments_data& args,
                               std::vector<event::ptr> const& deps,
-                              bool is_output = false) override;
+                              bool is_output = false, bool enforce = false) override;
     event::ptr enqueue_marker(std::vector<event::ptr> const& deps, bool is_output) override;
     event::ptr group_events(std::vector<event::ptr> const& deps) override;
     void wait_for_events(const std::vector<event::ptr>& events) override;
@@ -87,7 +87,7 @@ public:
 #endif
 
 private:
-    void sync_events(std::vector<event::ptr> const& deps, bool is_output = false);
+    void sync_events(std::vector<event::ptr> const& deps, bool is_output = false, bool enforce_barrier = false);
 
     const ocl_engine& _engine;
     ocl_queue_type _command_queue;

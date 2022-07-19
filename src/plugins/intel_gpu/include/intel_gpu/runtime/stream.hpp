@@ -31,7 +31,7 @@ public:
                                       const kernel_arguments_desc& args_desc,
                                       const kernel_arguments_data& args,
                                       std::vector<event::ptr> const& deps,
-                                      bool is_output_event = false) = 0;
+                                      bool is_output_event = false, bool enforce = false) = 0;
     virtual event::ptr enqueue_marker(std::vector<event::ptr> const& deps, bool is_output_event = false) = 0;
     virtual void enqueue_barrier() = 0;
     virtual event::ptr group_events(std::vector<event::ptr> const& deps) = 0;

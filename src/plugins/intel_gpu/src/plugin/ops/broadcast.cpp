@@ -82,7 +82,8 @@ static void CreateCommonBroadcastOp(Program& p,
             inputPrimitive = reshapeName;
         }
         auto broadcastPrim =
-            cldnn::broadcast(layerName, {inputPrimitive}, tensor_from_dims(op->get_output_shape(0)), {}, op->get_friendly_name());
+            //cldnn::broadcast(layerName, {inputPrimitive}, tensor_from_dims(op->get_output_shape(0)), {}, op->get_friendly_name());
+            cldnn::broadcast(layerName, {inputPrimitive}, op->get_output_partial_shape(0), {}, op->get_friendly_name());
         p.AddPrimitive(broadcastPrim);
         p.AddPrimitiveToProfiler(op);
         return;

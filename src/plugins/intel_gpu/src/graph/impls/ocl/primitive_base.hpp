@@ -16,6 +16,7 @@
 #include <list>
 #include <utility>
 #include "reorder_inst.h"
+#include "select_inst.h"
 namespace cldnn {
 namespace ocl {
 
@@ -180,8 +181,18 @@ protected:
                 for (const auto& m : instance.get_intermediates_memories()) {
                     args.intermediates.push_back(m);
                 }
-
-                auto ev = stream.enqueue_kernel(*_kernels[k], _kernel_data.kernels[k].params, args, tmp_events, is_output_event);
+                bool enforce = false;
+                //if (instance.id() == "select:LSTMSequence_1364/tensor_iterator/2/Select_4142")
+//                if (instance.id() == "select:LSTMSequence_1364/tensor_iterator/1/Select_4140" && std::getenv("ADD_BARRIER") != nullptr)
+//                if (instance.id() == "select:LSTMSequence_1364/tensor_iterator/1/Select_4142" && std::getenv("ADD_BARRIER") != nullptr)
+//                if (instance.id() == "multiply:LSTMSequence_1364/tensor_iterator/1/LSTMCell_2529.0")
+                if (instance.id() == "select:LSTMSequence_1363/1/Select_4134" && std::getenv("ADD_BARRIER") != nullptr)
+                    enforce = true;
+                else if (instance.id() == "select:LSTMSequence_1364/tensor_iterator/1/Select_4143" && std::getenv("ADD_BARRIER") != nullptr)
+                    enforce = true;
+                else if (instance.id() == "multiply:LSTMSequence_1364/tensor_iterator/1/LSTMCell_2529.0" && std::getenv("ADD_BARRIER") != nullptr)
+                    enforce = true;
+                auto ev = stream.enqueue_kernel(*_kernels[k], _kernel_data.kernels[k].params, args, tmp_events, is_output_event, enforce);
                 new_events.push_back(ev);
                 all_events.push_back(ev);
             }
@@ -189,6 +200,7 @@ protected:
             tmp_events = new_events;
         }
 
+        //std::cout << "execute " << instance.id() << " : all_events: " << all_events.size() << ", tmp_events: " << tmp_events.size() << std::endl;
         if ((all_events.size() == 0) && (tmp_events.size() > 0))
             return aggregate_events(tmp_events, stream);
 

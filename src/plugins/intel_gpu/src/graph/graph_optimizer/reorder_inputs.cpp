@@ -14,6 +14,7 @@
 #include "mvn_inst.h"
 #include "to_string_utils.h"
 #include "reshape_inst.h"
+#include "select_inst.h"
 
 #include <vector>
 #include <memory>
@@ -508,7 +509,11 @@ void reorder_inputs::run(program& p, layout_optimizer& lo, reorder_factory& rf) 
 
     insert_reorders(p, fmt_map, rf, lo);
 
+
     for (auto n : p.get_processing_order()) {
+        if (n->is_type<select>()) {
+            std::cout << n->id();
+        }
         n->recalc_output_layout(true);
     }
 
