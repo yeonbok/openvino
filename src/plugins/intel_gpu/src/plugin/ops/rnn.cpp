@@ -178,7 +178,8 @@ static void CreateLSTMCellOp(Program& p, const std::shared_ptr<ngraph::op::v4::L
     p.AddInnerPrimitiveToProfiler(gemmReorderID, op->get_friendly_name(), op);
     p.AddInnerPrimitiveToProfiler(lstm_elt_id, op->get_friendly_name(), op);
 
-    ov::PartialShape outSz = { lstm_batch_size, lstm_hidden_size, 1, 1 };
+//    ov::PartialShape outSz = { lstm_batch_size, lstm_hidden_size, 1, 1 };
+    ov::PartialShape outSz = { lstm_batch_size, lstm_hidden_size};
     cldnn::primitive_id outputHiddenCropID = layerName + "_hc";
     cldnn::primitive_id outputHiddenID = layerName + ".0";
     p.AddPrimitive(cldnn::crop(outputHiddenCropID, lstm_elt_id, hiddenSz, cldnn::tensor{0, 0, 0, 0}, op->get_friendly_name()));

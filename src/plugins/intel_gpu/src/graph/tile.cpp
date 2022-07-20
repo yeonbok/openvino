@@ -8,6 +8,9 @@
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "json_object.h"
 #include <string>
+#include "ngraph/op/tile.hpp"
+#include "tile_shape_inference.hpp"
+
 
 namespace cldnn {
 primitive_type_id tile::type_id() {
@@ -18,11 +21,28 @@ primitive_type_id tile::type_id() {
 layout tile_inst::calc_output_layout(tile_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for tile_node!");
+#if 1
     auto desc = node.get_primitive();
 
     auto input_layout = node.input().get_output_layout();
     auto input_format = input_layout.format;
-    return layout{input_layout.data_type, input_format, desc->out_shape};
+    if (desc->output_shape_partial.get_shape().size() != 0) {
+        return layout{input_layout.data_type, input_format, desc->output_shape_partial};
+    } else {
+        return layout{input_layout.data_type, input_format, desc->out_shape};
+    }
+#else
+    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+    std::vector<ov::PartialShape> input_shapes = {
+        node.get_dependency(0).get_output_layout().size,
+        node.get_dependency(1).get_output_layout().size,
+    };
+
+    ov::op::v0::Tile op;
+    ov::op::v0::shape_infer(&op, input_shapes, output_shapes);
+    auto output_layout = layout{node.get_dependency(0).get_output_layout().data_type, node.get_dependency(0).get_output_layout().format, output_shapes[0]};
+    return output_layout;
+#endif
 }
 
 std::string tile_inst::to_string(tile_node const& node) {

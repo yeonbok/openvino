@@ -312,7 +312,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
     if (_exec_deps.empty())
         return _impl->execute(events, *this);
-    std::cout << "Execute " << id() << std::endl;;
+//    std::cout << "Execute " << id() << std::endl;;
     std::vector<event::ptr> dependencies;
     auto queue_type = get_network().get_stream().get_queue_type();
     if (queue_type == queue_types::out_of_order) {

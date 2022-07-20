@@ -67,6 +67,7 @@ layout crop_inst::calc_output_layout(crop_node const& node) {
         auto ov_op = ov::as_type_ptr<ov::op::v1::Split>(node.get_ov_op()).get();
         shape_infer(ov_op, input_shapes, output_shapes);
     } else if (node.get_dependencies().size() == 1) {
+#if 0
         const auto& ref_in_sizes = node.get_primitive()->reference_input;
         const auto& in_sizes = in_layout.get_tensor();
         const auto& offsets = node.get_primitive()->offsets;
@@ -83,6 +84,25 @@ layout crop_inst::calc_output_layout(crop_node const& node) {
             return layout({in_layout.data_type, in_layout.format, out_sizes});
         }
         return layout({in_layout.data_type, in_layout.format, ref_in_sizes});
+#else
+        const auto& ref_in_sizes = node.get_primitive()->reference_input;
+        const auto& in_sizes = in_layout.get_tensor();
+        const auto& offsets = node.get_primitive()->offsets;
+
+        // Check for borders variant of crop.
+        if (ref_in_sizes.batch[0] < 0 || ref_in_sizes.feature[0] < 0 || ref_in_sizes.spatial[0] < 0 ||
+            ref_in_sizes.spatial[1] < 0 || ref_in_sizes.spatial[2] < 0) {
+            // Ignore not supported dimensions.
+            const auto rb_sizes = ref_in_sizes.negate().sub({0, 0, 0, 0, 0});
+            const auto lt_sizes = offsets.sub({0, 0, 0, 0, 0});
+
+            const auto out_sizes = in_sizes - (rb_sizes + lt_sizes);
+
+            return layout({in_layout.data_type, in_layout.format, out_sizes});
+        }
+        return layout({in_layout.data_type, in_layout.format, ref_in_sizes});
+
+#endif
     }
     return layout({in_layout.data_type, in_layout.format, output_shapes[desc->output_idx]});
 }

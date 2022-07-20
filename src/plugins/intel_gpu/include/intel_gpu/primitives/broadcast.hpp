@@ -80,7 +80,9 @@ struct broadcast : public primitive_base<broadcast> {
               std::shared_ptr<ov::Node> original_node = nullptr)
         : primitive_base(id, inputs, ext_prim_id, output_padding, optional_data_type(), original_node),
           broadcast_sizes(broadcast_sizes),
-          broadcast_axes(broadcast_axes) {}
+          broadcast_axes(broadcast_axes) {
+        std::cout << "hello" << std::endl;
+    }
 
     broadcast(const primitive_id& id,
               std::vector<primitive_id> inputs,
@@ -91,7 +93,9 @@ struct broadcast : public primitive_base<broadcast> {
               std::shared_ptr<ov::Node> original_node = nullptr)
         : primitive_base(id, inputs, ext_prim_id, output_padding, optional_data_type(), original_node),
           broadcast_sizes_partial(broadcast_sizes),
-          broadcast_axes(broadcast_axes) {}
+          broadcast_axes(broadcast_axes) {
+        std::cout << "hello" << std::endl;
+    }
 
     /// @brief Expected sizes of output from broadcast primitive.
     tensor broadcast_sizes;
