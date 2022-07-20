@@ -1427,17 +1427,10 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
     } else if (node.is_type<detection_output>()) {
         const auto& program = node.get_program();
         const auto& device_info = program.get_engine().get_device_info();
-        const size_t lws_max = device_info.max_work_group_size;
         auto& detection_output_node = node.as<detection_output>();
         auto confidence_layout = detection_output_node.confidence().get_output_layout();
         auto prim = detection_output_node.get_primitive();
-        auto batch_size_limitations = (device_info.supports_immad && device_info.execution_units_count >= 256) ? true : confidence_layout.batch() >= 4;
-        if (confidence_layout.batch() <= lws_max && batch_size_limitations &&
-            prim->confidence_threshold >= 0.1 &&
-            prim->top_k <= 400 && prim->num_classes >= 16 && confidence_layout.feature() > 10000)
-            preferred_impl = impl_types::ocl;
-        else
-            preferred_impl = impl_types::cpu;
+        preferred_impl = impl_types::ocl;
     } else if (node.is_type<non_max_suppression>()) {
         const std::set<format> blocked_formats = {
             format::b_fs_yx_fsv16,
