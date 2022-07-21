@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "strided_slice_shape_inference.hpp"
+
 namespace cldnn {
 primitive_type_id strided_slice::type_id() {
     static primitive_type_base<strided_slice> instance;
@@ -28,6 +30,68 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node) {
     }
     auto out_size = cldnn::tensor(output_format, dims_converted);
     return layout{input_layout.data_type, output_format, out_size};
+}
+
+std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& node, const std::map<int, memory::ptr> constant_mem) {
+    auto desc = node.get_primitive();
+    auto input_layout = node.input(0).get_output_layout();
+
+    if (constant_mem.empty()) {
+        auto out_shape = ov::PartialShape::dynamic(input_layout.get_rank());
+        return { layout{out_shape, input_layout.data_type, format::get_default_format(out_shape.rank().get_length())} };
+    }
+
+    ov::op::v1::StridedSlice op;
+    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+    std::vector<ov::PartialShape> input_shapes = {
+        node.get_dependency(0).get_output_layout().get_partial_shape(),
+        node.get_dependency(1).get_output_layout().get_partial_shape(),
+        node.get_dependency(2).get_output_layout().get_partial_shape(),
+        node.get_dependency(3).get_output_layout().get_partial_shape()
+    };
+
+    op.set_begin_mask(desc->begin_mask);
+    op.set_end_mask(desc->end_mask);
+    op.set_new_axis_mask(desc->new_axis_mask);
+    op.set_shrink_axis_mask(desc->shrink_axis_mask);
+
+    auto mem1 = constant_mem.at(1);
+    auto mem2 = constant_mem.at(2);
+    auto mem3 = constant_mem.at(3);
+
+    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock1(mem1, node.get_program().get_stream());
+    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock2(mem2, node.get_program().get_stream());
+    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock3(mem3, node.get_program().get_stream());
+
+    auto ptr1 = lock1.data();
+    auto ptr2 = lock2.data();
+    auto ptr3 = lock3.data();
+
+    auto make_tensor = [](layout l, void* memory_pointer) {
+        ov::element::Type et;
+
+        switch (l.data_type) {
+            case data_types::i64: et = ov::element::i64; break;
+            case data_types::i32: et = ov::element::i32; break;
+            default: IE_THROW() << "unsupported element type in strided slice primitive";
+        }
+
+        return std::make_shared<ngraph::runtime::HostTensor>(et, l.get_shape(), memory_pointer);
+    };
+
+    auto tensor1 = make_tensor(mem1->get_layout(), ptr1);
+    auto tensor2 = make_tensor(mem2->get_layout(), ptr2);
+    auto tensor3 = make_tensor(mem3->get_layout(), ptr3);
+
+    std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {
+        {1, tensor1},
+        {2, tensor2},
+        {3, tensor3},
+    };
+    ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
+    auto output_format = format::get_default_format(output_shapes[0].size());
+
+    return { layout{output_shapes[0], input_layout.data_type, output_format} };
 }
 
 std::string strided_slice_inst::to_string(strided_slice_node const& node) {
