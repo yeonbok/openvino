@@ -79,9 +79,9 @@ class typed_primitive_inst<strided_slice> : public typed_primitive_inst_base<str
 
 public:
     static layout calc_output_layout(strided_slice_node const& node, kernel_impl_params const& impl_param);
+    static std::vector<layout> calc_output_layouts(strided_slice_node const& node, kernel_impl_params const& impl_param, const std::map<int, memory::ptr> constant_mem);
     static std::string to_string(strided_slice_node const& node);
 
-public:
     typed_primitive_inst(network& network, strided_slice_node const& desc);
 };
 
