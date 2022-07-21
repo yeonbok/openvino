@@ -135,6 +135,12 @@ program::program(engine& engine_ref,
     build_program(is_internal);
 }
 
+program::program(engine& engine)
+    : _engine(engine),
+      options(build_options()),
+      processing_order(),
+      tuning_cache(nullptr) { }
+
 program::~program() {
 }
 

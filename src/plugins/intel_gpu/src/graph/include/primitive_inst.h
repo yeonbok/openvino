@@ -267,6 +267,8 @@ public:
     const typed_node& node;
     const PType& argument;
 
+    static std::vector<layout> calc_output_layouts(const typed_node& node, std::map<int, memory::ptr> constant_data) { return {}; }
+
     typed_primitive_inst_base(network& network, typed_node const& node)
         : typed_primitive_inst_base(network, node, do_allocate_memory(node)) {}
 
