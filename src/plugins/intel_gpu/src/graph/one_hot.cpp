@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "one_hot_shape_inference.hpp"
+
 namespace cldnn {
 primitive_type_id one_hot::type_id() {
     static primitive_type_base<one_hot> instance;
@@ -25,6 +27,37 @@ static bool is_output_bfzyx(const layout& input, int32_t axis) {
     if (in_dims[3] != 1)
         return true;
     return false;
+}
+
+std::vector<layout> one_hot_inst::calc_output_layouts(const one_hot_node& node, kernel_impl_params const& impl_param, std::map<int, memory::ptr> constant_data) {
+    auto input_layout = impl_param.input_layouts[0];
+    auto desc = impl_param.typed_desc<one_hot>();
+    auto dt = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
+
+    ov::op::v1::OneHot op;
+    try {
+        // set_axis also calls resolve_axis method which tries to get input0 partial shape
+        // thus wrap this call with try/catch.
+        // it's safe as shape_infer method calls normalize_axis internally
+        op.set_axis(desc->one_hot_axis);
+    } catch (...) {}
+
+    std::vector<ov::PartialShape> output_shapes = { ov::PartialShape::dynamic() };
+    std::vector<ov::PartialShape> input_shapes = {
+        input_layout.get_partial_shape(),
+        ov::PartialShape{},
+        ov::PartialShape{},
+        ov::PartialShape{}
+    };
+
+    int64_t depth = desc->depth;
+
+    auto depth_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64, ov::Shape{1}, static_cast<void*>(&depth));
+    std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {
+        {1, depth_tensor}
+    };
+    ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
+    return {{output_shapes[0], dt, format::get_default_format(output_shapes[0].size())}};
 }
 
 layout one_hot_inst::calc_output_layout(one_hot_node const& node, kernel_impl_params const& impl_param) {

@@ -77,6 +77,13 @@ struct primitive_type_base : primitive_type {
         return typed_primitive_inst<PType>::calc_output_layout(node, impl_param);
     }
 
+    std::vector<cldnn::layout> calc_output_layouts(const cldnn::program_node& node, std::map<int, memory::ptr> constant_data) const override {
+        if (node.type() != this)
+            throw std::invalid_argument("primitive_type_base::calc_output_layouts: primitive type mismatch");
+
+        return typed_primitive_inst<PType>::calc_output_layouts(node, constant_data);
+    }
+
     std::string to_string(const cldnn::program_node& node) const override {
         if (node.type() != this)
             throw std::invalid_argument("primitive_type_base::to_string: primitive type mismatch");
