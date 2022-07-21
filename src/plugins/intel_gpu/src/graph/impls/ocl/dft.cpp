@@ -22,14 +22,10 @@ struct dft_impl : typed_primitive_impl_ocl<dft> {
         return make_unique<dft_impl>(*this);
     }
 
-    static primitive_impl* create(const dft_node& arg) {
+    static primitive_impl* create(const dft_node& arg, std::shared_ptr<kernel_impl_params> impl_param) {
         const auto& prim = arg.get_primitive();
-        const auto& param_info = kernel_impl_params(arg.get_program(), prim, arg.get_unique_id(),
-                                                    arg.get_input_layouts(), arg.get_output_layout(),
-                                                    arg.get_fused_primitives(),
-                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
 
-        auto params = get_default_params<kernel_selector::dft_params>(param_info);
+        auto params = get_default_params<kernel_selector::dft_params>(*impl_param);
         auto primitive = arg.get_primitive();
         params.axes = primitive->axes;
         if (primitive->kind == dft_kind::inverse) {

@@ -37,13 +37,9 @@ protected:
     }
 
 public:
-    static primitive_impl* create(const experimental_detectron_generate_proposals_single_image_node& arg) {
+    static primitive_impl* create(const experimental_detectron_generate_proposals_single_image_node& arg, std::shared_ptr<kernel_impl_params> impl_param) {
         const auto& prim = arg.get_primitive();
-        const auto& param_info = kernel_impl_params(arg.get_program(), prim, arg.get_unique_id(),
-                                                    arg.get_input_layouts(), arg.get_output_layout(),
-                                                    arg.get_fused_primitives(),
-                                                    arg.get_fused_activations_funcs(), arg.get_fused_activations_params());
-        auto params = get_default_params<kernel_selector::experimental_detectron_generate_proposals_single_image_params>(param_info);
+        auto params = get_default_params<kernel_selector::experimental_detectron_generate_proposals_single_image_params>(*impl_param);
         auto optional_params = get_default_optional_params<
                 kernel_selector::experimental_detectron_generate_proposals_single_image_optional_params>(arg.get_program());
 
@@ -54,11 +50,11 @@ public:
         params.pre_nms_count = primitive->pre_nms_count;
         params.post_nms_count = primitive->post_nms_count;
 
-        params.inputs.push_back(convert_data_tensor(arg.anchors().get_output_layout()));
-        params.inputs.push_back(convert_data_tensor(arg.deltas().get_output_layout()));
-        params.inputs.push_back(convert_data_tensor(arg.scores().get_output_layout()));
+        params.inputs.push_back(convert_data_tensor(impl_param->input_layouts[1]));
+        params.inputs.push_back(convert_data_tensor(impl_param->input_layouts[2]));
+        params.inputs.push_back(convert_data_tensor(impl_param->input_layouts[3]));
 
-        params.inputs.push_back(convert_data_tensor(arg.output_roi_scores_node().get_output_layout()));
+        params.inputs.push_back(convert_data_tensor(impl_param->input_layouts[4]));
 
         const auto& kernel_selector = kernel_selector::experimental_detectron_generate_proposals_single_image_kernel_selector::Instance();
         const auto best_kernels = kernel_selector.GetBestKernels(params, optional_params);
