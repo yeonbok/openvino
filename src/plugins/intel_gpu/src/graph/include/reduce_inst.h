@@ -30,7 +30,6 @@ public:
     static layout calc_output_layout(reduce_node const& node);
     static std::string to_string(reduce_node const& node);
 
-public:
     typed_primitive_inst(network& network, reduce_node const& desc);
 };
 
