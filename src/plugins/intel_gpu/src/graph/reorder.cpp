@@ -32,7 +32,7 @@ layout reorder_inst::calc_output_layout(reorder_node const& node) {
         ofmt = ifmt;
     }
 
-    if (node.is_valid_output_layout() && input_layout.feature() <= 4) {
+    if (node.is_valid_output_layout() && input_layout.is_static() && input_layout.feature() <= 4) {
         auto users = node.get_users();
         if (users.size() > 0 && users.front()->is_type<convolution>()) {
             auto expected_fmt = node.get_output_layout().format;
