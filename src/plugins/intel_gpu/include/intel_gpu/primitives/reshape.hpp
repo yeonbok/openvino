@@ -34,10 +34,53 @@ struct reshape : public primitive_base<reshape> {
             const tensor& output_shape,
             const primitive_id& ext_prim_id = "",
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, ext_prim_id, output_padding), output_shape(output_shape) {}
+        : primitive_base(id, {input}, ext_prim_id, output_padding)
+        , output_shape(output_shape)
+        , output_pattern({}) {}
+
+    /// @brief Constructs reshape primitive.
+    /// @param id This primitive id.
+    /// @param input Input primitive id.
+    /// @param output_shape Requested memory shape (excluding padding).
+    /// A dimension could be 0, in this case,  the value is taken from the input tensor.
+    /// At most one dimension of the new shape can be -1. In this case, the value is inferred from the size of the tensor and the remaining dimensions.
+    /// @param output_padding Requested memory padding.
+    reshape(const primitive_id& id,
+            const primitive_id& input,
+            const primitive_id& pattern_id,
+            bool special_zero,
+            const std::vector<int64_t>& output_pattern,
+            const primitive_id& ext_prim_id = "",
+            const padding& output_padding = padding())
+        : primitive_base(id, {input, pattern_id}, ext_prim_id, output_padding)
+        , output_shape(tensor())
+        , special_zero(special_zero)
+        , output_pattern(output_pattern) {}
+
+    /// @brief Constructs reshape primitive.
+    /// @param id This primitive id.
+    /// @param input Input primitive id.
+    /// @param output_shape Requested memory shape (excluding padding).
+    /// A dimension could be 0, in this case,  the value is taken from the input tensor.
+    /// At most one dimension of the new shape can be -1. In this case, the value is inferred from the size of the tensor and the remaining dimensions.
+    /// @param output_padding Requested memory padding.
+    reshape(const primitive_id& id,
+            const primitive_id& input,
+            bool special_zero,
+            const std::vector<int64_t>& output_pattern,
+            const primitive_id& ext_prim_id = "",
+            const padding& output_padding = padding())
+        : primitive_base(id, {input}, ext_prim_id, output_padding)
+        , output_shape(tensor())
+        , special_zero(special_zero)
+        , output_pattern(output_pattern) {}
 
     /// @brief Requested memory shape.
     tensor output_shape;
+
+    bool special_zero = false;
+
+    std::vector<int64_t> output_pattern;
 };
 
 /// @}

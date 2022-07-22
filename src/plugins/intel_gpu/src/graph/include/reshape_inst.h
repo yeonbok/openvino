@@ -43,9 +43,9 @@ class typed_primitive_inst<reshape> : public typed_primitive_inst_base<reshape> 
 
 public:
     static layout calc_output_layout(reshape_node const& node);
+    static std::vector<layout> calc_output_layouts(reshape_node const& node, const std::map<int, memory::ptr> constant_mem);
     static std::string to_string(reshape_node const& node);
 
-public:
     typed_primitive_inst(network& network, reshape_node const& node);
 
 private:
