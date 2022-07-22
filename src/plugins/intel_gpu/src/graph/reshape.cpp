@@ -48,7 +48,8 @@ layout reshape_inst::calc_output_layout(reshape_node const& node, kernel_impl_pa
     return layout{input_layout.data_type, input_layout.format, tensor(sizes)};
 }
 
-std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, const std::map<int, memory::ptr> constant_mem) {
+std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, kernel_impl_params const& impl_param,
+                                                      const std::map<int, memory::ptr> constant_mem) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for reshape_node!");
     auto prim = node.get_primitive();

@@ -64,7 +64,8 @@ layout gather_inst::calc_output_layout(gather_node const& node, kernel_impl_para
                   tensor(format::get_default_format(dims_converted.size()), dims_converted)};
 }
 
-std::vector<layout> gather_inst::calc_output_layouts(gather_node const& node, const std::map<int, memory::ptr> constant_mem) {
+std::vector<layout> gather_inst::calc_output_layouts(gather_node const& node, kernel_impl_params const& impl_param,
+                                                     const std::map<int, memory::ptr> constant_mem) {
     auto desc = node.get_primitive();
 
     auto input_layout = node.input(0).get_output_layout();
