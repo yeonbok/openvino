@@ -10,6 +10,8 @@
 #include "json_object.h"
 #include <string>
 
+#include "shape_nodes.hpp"
+
 namespace cldnn {
 
 primitive_type_id reshape::type_id() {
@@ -43,6 +45,49 @@ layout reshape_inst::calc_output_layout(reshape_node const& node) {
         sizes[need_recalc] = static_cast<int>(input_layout.count()) / shape_count;
 
     return layout{input_layout.data_type, input_layout.format, tensor(sizes)};
+}
+
+std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, const std::map<int, memory::ptr> constant_mem) {
+    assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
+           "Output data type forcing is not supported for reshape_node!");
+    auto prim = node.get_primitive();
+    auto input_layout = node.input().get_non_padded_output_layout();
+
+    ov::op::v1::Reshape op;
+    op.set_special_zero(prim->special_zero);
+
+    ov::PartialShape pattern_shape = node.get_dependencies().size() == 2 ? node.get_dependency(1).get_output_layout().get_partial_shape()
+                                                                         : ov::Shape{ prim->output_pattern.size() };
+    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+    std::vector<ov::PartialShape> input_shapes = {
+        node.get_dependency(0).get_output_layout().get_partial_shape(),
+        pattern_shape,
+    };
+
+    if (!constant_mem.empty()) {
+        auto pattern_mem = constant_mem.at(1);
+
+        cldnn::mem_lock<uint8_t, mem_lock_type::read> pattern_lock(pattern_mem, node.get_program().get_stream());
+
+        auto pattern_ptr = pattern_lock.data();
+        auto pattern_tensor = make_host_tensor(pattern_mem->get_layout(), pattern_ptr);
+
+        std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {
+            {1, pattern_tensor},
+        };
+
+        shape_infer(&op, input_shapes, output_shapes, const_data);
+    } else {
+        auto pattern_data = prim->output_pattern;
+        auto pattern_tensor = make_host_tensor({pattern_shape, data_types::i64, format::bfyx}, static_cast<void*>(pattern_data.data()));
+        std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {
+            {1, pattern_tensor},
+        };
+
+        shape_infer(&op, input_shapes, output_shapes, const_data);
+    }
+
+    return { layout{output_shapes[0], input_layout.data_type, input_layout.format.adjust_to_rank(output_shapes[0].size())} };
 }
 
 std::string reshape_inst::to_string(reshape_node const& node) {
