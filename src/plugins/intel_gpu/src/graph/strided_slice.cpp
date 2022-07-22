@@ -63,25 +63,9 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
     cldnn::mem_lock<uint8_t, mem_lock_type::read> lock2(mem2, node.get_program().get_stream());
     cldnn::mem_lock<uint8_t, mem_lock_type::read> lock3(mem3, node.get_program().get_stream());
 
-    auto ptr1 = lock1.data();
-    auto ptr2 = lock2.data();
-    auto ptr3 = lock3.data();
-
-    auto make_tensor = [](layout l, void* memory_pointer) {
-        ov::element::Type et;
-
-        switch (l.data_type) {
-            case data_types::i64: et = ov::element::i64; break;
-            case data_types::i32: et = ov::element::i32; break;
-            default: IE_THROW() << "unsupported element type in strided slice primitive";
-        }
-
-        return std::make_shared<ngraph::runtime::HostTensor>(et, l.get_shape(), memory_pointer);
-    };
-
-    auto tensor1 = make_tensor(mem1->get_layout(), ptr1);
-    auto tensor2 = make_tensor(mem2->get_layout(), ptr2);
-    auto tensor3 = make_tensor(mem3->get_layout(), ptr3);
+    auto tensor1 = make_host_tensor(mem1->get_layout(), lock1.data());
+    auto tensor2 = make_host_tensor(mem2->get_layout(), lock2.data());
+    auto tensor3 = make_host_tensor(mem3->get_layout(), lock3.data());
 
     std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {
         {1, tensor1},
