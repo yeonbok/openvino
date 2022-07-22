@@ -244,7 +244,7 @@ std::string layout::to_string() const {
     s << "\n{\n"
       << "\tdata_type=" << data_type_traits::name(data_type) << ";\n"
       << "\tformat=" << format.to_string() << ";\n"
-      << "\tshape=" << size.to_string() << ";\n"
+      << "\tshape=" << size << ";\n"
       << "\tpad_l=" << data_padding.lower_size().to_string() << ";\n"
       << "\tpad_u=" << data_padding.upper_size().to_string() << ";\n"
       << "}";

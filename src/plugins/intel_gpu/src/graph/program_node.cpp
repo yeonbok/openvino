@@ -227,6 +227,21 @@ bool program_node::is_detached(bool whole_branch) {
 
 layout program_node::calc_output_layout() const {
     return type()->calc_output_layout(*this, *get_kernel_impl_params());
+    std::map<int, memory::ptr> constant_deps;
+    for (size_t i = 0; i < get_dependencies().size(); i++) {
+        auto& dep = get_dependency(i);
+        if (dep.is_type<data>()) {
+            constant_deps.insert({i, dep.as<data>().get_attached_memory_ptr()});
+        }
+    }
+
+    auto out_layouts = type()->calc_output_layouts(*this, *get_kernel_impl_params(), constant_deps);
+    if (!out_layouts.empty()) {
+        std::cerr << id() << " out layout: " << out_layouts[0].to_string() << std::endl;
+        return out_layouts[0];
+    }
+
+    return type()->calc_output_layout(*this, *get_kernel_impl_params());
 }
 
 std::vector<layout> program_node::calc_output_layouts() const {
@@ -237,7 +252,7 @@ std::vector<layout> program_node::calc_output_layouts() const {
             constant_deps.insert({i, dep.as<data>().get_attached_memory_ptr()});
         }
     }
-    return type()->calc_output_layouts(*this, constant_deps);
+    return type()->calc_output_layouts(*this, *get_kernel_impl_params(), constant_deps);
 }
 
 layout program_node::get_output_layout(bool invalidate_users_if_changed) {
