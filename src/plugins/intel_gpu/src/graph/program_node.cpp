@@ -226,8 +226,7 @@ bool program_node::is_detached(bool whole_branch) {
 }
 
 layout program_node::calc_output_layout() const {
-    auto params = get_kernel_impl_params();
-    auto out_layouts = type()->calc_output_layouts(*this, *params);
+    auto out_layouts = calc_output_layouts();
     if (!out_layouts.empty()) {
         return out_layouts[0];
     }
@@ -237,6 +236,7 @@ layout program_node::calc_output_layout() const {
 
 std::vector<layout> program_node::calc_output_layouts() const {
     auto params = get_kernel_impl_params();
+    params->memory_deps = get_const_memory_deps();
     return type()->calc_output_layouts(*this, *params);
 }
 
@@ -352,6 +352,21 @@ bool program_node::is_dynamic() const {
     }
 
     return get_output_layout().is_dynamic();
+}
+
+std::map<size_t, memory::ptr> program_node::get_const_memory_deps() const {
+    std::map<size_t, memory::ptr> mem_deps;
+    for (auto& i : get_shape_infer_dependencies()) {
+        // Some primitives may have flexible count of deps (e.g. reshape), thus allow skipping some deps
+        if (i >= get_dependencies().size())
+            continue;
+
+        auto& dep = get_dependency(i);
+        if (dep.is_type<data>()) {
+            mem_deps.insert({i, dep.as<data>().get_attached_memory_ptr()});
+        }
+    }
+    return mem_deps;
 }
 
 /* ----------------------------------------- */
