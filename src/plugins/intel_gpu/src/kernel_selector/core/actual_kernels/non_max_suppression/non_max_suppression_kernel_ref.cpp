@@ -227,13 +227,9 @@ void NonMaxSuppressionKernelRef::SetKernelArguments(const non_max_suppression_pa
         kernel.params.arguments.push_back({ ArgumentDescriptor::Types::INTERNAL_BUFFER, 1 });
         kernel.params.arguments.push_back({ ArgumentDescriptor::Types::INTERNAL_BUFFER, 0 });
 
-        // TODO(kelvin)
-        #if 0
-        if (params.has_second_output)
-            kernel.params.arguments.push_back({ ArgumentDescriptor::Types::INPUT, params.GetIndexSecondOutput() });
-        if (params.has_third_output)
-            kernel.params.arguments.push_back({ ArgumentDescriptor::Types::INPUT, params.GetIndexThirdOutput() });
-        #endif
+        // TODO(kelvin): Need to check this works properly
+        kernel.params.arguments.push_back({ ArgumentDescriptor::Types::OUTPUT, 1 });
+        kernel.params.arguments.push_back({ ArgumentDescriptor::Types::OUTPUT, 2 });
         break;
 
     default:

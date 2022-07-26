@@ -59,22 +59,6 @@ struct non_max_suppression_params : public base_params {
         if (score_threshold_type == NmsArgType::Input) input_idx++;
         return input_idx;
     }
-
-    // TODO(kelvin)
-    #if 0
-    uint32_t GetIndexSecondOutput() const {
-        uint32_t input_idx = GetIndexSoftNmsSigma();
-        if (soft_nms_sigma_type == NmsArgType::Input) input_idx++;
-        return input_idx;
-    }
-
-    uint32_t GetIndexThirdOutput() const {
-        uint32_t input_idx = GetIndexSecondOutput();
-        if (has_second_output) 
-            input_idx++;
-        return input_idx;
-    }
-    #endif
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
