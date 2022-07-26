@@ -238,6 +238,8 @@ layout program_node::calc_output_layout() const {
 }
 
 std::vector<layout> program_node::calc_output_layouts() const {
+    auto params = get_kernel_impl_params();
+    params->memory_deps = get_const_memory_deps();
     return type()->calc_output_layouts(*this, *get_kernel_impl_params());
 }
 
