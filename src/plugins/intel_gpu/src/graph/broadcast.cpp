@@ -28,8 +28,7 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node, kernel_imp
     return {input_layout.data_type, input_layout.format, desc->broadcast_sizes};
 }
 
-std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& node, kernel_impl_params const& impl_param,
-                                                        const std::map<int, memory::ptr> constant_mem) {
+std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& node, kernel_impl_params const& impl_param) {
     auto desc = node.get_primitive();
     auto input_layout = node.get_dependency(0).get_output_layout();
 

@@ -129,11 +129,16 @@ public:
         return get_kernel_impl_params(get_input_layouts(), output_layout);
     }
 
-    virtual std::unique_ptr<kernel_impl_params> get_kernel_impl_params(const std::vector<layout>& in_layouts,
-                                                      const layout& out_layout) const {
-        return std::unique_ptr<kernel_impl_params>(new kernel_impl_params(get_program(), get_primitive(), get_unique_id(), in_layouts, out_layout,
-                                  get_fused_primitives(),
-                                  get_fused_activations_funcs(), get_fused_activations_params()));
+    virtual std::unique_ptr<kernel_impl_params> get_kernel_impl_params(const std::vector<layout>& in_layouts, const layout& out_layout) const {
+        auto params = make_unique<kernel_impl_params>(get_program(), get_primitive(), get_unique_id(), in_layouts, out_layout,
+                                                      get_fused_primitives(),
+                                                      get_fused_activations_funcs(), get_fused_activations_params());
+
+        std::map<size_t, memory::ptr> memory_deps;
+        // TODO: fill memory deps with const inputs
+        params->memory_deps = memory_deps;
+
+        return params;
     }
 
     const primitive_id& get_ext_prim_id() const { return desc->ext_prim_id; }
