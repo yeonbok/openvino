@@ -102,7 +102,7 @@ void primitive_inst::update_shape() {
     if (!_network.shape_changed())
         return;
 
-    std::map<int, memory::ptr> memory_deps;
+    std::map<size_t, memory::ptr> memory_deps;
     for (auto& i : _node.get_shape_infer_dependencies()) {
         auto& dep = _node.get_dependency(i);
         if (dep.is_type<data>()) {
@@ -122,7 +122,9 @@ void primitive_inst::update_shape() {
     }
 
     layout new_layout = layout(data_types::f32, format::bfyx, tensor());
-    auto out_layouts = _node.type()->calc_output_layouts(_node, memory_deps);
+    auto params = _node.get_kernel_impl_params();
+    params->memory_deps = memory_deps;
+    auto out_layouts = _node.type()->calc_output_layouts(_node, *params);
     if (out_layouts.empty())
         new_layout = _node.type()->calc_output_layout(_node);
     else
@@ -282,7 +284,13 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         }
     }
 
+    if (_node.get_output_layout().is_dynamic())
+        throw ov::Exception("Runtime output layout for node " + id() + " is dynamic!");
+
     on_execute();
+
+    if (!_impl)
+        throw ov::Exception("Impl for " + id() + " is nullptr");
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_IF(debug_config->verbose >= 1) {
