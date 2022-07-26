@@ -532,10 +532,23 @@ public:
     }
 
     optional_layout(const optional_layout& new_opt_lay) {
+        this->opt_layout_ptr = nullptr;
         if (new_opt_lay) {
             layout copied_lay = *new_opt_lay;
             this->opt_layout_ptr = make_unique<layout>(copied_lay);
         }
+    }
+
+    optional_layout& operator=(const optional_layout& other) {
+        if (this == &other)
+            return *this;
+
+        this->opt_layout_ptr = nullptr;
+        if (other) {
+            layout copied_lay = *other;
+            this->opt_layout_ptr = make_unique<layout>(copied_lay);
+        }
+        return *this;
     }
 
     operator bool() const {
