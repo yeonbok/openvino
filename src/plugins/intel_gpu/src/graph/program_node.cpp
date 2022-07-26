@@ -244,14 +244,9 @@ layout program_node::calc_output_layout() const {
 }
 
 std::vector<layout> program_node::calc_output_layouts() const {
-    std::map<int, memory::ptr> constant_deps;
-    for (size_t i = 0; i < get_dependencies().size(); i++) {
-        auto& dep = get_dependency(i);
-        if (dep.is_type<data>()) {
-            constant_deps.insert({i, dep.as<data>().get_attached_memory_ptr()});
-        }
-    }
-    return type()->calc_output_layouts(*this, *get_kernel_impl_params(), constant_deps);
+    auto params = get_kernel_impl_params();
+    params->memory_deps = get_const_memory_deps();
+    return type()->calc_output_layouts(*this, *params);
 }
 
 layout program_node::get_output_layout(bool invalidate_users_if_changed) {
@@ -366,6 +361,21 @@ bool program_node::need_lockable_memory() const {
     });
 
     return need_lockable_mem;
+}
+
+std::map<size_t, memory::ptr> program_node::get_const_memory_deps() const {
+    std::map<size_t, memory::ptr> mem_deps;
+    for (auto& i : get_shape_infer_dependencies()) {
+        // Some primitives may have flexible count of deps (e.g. reshape), thus allow skipping some deps
+        if (i >= get_dependencies().size())
+            continue;
+
+        auto& dep = get_dependency(i);
+        if (dep.is_type<data>()) {
+            mem_deps.insert({i, dep.as<data>().get_attached_memory_ptr()});
+        }
+    }
+    return mem_deps;
 }
 
 /* ----------------------------------------- */

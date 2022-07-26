@@ -409,6 +409,8 @@ public:
         return res;
     }
 
+    std::map<size_t, memory::ptr> get_const_memory_deps() const;
+
 
 protected:
     size_t unique_id = 0;
