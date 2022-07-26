@@ -295,6 +295,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     if (is_dynamic() || has_mutable_input() || is_output()) {
         set_arguments();
     }
+
     on_execute();
 
     GPU_DEBUG_IF(debug_config->verbose >= 1) {
