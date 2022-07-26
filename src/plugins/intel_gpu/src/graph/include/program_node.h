@@ -135,9 +135,7 @@ public:
                                                       get_fused_primitives(),
                                                       get_fused_activations_funcs(), get_fused_activations_params());
 
-        std::map<size_t, memory::ptr> memory_deps;
-        // TODO: fill memory deps with const inputs
-        params->memory_deps = memory_deps;
+        params->memory_deps = get_const_memory_deps();
 
         return params;
     }
@@ -411,6 +409,8 @@ public:
         std::iota(std::begin(res), std::end(res), 0);
         return res;
     }
+
+    std::map<size_t, memory::ptr> get_const_memory_deps() const;
 
 
 protected:
