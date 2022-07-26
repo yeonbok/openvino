@@ -46,7 +46,7 @@ TEST_P(gather_test, shape_infer) {
     auto& gather_node = prog.get_or_create(gather_prim);
     program_wrapper::add_connection(prog, input0_layout_node, gather_node);
     program_wrapper::add_connection(prog, input1_layout_node, gather_node);
-    auto res = gather_inst::calc_output_layouts(gather_node, {});
+    auto res = gather_inst::calc_output_layouts(gather_node, *gather_node.get_kernel_impl_params());
 
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res[0], p.expected_layout);

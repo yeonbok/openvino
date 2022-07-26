@@ -40,7 +40,7 @@ TEST_P(broadcast_test, shape_infer) {
     auto& input_layout_node = prog.get_or_create(input_layout_prim);
     auto& broadcast_node = prog.get_or_create(broadcast_prim);
     program_wrapper::add_connection(prog, input_layout_node, broadcast_node);
-    auto res = broadcast_inst::calc_output_layouts(broadcast_node, {});
+    auto res = broadcast_inst::calc_output_layouts(broadcast_node, *broadcast_node.get_kernel_impl_params());
 
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res[0], p.expected_layout);

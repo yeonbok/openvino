@@ -32,9 +32,11 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node) {
     return layout{input_layout.data_type, output_format, out_size};
 }
 
-std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& node, const std::map<int, memory::ptr> constant_mem) {
+std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& node, const kernel_impl_params& impl_param) {
     auto desc = node.get_primitive();
     auto input_layout = node.input(0).get_output_layout();
+
+    auto& constant_mem = impl_param.memory_deps;
 
     if (constant_mem.empty()) {
         auto out_shape = ov::PartialShape::dynamic(input_layout.get_rank());

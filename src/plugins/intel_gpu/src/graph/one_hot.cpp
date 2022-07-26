@@ -29,7 +29,7 @@ static bool is_output_bfzyx(const layout& input, int32_t axis) {
     return false;
 }
 
-std::vector<layout> one_hot_inst::calc_output_layouts(const one_hot_node& node, std::map<int, memory::ptr> constant_data) {
+std::vector<layout> one_hot_inst::calc_output_layouts(const one_hot_node& node, const kernel_impl_params& impl_param) {
     auto desc = node.get_primitive();
     auto input_layout = node.input().get_output_layout();
     auto dt = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
