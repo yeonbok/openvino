@@ -159,7 +159,7 @@ layout reorder_inst::calc_output_layout(reorder_node const& node) {
         // TODO Shouldn't transform be called every time ifmt != ofmt?
         return layout(odt, ofmt, input_layout.get_tensor().transform(ofmt, 1), op);
     } else {
-        if (node.get_primitive()->output_shape.size())
+        if (node.get_primitive()->output_shape.size() && !node.get_primitive()->output_shape.is_dynamic())
             return layout(odt, ofmt, node.get_primitive()->output_shape, op);
         else
             return layout(odt, ofmt, input_layout.size, op);
