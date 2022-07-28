@@ -1573,3 +1573,6 @@ std::pair<int64_t, int64_t> program::get_estimated_device_mem_usage() {
 
     return std::make_pair(const_sum, get_engine().get_used_device_memory(allocation_type::usm_device));
 }
+void program::remove_kernel_entry(std::string kernel_entry) {
+    _kernels_cache->remove_kernel_entry(kernel_entry);
+}
