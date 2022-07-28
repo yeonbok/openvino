@@ -250,6 +250,7 @@ public:
     std::pair<int64_t/*const alloc*/, int64_t/*general alloc*/> get_estimated_device_mem_usage();
 
     std::shared_ptr<LRUCache<std::string, std::shared_ptr<primitive_impl>>> get_primitive_impl_cache() const { return primitive_impl_cache; }
+    void remove_kernel_entry(std::string kernel_entry);
 
 private:
     uint32_t prog_id = 0;

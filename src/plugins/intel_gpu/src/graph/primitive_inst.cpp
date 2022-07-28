@@ -153,6 +153,8 @@ void primitive_inst::realloc_if_needed() {
         GPU_DEBUG_IF(debug_config->verbose >= 4) {
             GPU_DEBUG_COUT << "realloc memory for node: " << id() << std::endl;
         }
+        if (_output)
+            _network.get_memory_pool().release_memory(_output.get(), _node.id(), get_network_id());
         _output = allocate_output();
     } else {
         _output = _network.get_engine().reinterpret_buffer(*_output, _node.get_output_layout());
@@ -183,6 +185,9 @@ void primitive_inst::update_impl() {
             auto cache = _network.get_program()->get_primitive_impl_cache();
             bool is_hit = false;
             std::shared_ptr<cldnn::primitive_impl> origin_impl;
+            auto lru_entry = cache->get_lru_element();
+            bool lru_element_popped = false;
+
             PRINT_TIME(std::tie(origin_impl, is_hit) = cache->get(layout_key, [&]() {
                 cldnn::LRUCache<std::string, std::shared_ptr<cldnn::primitive_impl>>::CacheEntry new_entry;
                 auto new_impl = std::move(_node.type()->choose_impl(_node));
@@ -191,11 +196,16 @@ void primitive_inst::update_impl() {
                 new_entry.size = 1;
                 new_entry.data = std::move(new_impl);
                 return new_entry;
-            }));
+            }, &lru_element_popped));
 
             _impl = std::move(origin_impl->clone());
             if (is_hit) {
                 PRINT_TIME(_impl->init_kernels());
+            } else if (lru_element_popped) {
+                auto kernel_ids = lru_entry->get_kernel_ids();
+                for (auto k : kernel_ids) {
+                    _network.get_program()->remove_kernel_entry(k);
+                }
             }
         } else {
             PRINT_TIME(_impl = std::move(_node.type()->choose_impl(_node)));
