@@ -97,6 +97,9 @@ public:
     // forces compilation of all pending kernels/programs
     void build_all();
     void reset();
+    void remove_kernel_entry(kernel_id entry_to_remove) {
+        _kernels.erase(entry_to_remove);
+    }
 };
 
 }  // namespace cldnn
