@@ -75,7 +75,11 @@ TEST_P(strided_slice_test, shape_infer) {
     program_wrapper::add_connection(prog, begin_node, strided_slice_node);
     program_wrapper::add_connection(prog, end_node, strided_slice_node);
     program_wrapper::add_connection(prog, strides_node, strided_slice_node);
-    auto res = strided_slice_inst::calc_output_layouts(strided_slice_node, {{1, begin_mem}, {2, end_mem}, {3, strides_mem}});
+    auto& node = const_cast<cldnn::strided_slice_node&>(dynamic_cast<const cldnn::strided_slice_node&>(strided_slice_node));
+    node.const_mem = {begin_mem, end_mem, strides_mem};
+    auto params = strided_slice_node.get_kernel_impl_params();
+
+    auto res = strided_slice_inst::calc_output_layouts(strided_slice_node, *params);
 
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res[0], p.expected_layout);

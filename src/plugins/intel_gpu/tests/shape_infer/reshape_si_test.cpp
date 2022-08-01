@@ -49,7 +49,9 @@ TEST_P(reshape_test, shape_infer) {
     auto& reshape_node = prog.get_or_create(reshape_prim);
     program_wrapper::add_connection(prog, input_node, reshape_node);
     program_wrapper::add_connection(prog, pattern_node, reshape_node);
-    auto res = reshape_inst::calc_output_layouts(reshape_node, {{1, pattern_mem}});
+    auto params = reshape_node.get_kernel_impl_params();
+    auto res = reshape_inst::calc_output_layouts(reshape_node, *params);
+    // auto res = reshape_inst::calc_output_layouts(reshape_node, {{1, pattern_mem}});
 
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res[0], p.expected_layout);
@@ -68,7 +70,8 @@ TEST_P(reshape_test, shape_infer_single_input) {
     auto& input_node = prog.get_or_create(input_prim);
     auto& reshape_node = prog.get_or_create(reshape_prim);
     program_wrapper::add_connection(prog, input_node, reshape_node);
-    auto res = reshape_inst::calc_output_layouts(reshape_node, {});
+    auto params = reshape_node.get_kernel_impl_params();
+    auto res = reshape_inst::calc_output_layouts(reshape_node, *params);
 
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res[0], p.expected_layout);

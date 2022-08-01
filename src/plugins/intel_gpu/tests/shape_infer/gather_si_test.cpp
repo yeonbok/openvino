@@ -37,7 +37,7 @@ TEST_P(gather_test, shape_infer) {
 
     auto input0_layout_prim = std::make_shared<input_layout>("input0", p.in0_layout);
     auto input1_layout_prim = std::make_shared<input_layout>("input1", p.in1_layout);
-    auto gather_prim = std::make_shared<gather>("output", "input0", "input1", p.axis, ov::Shape{}, p.batch_dim);
+    auto gather_prim = std::make_shared<gather>("output", "input0", "input1", p.axis, p.expected_layout.format, ov::PartialShape{}, p.batch_dim);
 
     cldnn::program prog(engine);
 
@@ -46,7 +46,9 @@ TEST_P(gather_test, shape_infer) {
     auto& gather_node = prog.get_or_create(gather_prim);
     program_wrapper::add_connection(prog, input0_layout_node, gather_node);
     program_wrapper::add_connection(prog, input1_layout_node, gather_node);
-    auto res = gather_inst::calc_output_layouts(gather_node, {});
+
+    auto param = gather_node.get_kernel_impl_params();
+    auto res = gather_inst::calc_output_layouts(gather_node, *param);
 
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res[0], p.expected_layout);

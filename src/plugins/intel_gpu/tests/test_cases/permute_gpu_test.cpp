@@ -812,9 +812,9 @@ TEST(permute_gpu_f32, 6D_reshape_permute_reshape)
     topology topology(
         input_layout("input", input_mem->get_layout()),
         reorder("input_6d", "input", { data_types::f32, format::bfwzyx, cldnn::tensor(batch(b), feature(f), spatial(x, y)) }),
-        reshape("reshape_4_to_6", "input_6d", cldnn::tensor(batch(b), feature(f_reshape), spatial(x, y, z_reshape, w_reshape))),
+        reshape("reshape_4_to_6", "input_6d", ov::PartialShape{b, f_reshape, w_reshape, z_reshape, y, x}),
         permute("permute", "reshape_4_to_6", permute_order),
-        reshape("reshape_6_to_4", "permute", cldnn::tensor(batch(b), feature(f), spatial(x, y))),
+        reshape("reshape_6_to_4", "permute", ov::PartialShape{b, f, y, x}),
         reorder("output_4d", "reshape_6_to_4", { data_types::f32, format::bfyx, cldnn::tensor(batch(b), feature(f), spatial(x, y)) })
     );
 
@@ -923,7 +923,7 @@ TEST(permute_gpu_f32_tile_8x8_4x4, normal_bfyx_0_2_3_1) {
 
     auto& engine = get_test_engine();
 
-    auto input = engine.allocate_memory({ data_types::f32, format::bfyx,{ 2, 8, 8, 2 } });
+    auto input = engine.allocate_memory({ data_types::f32, format::bfyx, { 2, 8, 8, 2 } });
 
     std::vector<float> input_data;
     input_data.reserve(array_size);
@@ -1683,12 +1683,12 @@ void TiledPermuteTest::run_test(const std::vector<cldnn::tensor::value_type>& si
     }
     order.push_back(1);
 
-    auto input = engine.allocate_memory({Data_Type, format, tensor});
+    auto input = engine.allocate_memory({tensor, Data_Type, format });
     set_random_values<type>(input);
 
     topology topology_ref = topology(
         input_layout("input", input->get_layout()),
-        reorder("reorder", "input", {Data_Type, format_fsv, tensor}),
+        reorder("reorder", "input", {tensor, Data_Type, format_fsv }),
         permute("output", "reorder", order )
     );
 

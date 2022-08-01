@@ -20,7 +20,7 @@ namespace {
 struct gather_test_params {
     tensor dictionary_shape;
     tensor indices_shape;
-    ov::Shape out_shape;
+    ov::PartialShape out_shape;
     int64_t axis;
     data_types data_type;
     format input_format;
@@ -56,7 +56,8 @@ public:
     }
 
     layout get_per_channel_layout(gather_test_params& p) {
-        return layout{ p.default_type, p.default_format, tensor{ 1, static_cast<tensor::value_type>(p.out_shape[1]), 1, 1 } };
+        auto shape = p.out_shape.get_shape();
+        return layout{ p.default_type, p.default_format, tensor{ 1, static_cast<tensor::value_type>(shape[1]), 1, 1 } };
     }
 };
 }  // namespace
@@ -99,7 +100,7 @@ TEST_P(gather_quantize, basic) {
         data("in_hi", get_mem(get_per_channel_layout(p), 1, max_random)),
         data("out_lo", get_mem(get_single_element_layout(p), -127)),
         data("out_hi", get_mem(get_single_element_layout(p), 127)),
-        gather("gather_prim", "input", "gather_indices", p.axis, p.out_shape),
+        gather("gather_prim", "input", "gather_indices", p.axis, p.default_format, p.out_shape),
         quantize("quantize", "gather_prim", "in_lo", "in_hi", "out_lo", "out_hi", 255, data_types::i8),
         reorder("reorder_bfyx", "quantize", p.default_format, data_types::f32)
     );
@@ -141,7 +142,7 @@ TEST_P(gather_eltwise_activation, basic) {
         input_layout("input", get_input_layout(p)),
         data("gather_indices", get_mem(get_indices_layout(p), 0, static_cast<int>(get_axis_dim(p) - 1))),
         data("eltwise_data", get_mem(get_per_channel_layout(p), -10, 10)),
-        gather("gather_prim", "input", "gather_indices", p.axis, p.out_shape),
+        gather("gather_prim", "input", "gather_indices", p.axis, p.default_format, p.out_shape),
         activation("activation", "gather_prim", activation_func::abs),
         eltwise("eltwise", { "activation", "eltwise_data" }, eltwise_mode::prod),
         reorder("reorder_bfyx", "eltwise", p.default_format, data_types::f32)
