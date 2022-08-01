@@ -188,8 +188,20 @@ void primitive_inst::update_shape() {
         _network.get_stream().wait_for_events(dependencies_events);
 
     _impl_params->memory_deps = memory_deps;
-    layout new_layout = _node.type()->calc_output_layout(_node, *_impl_params);
+    layout new_layout = layout(data_types::f32, format::bfyx, tensor());
     new_layout.data_padding = padding::max(_node.get_primitive()->output_padding, new_layout.data_padding);
+
+    auto out_layouts = _node.type()->calc_output_layouts(_node, *params);
+    if (out_layouts.empty())
+        new_layout = _node.type()->calc_output_layout(_node, *params);
+    else
+        new_layout = out_layouts[0];
+
+    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
+    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
+    GPU_DEBUG_IF(debug_config->verbose >= 4) {
+        GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
+    }
 
     if (_impl_params->output_layout != new_layout) {
         GPU_DEBUG_IF(debug_config->verbose >= 4) {
@@ -197,8 +209,6 @@ void primitive_inst::update_shape() {
         }
         set_shape_change();
     }
-
-    _impl_params->output_layout = new_layout;
 }
 
 void primitive_inst::realloc_if_needed() {

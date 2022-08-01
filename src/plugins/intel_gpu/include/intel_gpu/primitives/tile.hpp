@@ -32,6 +32,15 @@ struct tile : public primitive_base<tile> {
 
     /// @brief A per-dimension replication factor
     std::vector<int64_t> repeats;
+    tile(const primitive_id& id,
+         const primitive_id& input,
+         const ov::PartialShape& out_shape,
+         const primitive_id& ext_prim_id = "",
+         const padding& output_padding = padding())
+        : primitive_base(id, {input}, ext_prim_id, output_padding), output_shape_partial(out_shape) {}
+    /// @brief Shape of the output tensor
+    tensor out_shape;
+    ov::PartialShape output_shape_partial;
 };
 /// @}
 /// @}

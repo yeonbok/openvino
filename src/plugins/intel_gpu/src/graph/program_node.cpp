@@ -24,6 +24,9 @@
 #include <string>
 #include <set>
 
+// tmp : to be removed
+#include "broadcast_inst.h"
+#include "crop_inst.h"
 using namespace cldnn;
 
 thread_local size_t program_node::cur_id = 0;
@@ -226,6 +229,8 @@ bool program_node::is_detached(bool whole_branch) {
 }
 
 layout program_node::calc_output_layout() const {
+    if (is_type<broadcast>() || is_type<crop>())
+        return calc_output_layouts()[0];
     return type()->calc_output_layout(*this, *get_kernel_impl_params());
 }
 

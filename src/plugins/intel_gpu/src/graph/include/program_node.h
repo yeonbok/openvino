@@ -150,6 +150,7 @@ public:
     }
 
     const primitive_id& get_ext_prim_id() const { return desc->ext_prim_id; }
+    std::shared_ptr<ov::Node> get_ov_op() const { return desc->ov_op; }  // TODO (taylor) needed?
 
     template <class PType>
     bool is_type() const {
