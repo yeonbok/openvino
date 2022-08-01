@@ -58,10 +58,10 @@ public:
             get_default_optional_params<kernel_selector::reverse_optional_params>(arg.get_program());
 
         auto constLayout = arg.input(1).get_output_layout();
-        auto oldShape = constLayout.size;
+        auto oldShape = constLayout.get_partial_shape();
         auto newShape = getConstPartialShape(oldShape.to_shape());
         if (oldShape != newShape) {
-            constLayout = layout{constLayout.data_type, constLayout.format, newShape};
+            constLayout = layout{newShape, constLayout.data_type, constLayout.format};
         }
         params.inputs.push_back(convert_data_tensor(constLayout));
         params.reverseMode = arg.get_primitive()->mode == reverse_mode::index ? kernel_selector::reverse_mode::index

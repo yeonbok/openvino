@@ -37,7 +37,7 @@ struct reshape : public primitive_base<reshape> {
     /// @param output_padding Requested memory padding.
     reshape(const primitive_id& id,
             const primitive_id& input,
-            const tensor& output_shape,
+            const ov::PartialShape& output_shape,
             reshape_mode mode = reshape_mode::base,
             const padding& output_padding = padding())
         : primitive_base(id, {input}, output_padding)
@@ -55,7 +55,7 @@ struct reshape : public primitive_base<reshape> {
             reshape_mode mode = reshape_mode::base,
             const padding& output_padding = padding())
         : primitive_base(id, {input, pattern_id}, output_padding)
-        , output_shape(tensor())
+        , output_shape(ov::PartialShape())
         , special_zero(special_zero)
         , output_pattern({})
         , output_partial_shape(output_partial_shape)
@@ -70,14 +70,14 @@ struct reshape : public primitive_base<reshape> {
             reshape_mode mode = reshape_mode::base,
             const padding& output_padding = padding())
         : primitive_base(id, {input}, output_padding)
-        , output_shape(tensor())
+        , output_shape(ov::PartialShape())
         , special_zero(special_zero)
         , output_pattern(output_pattern)
         , output_partial_shape(output_partial_shape)
         , mode(mode) {}
 
     /// @brief Requested memory shape.
-    tensor output_shape;
+    ov::PartialShape output_shape = {};
 
     bool special_zero = false;
 

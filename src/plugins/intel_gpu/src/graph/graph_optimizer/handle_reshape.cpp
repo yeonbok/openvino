@@ -37,9 +37,14 @@ void handle_reshape::run(program& p) {
                 node.has_fused_primitives())
                 return;
 
-            if (input_lay.identical(output_lay)) {
-                p.add_optimized_primitive_info(node.id());
-                p.extract_and_remove(node);
+            if (input_lay.identical(output_lay) && input_lay.get_partial_shape().size() == output_lay.get_partial_shape().size()) {
+                if (node.input().is_type<reorder>()) {
+                    p.add_optimized_primitive_info(node.id());
+                    node.can_be_optimized(true);
+                } else {
+                    p.add_optimized_primitive_info(node.id());
+                    p.extract_and_remove(node);
+                }
             } else if (input_lay.compatible(output_lay) && input_node.is_type<data>()) {
                 input_node.set_output_layout(output_lay, false);
                 p.add_optimized_primitive_info(node.id());

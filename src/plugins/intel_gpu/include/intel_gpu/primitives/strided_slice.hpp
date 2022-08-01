@@ -43,7 +43,7 @@ struct strided_slice : public primitive_base<strided_slice> {
                   const std::vector<int64_t>& new_axis_mask,
                   const std::vector<int64_t>& shrink_axis_mask,
                   const std::vector<int64_t>& ellipsis_mask,
-                  const ov::Shape out_size,
+                  const ov::PartialShape out_size,
                   const padding& output_padding = padding())
         : primitive_base(id, {input, begin_id, end_id, strides_id}, output_padding),
           begin_mask(begin_mask),
@@ -64,7 +64,7 @@ struct strided_slice : public primitive_base<strided_slice> {
     /// @brief Array of bits, that provide inserts missing dimensions on a position of a non-zero bit.
     std::vector<int64_t> ellipsis_mask;
     /// @brief Size of output tensor
-    ov::Shape out_size;
+    ov::PartialShape out_size;
 };
 /// @}
 /// @}

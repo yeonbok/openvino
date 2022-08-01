@@ -135,7 +135,7 @@ static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::Mat
             auto reshapeInName = op->get_friendly_name() + suffix;
             auto reshapeInPrim = cldnn::reshape(reshapeInName,
                                                 inputName,
-                                                tensor_from_dims(reshapeSize));
+                                                ov::PartialShape(reshapeSize));
             p.add_primitive(*op, reshapeInPrim);
             return reshapeInName;
         };
@@ -186,7 +186,7 @@ static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::Mat
             }
 
             // add reshape
-            auto outReshapePrim = cldnn::reshape(outReshapeName, lastLayerName, tensor_from_dims(outShape.to_shape()));
+            auto outReshapePrim = cldnn::reshape(outReshapeName, lastLayerName, outShape);
 
             p.add_primitive(*op, outReshapePrim);
 

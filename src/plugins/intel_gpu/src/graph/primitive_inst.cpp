@@ -204,7 +204,6 @@ void primitive_inst::update_shape() {
         }
         set_shape_change();
     }
-
     _impl_params->output_layout = new_layout;
 }
 
