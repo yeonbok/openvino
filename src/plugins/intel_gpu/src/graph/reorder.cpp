@@ -162,7 +162,10 @@ layout reorder_inst::calc_output_layout(reorder_node const& node) {
         // TODO Shouldn't transform be called every time ifmt != ofmt?
         return layout(input_layout.transform(ofmt), odt, ofmt, op);
     } else {
-        return layout(odt, ofmt, input_layout.get_tensor(), op);
+        if (node.get_primitive()->output_shape.size() && !node.get_primitive()->output_shape.is_dynamic())
+            return layout(node.get_primitive()->output_shape, odt, ofmt, op);
+        else
+            return layout(odt, ofmt, input_layout.get_tensor(), op);
     }
 }
 

@@ -71,7 +71,7 @@ binary_convolution_inst::typed_primitive_inst(network& network, binary_convoluti
 
     auto input_layout = node.input().get_output_layout();
     auto output_layout = node.get_output_layout();
-    auto output_size = output_layout.get_tensor();
+    auto output_size = output_layout.get_partial_shape();
 
     CLDNN_ERROR_NOT_EQUAL(node.id(),
                           "Input number of dimensions",
@@ -111,13 +111,13 @@ binary_convolution_inst::typed_primitive_inst(network& network, binary_convoluti
                               "Unknown padding mode.");
         CLDNN_ERROR_NOT_EQUAL(node.id(),
                               "Output feature size",
-                              output_size.feature.size(),
+                              output_size[1].get_length(),
                               "expected feature size",
                               1,
                               "Only one-dimensional features are supported");
         CLDNN_ERROR_NOT_EQUAL(node.id(),
                               "Output batch size",
-                              output_size.batch.size(),
+                              output_size[0].get_length(),
                               "expected output size",
                               1,
                               "Only one-dimensional batch size are supported");

@@ -8,6 +8,8 @@
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "json_object.h"
 #include <string>
+#include "ngraph/op/tile.hpp"
+#include "tile_shape_inference.hpp"
 
 namespace cldnn {
 primitive_type_id tile::type_id() {
@@ -18,11 +20,22 @@ primitive_type_id tile::type_id() {
 layout tile_inst::calc_output_layout(tile_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for tile_node!");
+    #if 0
     auto desc = node.get_primitive();
 
     auto input_layout = node.input().get_output_layout();
     auto input_format = input_layout.format;
     return layout{input_layout.data_type, input_format, desc->out_shape};
+    #endif
+    auto desc = node.get_primitive();
+
+    auto input_layout = node.input().get_output_layout();
+    auto input_format = input_layout.format;
+    if (desc->output_shape_partial.get_shape().size() != 0) {
+        return layout{desc->output_shape_partial, input_layout.data_type, input_format};
+    } else {
+        return layout{input_layout.data_type, input_format, desc->out_shape};
+    }
 }
 
 std::string tile_inst::to_string(tile_node const& node) {

@@ -8,6 +8,8 @@
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "json_object.h"
 #include <string>
+#include "ngraph/op/select.hpp"
+#include "select_shape_inference.hpp"
 
 namespace cldnn {
 primitive_type_id select::type_id() {
@@ -18,7 +20,7 @@ primitive_type_id select::type_id() {
 layout select_inst::calc_output_layout(select_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for select_node!");
-
+#if 0
     auto in_layout = node.input(1).get_non_padded_output_layout();
     auto output_size = in_layout.get_tensor();
 
@@ -29,6 +31,18 @@ layout select_inst::calc_output_layout(select_node const& node) {
     }
 
     return layout(in_layout.data_type, in_layout.format, output_size);
+#endif
+    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+    std::vector<ov::PartialShape> input_shapes = {
+        node.get_dependency(0).get_output_layout().get_partial_shape(),
+        node.get_dependency(1).get_output_layout().get_partial_shape(),
+        node.get_dependency(2).get_output_layout().get_partial_shape()
+    };
+
+    ov::op::v1::Select op;
+    ov::op::v1::shape_infer(&op, input_shapes, output_shapes);
+    auto output_layout = layout{output_shapes[0], node.get_dependency(1).get_output_layout().data_type, node.get_dependency(1).get_output_layout().format};
+    return output_layout;
 }
 
 std::string select_inst::to_string(select_node const& node) {

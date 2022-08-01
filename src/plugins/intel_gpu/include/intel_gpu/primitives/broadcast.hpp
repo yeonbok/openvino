@@ -71,6 +71,7 @@ struct broadcast : public primitive_base<broadcast> {
     ///                        axes must be greater (dividable) or equal to corresponding input
     ///                        dimension values.
     /// @param output_padding  Optional padding for output from primitive.
+    #if 0
     broadcast(const primitive_id& id,
               const primitive_id& input,
               const tensor& broadcast_sizes,
@@ -80,9 +81,34 @@ struct broadcast : public primitive_base<broadcast> {
         : primitive_base(id, {input}, ext_prim_id, output_padding),
           broadcast_sizes(broadcast_sizes),
           broadcast_axes(broadcast_axes) {}
-
+    #endif
+    broadcast(const primitive_id& id,
+              std::vector<primitive_id> inputs,
+              const tensor& broadcast_sizes,
+              const std::vector<uint16_t>& broadcast_axes = {},
+              const primitive_id& ext_prim_id = "",
+              const padding& output_padding = padding(),
+              std::shared_ptr<ov::Node> original_node = nullptr)
+        : primitive_base(id, inputs, ext_prim_id, output_padding, optional_data_type(), original_node),
+          broadcast_sizes(broadcast_sizes),
+          broadcast_axes(broadcast_axes) {
+        std::cout << "hello" << std::endl;
+    }
+    broadcast(const primitive_id& id,
+              std::vector<primitive_id> inputs,
+              const ov::PartialShape& broadcast_sizes,
+              const std::vector<uint16_t>& broadcast_axes = {},
+              const primitive_id& ext_prim_id = "",
+              const padding& output_padding = padding(),
+              std::shared_ptr<ov::Node> original_node = nullptr)
+        : primitive_base(id, inputs, ext_prim_id, output_padding, optional_data_type(), original_node),
+          broadcast_sizes_partial(broadcast_sizes),
+          broadcast_axes(broadcast_axes) {
+        std::cout << "hello" << std::endl;
+    }
     /// @brief Expected sizes of output from broadcast primitive.
     tensor broadcast_sizes;
+    ov::PartialShape broadcast_sizes_partial;
     /// @brief Array of axes positions from output shape (0-based, from left to right)
     ///        along which broadcast should happen.
     std::vector<uint16_t> broadcast_axes;

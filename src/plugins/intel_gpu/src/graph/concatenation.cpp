@@ -22,7 +22,7 @@ layout concatenation_inst::calc_output_layout(concatenation_node const& node) {
 
     auto input_layout = node.input(0).get_output_layout();
     auto output_format = input_layout.format;
-    auto result_sizes = input_layout.get_dims();
+    auto result_sizes = input_layout.get_partial_shape();
 
     auto output_dt = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
 
@@ -31,16 +31,16 @@ layout concatenation_inst::calc_output_layout(concatenation_node const& node) {
     // calculate sum of features from all inputs
     result_sizes[axis_index] = 0;
     for (size_t i = 0; i < desc->input.size(); ++i) {
-        auto input_sizes = node.input(i).get_output_layout().get_dims();
+        auto input_sizes = node.input(i).get_output_layout().get_partial_shape();
         if (node.input(i).get_output_layout().format == format::b_fs_yx_fsv16)
             output_format = format::b_fs_yx_fsv16;
 
         result_sizes[axis_index] += input_sizes[axis_index];
     }
 
-    auto def_fmt = format::get_default_format(input_layout.get_rank());
+    //auto def_fmt = format::get_default_format(input_layout.get_rank());
 
-    return layout {output_dt, output_format, tensor(def_fmt, result_sizes)};
+    return layout{result_sizes, output_dt, output_format};
 }
 
 std::string concatenation_inst::to_string(concatenation_node const& node) {

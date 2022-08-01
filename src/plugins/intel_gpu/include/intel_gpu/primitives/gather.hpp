@@ -33,21 +33,23 @@ struct gather : public primitive_base<gather> {
            const primitive_id& dict,
            const primitive_id& idx,
            const int64_t axis,
-           const ov::Shape& output_shape,
+           const format& output_format,
+           const ov::PartialShape& output_shape,
            const int64_t batch_dim = 0,
            const bool support_neg_ind = false,
            const primitive_id& ext_prim_id = "",
-           const padding& output_padding = padding())
-        : primitive_base(id, {dict, idx}, ext_prim_id, output_padding)
-        , axis(axis)
-        , output_shape(output_shape)
-        , batch_dim(batch_dim)
-        , support_neg_ind(support_neg_ind) {}
+           const padding& output_padding = padding(),
+           std::shared_ptr<ov::Node> ov_node = nullptr
+           )
+        : primitive_base(id, {dict, idx}, ext_prim_id, output_padding, optional_data_type(), ov_node), axis(axis), output_format(output_format),
+                         output_shape(output_shape), batch_dim(batch_dim), support_neg_ind(support_neg_ind) {}
 
     /// @brief Gathering axis
     int64_t axis;
+    /// @brief Gather output format
+    format output_format;
     /// @brief Gather output shape
-    ov::Shape output_shape;
+    ov::PartialShape output_shape;
     /// @brief Gathering batch_dim
     int64_t batch_dim;
     /// @brief Support negative indexes

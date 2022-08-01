@@ -22,10 +22,50 @@ primitive_type_id broadcast::type_id() {
 layout broadcast_inst::calc_output_layout(broadcast_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for broadcast_node!");
-    auto input_layout = node.input().get_output_layout();
     auto desc = node.get_primitive();
+    if (desc->broadcast_sizes_partial.get_shape().size() != 0) {
+        // static
+        auto input_layout = node.input().get_output_layout();
+        return {desc->broadcast_sizes_partial, input_layout.data_type, input_layout.format};
+    } else if (desc->broadcast_sizes.sizes()[0] != 0) {
+        // static
+        auto input_layout = node.input().get_output_layout();
+        return {input_layout.data_type, input_layout.format, desc->broadcast_sizes};
+    } else {
+        // dynamic
+        return {ov::PartialShape(), node.input().get_output_layout().data_type, node.input().get_output_layout().format};
+    }
+}
 
-    return {input_layout.data_type, input_layout.format, desc->broadcast_sizes};
+static std::vector<int64_t> read_vector(cldnn::memory::ptr mem, cldnn::stream& stream) {
+    switch (mem->get_layout().data_type) {
+        case data_types::i32: {
+            mem_lock<int32_t, mem_lock_type::read> lock{mem, stream};
+            return std::vector<int64_t>(lock.begin(), lock.end());
+        }
+        case data_types::i64: {
+            mem_lock<int64_t, mem_lock_type::read> lock{mem, stream};
+            return std::vector<int64_t>(lock.begin(), lock.end());
+        }
+        default: IE_THROW() << "read_vector: unsupported data type";
+    }
+}
+
+void broadcast_inst::update_shape() {
+    if (!_network.shape_changed())
+        return;
+
+    auto& node = const_cast<broadcast_node&>(dynamic_cast<const broadcast_node&>(_node));
+
+    auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
+    auto output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
+    auto new_layout = layout{output_shape, cldnn::data_types::i32, cldnn::format::bfyx};
+    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::i32, format::bfyx, tensor{});
+    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
+    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
+        set_shape_change();
+
+    node.set_output_layout(new_layout);
 }
 
 std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& node, const kernel_impl_params& impl_param) {
@@ -80,6 +120,10 @@ std::string broadcast_inst::to_string(broadcast_node const& node) {
 }
 
 broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& node) : parent(network, node) {
+    auto sizes = node.get_primitive()->broadcast_sizes.sizes();
+    if (sizes[0] == 0 && sizes[1] == 0 && sizes[2] == 0 && sizes[3] == 0 && sizes[4] == 0 && sizes[5] == 0)
+        return;
+
     auto input_layout = node.input().get_output_layout();
 
     const auto& output_sizes = argument.broadcast_sizes;
