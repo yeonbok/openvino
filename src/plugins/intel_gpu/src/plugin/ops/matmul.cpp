@@ -147,7 +147,7 @@ static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::Mat
             auto reshapeInName = op->get_friendly_name() + suffix;
             auto reshapeInPrim = cldnn::reshape(reshapeInName,
                                                 inputName,
-                                                tensor_from_dims(reshapeSize),
+                                                ov::PartialShape(reshapeSize),
                                                 op->get_friendly_name());
             p.AddPrimitive(reshapeInPrim);
             p.AddInnerPrimitiveToProfiler(reshapeInName, layerName, op);
@@ -179,19 +179,18 @@ static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::Mat
             auto outReshapeName = layerName + "_cldnn_out_reshape";
 
             // add reorder
-            auto outDims = op->get_output_shape(0);
-            auto outTensor = tensor_from_dims(outDims);
+            auto outShape = op->get_output_partial_shape(0);
 
-            if (outDims.size() > 4) {
+            if (outShape.size() > 4) {
                 cldnn::format outputFormat = cldnn::format::bfyx;
-                switch (outDims.size()) {
+                switch (outShape.size()) {
                 case 5: outputFormat = cldnn::format::bfzyx; break;
                 case 6: outputFormat = cldnn::format::bfwzyx; break;
                 default: break;
                 }
 
                 cldnn::primitive_id reorderId = "reorder:" + outReshapeName + "_reorder";
-                cldnn::layout outputLayout(DataTypeFromPrecision(op->get_output_element_type(0)), outputFormat, outTensor);
+                cldnn::layout outputLayout(outShape, DataTypeFromPrecision(op->get_output_element_type(0)), outputFormat);
                 p.AddPrimitive(cldnn::reorder(reorderId,
                                             layerName,
                                             outputLayout,
@@ -204,7 +203,7 @@ static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::Mat
             }
 
             // add reshape
-            auto outReshapePrim = cldnn::reshape(outReshapeName, lastLayerName, outTensor, op->get_friendly_name());
+            auto outReshapePrim = cldnn::reshape(outReshapeName, lastLayerName, outShape, op->get_friendly_name());
 
             p.AddPrimitive(outReshapePrim);
             p.AddInnerPrimitiveToProfiler(outReshapeName, lastLayerName, op);

@@ -142,9 +142,15 @@ void oooq_memory_dependencies::run(program& p) {
     while (itr_A != processing_order_except_const.end()) {
         if (suspect_nodes.is_set(A)) {
             std::vector<std::pair<program_node*, unsigned int>> deps;
+            // W/A for some corner case => TBD
+            std::vector<std::pair<program_node*, unsigned int>> deps_of_deps;
             for (const auto& dep : (*itr_A)->get_dependencies()) {
                 if (!dep->is_type<data>()) {
                     deps.emplace_back(dep, user_map.at(dep));
+                    for (const auto &dep_dep : dep->get_dependencies()) {
+                        if (dep_dep->is_type<data>()) continue;
+                        deps_of_deps.emplace_back(dep_dep, user_map.at(dep_dep));
+                    }
                 }
             }
 
@@ -152,7 +158,10 @@ void oooq_memory_dependencies::run(program& p) {
                     [](const std::pair<cldnn::program_node*, unsigned int>& a, const std::pair<cldnn::program_node*, unsigned int>& b) {
                         return a.second < b.second;
                     });
-
+            std::sort(deps_of_deps.begin(), deps_of_deps.end(),
+                    [](const std::pair<cldnn::program_node*, unsigned int>& a, const std::pair<cldnn::program_node*, unsigned int>& b) {
+                        return a.second < b.second;
+                    });
             for (size_t i = 0; i < deps.size(); ++i) {
                 for (size_t j = i + 1; j < deps.size(); ++j) {
                     if (are_connected(deps[i].second, deps[j].second)) {
@@ -160,6 +169,14 @@ void oooq_memory_dependencies::run(program& p) {
                             add_memory_dependency(deps[i].first, user);
                             add_memory_dependency(user, deps[i].first);
                         }
+                    }
+                }
+            }
+            for (size_t i = 0; i < deps_of_deps.size(); ++i) {
+                for (const auto &u : deps_of_deps[i].first->get_users()) {
+                    if (!are_connected(user_map.at((*itr_A)), user_map.at(u))) {
+                        add_memory_dependency(deps_of_deps[i].first, (*itr_A));
+                        add_memory_dependency((*itr_A), deps_of_deps[i].first);
                     }
                 }
             }

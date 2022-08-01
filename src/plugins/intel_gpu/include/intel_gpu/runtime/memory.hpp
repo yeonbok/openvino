@@ -193,10 +193,12 @@ inline std::vector<T> read_vector(cldnn::memory::ptr mem, cldnn::stream& stream)
             case data_types::i32: {
                 mem_lock<int32_t, mem_lock_type::read> lock{mem, stream};
                 out_vecs = std::move(std::vector<T>(lock.begin(), lock.end()));
+                break;
             }
             case data_types::i64: {
                 mem_lock<int64_t, mem_lock_type::read> lock{mem, stream};
                 out_vecs = std::move(std::vector<T>(lock.begin(), lock.end()));
+                break;
             }
             default: IE_THROW() << "read_vector: unsupported data type";
         }

@@ -38,6 +38,7 @@ public:
                                                    const std::map<int, memory::ptr> constant_mem);
     static std::string to_string(broadcast_node const& node);
     typed_primitive_inst(network& network, broadcast_node const& node);
+    void update_shape() override;
 };
 
 using broadcast_inst = typed_primitive_inst<broadcast>;
