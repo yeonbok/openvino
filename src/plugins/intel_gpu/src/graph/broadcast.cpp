@@ -4,6 +4,7 @@
 
 #include "broadcast_inst.h"
 
+#include "intel_gpu/plugin/common_utils.hpp"
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "json_object.h"
 #include "primitive_type_base.h"
@@ -22,10 +23,15 @@ primitive_type_id broadcast::type_id() {
 layout broadcast_inst::calc_output_layout(broadcast_node const& node) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for broadcast_node!");
-    auto input_layout = node.input().get_output_layout();
     auto desc = node.get_primitive();
-
-    return {input_layout.data_type, input_layout.format, desc->broadcast_sizes};
+    if (desc->broadcast_sizes.is_static() && desc->broadcast_sizes.get_shape().size() != 0) {
+        // static
+        auto input_layout = node.input().get_output_layout();
+        return {desc->broadcast_sizes, input_layout.data_type, input_layout.format};
+    } else {
+        // dynamic
+        return {ov::PartialShape(), node.input().get_output_layout().data_type, node.input().get_output_layout().format};
+    }
 }
 
 std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& node, const kernel_impl_params& impl_param) {
@@ -53,6 +59,37 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& no
     return { layout{output_shapes[0], input_layout.data_type, output_format} };
 }
 
+static std::vector<int64_t> read_vector(cldnn::memory::ptr mem, cldnn::stream& stream) {
+    switch (mem->get_layout().data_type) {
+        case data_types::i32: {
+            mem_lock<int32_t, mem_lock_type::read> lock{mem, stream};
+            return std::vector<int64_t>(lock.begin(), lock.end());
+        }
+        case data_types::i64: {
+            mem_lock<int64_t, mem_lock_type::read> lock{mem, stream};
+            return std::vector<int64_t>(lock.begin(), lock.end());
+        }
+        default: IE_THROW() << "read_vector: unsupported data type";
+    }
+}
+
+void broadcast_inst::update_shape() {
+    if (!_network.shape_changed())
+        return;
+
+    auto& node = const_cast<broadcast_node&>(dynamic_cast<const broadcast_node&>(_node));
+
+    auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
+    auto output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
+    auto new_layout = layout{output_shape, cldnn::data_types::i32, cldnn::format::bfyx};
+    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::i32, format::bfyx, tensor{});
+    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
+    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
+        set_shape_change();
+
+    node.set_output_layout(new_layout);
+}
+
 std::string broadcast_inst::to_string(broadcast_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -61,16 +98,17 @@ std::string broadcast_inst::to_string(broadcast_node const& node) {
     auto& input = node.input();
 
     std::stringstream primitive_description;
+    std::stringstream ss_broadcast_sizes;
+    ss_broadcast_sizes << broadcast_sizes;
     std::stringstream ss_broadcast_axes;
 
     for (size_t i = 0; i < broadcast_axes.size(); ++i) {
         ss_broadcast_axes << broadcast_axes.at(i);
         i != (broadcast_axes.size() - 1) ? ss_broadcast_axes << ", " : ss_broadcast_axes << "";
     }
-
     json_composite broadcast_info;
     broadcast_info.add("input id", input.id());
-    broadcast_info.add("broadcast_sizes", broadcast_sizes.to_string());
+    broadcast_info.add("broadcast_sizes", ss_broadcast_sizes.str());
     broadcast_info.add("broadcast axes", ss_broadcast_axes.str());
 
     node_info->add("broadcast info", broadcast_info);
@@ -80,6 +118,8 @@ std::string broadcast_inst::to_string(broadcast_node const& node) {
 }
 
 broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& node) : parent(network, node) {
+    if (node.get_primitive()->broadcast_sizes.is_dynamic())
+        return;
     auto input_layout = node.input().get_output_layout();
 
     const auto& output_sizes = argument.broadcast_sizes;
@@ -138,11 +178,13 @@ broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& nod
     }
     tensor input_sizes_to_compare = tensor(format::get_default_format(reordered_input_dims.size()), reordered_input_dims);
 
-    CLDNN_ERROR_TENSOR_SIZES_NOT_DIVIDABLE(node.id(),
-                                           "Broadcast sizes",
-                                           output_sizes,
-                                           "input sizes",
-                                           input_sizes_to_compare,
-                                           "Invalid broadcast size: not dividable by input size");
+    if (output_sizes.is_static()) {
+        CLDNN_ERROR_TENSOR_SIZES_NOT_DIVIDABLE(node.id(),
+                                              "Broadcast sizes",
+                                              ov::intel_gpu::tensor_from_dims(output_sizes.to_shape()),
+                                              "input sizes",
+                                              input_sizes_to_compare,
+                                              "Invalid broadcast size: not dividable by input size");
+    }
 }
 }  // namespace cldnn

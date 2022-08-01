@@ -19,74 +19,74 @@ static void CreateCommonBroadcastOp(Program& p, const std::shared_ptr<ngraph::No
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
 
-    auto inputShape = op->get_input_shape(0);
-    auto outputShape = op->get_output_shape(0);
-    auto inputRank = inputShape.size();
-    auto outputRank = outputShape.size();
+    //auto inputShape = op->get_input_shape(0);
+    //auto outputShape = op->get_output_shape(0);
+    if (op->get_input_partial_shape(0).is_static() && op->get_output_partial_shape(0).is_static()) {
+        auto inputShape = op->get_input_shape(0);
+        auto outputShape = op->get_output_shape(0);
+        auto inputPrimitive = inputPrimitives[0];
+        auto inputRank = inputShape.size();
+        auto outputRank = outputShape.size();
 
-    auto inputPrimitive = inputPrimitives[0];
-
-    if (inputRank != outputRank) {
-        // Add reorder if changing number of dimensions requires changing format
-        auto targetFormat = cldnn::format::get_default_format(outputRank);
-        if (targetFormat.value != cldnn::format::get_default_format(inputRank).value) {
-            auto reorderName = layerName + "_cldnn_in_reorder";
-            auto targetDatatype = DataTypeFromPrecision(op->get_input_element_type(0));
-            auto reorderPrim = cldnn::reorder(reorderName,
+        if (inputRank != outputRank) {
+            // Add reorder if changing number of dimensions requires changing format
+            auto targetFormat = cldnn::format::get_default_format(outputRank);
+            if (targetFormat.value != cldnn::format::get_default_format(inputRank).value) {
+                auto reorderName = layerName + "_cldnn_in_reorder";
+                auto targetDatatype = DataTypeFromPrecision(op->get_input_element_type(0));
+                auto reorderPrim = cldnn::reorder(reorderName,
                                               inputPrimitive,
                                               targetFormat,
                                               targetDatatype,
                                               std::vector<float>(),
                                               cldnn::reorder_mean_mode::subtract,
                                               op->get_friendly_name());
-            p.AddPrimitive(reorderPrim);
-            p.AddInnerPrimitiveToProfiler(reorderName, layerName, op);
-
-            inputPrimitive = reorderName;
-        }
-
-        auto reshapeName = layerName + "_cldnn_in_reshape";
-
-        // Extend input dimensions with ones
-        if (axis_mapping.empty()) {
-            // If axis_mapping is not specified, then we prepend shape with neccesary count of 1-s
-            inputShape.insert(inputShape.begin(), outputRank - inputRank, 1ul);
-        } else {
-            // If axis_mapping is specified, then ones are inserted according to it.
-            ngraph::Shape tmp_shape;
-            int prev_axis = -1;
-            int next_axis = -1;
-            size_t currentRank = 0;
-            for (auto& axis : axis_mapping) {
-                prev_axis = next_axis;
-                next_axis = static_cast<int>(axis);
-
-                int ones_count = std::max(next_axis - prev_axis - 1, 0);
-                tmp_shape.insert(tmp_shape.begin() + currentRank, ones_count, 1ul);
-                tmp_shape.push_back(outputShape[axis]);
-
-                currentRank += ones_count + 1;
+                p.AddPrimitive(reorderPrim);
+                p.AddInnerPrimitiveToProfiler(reorderName, layerName, op);
+                inputPrimitive = reorderName;
             }
-            inputShape = tmp_shape;
+
+            auto reshapeName = layerName + "_cldnn_in_reshape";
+            // Extend input dimensions with ones
+            if (axis_mapping.empty()) {
+                // If axis_mapping is not specified, then we prepend shape with neccesary count of 1-s
+                inputShape.insert(inputShape.begin(), outputRank - inputRank, 1ul);
+            } else {
+                // If axis_mapping is specified, then ones are inserted according to it.
+                ngraph::Shape tmp_shape;
+                int prev_axis = -1;
+                int next_axis = -1;
+                size_t currentRank = 0;
+                for (auto& axis : axis_mapping) {
+                    prev_axis = next_axis;
+                    next_axis = static_cast<int>(axis);
+
+                    int ones_count = std::max(next_axis - prev_axis - 1, 0);
+                    tmp_shape.insert(tmp_shape.begin() + currentRank, ones_count, 1ul);
+                    tmp_shape.push_back(outputShape[axis]);  // TODO
+
+                    currentRank += ones_count + 1;
+                }
+                inputShape = tmp_shape;
+            }
+            auto reshapePrim = cldnn::reshape(reshapeName, inputPrimitive, inputShape, op->get_friendly_name());
+            p.AddPrimitive(reshapePrim);
+            p.AddInnerPrimitiveToProfiler(reshapeName, layerName, op);
+            inputPrimitive = reshapeName;
         }
-
-        auto targetShape = tensor_from_dims(inputShape);
-
-        auto reshapePrim = cldnn::reshape(reshapeName, inputPrimitive, targetShape, op->get_friendly_name());
-        p.AddPrimitive(reshapePrim);
-        p.AddInnerPrimitiveToProfiler(reshapeName, layerName, op);
-
-        inputPrimitive = reshapeName;
+        auto broadcastPrim =
+            cldnn::broadcast(layerName, {inputPrimitive}, op->get_output_partial_shape(0), {}, op->get_friendly_name());
+        p.AddPrimitive(broadcastPrim);
+        p.AddPrimitiveToProfiler(op);
+        return;
+    } else {  // dynamic shape
+        auto broadcastPrim = cldnn::broadcast(layerName,
+                                              inputPrimitives,
+                                            op->get_output_partial_shape(0), {}, op->get_friendly_name());
+        p.AddPrimitive(broadcastPrim);
+        p.AddPrimitiveToProfiler(op);
+        return;
     }
-
-    auto broadcastPrim = cldnn::broadcast(layerName,
-                                          inputPrimitive,
-                                          tensor_from_dims(op->get_output_shape(0)),
-                                          {},
-                                          op->get_friendly_name());
-
-    p.AddPrimitive(broadcastPrim);
-    p.AddPrimitiveToProfiler(op);
 }
 
 static void CreateBroadcastOp(Program& p, const std::shared_ptr<ngraph::op::v1::Broadcast>& op) {

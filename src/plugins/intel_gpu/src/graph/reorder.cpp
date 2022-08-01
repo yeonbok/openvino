@@ -162,7 +162,10 @@ layout reorder_inst::calc_output_layout(reorder_node const& node) {
         // TODO Shouldn't transform be called every time ifmt != ofmt?
         return layout(input_layout.transform(ofmt), odt, ofmt, op);
     } else {
-        return layout(odt, ofmt, input_layout.get_tensor(), op);
+        if (node.get_primitive()->output_shape.size() && !node.get_primitive()->output_shape.is_dynamic())
+            return layout(node.get_primitive()->output_shape, odt, ofmt, op);
+        else
+            return layout(input_layout.get_partial_shape(), odt, ofmt, op);
     }
 }
 
@@ -194,15 +197,15 @@ reorder_inst::typed_primitive_inst(network& network, reorder_node const& node)
 
     auto input_layout = node.input().get_output_layout();
     auto output_layout = node.get_output_layout();
-
-    CLDNN_ERROR_LESS_THAN(node.id(),
-                          "Input dimension size",
-                          input_layout.get_tensor().raw.size(),
-                          "ouput dimension size",
-                          output_layout.get_tensor().raw.size(),
-                          "Input dimension < output dimension. Reorder primitive woks only with same dimension sizes "
-                          "(reorder) or when input > output (flatten).");
-
+    if (input_layout.is_static() && output_layout.is_static()) {
+        CLDNN_ERROR_LESS_THAN(node.id(),
+                "Input dimension size",
+                input_layout.get_tensor().raw.size(),
+                "ouput dimension size",
+                output_layout.get_tensor().raw.size(),
+                "Input dimension < output dimension. Reorder primitive woks only with same dimension sizes "
+                "(reorder) or when input > output (flatten).");
+    }
     if (!argument.subtract_per_feature.empty()) {
         CLDNN_ERROR_GREATER_THAN(node.id(),
                                  "Input feature dimension size",

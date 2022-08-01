@@ -38,12 +38,12 @@ static bool check_if_axis_is_set_properly(loop_node const & node) {
         });
         assert(found != dependencies.end());
         const layout input_layout = (*found)->get_output_layout();
-        const auto shape = input_layout.get_tensor().sizes(input_layout.format);
+        const auto shape = input_layout.get_partial_shape().to_shape();
         const size_t iteration_axis = node.convert_to_raw_axis(pm.get().axis, static_cast<int32_t>(shape.size()));
         if (iteration_size < 0) {
             iteration_size = shape[iteration_axis];
         } else {
-            if (iteration_size != shape[iteration_axis]) {
+            if ((int32_t)iteration_size != (int32_t)shape[iteration_axis]) {
                 return false;
             }
         }
@@ -113,10 +113,11 @@ layout loop_inst::calc_output_layout(loop_node const & node) {
     layout loop_output_layout = (*target)->get_output_layout();
     const int64_t axis_to_iterate_throgh = output_mapping.axis;
     if (axis_to_iterate_throgh != -1) {
-        const size_t ndim = loop_output_layout.get_rank();
-        auto shape = loop_output_layout.get_dims();
+        //const size_t ndim = loop_output_layout.get_rank();
+        auto shape = loop_output_layout.get_partial_shape();
         shape[axis_to_iterate_throgh] = static_cast<int32_t>(node.get_max_iteration());
-        loop_output_layout.set_tensor(tensor(format::get_default_format(ndim), shape));
+        //loop_output_layout.set_tensor(tensor(format::get_default_format(ndim), shape));
+        loop_output_layout = layout{shape, loop_output_layout.data_type, loop_output_layout.format};
     }
     return loop_output_layout;
 }
