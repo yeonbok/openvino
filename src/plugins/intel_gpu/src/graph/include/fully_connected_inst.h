@@ -26,6 +26,7 @@ public:
     std::unique_ptr<kernel_impl_params> get_kernel_impl_params(const std::vector<layout>& in_layouts,
                                               const layout& out_layout) const override {
         auto params = parent::get_kernel_impl_params(in_layouts, out_layout);
+        params->weights_layout = optional_layout(weights().get_output_layout());
         params->bias_layout = bias_term() ? optional_layout(bias().get_output_layout()) : optional_layout();
         return params;
     }

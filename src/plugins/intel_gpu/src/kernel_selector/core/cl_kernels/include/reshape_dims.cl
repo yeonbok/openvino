@@ -13,7 +13,40 @@ inline uint8 FUNC(reshape_2_to_4)(uint o, uint i, uint y, uint x, uint dst_size_
     uint _x = _yx % dst_size_x;
     return (uint8)(0, o, _i, 0, 0, _y,_x, 0);
 }
+inline uint8 FUNC(reshape_3_to_4)(uint o, uint i, uint y,
+                                  uint src_size_f, uint src_size_y,
+                                  uint dst_size_f, uint dst_size_y, uint dst_size_x)
+{
+    const uint src_pitch_y = 1;
+    const uint src_pitch_f = src_pitch_y * src_size_y;
+    const uint src_pitch_b = src_pitch_f * src_size_f;
+    uint flat_idx = y * src_pitch_y + i * src_pitch_f + o * src_pitch_b;
+    uint dst_x = flat_idx % dst_size_x;
+    flat_idx /= dst_size_x;
+    uint dst_y = flat_idx % dst_size_y;
+    flat_idx /= dst_size_y;
+    uint dst_f = flat_idx % dst_size_f;
+    flat_idx /= dst_size_f;
+    uint dst_b = flat_idx;
+    return (uint8)(0, dst_b, dst_f, 0, 0, dst_y, dst_x, 0);
+}
 
+inline uint8 FUNC(reshape_4_to_3)(uint o, uint i, uint y, uint x,
+                                  uint src_size_f, uint src_size_y, uint src_size_x,
+                                  uint dst_size_f, uint dst_size_y)
+{
+    const uint src_pitch_x = 1;
+    const uint src_pitch_y = src_pitch_x * src_size_x;
+    const uint src_pitch_f = src_pitch_y * src_size_y;
+    const uint src_pitch_b = src_pitch_f * src_size_f;
+    uint flat_idx = x * src_pitch_x + y * src_pitch_y + i * src_pitch_f + o * src_pitch_b;
+    uint dst_y = flat_idx % dst_size_y;
+    flat_idx /= dst_size_y;
+    uint dst_f = flat_idx % dst_size_f;
+    flat_idx /= dst_size_f;
+    uint dst_b = flat_idx;
+    return (uint8)(0, dst_b, dst_f, 0, 0, dst_y, 0, 0);
+}
 inline uint8 FUNC(reshape_4_to_2)(uint o, uint i, uint y, uint x, uint src_size_y, uint src_size_x)
 {
     uint _i = i*src_size_y*src_size_x + y*src_size_x + x;
@@ -256,11 +289,16 @@ inline uint8 FUNC(reshape_dims)(
 {
     if (src_dims == 4 && dst_dims == 2)
     {
-        return FUNC_CALL(reshape_4_to_2)(o,i,y,x,src_size_y,src_size_x);
+        return FUNC_CALL(reshape_4_to_2)(o, i, y, x, src_size_y, src_size_x);
     }
     else if (src_dims == 2 && dst_dims == 4)
     {
-        return FUNC_CALL(reshape_2_to_4)(o,i,y,x,dst_size_y,dst_size_x);
+        return FUNC_CALL(reshape_2_to_4)(o, i, y, x, dst_size_y, dst_size_x);
+    }
+    else if (src_dims == 4 && dst_dims == 3)
+    {
+        printf("Reorder from 4 to 4\n"); 
+        return FUNC_CALL(reshape_4_to_3)(o, i, y, src_size_f, src_size_y, src_size_x, dst_size_f, dst_size_y, dst_size_x);
     }
     else if (src_dims == 4 && dst_dims == 6)
     {
@@ -297,6 +335,14 @@ inline uint8 FUNC(reshape_dims)(
     else if (src_dims == 6 && dst_dims == 6)
     {
         return FUNC_CALL(reshape_6_to_6)(o, i, w, z, y, x, src_size_f, src_size_w, src_size_z, src_size_y, src_size_x, dst_size_f, dst_size_w, dst_size_z, dst_size_y, dst_size_x);
+    }
+        else if (src_dims == 4 && dst_dims == 4)
+    {
+        return FUNC_CALL(reshape_4_to_4)(o, i, y, x, src_size_f, src_size_y, src_size_x, dst_size_f, dst_size_y, dst_size_x);
+    }
+    else if (src_dims == 5 && dst_dims == 5)
+    {
+        return FUNC_CALL(reshape_5_to_5)(o, i, z, y, x, src_size_f, src_size_z, src_size_y, src_size_x, dst_size_f, dst_size_z, dst_size_y, dst_size_x);
     }
 
     return (uint8)(0, o, i, w, z, y, x, 0);

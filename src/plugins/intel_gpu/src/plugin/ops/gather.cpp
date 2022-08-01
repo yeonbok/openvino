@@ -45,14 +45,17 @@ void CreateGatherOpBase(Program& p, const std::shared_ptr<T>& op, const int64_t 
         }
     }
 
+    auto outLayout = cldnn::format::get_default_format(op->get_output_partial_shape(0).rank().get_length());
+
     auto gatherPrim = cldnn::gather(layerName,
                                     reorderedInputs[0],
                                     reorderedInputs[1],
                                     axis,
-                                    op->get_output_shape(0),
+                                    outLayout,
+                                    op->get_output_partial_shape(0),
                                     batch_dim,
                                     support_neg_ind,
-                                    op->get_friendly_name());
+                                    op->get_friendly_name(), cldnn::padding(), op);
 
     p.AddPrimitive(gatherPrim);
     p.AddPrimitiveToProfiler(op);

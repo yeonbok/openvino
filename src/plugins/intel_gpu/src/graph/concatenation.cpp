@@ -22,7 +22,7 @@ layout concatenation_inst::calc_output_layout(concatenation_node const& node, ke
 
     auto input_layout = impl_param.input_layouts[0];
     auto output_format = input_layout.format;
-    auto result_sizes = input_layout.get_dims();
+    auto result_sizes = input_layout.get_partial_shape();
 
     auto output_dt = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
 
@@ -38,9 +38,9 @@ layout concatenation_inst::calc_output_layout(concatenation_node const& node, ke
         result_sizes[axis_index] += input_sizes[axis_index];
     }
 
-    auto def_fmt = format::get_default_format(input_layout.get_rank());
+    //auto def_fmt = format::get_default_format(input_layout.get_rank());
 
-    return layout {output_dt, output_format, tensor(def_fmt, result_sizes)};
+    return layout{result_sizes, output_dt, output_format};
 }
 
 std::string concatenation_inst::to_string(concatenation_node const& node) {
