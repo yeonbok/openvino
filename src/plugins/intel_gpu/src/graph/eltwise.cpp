@@ -33,7 +33,8 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node, kernel_impl_pa
 
     auto get_output_layout = [&](){
         auto format = input_node_layout.format;
-        if (input_node_layout.is_static()) {
+        //if (input_node_layout.is_static()) {
+        if (0) {
             auto size = input_node_layout.get_tensor();
             for (size_t i = 0; i < node.inputs_count(); i++) {
                 if (i == primary_input_idx)

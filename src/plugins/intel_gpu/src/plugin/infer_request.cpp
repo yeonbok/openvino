@@ -978,7 +978,7 @@ void InferRequest::copy_output_data(cldnn::memory::ptr src, Blob::Ptr dst, buf_i
     case Precision::I8:   copyResultToOutputBlob<int8_t, int8_t>(src, dst, bi, stream);  break;
     case Precision::U16:  copyResultToOutputBlob<float, uint16_t>(src, dst, bi, stream);  break;
     case Precision::U32:  copyResultToOutputBlob<int32_t, uint32_t>(src, dst, bi, stream);  break;
-    case Precision::U64:  copyResultToOutputBlob<int32_t, uint64_t>(src, dst, bi, stream);  break;
+    case Precision::U64:  copyResultToOutputBlob<int64_t, uint64_t>(src, dst, bi, stream);  break;
     case Precision::U8:   copyResultToOutputBlob<uint8_t, uint8_t>(src, dst, bi, stream);  break;
     default: IE_THROW(NotImplemented) << "The plugin does not support output " << dst->getTensorDesc().getPrecision() << " precision";
     }
@@ -1134,12 +1134,11 @@ void InferRequest::allocate_outputs() {
         }
 
         outputsMap[no.first] = outputID;
-        if (desc.getPrecision() == Precision::I16 || desc.getPrecision() == Precision::U16 ||
-            desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64 ||
+        if (desc.getPrecision() == Precision::I16 || desc.getPrecision() == Precision::U16 || desc.getPrecision() == Precision::I32 ||
+            desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64 || desc.getPrecision() == Precision::I64 ||
             desc.getPrecision() == Precision::FP64) {
             TensorDesc device_blob_desc = desc;
-
-            if (desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64)
+            if (desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64 || desc.getPrecision() == Precision::I64)
                 device_blob_desc.setPrecision(Precision::I32);
             else
                 device_blob_desc.setPrecision(Precision::FP32);
@@ -1209,7 +1208,7 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
     auto remote_ptr = inputBlob->as<gpu::ClBlob>();
     auto& stream = m_graph->GetNetwork()->get_stream();
     bool is_dev_input = remote_ptr != nullptr;
-
+    cldnn::memory::ptr inputMem = nullptr;
     switch (prec) {
         case Precision::FP64:
         case Precision::FP32:
@@ -1229,7 +1228,7 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
             if (!impl->is_allocated()) {
                 IE_THROW() << str_input_not_allocated;
             }
-            auto inputMem = impl->getMemory();
+            inputMem = impl->getMemory();
 
             auto input_layout = m_graph->GetInputLayouts().find(inputName);
             if (input_layout != m_graph->GetInputLayouts().end()) {
@@ -1250,13 +1249,16 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
                     } else {
                         convertAndCopy<double, float>(inputBlob.get(), ptr.data());
                     }
-                } else if (prec == Precision::U64 || prec == Precision::U32) {
-                    cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
+                } else if (prec == Precision::U64 || prec == Precision::I64) {
+                    cldnn::mem_lock<int64_t> ptr{ inputMem, stream };
                     if (prec == Precision::U64) {
-                        convertAndCopy<uint64_t, int32_t>(inputBlob.get(), ptr.data());
-                    } else {
-                        convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
+                        convertAndCopy<uint64_t, int64_t>(inputBlob.get(), ptr.data());
+                    } else if (prec == Precision::I64) {
+                        convertAndCopy<int64_t, int64_t>(inputBlob.get(), ptr.data());
                     }
+                } else if (prec == Precision::U32) {
+                    cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
+                    convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
                 } else {
                     auto src_lock = inputBlob->cbuffer();
                     auto src_ptr = src_lock.as<uint8_t*>();
