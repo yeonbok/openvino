@@ -316,6 +316,9 @@ void prepare_buffer_fusing::run(program& p) {
             continue;
         // zero copy
         program_helpers::do_for_types<crop>(*node, [&p, is_debug](crop_node& node) {
+            // TODO (taylor) is this needed?
+            if (node.get_dependencies().size() > 1)
+                return;
             // if the node is marked as network output, prevent optimizations which would affect a form of its output,
             // unless debug flag is set
             if (node.is_output() && !is_debug)
@@ -345,10 +348,10 @@ void prepare_buffer_fusing::run(program& p) {
                 auto format = crop_layout.format;
                 auto crop_prim = node.get_primitive();
                 auto input_layout = node.get_dependency(0).get_output_layout();
-                const auto& crop_size = crop_layout.get_tensor();
+                //const auto& crop_size = crop_layout.get_tensor();
                 const auto& out_padd = crop_layout.data_padding;
                 const auto opt_lower_pad = crop_prim->offsets.feature[0];
-                const auto opt_upper_pad = input_layout.feature() - crop_prim->offsets.feature[0] - crop_size.feature[0];
+                const auto opt_upper_pad = input_layout.feature() - crop_prim->offsets.feature[0] - crop_layout.feature();
 
                 // do not optimize crop if paddings are not properly aligned
                 for (auto& usr : node.get_users()) {
@@ -363,11 +366,15 @@ void prepare_buffer_fusing::run(program& p) {
                     // oneDNN doesn't support paddings
                     if (usr->get_preferred_impl_type() == impl_types::onednn)
                         return;
+                    if (usr->is_type<reorder>()) {
+                        //std::cout << usr->id() << " reorder user! can be optimized" << usr->can_be_optimized() << std::endl;
+                        return;
+                    }
                 }
 
-                if (format == format::bfyx && crop_size.batch[0] == input_layout.batch() &&
-                    crop_size.spatial[0] == input_layout.spatial(0) &&
-                    crop_size.spatial[1] == input_layout.spatial(1) && out_padd.lower_size().feature[0] == 0 &&
+                if (format == format::bfyx && crop_layout.batch() == input_layout.batch() &&
+                    crop_layout.spatial(0) == input_layout.spatial(0) &&
+                    crop_layout.spatial(1) == input_layout.spatial(1) && out_padd.lower_size().feature[0] == 0 &&
                     out_padd.upper_size().feature[0] == 0 && out_padd.lower_size().batch[0] == 0 &&
                     out_padd.upper_size().batch[0] == 0 && out_padd.lower_size().spatial[0] == 0 &&
                     out_padd.lower_size().spatial[1] == 0 && out_padd.upper_size().spatial[0] == 0 &&
