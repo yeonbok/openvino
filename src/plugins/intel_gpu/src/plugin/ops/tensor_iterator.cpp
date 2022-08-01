@@ -28,7 +28,7 @@ namespace intel_gpu {
 
 template<class DATA_TYPE>
 static DATA_TYPE CreateScalarData(Program &p, const cldnn::primitive_id& id, int64_t num) {
-    auto mem = p.GetEngine().allocate_memory({ cldnn::data_types::i64, cldnn::format::bfyx, { 1, 1, 1, 1 } });
+    auto mem = p.GetEngine().allocate_memory({ ov::PartialShape({1}), cldnn::data_types::i64, cldnn::format::bfyx });
     cldnn::mem_lock<int64_t> ptr{mem, p.GetEngine().get_program_stream()};
     *ptr.begin() = num;
     return {id, mem};
@@ -39,8 +39,9 @@ static cldnn::mutable_data CreateAdditionalOutputData(Program &p, const std::sha
                                             const int32_t output_idx) {
     const auto precision = cldnn::element_type_to_data_type(op->get_output_element_type(output_idx));
     const auto format = cldnn::format::get_default_format(op->get_output_shape(output_idx).size());
-    const auto tensor = tensor_from_dims(op->get_output_shape(output_idx));
-    cldnn::layout output_layout = cldnn::layout(precision, format, tensor);
+    //const auto tensor = tensor_from_dims(op->get_output_shape(output_idx));
+    //cldnn::layout output_layout = cldnn::layout(precision, format, tensor);
+    cldnn::layout output_layout = cldnn::layout(op->get_output_partial_shape(output_idx), precision, format);
     auto mem = p.GetEngine().allocate_memory(output_layout);
     auto md = cldnn::mutable_data(id, {input}, mem); // cldnn::data cannot set dependency
     return md;

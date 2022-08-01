@@ -149,6 +149,7 @@ public:
         return params;
     }
 
+    std::shared_ptr<ov::Node> get_ov_op() const { return desc->ov_op; }  // TODO (taylor) to remove
     template <class PType>
     bool is_type() const {
         static_assert(

@@ -36,7 +36,6 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node, kernel_impl_pa
     for (size_t i = 0; i < desc->input_size(); i++) {
         if (i == primary_input_idx)
             continue;
-
         auto l = impl_param.get_non_padded_input_layout(i);
         if (!ov::PartialShape::broadcast_merge_into(out_pshape, l.get_partial_shape(), ov::op::AutoBroadcastSpec(ov::op::AutoBroadcastType::NUMPY))) {
             IE_THROW() << "incorrect input shapes\n";

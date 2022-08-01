@@ -33,7 +33,7 @@ struct gather : public primitive_base<gather> {
            const primitive_id& dict,
            const primitive_id& idx,
            const int64_t axis,
-           const ov::Shape& output_shape,
+           const ov::PartialShape& output_shape,
            const int64_t batch_dim = 0,
            const bool support_neg_ind = false,
            const padding& output_padding = padding())
@@ -46,7 +46,7 @@ struct gather : public primitive_base<gather> {
     /// @brief Gathering axis
     int64_t axis;
     /// @brief Gather output shape
-    ov::Shape output_shape;
+    ov::PartialShape output_shape;
     /// @brief Gathering batch_dim
     int64_t batch_dim;
     /// @brief Support negative indexes

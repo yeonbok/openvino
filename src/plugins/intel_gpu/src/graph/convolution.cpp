@@ -356,7 +356,7 @@ convolution_inst::typed_primitive_inst(network& network, convolution_node const&
                                   "Bias feature[0]",
                                   bias_inst.feature(),
                                   "expected feature map number",
-                                  output_size.feature[0] / split,
+                                  output_layout.feature() / split,
                                   "Bias/fm mismatch");
             CLDNN_ERROR_NOT_EQUAL(node.id(),
                                   "Bias spatial[2]",

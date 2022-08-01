@@ -40,12 +40,14 @@ public:
               const primitive_id& id,
               const std::vector<primitive_id>& input,
               const padding& output_padding = padding(),
-              const optional_data_type output_data_type = optional_data_type())
+              const optional_data_type output_data_type = optional_data_type(),
+              std::shared_ptr<ov::Node> ov_op = nullptr)
         : type(type),
           id(id),
           output_padding(output_padding),
           output_data_type(output_data_type),
-          input(input) {}
+          input(input),
+          ov_op(ov_op) {}
 
     virtual ~primitive() = default;
 
@@ -98,6 +100,8 @@ public:
 
     /// @brief List of ids of input primitives.
     primitive_id_arr input;
+
+    std::shared_ptr<ov::Node> ov_op;
 
 protected:
     virtual std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const { return {}; }

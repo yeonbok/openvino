@@ -104,10 +104,10 @@ static void CreateLSTMCellOp(Program& p, const std::shared_ptr<ngraph::op::v4::L
     cldnn::primitive_id gemmReorderID = layerName + "_gemmReorder";
     cldnn::primitive_id input_concatID = layerName + "_inputConcat";
 
-    cldnn::tensor inputShape = { lstm_batch_size, 1, lstm_input_size, 1 };
-    cldnn::tensor inStateShape = { lstm_batch_size, 1, lstm_hidden_size, 1 };
-    cldnn::layout inputLayout = cldnn::layout(lstm_dtype, cldnn::format::bfyx, inputShape);
-    cldnn::layout hiddenLayout = cldnn::layout(lstm_dtype, cldnn::format::bfyx, inStateShape);
+    ov::PartialShape inputShape = { lstm_batch_size, 1, 1, lstm_input_size };
+    ov::PartialShape inStateShape = { lstm_batch_size, 1, 1, lstm_hidden_size };
+    cldnn::layout inputLayout = cldnn::layout(inputShape, lstm_dtype, cldnn::format::bfyx);
+    cldnn::layout hiddenLayout = cldnn::layout(inStateShape, lstm_dtype, cldnn::format::bfyx);
     p.add_primitive(*op, cldnn::reshape(inReshapeID, inputPrimitives[0], inputShape));
     p.add_primitive(*op, cldnn::reorder(permuteID,
                                   inReshapeID,
@@ -137,8 +137,8 @@ static void CreateLSTMCellOp(Program& p, const std::shared_ptr<ngraph::op::v4::L
                                               3));
 
 
-    cldnn::tensor gemmSz = cldnn::tensor{ lstm_batch_size, 1, 4 * lstm_hidden_size, 1 };
-    cldnn::layout gemmLayout = cldnn::layout(lstm_dtype, cldnn::format::bfyx, gemmSz);
+    ov::PartialShape gemmSz = { lstm_batch_size, 1, 1, 4 * lstm_hidden_size };
+    cldnn::layout gemmLayout = cldnn::layout(gemmSz, lstm_dtype, cldnn::format::bfyx);
     cldnn::tensor hiddenSz = cldnn::tensor{ lstm_batch_size, 1, lstm_hidden_size, 1 };
     cldnn::tensor cellCropSz = cldnn::tensor{0, 1, 0, 0};
 
@@ -160,7 +160,7 @@ static void CreateLSTMCellOp(Program& p, const std::shared_ptr<ngraph::op::v4::L
                                          activation_params, cldnn::lstm_weights_order::fizo, 0));
 
 
-    cldnn::tensor outSz = cldnn::tensor{ lstm_batch_size, lstm_hidden_size, 1, 1 };
+    ov::PartialShape outSz = { lstm_batch_size, lstm_hidden_size};
     cldnn::primitive_id outputHiddenCropID = layerName + "_hc";
     cldnn::primitive_id outputHiddenID = layerName + ".out0";
     p.add_primitive(*op, cldnn::crop(outputHiddenCropID, lstm_elt_id, hiddenSz, cldnn::tensor{0, 0, 0, 0}));
@@ -216,9 +216,9 @@ static void CreateLSTMSequenceOp(Program& p, const std::shared_ptr<ngraph::op::v
 
     std::vector<cldnn::primitive_id> output_ids_offsets;
 
-    cldnn::tensor inputShape = { lstm_batch_size, lstm_sequence_len, lstm_input_size, 1 };
-    cldnn::tensor inStateShape = { lstm_batch_size, 1, lstm_hidden_size, 1 };
-    cldnn::layout inputLayout = cldnn::layout(lstm_dtype, cldnn::format::bfyx, inputShape);
+    ov::PartialShape inputShape = { lstm_batch_size, lstm_sequence_len, 1, lstm_input_size};
+    ov::PartialShape inStateShape = { lstm_batch_size, 1, 1, lstm_hidden_size};
+    cldnn::layout inputLayout = cldnn::layout(inputShape, lstm_dtype, cldnn::format::bfyx);
     p.add_primitive(*op, cldnn::reshape(inReshapeID, inputPrimitives[0], inputShape));
     p.add_primitive(*op, cldnn::reorder(permuteID,
                                         inReshapeID,
@@ -229,8 +229,8 @@ static void CreateLSTMSequenceOp(Program& p, const std::shared_ptr<ngraph::op::v
     p.add_primitive(*op, cldnn::reshape(inHiddenStateID, inputPrimitives[1], inStateShape));
     p.add_primitive(*op, cldnn::reshape(inCellStateID, inputPrimitives[2], inStateShape));
 
-    cldnn::tensor gemmSz = cldnn::tensor{ lstm_batch_size, 1, 4 * lstm_hidden_size, 1 };
-    cldnn::layout gemmLayout = cldnn::layout(lstm_dtype, cldnn::format::bfyx, gemmSz);
+    ov::PartialShape gemmSz = { lstm_batch_size, 1, 1, 4 * lstm_hidden_size};
+    cldnn::layout gemmLayout = cldnn::layout(gemmSz, lstm_dtype, cldnn::format::bfyx);
     cldnn::tensor hiddenSz = cldnn::tensor{ lstm_batch_size, 1, lstm_hidden_size, 1 };
     cldnn::tensor cellCropSz = cldnn::tensor{0, 1, 0, 0};
     cldnn::primitive_id hiddenStr = inHiddenReshapeID + "_1";
@@ -240,9 +240,9 @@ static void CreateLSTMSequenceOp(Program& p, const std::shared_ptr<ngraph::op::v
     cldnn::primitive_id WRconcatID = layerName + "_WRconcat";
     p.add_primitive(*op, cldnn::concatenation(WRconcatID, { weightID, recurrentID }, 2));
 
-    std::vector<size_t> WRreshapeSize = { 4 * size_t(lstm_hidden_size), size_t(lstm_input_size + lstm_hidden_size) };
+    ov::PartialShape WRreshapeSize = { 4 * static_cast<int>(lstm_hidden_size), static_cast<int>(lstm_input_size + lstm_hidden_size), 1, 1 };
     cldnn::primitive_id WRreshapeID = WRconcatID + "_reshape";
-    auto reshapeInPrim = cldnn::reshape(WRreshapeID, WRconcatID, tensor_from_dims(WRreshapeSize));
+    auto reshapeInPrim = cldnn::reshape(WRreshapeID, WRconcatID, WRreshapeSize);
     p.add_primitive(*op, reshapeInPrim);
 
     for (int i = 0; i < lstm_sequence_len; ++i) {
@@ -257,7 +257,8 @@ static void CreateLSTMSequenceOp(Program& p, const std::shared_ptr<ngraph::op::v
         int seqIdx = isForward ? i : lstm_sequence_len - 1 - i;
         const std::string seqIdx_str = std::to_string(seqIdx);
 
-        cldnn::tensor crop_tensor{ inputShape.batch[0], 1, inputShape.spatial[0], inputShape.spatial[1] };
+        cldnn::tensor crop_tensor{ static_cast<int>(inputShape[0].get_length()), 1, static_cast<int>(inputShape[3].get_length()),
+                                   static_cast<int>(inputShape[2].get_length()) };
         cldnn::tensor offset_tensor{ 0, static_cast<cldnn::tensor::value_type>(seqIdx), 0, 0 };
         cldnn::primitive_id inputCrop_id = inputCropID + ":" + seqIdx_str;
         p.add_primitive(*op, cldnn::crop(inputCrop_id, permuteID, crop_tensor, offset_tensor));

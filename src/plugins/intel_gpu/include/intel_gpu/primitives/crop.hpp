@@ -54,6 +54,16 @@ struct crop : public primitive_base<crop> {
          const padding& output_padding = padding())
         : primitive_base(id, {input}, output_padding), reference_input(reference_input), offsets(offsets) {}
 
+    crop(const primitive_id& id,
+         const std::vector<primitive_id>& inputs,
+         const tensor& offsets,
+         const padding& output_padding = padding(),
+         const int output_idx = 0,
+         const int split_size = 0,
+         const optional_data_type output_data_type = optional_data_type(),
+         std::shared_ptr<ov::Node> orig_op = nullptr)
+        : primitive_base(id, inputs, output_padding), reference_input(tensor{1, 1, 1, 1}), offsets(offsets),
+          output_idx(output_idx), split_size(split_size) {}
     /// @brief Constructs crop primitive (borders variant).
     ///
     /// @details Allows to specify borders from each side that should be cut out
@@ -95,6 +105,8 @@ struct crop : public primitive_base<crop> {
     tensor reference_input;
     /// @brief Input offsets.
     tensor offsets;
+    int output_idx = 0;
+    int split_size = 1;
 };
 /// @}
 /// @}

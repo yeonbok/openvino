@@ -19,11 +19,11 @@ primitive_type_id strided_slice::type_id() {
     return &instance;
 }
 
-layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, kernel_impl_params const& impl_param) {
+layout strided_slice_inst::calc_output_layout(strided_slice_node const& /*node*/, kernel_impl_params const& impl_param) {
     auto desc = impl_param.typed_desc<strided_slice>();
-    auto input_layout = impl_param.get_input_layout();
+    auto input_layout = impl_param.input_layouts[0];
     auto output_format = format::get_default_format(desc->out_size.size());
-    auto out_shape = desc->out_size;
+    auto out_shape = desc->out_size.to_shape();
     std::vector<tensor::value_type> dims_converted(out_shape.begin(), out_shape.end());
     // extend shape to 4d
     for (size_t i = dims_converted.size(); i < 4; i++) {
@@ -106,6 +106,7 @@ std::string strided_slice_inst::to_string(strided_slice_node const& node) {
 
     return primitive_description.str();
 }
+
 
 strided_slice_inst::typed_primitive_inst(network& network, strided_slice_node const& node)
     : parent(network, node) {}

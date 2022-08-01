@@ -5,9 +5,11 @@
 #include "broadcast_inst.h"
 #include "broadcast_shape_inference.hpp"
 
+#include "intel_gpu/plugin/common_utils.hpp"
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "json_object.h"
 #include "primitive_type_base.h"
+#include "intel_gpu/runtime/memory.hpp"
 #include <string>
 #include <vector>
 #include <set>
@@ -33,7 +35,7 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node, kernel_imp
                  input_layout.format,
                  tensor(format::get_default_format(dims_converted.size()), dims_converted) };
     } else {
-        return { input_layout.data_type, input_layout.format, desc->broadcast_sizes };
+        return { desc->broadcast_sizes, input_layout.data_type, input_layout.format };
     }
 }
 
@@ -99,16 +101,17 @@ std::string broadcast_inst::to_string(broadcast_node const& node) {
     auto& input = node.input();
 
     std::stringstream primitive_description;
+    std::stringstream ss_broadcast_sizes;
+    ss_broadcast_sizes << broadcast_sizes;
     std::stringstream ss_broadcast_axes;
 
     for (size_t i = 0; i < broadcast_axes.size(); ++i) {
         ss_broadcast_axes << broadcast_axes.at(i);
         i != (broadcast_axes.size() - 1) ? ss_broadcast_axes << ", " : ss_broadcast_axes << "";
     }
-
     json_composite broadcast_info;
     broadcast_info.add("input id", input.id());
-    broadcast_info.add("broadcast_sizes", broadcast_sizes.to_string());
+    broadcast_info.add("broadcast_sizes", ss_broadcast_sizes.str());
     broadcast_info.add("broadcast axes", ss_broadcast_axes.str());
 
     node_info->add("broadcast info", broadcast_info);
@@ -118,6 +121,8 @@ std::string broadcast_inst::to_string(broadcast_node const& node) {
 }
 
 broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& node) : parent(network, node) {
+    if (node.get_primitive()->broadcast_sizes.is_dynamic())
+        return;
     auto input_layout = node.input().get_output_layout();
 
     const auto& output_sizes = argument.broadcast_sizes;
@@ -168,11 +173,13 @@ broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& nod
     }
     tensor input_sizes_to_compare = tensor(format::get_default_format(reordered_input_dims.size()), reordered_input_dims);
 
-    CLDNN_ERROR_TENSOR_SIZES_NOT_DIVIDABLE(node.id(),
-                                           "Broadcast sizes",
-                                           output_sizes,
-                                           "input sizes",
-                                           input_sizes_to_compare,
-                                           "Invalid broadcast size: not dividable by input size");
+    if (output_sizes.is_static()) {
+        CLDNN_ERROR_TENSOR_SIZES_NOT_DIVIDABLE(node.id(),
+                                              "Broadcast sizes",
+                                              ov::intel_gpu::tensor_from_dims(output_sizes.to_shape()),
+                                              "input sizes",
+                                              input_sizes_to_compare,
+                                              "Invalid broadcast size: not dividable by input size");
+    }
 }
 }  // namespace cldnn

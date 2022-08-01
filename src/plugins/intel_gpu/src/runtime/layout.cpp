@@ -247,6 +247,9 @@ std::vector<size_t> layout::get_dims_order() const {
 
 std::string layout::to_string() const {
     std::stringstream s;
+    s << format.to_string();
+    s << size;
+#if 0
     s << "\n{\n"
       << "\tdata_type=" << data_type_traits::name(data_type) << ";\n"
       << "\tformat=" << format.to_string() << ";\n"
@@ -254,6 +257,7 @@ std::string layout::to_string() const {
       << "\tpad_l=" << data_padding.lower_size().to_string() << ";\n"
       << "\tpad_u=" << data_padding.upper_size().to_string() << ";\n"
       << "}";
+#endif
     return s.str();
 }
 
@@ -471,124 +475,5 @@ std::vector<cldnn::tensor::value_type> convert_dimensions(const std::vector<cldn
         }
     }
     return new_sizes;
-}
-
-ov::PartialShape layout::transform(cldnn::format new_fmt) const {
-    if (format == new_fmt) {
-        return size;
-    }
-
-    cldnn::tensor::value_type default_size = -1;
-    auto shape = size.to_shape();
-    std::vector<tensor::value_type> dims(shape.begin(), shape.end());
-
-    const cldnn::format default_fmt = cldnn::format::bfwzyx;
-    auto old_sizes = convert_dimensions(dims, format.order(), default_fmt.internal_order()); // convert to internal order (bfxyzw)
-
-    auto val_order = default_fmt.internal_order();
-    auto new_order = new_fmt.internal_order();
-
-    std::vector<tensor::value_type> new_sizes(old_sizes.size(), {default_size});
-    auto tmp = 1;
-    auto tmp_z = 1;
-    auto tmp_w = 1;
-
-    for (size_t i = 0; i < default_fmt.order().size(); i++) {
-        auto c = val_order[i];//bfxywz
-
-        // skip f, y, z, and w for the formats that do not have it
-        if (((new_fmt == format::bs_xs_xsv8_bsv8) ||
-                (new_fmt == format::bs_xs_xsv8_bsv16) ||
-                (new_fmt == format::os_i_osv8__ai8) ||
-                (new_fmt == format::os_i_osv16__ai8) ||
-                (new_fmt == format::bs_x_bsv16)) &&
-            ((c == 'f') ||
-                (c == 'y') ||
-                (c == 'z') ||
-                (c == 'w'))) {
-            if (new_order[i] == '?')
-                new_sizes[i] = default_size;
-
-            tmp *= old_sizes[i];//0f0ywz
-
-            continue;
-        }
-
-        // skip z for the formats that do not have it
-        if (((new_fmt != format::bfzyx && new_fmt != format::b_fs_zyx_fsv16 && new_fmt != format::b_fs_zyx_fsv32 &&
-                new_fmt != format::bfwzyx && new_fmt != format::bs_fs_zyx_bsv16_fsv16 && new_fmt != format::bs_fs_zyx_bsv16_fsv32 &&
-                new_fmt != format::bs_fs_zyx_bsv32_fsv16 && new_fmt != format::bs_fs_zyx_bsv32_fsv32 &&
-                new_fmt != format::b_fs_zyx_fsv2 && new_fmt != format::b_fs_zyx_fsv4 &&
-                new_fmt != format::bs_fs_zyx_bsv8_fsv2 && new_fmt != format::bs_fs_zyx_bsv8_fsv4)) && (c == 'z')) {
-            if (new_order[i] == '?')
-                new_sizes[i] = default_size;
-
-            tmp_z *= old_sizes[i];//00000z
-
-            continue;
-        }
-
-        if (new_fmt != format::bfwzyx && c == 'w') {
-            if (new_order[i] == '?')
-                new_sizes[i] = default_size;
-
-            if (new_fmt == format::bfzyx || new_fmt == format::b_fs_zyx_fsv16 ||
-                new_fmt == format::bs_fs_zyx_bsv16_fsv16 || new_fmt == format::b_fs_zyx_fsv32 ||
-                new_fmt == format::bs_fs_zyx_bsv16_fsv32)
-                tmp_w *= old_sizes[i];//0000w0
-            else
-                tmp_z *= old_sizes[i];//0000w0
-
-            continue;
-        }
-
-        auto new_pos = new_order.find(c);
-        if (new_pos == std::string::npos)
-            throw std::invalid_argument("cannot convert to new format");
-        new_sizes[new_pos] = old_sizes[i];
-    }
-
-    // in case of formats with smaller number of dimensions than input, flatten is performed below
-    if (tmp != 1 || tmp_z != 1 || tmp_w != 1) {
-        for (size_t i = 0; i < default_fmt.order().size(); i++) {
-            auto c = val_order[i];
-            if (c == 'x') {
-                auto new_pos = new_order.find(c);
-                new_sizes[new_pos] *= tmp;
-            }
-
-            if (c == 'y') {
-                auto new_pos = new_order.find(c);
-                if (new_pos != std::string::npos)
-                    new_sizes[new_pos] *= tmp_z;
-            }
-
-            if (c == 'z') {
-                auto new_pos = new_order.find(c);
-                if (new_pos != std::string::npos)
-                    new_sizes[new_pos] *= tmp_w;
-            }
-        }
-    }
-
-    for (size_t i = 0; i < new_order.size(); i++) {
-        auto c = new_order[i];//bfxywz
-        if (c == '?')
-            continue;
-        if (new_sizes[i] == -1) {
-            new_sizes[i] = 1;
-        }
-    }
-
-    auto new_dims = convert_dimensions(new_sizes, default_fmt.internal_order(), new_fmt.order());
-    for (int idx = (new_dims.size() - 1); idx >= 0; idx--) {
-        if (new_dims[idx] == -1)
-            new_dims.erase((new_dims.begin() + idx));
-        else if (new_dims[idx] < 0)
-            new_dims[idx] *= -1;
-    }
-
-    ov::Shape new_shape(new_dims.begin(), new_dims.end());
-    return ov::PartialShape(new_shape);
 }
 }  // namespace cldnn
