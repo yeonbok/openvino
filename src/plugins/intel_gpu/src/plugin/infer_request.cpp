@@ -1307,7 +1307,7 @@ InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngin
         auto blobPtr = std::make_shared<RemoteUSMbuffer>(m_graph->GetContext(),
                                                          m_graph->GetNetwork()->get_stream(),
                                                          desc,
-                                                         layout,
+                                                         l,
                                                          nullptr,
                                                          0,
                                                          0,
@@ -1319,7 +1319,7 @@ InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngin
         auto blobPtr = std::make_shared<RemoteCLbuffer>(m_graph->GetContext(),
                                                         m_graph->GetNetwork()->get_stream(),
                                                         desc,
-                                                        layout);
+                                                        l);
         getBlobImpl(blobPtr.get())->allocate();
         checkAlloc(blobPtr, str_device_mem_not_allocated);
         return blobPtr;

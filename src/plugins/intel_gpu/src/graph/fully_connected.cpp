@@ -105,8 +105,8 @@ layout fully_connected_inst::calc_output_layout(fully_connected_node const& node
     }
 
     format output_format = get_preferred_format(node, impl_param);
-    auto batch = input_layout.size[0];
-    auto feature = input_layout.size[1];
+    auto batch = input_layout.get_partial_shape()[0];
+    auto feature = input_layout.get_partial_shape()[1];
     auto output_size = ov::PartialShape{batch, weights_layout.batch()};
     if (desc->input_size == 3) {
         output_size = ov::PartialShape{batch, feature, weights_layout.batch()};

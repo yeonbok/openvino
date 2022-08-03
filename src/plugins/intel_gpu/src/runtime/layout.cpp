@@ -244,6 +244,9 @@ std::vector<size_t> layout::get_dims_order() const {
 
 std::string layout::to_string() const {
     std::stringstream s;
+    s << format.to_string();
+    s << size;
+#if 0
     s << "\n{\n"
       << "\tdata_type=" << data_type_traits::name(data_type) << ";\n"
       << "\tformat=" << format.to_string() << ";\n"
@@ -251,6 +254,7 @@ std::string layout::to_string() const {
       << "\tpad_l=" << data_padding.lower_size().to_string() << ";\n"
       << "\tpad_u=" << data_padding.upper_size().to_string() << ";\n"
       << "}";
+#endif
     return s.str();
 }
 

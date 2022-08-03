@@ -22,59 +22,7 @@ primitive_type_id strided_slice::type_id() {
 layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, kernel_impl_params const& impl_param) {
     auto desc = impl_param.typed_desc<strided_slice>();
     auto input_layout = impl_param.input_layouts[0];
-
-    ov::op::v1::StridedSlice op;
-    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
-    std::vector<ov::PartialShape> input_shapes = {
-        node.get_dependency(0).get_output_layout().size,
-        node.get_dependency(1).get_output_layout().size,
-        node.get_dependency(2).get_output_layout().size,
-        node.get_dependency(3).get_output_layout().size
-    };
-
-    auto begin_mask = desc->begin_mask;
-    auto end_mask = desc->end_mask;
-    auto new_axis_mask = desc->new_axis_mask;
-    auto shrink_axis_mask = desc->shrink_axis_mask;
-
-    op.set_begin_mask(desc->begin_mask);
-    op.set_end_mask(desc->end_mask);
-    op.set_new_axis_mask(desc->new_axis_mask);
-    op.set_shrink_axis_mask(desc->shrink_axis_mask);
-
-    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock1(node.const_mem[0], node.get_program().get_stream());
-    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock2(node.const_mem[1], node.get_program().get_stream());
-    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock3(node.const_mem[2], node.get_program().get_stream());
-
-    auto ptr1 = lock1.data();
-    auto ptr2 = lock2.data();
-    auto ptr3 = lock3.data();
-
-    auto make_tensor = [](layout l, void* memory_pointer) {
-        ov::element::Type et;
-
-        switch (l.data_type) {
-            case data_types::i64: et = ov::element::i64; break;
-            case data_types::i32: et = ov::element::i32; break;
-            default: IE_THROW() << "unsupported element type in strided slice primitive";
-        }
-
-        return std::make_shared<ngraph::runtime::HostTensor>(et, l.size.to_shape(), memory_pointer);
-    };
-
-
-    auto tensor1 = make_tensor(node.const_mem[0]->get_layout(), ptr1);
-    auto tensor2 = make_tensor(node.const_mem[1]->get_layout(), ptr2);
-    auto tensor3 = make_tensor(node.const_mem[2]->get_layout(), ptr3);
-
-    std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {
-        {1, tensor1},
-        {2, tensor2},
-        {3, tensor3},
-    };
-    ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
     auto output_format = format::get_default_format(desc->out_size.size());
-
     if (!node.const_mem.empty()) {
         ov::op::v1::StridedSlice op;
         std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
@@ -190,7 +138,8 @@ void strided_slice_inst::update_shape() {
     node.const_mem = {in_mem1, in_mem2, in_mem3};
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
-    auto new_layout = _node.type()->calc_output_layout(_node);
+    // TODO: create kernel impl param with dyn layout
+    auto new_layout = _node.type()->calc_output_layout(_node, *_node.get_kernel_impl_params());
     auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
     auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
     GPU_DEBUG_IF(debug_config->verbose >= 4) {
