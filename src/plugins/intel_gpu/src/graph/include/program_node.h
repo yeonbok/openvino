@@ -403,8 +403,6 @@ public:
         cur_id = 0;
     }
 
-    bool is_dynamic() const;
-
     virtual std::vector<size_t> get_shape_infer_dependencies() const {
         // Default impl will request all deps for shape infer
         // It means that update_shape impl will wait for all memory deps
