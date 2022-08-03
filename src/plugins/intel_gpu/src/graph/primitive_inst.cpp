@@ -126,7 +126,7 @@ void primitive_inst::update_shape() {
     params->memory_deps = memory_deps;
     auto out_layouts = _node.type()->calc_output_layouts(_node, *params);
     if (out_layouts.empty())
-        new_layout = _node.type()->calc_output_layout(_node);
+        new_layout = _node.type()->calc_output_layout(_node, *params);
     else
         new_layout = out_layouts[0];
 
@@ -138,7 +138,6 @@ void primitive_inst::update_shape() {
 
     if (out_layout != new_layout)
         set_shape_change();
-
     // TODO: Get rid of this const_cast
     const_cast<program_node&>(_node).set_output_layout(new_layout);
 }
