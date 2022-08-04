@@ -119,9 +119,11 @@ public:
         auto gemm_optional_params =
             get_default_optional_params<kernel_selector::gemm_optional_params>(arg.get_program());
 
-        for (size_t i = 1; i < arg.inputs_count(); i++) {
-            gemm_params.inputs.push_back(convert_data_tensor(impl_param->input_layouts[i]));
+        gemm_params.inputs.clear();
+        for (size_t i = 0; i < input_layouts.size(); i++) {
+            gemm_params.inputs.push_back(convert_data_tensor(input_layouts[i]));
         }
+        gemm_params.outputs[0] = convert_data_tensor(output_layout);
 
         gemm_params.alpha = desc->alpha;
         gemm_params.beta = desc->beta;
