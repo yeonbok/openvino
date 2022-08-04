@@ -110,5 +110,4 @@ std::string strided_slice_inst::to_string(strided_slice_node const& node) {
 
 strided_slice_inst::typed_primitive_inst(network& network, strided_slice_node const& node)
     : parent(network, node) {}
-
 }  // namespace cldnn
