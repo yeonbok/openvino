@@ -202,7 +202,7 @@ void primitive_inst::update_impl() {
             } else if (lru_element_popped) {
                 auto kernel_ids = lru_entry->get_kernel_ids();
                 for (auto k : kernel_ids) {
-                    _network.get_program()->remove_kernel_entry(k);
+                    _network.get_program()->remove_kernel(k);
                 }
             }
         } else {
