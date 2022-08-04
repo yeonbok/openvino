@@ -21,8 +21,8 @@ primitive_type_id gather::type_id() {
 layout gather_inst::calc_output_layout(gather_node const& node, kernel_impl_params const& impl_param) {
     auto desc = impl_param.typed_desc<gather>();
 
-    auto input_layout = impl_param.input_layouts[0];
-    std::vector<tensor::value_type> dims_converted(desc->output_shape.to_shape().begin(), desc->output_shape.to_shape().end());
+    auto input_layout = impl_param.get_input_layout();
+    std::vector<tensor::value_type> dims_converted(desc->output_shape.begin(), desc->output_shape.end());
     // extend shape to 4d
     for (size_t i = dims_converted.size(); i < 4; i++)
         dims_converted.push_back(1);
@@ -68,33 +68,31 @@ layout gather_inst::calc_output_layout(gather_node const& node, kernel_impl_para
 std::vector<layout> gather_inst::calc_output_layouts(gather_node const& node, kernel_impl_params const& impl_param) {
     auto desc = impl_param.typed_desc<gather>();
 
-    auto input_layout = impl_param.input_layouts[0];
-    auto output_format = desc->output_format;
-    auto output_shape = desc->output_shape;
+    auto input_layout = impl_param.get_input_layout();
 
     auto output_type = input_layout.data_type;
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;
     }
 
-    {
-        ov::op::v8::Gather op;
-        op.set_batch_dims(desc->batch_dim);
-        std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
-        std::vector<ov::PartialShape> input_shapes = {
-            node.get_dependency(0).get_output_layout().get_partial_shape(),
-            node.get_dependency(1).get_output_layout().get_partial_shape(),
-            ov::PartialShape{1} // axis input is removed on gather primitive creation, so we can't use get_dependency(2)
-        };
+    ov::op::v8::Gather op;
+    op.set_batch_dims(desc->batch_dim);
+    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+    std::vector<ov::PartialShape> input_shapes = {
+        impl_param.input_layouts[0].get_partial_shape(),
+        impl_param.input_layouts[1].get_partial_shape(),
+        ov::PartialShape{1} // axis input is removed on gather primitive creation, so we can't user get_dependency(2)
+    };
 
-        int64_t axis = desc->axis;
+    int64_t axis = desc->axis;
 
-        auto axis_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64, ov::Shape{1}, static_cast<void*>(&axis));
-        std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
-        ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
-        return {layout{output_shapes[0], output_type, output_format}};
-    }
-    return {layout{output_shape, output_type, output_format}};
+    auto axis_tensor = std::make_shared<ngraph::runtime::HostTensor>(ov::element::i64, ov::Shape{1}, static_cast<void*>(&axis));
+    std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
+    ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
+
+    format output_format = format::adjust_to_rank(input_layout.format, output_shapes[0].size());
+
+    return { layout{output_shapes[0], output_type, output_format} };
 }
 
 std::string gather_inst::to_string(gather_node const& node) {

@@ -3,10 +3,10 @@
 //
 
 #include "intel_gpu/runtime/format.hpp"
+#include "openvino/core/except.hpp"
 
 #include <list>
 #include <vector>
-#include <unordered_set>
 #include <algorithm>
 
 #define FMT_TRAITS(fmt, ...) {format::fmt, {#fmt, __VA_ARGS__}}
@@ -179,9 +179,7 @@ static const std::map<format::type, format_traits> format_traits_map {
 };
 
 const format_traits& format::traits(type fmt) {
-    if (format_traits_map.find(fmt) == format_traits_map.end()) {
-        throw std::runtime_error("[GPU] Format description is missing in fmt traits");
-    }
+    OPENVINO_ASSERT(format_traits_map.find(fmt) != format_traits_map.end(), "[GPU] Format description is missing in fmt traits");
     return format_traits_map.at(fmt);
 }
 
@@ -218,19 +216,26 @@ format format::get_default_format(size_t rank, bool is_weights, bool is_grouped)
     return default_fmt;
 }
 
-format format::adjust_to_rank(size_t new_rank) {
+format format::adjust_to_rank(format fmt, size_t new_rank) {
+    // TODO: remove as soon as rank extension is not needed anymore
     new_rank = std::max<size_t>(new_rank, 4);
-    auto current_traits = format::traits(value);
+
+    auto current_traits = format::traits(fmt);
     auto current_order = current_traits._order;
     auto current_blocking = current_traits.block_sizes;
     auto current_rank = current_order.size();
     if (new_rank == current_rank)
-        return *this;
+        return fmt;
 
-    if (format::is_weights_format(value) ||
-        format::is_image_2d(value) ||
-        format::is_winograd(value))
-        throw std::runtime_error("Can't adjust format for weights, images and winograd formats");
+    auto is_adjustable = [](const format& fmt) -> bool {
+        return !format::is_weights_format(fmt) &&
+               !format::is_image_2d(fmt) &&
+               !format::is_winograd(fmt) &&
+               fmt != format::b_fs_yx_32fp;
+    };
+
+    // Skip special formats as order + blocking desc may be not enough to properly match them
+    OPENVINO_ASSERT(is_adjustable(fmt), "Format ", fmt, " is not adjustable");
 
     auto align_order = [](std::vector<size_t>& order, size_t current_rank, size_t new_rank) {
         auto max_element_it = std::max_element(order.begin(), order.end());
@@ -251,10 +256,7 @@ format format::adjust_to_rank(size_t new_rank) {
         auto candidate_blocking = candidate_traits.block_sizes;
         auto candidate_rank = candidate_traits.order.size();
 
-        if (candidate_rank != new_rank ||
-            format::is_weights_format(candidate_tag) ||
-            format::is_image_2d(candidate_tag) ||
-            format::is_winograd(candidate_tag))
+        if (candidate_rank != new_rank || !is_adjustable(candidate_tag))
             continue;
 
         bool same_blocking_scheme = candidate_blocking == current_blocking;
@@ -273,7 +275,7 @@ format format::adjust_to_rank(size_t new_rank) {
             return candidate_tag;
     }
 
-    throw std::runtime_error("Can't adjust format to the new rank");
+    OPENVINO_ASSERT(false, "Can't adjust format ", fmt.to_string(), " to the new rank (", new_rank, ")");
 }
 
 }  // namespace cldnn
