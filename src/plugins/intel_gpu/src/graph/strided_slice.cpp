@@ -23,6 +23,21 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, ke
     auto desc = impl_param.typed_desc<strided_slice>();
     auto input_layout = impl_param.input_layouts[0];
     auto output_format = format::get_default_format(desc->out_size.size());
+    auto out_shape = desc->out_size.to_shape();
+    std::vector<tensor::value_type> dims_converted(out_shape.begin(), out_shape.end());
+    // extend shape to 4d
+    for (size_t i = dims_converted.size(); i < 4; i++) {
+        dims_converted.push_back(1);
+    }
+    auto out_size = cldnn::tensor(output_format, dims_converted);
+    return layout{input_layout.data_type, output_format, out_size};
+}
+
+template<typename ShapeType>
+std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& node, const kernel_impl_params& impl_param) {
+    auto desc = impl_param.typed_desc<strided_slice>();
+    auto input_layout = impl_param.input_layouts[0];
+    auto output_format = format::get_default_format(desc->out_size.size());
     if (!node.const_mem.empty()) {
         ov::op::v1::StridedSlice op;
         std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
@@ -63,7 +78,6 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, ke
             return std::make_shared<ngraph::runtime::HostTensor>(et, l.get_partial_shape().to_shape(), memory_pointer);
         };
 
-
         auto tensor1 = make_tensor(node.const_mem[0]->get_layout(), ptr1);
         auto tensor2 = make_tensor(node.const_mem[1]->get_layout(), ptr2);
         auto tensor3 = make_tensor(node.const_mem[2]->get_layout(), ptr3);
@@ -74,81 +88,9 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, ke
             {3, tensor3},
         };
         ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
-        return layout{output_shapes[0], input_layout.data_type, output_format};
+        return {layout{output_shapes[0], input_layout.data_type, output_format}};
     }
     return layout{input_layout.data_type, output_format, output_shapes[0]};
-}
-
-void strided_slice_inst::update_shape() {
-    auto& node = const_cast<strided_slice_node&>(dynamic_cast<const strided_slice_node&>(_node));
-    auto in_mem1 = _network.get_output_memory(_node.get_dependency(1).id());
-    auto in_mem2 = _network.get_output_memory(_node.get_dependency(2).id());
-    auto in_mem3 = _network.get_output_memory(_node.get_dependency(3).id());
-
-    node.const_mem = {in_mem1, in_mem2, in_mem3};
-
-    GPU_DEBUG_GET_INSTANCE(debug_config);
-    auto new_layout = _node.type()->calc_output_layout(_node);
-    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
-    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
-    GPU_DEBUG_IF(debug_config->verbose >= 4) {
-        GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
-    }
-    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
-        set_shape_change();
-    // TODO: Get rid of this const_cast
-    node.set_output_layout(new_layout);
-    return layout{desc->out_size, input_layout.data_type, output_format};
-}
-
-template<typename ShapeType>
-std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& node, const kernel_impl_params& impl_param) {
-    auto desc = impl_param.typed_desc<strided_slice>();
-    auto input0_layout = impl_param.get_input_layout(0);
-
-    auto& constant_mem = impl_param.memory_deps;
-
-    if (constant_mem.empty()) {
-        auto out_shape = ov::PartialShape::dynamic(input0_layout.get_rank());
-        return { layout{out_shape, input0_layout.data_type, format::get_default_format(out_shape.rank().get_length())} };
-    }
-
-    ov::op::v1::StridedSlice op;
-    std::vector<ShapeType> output_shapes = {ShapeType{}};
-    std::vector<ShapeType> input_shapes = {
-        input0_layout.get<ShapeType>(),
-        impl_param.get_input_layout(1).get<ShapeType>(),
-        impl_param.get_input_layout(2).get<ShapeType>(),
-        impl_param.get_input_layout(3).get<ShapeType>()
-    };
-
-    op.set_begin_mask(desc->begin_mask);
-    op.set_end_mask(desc->end_mask);
-    op.set_new_axis_mask(desc->new_axis_mask);
-    op.set_shrink_axis_mask(desc->shrink_axis_mask);
-    op.set_ellipsis_mask_mask(desc->ellipsis_mask);
-
-    auto mem1 = constant_mem.at(1);
-    auto mem2 = constant_mem.at(2);
-    auto mem3 = constant_mem.at(3);
-
-    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock1(mem1, node.get_program().get_stream());
-    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock2(mem2, node.get_program().get_stream());
-    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock3(mem3, node.get_program().get_stream());
-
-    auto tensor1 = make_host_tensor(mem1->get_layout(), lock1.data());
-    auto tensor2 = make_host_tensor(mem2->get_layout(), lock2.data());
-    auto tensor3 = make_host_tensor(mem3->get_layout(), lock3.data());
-
-    std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {
-        {1, tensor1},
-        {2, tensor2},
-        {3, tensor3},
-    };
-    ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
-    auto output_format = format::get_default_format(output_shapes[0].size());
-
-    return { layout{output_shapes[0], input0_layout.data_type, output_format} };
 }
 
 void strided_slice_inst::update_shape() {
@@ -202,5 +144,4 @@ std::string strided_slice_inst::to_string(strided_slice_node const& node) {
 
 strided_slice_inst::typed_primitive_inst(network& network, strided_slice_node const& node)
     : parent(network, node) {}
-
 }  // namespace cldnn
