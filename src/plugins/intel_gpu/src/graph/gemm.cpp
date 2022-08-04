@@ -24,6 +24,39 @@ layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params c
 
     auto input0_layout = impl_param.input_layouts[0];
     auto input1_layout = impl_param.input_layouts[1];
+    bool transpose_input0 = prim->transpose_input0;
+    bool transpose_input1 = prim->transpose_input1;
+
+    auto M = !transpose_input0 ? input0_layout.spatial(1) : input0_layout.spatial(0);
+    auto N = !transpose_input1 ? input1_layout.spatial(0) : input1_layout.spatial(1);
+
+    auto output_size = input0_layout.get_tensor();
+
+    for (size_t i = 1; i < prim->input_size(); ++i) {
+        auto input_layout = impl_param.input_layouts[i];
+        output_size = tensor::max(output_size, input_layout.get_tensor());
+    }
+
+    output_size.spatial[0] = N;
+    output_size.spatial[1] = M;
+    auto output_type = input0_layout.data_type;
+    if ((output_type == data_types::u8 || output_type == data_types::i8) && prim->output_data_type)
+        output_type = *prim->output_data_type;
+
+    if (impl_param.has_fused_primitives()) {
+        output_type = impl_param.get_fused_output_layout().data_type;
+    }
+
+    auto output_format = input0_layout.format;
+
+    return layout(output_type, output_format, output_size, prim->output_padding);
+}
+
+std::vector<layout> gemm_inst::calc_output_layouts(gemm_node const& node, kernel_impl_params const& impl_param) {
+    auto prim = impl_param.typed_desc<gemm>();
+
+    auto input0_layout = impl_param.input_layouts[0];
+    auto input1_layout = impl_param.input_layouts[1];
 
     ov::op::v0::MatMul op;
     op.set_transpose_a(prim->transpose_input0);
@@ -47,7 +80,7 @@ layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params c
 
     auto output_format = input0_layout.format;
 
-    return layout(output_shapes[0], output_type, output_format, prim->output_padding);
+    return { layout(output_shapes[0], output_type, output_format, prim->output_padding) };
 }
 
 std::string gemm_inst::to_string(gemm_node const& node) {
