@@ -146,6 +146,7 @@ public:
                                                                                  get_fused_primitives(),
                                                                                  get_fused_activations_funcs(), get_fused_activations_params()));
 
+        params->memory_deps = get_const_memory_deps();
         return params;
     }
 
