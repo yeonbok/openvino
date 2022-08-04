@@ -8,6 +8,8 @@
 #include "primitive_type_base.h"
 #include "intel_gpu/runtime/memory.hpp"
 #include "intel_gpu/runtime/error_handler.hpp"
+#include "intel_gpu/runtime/debug_configuration.hpp"
+#include "intel_gpu/plugin/common_utils.hpp"
 #include "json_object.h"
 #include <string>
 
@@ -23,43 +25,30 @@ primitive_type_id reshape::type_id() {
 layout reshape_inst::calc_output_layout(reshape_node const& node, kernel_impl_params const& impl_param) {
     assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
            "Output data type forcing is not supported for reshape_node!");
-    auto prim = node.get_primitive();
-    auto input_layout = node.input().get_non_padded_output_layout();
+    auto input_layout = impl_param.get_non_padded_input_layout();
+    auto desc = impl_param.typed_desc<reshape>();
+    auto sizes = ov::intel_gpu::tensor_from_dims(desc->output_shape.to_shape()).sizes();
+    auto input_sizes = input_layout.get_tensor().sizes();
+    size_t need_recalc = 0;
+    uint32_t shape_count = 1;
 
-    if (input_layout.is_static()) {
-        auto sizes = prim->output_shape;
-        #if 0
-        if (sizes.size() < input_layout.format.dimension()) {
-            sizes.insert(sizes.end(), input_layout.format.dimension() - sizes.size(), 1);
-        }
-        #endif
-        auto input_sizes = input_layout.get_dims();
-        int64_t need_recalc = -1;
-        ov::Dimension::value_type shape_count = 1;
-
-        for (size_t i = 0; i < sizes.size(); i++) {
-            if (sizes[i].is_dynamic()) {
-                if (need_recalc >= 0) {
-                    CLDNN_ERROR_MESSAGE(node.id(), "Only one dimension of the new shape can be -1");
-                }
-                need_recalc = i;
-                continue;
+    for (size_t i = 0; i < sizes.size(); i++) {
+        if (sizes[i] == -1) {
+            if (need_recalc) {
+                CLDNN_ERROR_MESSAGE(desc->id, "Only one dimension of the new shape can be -1");
             }
-            // when output pattern is 0, then we need to copy corresponding dimension from input
-            if (sizes[i] == 0) {
-                sizes[i] = input_sizes[i];
-            }
-            shape_count *= sizes[i].get_length();
+            need_recalc = i;
+            continue;
         }
-        if (need_recalc >= 0)
-            sizes[need_recalc] = static_cast<int>(input_layout.count()) / shape_count;
-
-        node.reset_shape_ready();
-
-        return layout{sizes, input_layout.data_type, input_layout.format};
-    } else {
-        return layout{prim->output_shape, input_layout.data_type, input_layout.format};
+        if (sizes[i] == 0) {
+            sizes[i] = input_sizes[i];
+        }
+        shape_count *= sizes[i];
     }
+    if (need_recalc)
+        sizes[need_recalc] = static_cast<int>(input_layout.count()) / shape_count;
+
+    return layout{input_layout.data_type, input_layout.format, tensor(sizes)};
 }
 
 template<typename ShapeType>
