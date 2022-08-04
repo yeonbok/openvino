@@ -23,6 +23,21 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, ke
     auto desc = impl_param.typed_desc<strided_slice>();
     auto input_layout = impl_param.input_layouts[0];
     auto output_format = format::get_default_format(desc->out_size.size());
+    auto out_shape = desc->out_size.to_shape();
+    std::vector<tensor::value_type> dims_converted(out_shape.begin(), out_shape.end());
+    // extend shape to 4d
+    for (size_t i = dims_converted.size(); i < 4; i++) {
+        dims_converted.push_back(1);
+    }
+    auto out_size = cldnn::tensor(output_format, dims_converted);
+    return layout{input_layout.data_type, output_format, out_size};
+}
+
+template<typename ShapeType>
+std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& node, const kernel_impl_params& impl_param) {
+    auto desc = impl_param.typed_desc<strided_slice>();
+    auto input_layout = impl_param.input_layouts[0];
+    auto output_format = format::get_default_format(desc->out_size.size());
     if (!node.const_mem.empty()) {
         ov::op::v1::StridedSlice op;
         std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
@@ -63,7 +78,6 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, ke
             return std::make_shared<ngraph::runtime::HostTensor>(et, l.get_partial_shape().to_shape(), memory_pointer);
         };
 
-
         auto tensor1 = make_tensor(node.const_mem[0]->get_layout(), ptr1);
         auto tensor2 = make_tensor(node.const_mem[1]->get_layout(), ptr2);
         auto tensor3 = make_tensor(node.const_mem[2]->get_layout(), ptr3);
@@ -74,34 +88,11 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, ke
             {3, tensor3},
         };
         ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
-        return layout{output_shapes[0], input_layout.data_type, output_format};
+        return {layout{output_shapes[0], input_layout.data_type, output_format}};
     }
     return layout{input_layout.data_type, output_format, output_shapes[0]};
 }
 
-void strided_slice_inst::update_shape() {
-    auto& node = const_cast<strided_slice_node&>(dynamic_cast<const strided_slice_node&>(_node));
-    auto in_mem1 = _network.get_output_memory(_node.get_dependency(1).id());
-    auto in_mem2 = _network.get_output_memory(_node.get_dependency(2).id());
-    auto in_mem3 = _network.get_output_memory(_node.get_dependency(3).id());
-
-    node.const_mem = {in_mem1, in_mem2, in_mem3};
-
-    GPU_DEBUG_GET_INSTANCE(debug_config);
-    auto new_layout = _node.type()->calc_output_layout(_node);
-    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
-    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
-    GPU_DEBUG_IF(debug_config->verbose >= 4) {
-        GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
-    }
-    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
-        set_shape_change();
-    // TODO: Get rid of this const_cast
-    node.set_output_layout(new_layout);
-    return layout{desc->out_size, input_layout.data_type, output_format};
-}
-
-template<typename ShapeType>
 std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& /*node*/, const kernel_impl_params& impl_param) {
     auto desc = impl_param.typed_desc<strided_slice>();
     auto input0_layout = impl_param.get_input_layout(0);
@@ -151,31 +142,6 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
     return { layout{output_shapes[0], input0_layout.data_type, output_format} };
 }
 
-void strided_slice_inst::update_shape() {
-    if (!_network.shape_changed())
-        return;
-
-    auto& node = const_cast<strided_slice_node&>(dynamic_cast<const strided_slice_node&>(_node));
-    auto in_mem1 = _network.get_output_memory(_node.get_dependency(1).id());
-    auto in_mem2 = _network.get_output_memory(_node.get_dependency(2).id());
-    auto in_mem3 = _network.get_output_memory(_node.get_dependency(3).id());
-
-    node.const_mem = {in_mem1, in_mem2, in_mem3};
-
-    GPU_DEBUG_GET_INSTANCE(debug_config);
-    // TODO: create kernel impl param with dyn layout
-    auto new_layout = _node.type()->calc_output_layout(_node, *_node.get_kernel_impl_params());
-    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
-    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
-    GPU_DEBUG_IF(debug_config->verbose >= 4) {
-        GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
-    }
-    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
-        set_shape_change();
-    // TODO: Get rid of this const_cast
-    node.set_output_layout(new_layout);
-}
-
 std::string strided_slice_inst::to_string(strided_slice_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -202,5 +168,4 @@ std::string strided_slice_inst::to_string(strided_slice_node const& node) {
 
 strided_slice_inst::typed_primitive_inst(network& network, strided_slice_node const& node)
     : parent(network, node) {}
-
 }  // namespace cldnn
