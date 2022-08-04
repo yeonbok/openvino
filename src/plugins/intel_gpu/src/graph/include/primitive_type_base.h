@@ -68,7 +68,6 @@ struct primitive_type_base : primitive_type {
 
     std::vector<cldnn::layout> calc_output_layouts(const cldnn::program_node& node, const kernel_impl_params& impl_param) const override {
         OPENVINO_ASSERT(node.type() == this, "primitive_type_base::calc_output_layouts: primitive type mismatch");
-
         return typed_primitive_inst<PType>::template calc_output_layouts<ov::PartialShape>(node, impl_param);
     }
 
