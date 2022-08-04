@@ -24,15 +24,6 @@
 #include <string>
 #include <set>
 
-// tmp : to be removed
-#include "broadcast_inst.h"
-#include "crop_inst.h"
-#include "strided_slice_inst.h"
-#include "gather_inst.h"
-#include "one_hot_inst.h"
-#include "eltwise_inst.h"
-#include "gemm_inst.h"
-
 using namespace cldnn;
 
 thread_local size_t program_node::cur_id = 0;
@@ -235,20 +226,8 @@ bool program_node::is_detached(bool whole_branch) {
 }
 
 layout program_node::calc_output_layout() const {
-    if (is_type<broadcast>() || is_type<crop>() || is_type<strided_slice>()
-        || is_type<gather>() || is_type<one_hot>() || is_type<eltwise>()
-        || is_type<gemm>())
-        return calc_output_layouts()[0];
-    return type()->calc_output_layout(*this, *get_kernel_impl_params());
-    std::map<int, memory::ptr> constant_deps;
-    for (size_t i = 0; i < get_dependencies().size(); i++) {
-        auto& dep = get_dependency(i);
-        if (dep.is_type<data>()) {
-            constant_deps.insert({i, dep.as<data>().get_attached_memory_ptr()});
-        }
-    }
-
-    auto out_layouts = type()->calc_output_layouts(*this, *get_kernel_impl_params(), constant_deps);
+    auto params = get_kernel_impl_params();
+    auto out_layouts = type()->calc_output_layouts(*this, *params);
     if (!out_layouts.empty()) {
         return out_layouts[0];
     }
