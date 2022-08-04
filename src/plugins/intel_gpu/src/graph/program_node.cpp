@@ -30,6 +30,9 @@
 #include "strided_slice_inst.h"
 #include "gather_inst.h"
 #include "one_hot_inst.h"
+#include "eltwise_inst.h"
+#include "gemm_inst.h"
+
 using namespace cldnn;
 
 thread_local size_t program_node::cur_id = 0;
@@ -236,7 +239,8 @@ layout program_node::calc_output_layout() const {
         get_program().get_options().get<build_option_type::allow_new_shape_infer>()->enabled();
     if (allow_new_shape_infer) {
         if (is_type<broadcast>() || is_type<crop>() || is_type<strided_slice>()
-            || is_type<gather>() || is_type<one_hot>())
+            || is_type<gather>() || is_type<one_hot>() || is_type<eltwise>()
+            || is_type<gemm>())
             return calc_output_layouts()[0];
 
         auto out_layouts = type()->calc_output_layouts(*this, *get_kernel_impl_params());
