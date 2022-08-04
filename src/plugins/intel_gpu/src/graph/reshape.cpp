@@ -8,6 +8,8 @@
 #include "primitive_type_base.h"
 #include "intel_gpu/runtime/memory.hpp"
 #include "intel_gpu/runtime/error_handler.hpp"
+#include "intel_gpu/runtime/debug_configuration.hpp"
+#include "intel_gpu/plugin/common_utils.hpp"
 #include "json_object.h"
 #include <string>
 
@@ -23,68 +25,63 @@ primitive_type_id reshape::type_id() {
 layout reshape_inst::calc_output_layout(reshape_node const& node, kernel_impl_params const& impl_param) {
     assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
            "Output data type forcing is not supported for reshape_node!");
-    auto prim = node.get_primitive();
-    auto input_layout = node.input().get_non_padded_output_layout();
+    auto input_layout = impl_param.get_non_padded_input_layout();
+    auto desc = impl_param.typed_desc<reshape>();
+    auto sizes = ov::intel_gpu::tensor_from_dims(desc->output_shape.to_shape()).sizes();
+    auto input_sizes = input_layout.get_tensor().sizes();
+    size_t need_recalc = 0;
+    uint32_t shape_count = 1;
 
-    if (input_layout.is_static()) {
-        auto sizes = prim->output_shape;
-        #if 0
-        if (sizes.size() < input_layout.format.dimension()) {
-            sizes.insert(sizes.end(), input_layout.format.dimension() - sizes.size(), 1);
-        }
-        #endif
-        auto input_sizes = input_layout.get_dims();
-        int64_t need_recalc = -1;
-        ov::Dimension::value_type shape_count = 1;
-
-        for (size_t i = 0; i < sizes.size(); i++) {
-            if (sizes[i].is_dynamic()) {
-                if (need_recalc >= 0) {
-                    CLDNN_ERROR_MESSAGE(node.id(), "Only one dimension of the new shape can be -1");
-                }
-                need_recalc = i;
-                continue;
+    for (size_t i = 0; i < sizes.size(); i++) {
+        if (sizes[i] == -1) {
+            if (need_recalc) {
+                CLDNN_ERROR_MESSAGE(desc->id, "Only one dimension of the new shape can be -1");
             }
-            // when output pattern is 0, then we need to copy corresponding dimension from input
-            if (sizes[i] == 0) {
-                sizes[i] = input_sizes[i];
-            }
-            shape_count *= sizes[i].get_length();
+            need_recalc = i;
+            continue;
         }
-        if (need_recalc >= 0)
-            sizes[need_recalc] = static_cast<int>(input_layout.count()) / shape_count;
-
-        node.reset_shape_ready();
-
-        return layout{sizes, input_layout.data_type, input_layout.format};
-    } else {
-        return layout{prim->output_shape, input_layout.data_type, input_layout.format};
+        if (sizes[i] == 0) {
+            sizes[i] = input_sizes[i];
+        }
+        shape_count *= sizes[i];
     }
+    if (need_recalc)
+        sizes[need_recalc] = static_cast<int>(input_layout.count()) / shape_count;
+
+    return layout{input_layout.data_type, input_layout.format, tensor(sizes)};
 }
 
 template<typename ShapeType>
 std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, const kernel_impl_params& impl_param) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for reshape_node!");
-    auto prim = impl_param.typed_desc<reshape>();
-    auto input_layout = impl_param.get_input_layout(0);
+    auto prim = node.get_primitive();
+    auto input_layout = node.input().get_non_padded_output_layout();
 
+    ov::PartialShape pattern_shape = node.get_dependencies().size() == 2 ? node.get_dependency(1).get_output_layout().get_partial_shape()
+                                                                         : ov::Shape{ prim->output_pattern.size() };
+    if (input_layout.is_dynamic()) {
+        auto rank = pattern_shape.rank().get_length();
+        return { layout{ov::PartialShape::dynamic(rank),
+                        input_layout.data_type,
+                        input_layout.format.adjust_to_rank(rank)} };
+    }
     auto& memory_deps = impl_param.memory_deps;
     // On program build stage for the cases with pattern being stored in a runtime tensor
     // we return output_partial_shape taken from the original model intead of something like PartialShape::dynamic(rank)
     // as ngraph may refine output shape using interval arithmetic
     if (memory_deps.empty() && prim->output_pattern.empty()) {
-        return { layout{prim->output_partial_shape, input_layout.data_type, format::adjust_to_rank(input_layout.format, prim->output_partial_shape.size())} };
+        return { layout{prim->output_shape, input_layout.data_type, input_layout.format.adjust_to_rank(prim->output_shape.size())} };
     }
 
     ov::op::v1::Reshape op;
     op.set_special_zero(prim->special_zero);
 
-    ShapeType pattern_shape = impl_param.input_layouts.size() == 2 ? impl_param.get_input_layout(1).get<ShapeType>()
-                                                           : ShapeType(ov::Shape{ prim->output_pattern.size() });
-    std::vector<ShapeType> output_shapes = {ShapeType()};
-    std::vector<ShapeType> input_shapes = {
-        input_layout.get<ShapeType>(),
+    pattern_shape = impl_param.input_layouts.size() == 2 ? impl_param.input_layouts[1].get_partial_shape()
+                                                         : ov::Shape{ prim->output_pattern.size() };
+    std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
+    std::vector<ov::PartialShape> input_shapes = {
+        impl_param.input_layouts[0].get_partial_shape(),
         pattern_shape,
     };
 
@@ -112,7 +109,7 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, 
         shape_infer(&op, input_shapes, output_shapes, const_data);
     }
 
-    return { layout{output_shapes[0], input_layout.data_type, format::adjust_to_rank(input_layout.format, output_shapes[0].size())} };
+    return { layout{output_shapes[0], input_layout.data_type, input_layout.format.adjust_to_rank(output_shapes[0].size())} };
 }
 
 std::string reshape_inst::to_string(reshape_node const& node) {
@@ -181,7 +178,7 @@ void reshape_inst::update_shape() {
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
     // TODO: modify kernel_impl_param with dyn_layout
-    auto new_layout = _node.type()->calc_output_layout(_node, *_node.get_kernel_impl_params());
+    auto new_layout = _node.type()->calc_output_layouts(_node, *_node.get_kernel_impl_params())[0];
     auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
     auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
     GPU_DEBUG_IF(debug_config->verbose >= 4) {
