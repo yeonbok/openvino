@@ -104,6 +104,28 @@ layout fully_connected_inst::calc_output_layout(fully_connected_node const& node
         output_type = impl_param.get_fused_output_layout().data_type;
     }
 
+    auto output_size = tensor(input_layout.batch(), weights_layout.batch(), 1, 1);
+    if (desc->input_size == 3) {
+        output_size = tensor(input_layout.batch(), input_layout.feature(), 1, weights_layout.batch());
+    }
+    format output_format = get_preferred_format(node, impl_param);
+
+    return layout(output_type, output_format, output_size);
+}
+
+std::vector<layout> fully_connected_inst::calc_output_layouts(fully_connected_node const& node, kernel_impl_params const& impl_param) {
+    auto desc = impl_param.typed_desc<fully_connected>();
+
+    auto input_layout = impl_param.input_layouts[0];
+    auto weights_layout = *impl_param.weights_layout;
+    auto output_type = input_layout.data_type;
+    if ((output_type == data_types::u8 || output_type == data_types::i8) && desc->output_data_type)
+        output_type = *desc->output_data_type;
+
+    if (impl_param.has_fused_primitives()) {
+        output_type = impl_param.get_fused_output_layout().data_type;
+    }
+
     format output_format = get_preferred_format(node, impl_param);
     auto batch = input_layout.get_partial_shape()[0];
     auto feature = input_layout.get_partial_shape()[1];
@@ -112,7 +134,7 @@ layout fully_connected_inst::calc_output_layout(fully_connected_node const& node
         output_size = ov::PartialShape{batch, feature, weights_layout.batch()};
     }
 
-    return layout(output_size, output_type, output_format);
+    return { layout(output_size, output_type, output_format) };
 }
 
 std::string fully_connected_inst::to_string(fully_connected_node const& node) {
