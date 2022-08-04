@@ -29,6 +29,24 @@ static bool is_output_bfzyx(const layout& input, int32_t axis) {
     return false;
 }
 
+layout one_hot_inst::calc_output_layout(const one_hot_node& node, const kernel_impl_params& impl_param) {
+    auto input_layout = impl_param.input_layouts[0];
+    auto desc = impl_param.typed_desc<one_hot>();
+
+    auto dt = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
+    auto format = input_layout.format;
+
+    if (desc->one_hot_axis > 4) {
+        CLDNN_ERROR_MESSAGE(desc->id,
+                            "Incorrect parameters configuration: one_hot_axis should be less or equal to 4.");
+    }
+
+    if (is_output_bfzyx(input_layout, desc->one_hot_axis))
+        format = format::bfzyx;
+
+    return {dt, format, desc->shape};
+}
+
 std::vector<layout> one_hot_inst::calc_output_layouts(const one_hot_node& node, const kernel_impl_params& impl_param) {
     auto input_layout = impl_param.input_layouts[0];
     auto desc = impl_param.typed_desc<one_hot>();
@@ -58,24 +76,6 @@ std::vector<layout> one_hot_inst::calc_output_layouts(const one_hot_node& node, 
     };
     ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
     return {{output_shapes[0], dt, format::get_default_format(output_shapes[0].size())}};
-}
-
-layout one_hot_inst::calc_output_layout(one_hot_node const& node, kernel_impl_params const& impl_param) {
-    auto input_layout = impl_param.input_layouts[0];
-    auto desc = impl_param.typed_desc<one_hot>();
-
-    auto dt = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
-    auto format = input_layout.format;
-
-    if (desc->one_hot_axis > 4) {
-        CLDNN_ERROR_MESSAGE(desc->id,
-                            "Incorrect parameters configuration: one_hot_axis should be less or equal to 4.");
-    }
-
-    if (is_output_bfzyx(input_layout, desc->one_hot_axis))
-        format = format::bfzyx;
-
-    return {dt, format, desc->shape};
 }
 
 std::string one_hot_inst::to_string(one_hot_node const& node) {
