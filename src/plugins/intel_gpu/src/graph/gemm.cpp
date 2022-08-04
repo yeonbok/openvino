@@ -22,6 +22,40 @@ primitive_type_id gemm::type_id() {
 layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params const& impl_param) {
     auto prim = impl_param.typed_desc<gemm>();
 
+    auto input0_layout = impl_param.get_input_layout(0);
+    auto input1_layout = impl_param.get_input_layout(1);
+    bool transpose_input0 = prim->transpose_input0;
+    bool transpose_input1 = prim->transpose_input1;
+
+    auto M = !transpose_input0 ? input0_layout.spatial(1) : input0_layout.spatial(0);
+    auto N = !transpose_input1 ? input1_layout.spatial(0) : input1_layout.spatial(1);
+
+    auto output_size = input0_layout.get_tensor();
+
+    for (size_t i = 1; i < prim->input_size(); ++i) {
+        auto input_layout = impl_param.get_input_layout(i);
+        output_size = tensor::max(output_size, input_layout.get_tensor());
+    }
+
+    output_size.spatial[0] = N;
+    output_size.spatial[1] = M;
+    auto output_type = input0_layout.data_type;
+    if ((output_type == data_types::u8 || output_type == data_types::i8) && prim->output_data_type)
+        output_type = *prim->output_data_type;
+
+    if (impl_param.has_fused_primitives()) {
+        output_type = impl_param.get_fused_output_layout().data_type;
+    }
+
+    auto output_format = input0_layout.format;
+
+    return layout(output_type, output_format, output_size, prim->output_padding);
+}
+
+template<typename ShapeType>
+std::vector<layout> gemm_inst::calc_output_layouts(gemm_node const& node, kernel_impl_params const& impl_param) {
+    auto prim = impl_param.typed_desc<gemm>();
+
     auto input0_layout = impl_param.input_layouts[0];
     auto input1_layout = impl_param.input_layouts[1];
 
@@ -31,8 +65,8 @@ layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params c
 
     std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
     std::vector<ov::PartialShape> input_shapes = {
-        node.get_dependency(0).get_output_layout().get_partial_shape(),
-        node.get_dependency(1).get_output_layout().get_partial_shape(),
+        input0_layout.get_partial_shape(),
+        input1_layout.get_partial_shape(),
     };
 
     shape_infer(&op, input_shapes, output_shapes);
@@ -47,35 +81,7 @@ layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params c
 
     auto output_format = input0_layout.format;
 
-    return layout(output_shapes[0], output_type, output_format, prim->output_padding);
-}
-
-template<typename ShapeType>
-std::vector<layout> gemm_inst::calc_output_layouts(gemm_node const& /*node*/, const kernel_impl_params& impl_param) {
-    auto prim = impl_param.typed_desc<gemm>();
-    auto input0_layout = impl_param.get_input_layout(0);
-    auto input1_layout = impl_param.get_input_layout(1);
-
-    auto default_out_dt = data_type_traits::is_floating_point(input0_layout.data_type) ? input0_layout.data_type : data_types::f32;
-    auto output_type = prim->output_data_type.value_or(default_out_dt);
-
-    if (impl_param.has_fused_primitives()) {
-        output_type = impl_param.get_fused_output_layout().data_type;
-    }
-
-    ov::op::v0::MatMul op;
-    op.set_transpose_a(prim->transpose_input0);
-    op.set_transpose_b(prim->transpose_input1);
-
-    std::vector<ShapeType> output_shapes = {ShapeType()};
-    std::vector<ShapeType> input_shapes = {
-        input0_layout.get<ShapeType>(),
-        input1_layout.get<ShapeType>()
-    };
-
-    ov::op::v0::shape_infer(&op, input_shapes, output_shapes);
-
-    return { layout{output_shapes[0], output_type, input0_layout.format, prim->output_padding} };
+    return { layout(output_shapes[0], output_type, output_format, prim->output_padding) };
 }
 
 std::string gemm_inst::to_string(gemm_node const& node) {
