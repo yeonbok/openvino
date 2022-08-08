@@ -719,7 +719,7 @@ TEST(depth_concatenate_f32_gpu, concat_with_reshape_input) {
 
     topology topology;
     topology.add(input_layout("input1", input1->get_layout()));
-    topology.add(reshape("reshape", "input1", tensor(2, 1, 4, 2)));
+    topology.add(reshape("reshape", "input1", ov::PartialShape{2, 1, 2, 4}));
     topology.add(concatenation("depth1", { "reshape" }, 1));
     topology.add(concatenation("depth2", { "depth1" }, 1));
 

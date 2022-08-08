@@ -51,7 +51,16 @@ public:
         auto output_shape = p.in_shape;
         output_shape.feature[0] *= output_shape.spatial[0];
         output_shape.spatial[0] = 1;
+        auto l = layout{p.default_type, p.default_format, output_shape};
         return output_shape;
+    }
+
+    ov::PartialShape get_reshape_partial_shape(softmax_test_params& p) {
+        auto output_shape = p.in_shape;
+        output_shape.feature[0] *= output_shape.spatial[0];
+        output_shape.spatial[0] = 1;
+        auto l = layout{p.default_type, p.default_format, output_shape};
+        return l.get_partial_shape();
     }
 
     layout get_output_layout(softmax_test_params& p) {
@@ -106,7 +115,7 @@ TEST_P(softmax_quantize_fusing_through, reshape) {
         data("out_lo", get_mem(get_single_element_layout(p), -127)),
         data("out_hi", get_mem(get_single_element_layout(p), 127)),
         softmax("softmax", "input", p.dimension),
-        reshape("reshape", "softmax", get_reshape_shape(p)),
+        reshape("reshape", "softmax", get_reshape_partial_shape(p)),
         quantize("quantize", "reshape", "in_lo", "in_hi", "out_lo", "out_hi", 255, data_types::i8),
         reorder("reorder_bfyx", "quantize", get_output_layout(p))
     );
@@ -142,9 +151,9 @@ TEST_P(softmax_quantize_fusing_through, chain) {
         data("out_lo", get_mem(get_single_element_layout(p), -127)),
         data("out_hi", get_mem(get_single_element_layout(p), 127)),
         softmax("softmax", "input", p.dimension),
-        reshape("reshape_first", "softmax", get_reshape_shape(p)),
+        reshape("reshape_first", "softmax", get_reshape_partial_shape(p)),
         reorder("reorder", "reshape_first", reorder_layout),
-        reshape("reshape_second", "reorder", get_reshape_shape(p)),
+        reshape("reshape_second", "reorder", get_reshape_partial_shape(p)),
         quantize("quantize", "reshape_second", "in_lo", "in_hi", "out_lo", "out_hi", 255, data_types::i8),
         reorder("reorder_bfyx", "quantize", get_output_layout(p))
     );

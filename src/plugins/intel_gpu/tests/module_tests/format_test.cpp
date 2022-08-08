@@ -6,6 +6,8 @@
 
 #include "intel_gpu/runtime/format.hpp"
 
+using namespace cldnn;
+
 TEST(format, to_string) {
     typedef std::underlying_type<cldnn::format::type>::type format_underlying_type;
     for (format_underlying_type i = 0; i < static_cast<format_underlying_type>(cldnn::format::format_num); i++) {

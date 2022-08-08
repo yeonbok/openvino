@@ -42,7 +42,8 @@ TEST_P(one_hot_test, shape_infer) {
     auto& input_layout_node = prog.get_or_create(input_layout_prim);
     auto& one_hot_node = prog.get_or_create(one_hot_prim);
     program_wrapper::add_connection(prog, input_layout_node, one_hot_node);
-    auto res = one_hot_inst::calc_output_layouts(one_hot_node, {});
+    auto params = one_hot_node.get_kernel_impl_params();
+    auto res = one_hot_inst::calc_output_layouts(one_hot_node, *params);
 
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res[0], p.expected_layout);
