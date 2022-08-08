@@ -95,11 +95,11 @@ public:
     }
 
     layout get_input_layout(permute_params& p) {
-        return layout{ p.data_type, p.input_format, p.in_shape, padding{} };
+        return layout{ p.in_shape, p.data_type, p.input_format, padding{} };
     }
 
     layout get_per_channel_layout(permute_params& p) {
-        auto l = layout{ p.default_type, p.default_format, p.out_shape };
+        auto l = layout{ p.out_shape, p.default_type, p.default_format };
         auto s = l.get_tensor();
         return layout{ p.default_type, p.default_format, tensor{ 1, s.feature[0], 1, 1 } };
     }
@@ -118,7 +118,7 @@ public:
     }
 
     layout get_input_layout(permute_reorder_params& p) {
-        return layout{ p.permute_type, p.permute_format, p.in_shape, padding{} };
+        return layout{ p.in_shape, p.permute_type, p.permute_format, padding{} };
     }
 };
 }  // namespace
@@ -204,7 +204,7 @@ TEST_P(permute_activation_scale_eltwise, basic) {
 
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("eltwise_data", get_mem(layout{ p.data_type, p.input_format, p.out_shape })),
+        data("eltwise_data", get_mem(layout{ p.out_shape, p.data_type, p.input_format })),
         data("scale_data", get_mem(get_per_channel_layout(p), 5e-1f)),
         permute("permute", "input", p.permute_order),
         scale("scale", "permute", "scale_data"),
@@ -328,7 +328,7 @@ TEST_P(permute_scale_actv_eltw_scale_actv_quant_i8, basic) {
         data("in_hi", get_mem(get_per_channel_layout(p), 1, max_random)),
         data("out_lo", get_mem(get_single_element_layout(p), -127)),
         data("out_hi", get_mem(get_single_element_layout(p), 127)),
-        data("eltw_data", get_mem(layout(p.data_type, p.input_format, p.out_shape))),
+        data("eltw_data", get_mem(layout(p.out_shape, p.data_type, p.input_format))),
         data("scale2_data", get_mem(get_per_channel_layout(p), 1e-1f)),
         permute("permute", "input", p.permute_order),
         scale("scale1", "permute", "scale1_data"),
@@ -401,7 +401,7 @@ TEST_P(permute_scale_eltwise_actv_scale_actv, basic) {
 
     create_topologies(
         input_layout("input", get_input_layout(p)),
-        data("eltwise_data", get_mem(layout{ p.data_type, p.input_format, p.out_shape })),
+        data("eltwise_data", get_mem(layout{ p.out_shape, p.data_type, p.input_format })),
         data("scale_data1", get_mem(get_per_channel_layout(p), 1e-1f)),
         data("scale_data2", get_mem(get_per_channel_layout(p), 1e-1f)),
         permute("permute", "input", p.permute_order),

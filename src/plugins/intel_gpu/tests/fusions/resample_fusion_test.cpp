@@ -275,11 +275,13 @@ TEST_P(resample_eltwise_fusing_through, reshape) {
     reshape_shape.feature[0] *= reshape_shape.spatial[0];
     reshape_shape.spatial[0] = 1;
 
+    auto l = layout{p.default_type, p.default_format, reshape_shape};
+
     create_topologies(
         input_layout("input", get_input_layout(p)),
         data("eltwise_data", get_mem(layout{ p.default_type, p.default_format, tensor{ 1, 1, 1, 1 } })),
         resample("resample_prim", "input", p.out_shape, p.in_shape.feature[0], p.type),
-        reshape("reshape", "resample_prim", reshape_shape),
+        reshape("reshape", "resample_prim", l.get_partial_shape()),
         eltwise("eltwise", "reshape", "eltwise_data", eltwise_mode::prod),
         reorder("reorder_bfyx", "eltwise", p.default_format, data_types::f32)
     );
@@ -318,12 +320,13 @@ TEST_P(resample_eltwise_fusing_through_not_allowed, reshape_two_users) {
     auto reshape_shape = p.out_shape;
     reshape_shape.feature[0] *= reshape_shape.spatial[0];
     reshape_shape.spatial[0] = 1;
+    auto l = layout{p.default_type, p.default_format, reshape_shape};
 
     create_topologies(
         input_layout("input", get_input_layout(p)),
         data("eltwise_data", get_mem(layout{ p.default_type, p.default_format, tensor{ 1, 1, 1, 1 } })),
         resample("resample_prim", "input", p.out_shape, p.in_shape.feature[0], p.type),
-        reshape("reshape", "resample_prim", reshape_shape),
+        reshape("reshape", "resample_prim", l.get_partial_shape()),
         eltwise("eltwise", "reshape", "eltwise_data", eltwise_mode::prod),
         eltwise("sum", "reshape", "eltwise", eltwise_mode::sum),
         reorder("reorder_bfyx", "sum", p.default_format, data_types::f32)

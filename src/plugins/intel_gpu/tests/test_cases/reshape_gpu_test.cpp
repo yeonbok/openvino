@@ -54,6 +54,11 @@ void generic_reshape_test(format fmt, tensor const& input_size, tensor const& re
             *input_itr++ = (ElemType)value++;
     }
 
+    auto sizes = fmt == format::any ? reshape_size.sizes() : reshape_size.sizes(format::get_default_format(fmt.dimension(),
+                                                                                            format::is_weights_format(fmt),
+                                                                                            format::is_grouped(fmt)));
+    ov::Shape resize_shape(sizes.begin(), sizes.end());
+
     topology tpl;
     std::string reshape_input = "input";
 
@@ -64,7 +69,7 @@ void generic_reshape_test(format fmt, tensor const& input_size, tensor const& re
         tpl.add(reorder("reorder", "input", padded_input_layout));
         reshape_input = "reorder";
     }
-    tpl.add(reshape("reshape", reshape_input, reshape_size, "", output_padd));
+    tpl.add(reshape("reshape", reshape_input, ov::PartialShape(resize_shape), "", output_padd));
 
     build_options bo;
     bo.set_option(build_option::outputs({reshape_input, "reshape"}));
@@ -447,7 +452,7 @@ TEST(reshape_gpu_f32, multiple_users_with_reorder) {
     topology topology;
     topology.add(input_layout("input", input->get_layout()));
     topology.add(activation("relu", "input", activation_func::relu));
-    topology.add(reshape("reshape", "relu", tensor(batch(4))));
+    topology.add(reshape("reshape", "relu", ov::PartialShape{4}));
     topology.add(reorder("reorder1", "reshape", format::yxfb, data_types::f32));
     topology.add(activation("relu1", "reorder1", activation_func::relu));
     topology.add(activation("relu2", "reshape", activation_func::relu));
@@ -491,7 +496,7 @@ TEST(reshape_gpu_f32, calc_output_shape) {
 
     topology topology;
     topology.add(input_layout("input", input->get_layout()));
-    topology.add(reshape("reshape", "input", tensor(1, 1, 0, -1)));
+    topology.add(reshape("reshape", "input", ov::PartialShape{1, 1, -1, 0}));
 
     set_values(input, {-1.f, 2.f, -3.f, 4.f});
 
@@ -527,7 +532,7 @@ TEST(reshape_gpu_f32, basic_bfwzyx) {
 
     topology topology;
     topology.add(input_layout("input", input->get_layout()));
-    topology.add(reshape("reshape", "input", tensor(batch(1), feature(1), spatial(2, 2, 3, 3)), "", padding({0, 0, 0, 0, 0, 1}, 0.f)));
+    topology.add(reshape("reshape", "input", ov::PartialShape{1,1,3,3,2,2}, "", padding({0, 0, 0, 0, 0, 1}, 0.f)));
 
     // clang-format off
     std::vector<float> input_data = {
@@ -747,9 +752,9 @@ TEST(reshape_gpu_f32, shrink_chain_partial) {
     topology.add(data("scale_in", scale_in));
     topology.add(data("shift_in", shift_in));
     topology.add(activation("relu", "input", activation_func::relu));
-    topology.add(reshape("reshape", "relu", tensor(spatial(2, 2))));
+    topology.add(reshape("reshape", "relu", ov::PartialShape{2, 2}));
     topology.add(reorder("reorder", "reshape", format::bfyx, data_types::f32));
-    topology.add(reshape("reshape1", "reorder", tensor(feature(4))));
+    topology.add(reshape("reshape1", "reorder", ov::PartialShape{4}));
     topology.add(scale("scale", "reshape1", "scale_in", "shift_in"));
     topology.add(reorder("out_reorder", "scale", format::yxfb, data_types::f32));
 
@@ -786,9 +791,9 @@ TEST(reshape_gpu_f32, shrink_chain_full) {
     topology.add(data("scale_in", scale_in));
     topology.add(data("shift_in", shift_in));
     topology.add(activation("relu", "input", activation_func::relu));
-    topology.add(reshape("reshape", "relu", tensor(spatial(2, 2))));
+    topology.add(reshape("reshape", "relu", ov::PartialShape{2, 2}));
     topology.add(reorder("reorder", "reshape", format::bfyx, data_types::f32));
-    topology.add(reshape("reshape1", "reorder", tensor(feature(4))));
+    topology.add(reshape("reshape1", "reorder", ov::PartialShape{4}));
     topology.add(scale("scale", "reshape1", "scale_in", "shift_in"));
     topology.add(reorder("out_reorder", "scale", format::yxfb, data_types::f32));
 
@@ -823,9 +828,9 @@ TEST(reshape_gpu_f32, shrink_chain_out) {
     topology topology;
     topology.add(input_layout("input", input->get_layout()));
     topology.add(activation("relu", "input", activation_func::relu));
-    topology.add(reshape("reshape", "relu", tensor(spatial(2, 2))));
+    topology.add(reshape("reshape", "relu", ov::PartialShape{2, 2}));
     topology.add(reorder("reorder", "reshape", format::bfyx, data_types::f32));
-    topology.add(reshape("reshape1", "reorder", tensor(feature(4))));
+    topology.add(reshape("reshape1", "reorder", ov::PartialShape{4}));
 
     std::vector<float> input_vec = {-1.f, 2.f, -3.f, 4.f};
     std::vector<float> out = {0.f, 2.f, 0.f, 4.0f};
