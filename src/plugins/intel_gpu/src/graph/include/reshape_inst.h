@@ -37,7 +37,10 @@ public:
     }
 
     std::vector<size_t> get_shape_infer_dependencies() const override {
-        return {1};
+        if (dependencies.size() > 1)
+            return {1};
+        else
+            return {};
     }
 
     void set_shape_ready() { _shape_ready = true; }
@@ -60,8 +63,6 @@ public:
 
 private:
     void on_execute() override;
-
-    void update_shape() override;
 
     void reuse_input();
 };

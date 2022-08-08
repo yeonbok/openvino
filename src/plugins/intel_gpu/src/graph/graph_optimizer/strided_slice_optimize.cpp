@@ -12,6 +12,7 @@
 #include "data_inst.h"
 #include <vector>
 #include <memory>
+#include "intel_gpu/plugin/common_utils.hpp"
 
 using namespace cldnn;
 
@@ -32,7 +33,6 @@ void strided_slice_optimize::run(program& p) {
                     node->remove_dependency(i);
 
             auto node_layout = strided_slice_node.get_output_layout();
-            auto output_dims_sizes = node_layout.get_shape();
 
             auto is_shift_possible = [&](const ov::PartialShape& dims) -> bool {
                 if (dims.rank().get_length() == 0)
@@ -45,6 +45,7 @@ void strided_slice_optimize::run(program& p) {
                 return false;
             };
 
+            auto output_dims_sizes = node_layout.get_shape();
             if (std::find(new_axis_mask.begin(), new_axis_mask.end(), 1) != new_axis_mask.end()) {
                 for (size_t i = 0; i < new_axis_mask.size(); ++i) {
                     if (new_axis_mask[new_axis_mask.size() - i - 1] == 1) {
@@ -57,14 +58,15 @@ void strided_slice_optimize::run(program& p) {
                 }
             }
 
-            std::vector<int64_t> pattern(output_dims_sizes.begin(), output_dims_sizes.end());
+            auto pattern = ov::PartialShape(output_dims_sizes);
 
-            auto reshape_prim = std::make_shared<reshape>("reshape_" + node->id(),
-                                                          node->get_dependency(0).get_primitive()->id,
-                                                          false,
+            auto reshape_prim = std::make_shared<reshape>("reshape_" + node->id(), node->get_dependency(0).get_primitive()->id,
                                                           pattern);
 
             auto& reshape_prim_node = p.get_or_create(reshape_prim);
+
+            layout output_layout = { reshape_prim->output_shape, node_layout.data_type, node_layout.format };
+            reshape_prim_node.set_output_layout(output_layout);
 
             p.add_intermediate(reshape_prim_node, *node, 0, true);
             p.extract_and_remove(*node);

@@ -141,7 +141,6 @@ void primitive_inst::update_shape() {
     // TODO: Get rid of this const_cast
     const_cast<program_node&>(_node).set_output_layout(new_layout);
 }
-
 void primitive_inst::realloc_if_needed() {
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
@@ -268,9 +267,9 @@ void primitive_inst::set_output_memory(memory::ptr mem_new, bool check) {
 
     if (_node.is_constant()) {
         mem_new->copy_from(_network.get_stream(), *_output);
+    } else {
+        _output = mem_new;
     }
-
-    _output = mem_new;
 }
 
 event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
