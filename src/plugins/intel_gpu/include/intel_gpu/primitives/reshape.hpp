@@ -37,7 +37,8 @@ struct reshape : public primitive_base<reshape> {
         : primitive_base(id, {input}, ext_prim_id, output_padding)
         , output_shape(output_shape)
         , output_pattern({})
-        , output_partial_shape({}) {}
+        , output_partial_shape({}) {
+    }
 
     /// @brief reshape with dynamic pattern
     reshape(const primitive_id& id,
@@ -51,7 +52,8 @@ struct reshape : public primitive_base<reshape> {
         , output_shape(ov::PartialShape())
         , special_zero(special_zero)
         , output_pattern({})
-        , output_partial_shape(output_partial_shape) {}
+        , output_partial_shape(output_partial_shape) {
+    }
 
     /// @brief reshape with static pattern
     reshape(const primitive_id& id,
@@ -65,10 +67,11 @@ struct reshape : public primitive_base<reshape> {
         , output_shape(ov::PartialShape())
         , special_zero(special_zero)
         , output_pattern(output_pattern)
-        , output_partial_shape(output_partial_shape) {}
+        , output_partial_shape(output_partial_shape) {
+    }
 
     /// @brief Requested memory shape.
-    ov::PartialShape output_shape = {};
+    ov::PartialShape output_shape;
 
     bool special_zero = false;
 

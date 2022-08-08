@@ -54,9 +54,6 @@ static void CreateReduceOp(Program& p, const std::shared_ptr<ngraph::Node>& op, 
     p.AddPrimitive(reducePrim);
 
     auto resultLayerName = layerName;
-//auto out_dims = op->get_output_shape(0).size();
-    auto out_dims_partial = op->get_output_partial_shape(0).size();
-    std::cout << out_dims_partial << std::endl;
 
     p.AddInnerPrimitiveToProfiler(layerName, reducePrim, op);
     auto reorderLayerName = layerName + "_reorder";

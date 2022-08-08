@@ -119,6 +119,7 @@ std::vector<layout> fully_connected_inst::calc_output_layouts(fully_connected_no
 
     auto input_layout = impl_param.input_layouts[0];
     auto weights_layout = *impl_param.weights_layout;
+
     auto output_type = input_layout.data_type;
     if ((output_type == data_types::u8 || output_type == data_types::i8) && desc->output_data_type)
         output_type = *desc->output_data_type;
@@ -128,6 +129,11 @@ std::vector<layout> fully_connected_inst::calc_output_layouts(fully_connected_no
     }
 
     format output_format = get_preferred_format(node, impl_param);
+
+    if (input_layout.is_dynamic()) {
+        return { layout(ov::PartialShape::dynamic(input_layout.get_rank()), output_type, output_format) };
+    }
+
     auto batch = input_layout.get_partial_shape()[0];
     auto feature = input_layout.get_partial_shape()[1];
     auto output_size = ov::PartialShape{batch, weights_layout.batch()};

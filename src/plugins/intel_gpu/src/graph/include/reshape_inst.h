@@ -35,6 +35,13 @@ public:
         return (!this->get_output_layout().data_padding && !input().get_output_layout(false).data_padding);
     }
 
+    std::vector<size_t> get_shape_infer_dependencies() const override {
+        if (dependencies.size() > 1)
+            return {1};
+        else
+            return {};
+    }
+
     void set_shape_ready() { _shape_ready = true; }
     void reset_shape_ready() const { _shape_ready = false; }
     bool get_shape_ready() const { return _shape_ready; }
@@ -56,8 +63,6 @@ public:
 
 private:
     void on_execute() override;
-
-    void update_shape() override;
 
     void reuse_input();
 };

@@ -210,7 +210,6 @@ void primitive_inst::update_shape() {
         set_shape_change();
     }
 }
-
 void primitive_inst::realloc_if_needed() {
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
@@ -304,6 +303,35 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
     if (is_dynamic() || has_mutable_input() || is_output()) {
         set_arguments();
+    if (check)
+        check_memory_to_set(*mem_new, ol);
+
+    if (_node.is_constant()) {
+        mem_new->copy_from(_network.get_stream(), *_output);
+    } else {
+        _output = mem_new;
+    }
+}
+
+event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
+    const auto primitive_id = id();
+    CLDNN_ERROR_BOOL(primitive_id,
+                     "Invalid/unset input",
+                     !_has_valid_input,
+                     "Cannot execute primitive " + primitive_id + " with invalid/unset input");
+
+    static std::mutex m;
+    {
+        // Lock for program nodes
+        // To be removed once concurrency issue for program node is resolved
+        std::lock_guard<std::mutex> lock(m);
+        PRINT_TIME(update_shape());
+        if (shape_changed()) {
+            PRINT_TIME(update_impl());
+            PRINT_TIME(update_weights());
+            PRINT_TIME(realloc_if_needed());
+        }
+>>>>>>> 3d8b16617d... Fix reshape to run dynamic shape
     }
 
     on_execute();
