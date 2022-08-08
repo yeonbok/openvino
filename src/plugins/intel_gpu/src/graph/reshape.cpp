@@ -152,43 +152,6 @@ reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) :
         reuse_input();
 }
 
-void reshape_inst::update_shape() {
-    if (!_network.shape_changed())
-        return;
-
-    auto& node = const_cast<reshape_node&>(dynamic_cast<const reshape_node&>(_node));
-
-    if (_node.get_dependencies().size() == 2) {
-        auto in_node = _node.get_dependency(1).id();
-        auto shape_mem = _network.get_output_memory(in_node);
-        // TODO: usm_device is copied to host on lock(), but we need to ensure that this is better, then
-        // keeping such constants on host (i.e. modifying transfer_memory_to_device)
-        // if (shape_mem->get_allocation_type() == allocation_type::usm_device) {
-        //     IE_THROW() << " lockable memory is required to update shape for reshape prim\n";
-        // }
-        auto reshape_prim = std::static_pointer_cast<reshape>(std::const_pointer_cast<primitive>(_node.get_primitive()));
-        if (_network.has_event(in_node)) {
-            const auto& ev = _network.get_primitive_event(in_node);
-            _network.get_stream().wait_for_events({ev});
-        }
-        reshape_prim->output_shape = ov::PartialShape(read_vector<size_t>(shape_mem, _network.get_stream()));
-        node.set_shape_ready();
-    }
-
-    GPU_DEBUG_GET_INSTANCE(debug_config);
-    // TODO: modify kernel_impl_param with dyn_layout
-    auto new_layout = _node.type()->calc_output_layouts(_node, *_node.get_kernel_impl_params())[0];
-    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::f32, format::any, tensor{});
-    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
-    GPU_DEBUG_IF(debug_config->verbose >= 4) {
-        GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
-    }
-    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
-        set_shape_change();
-    // TODO: Get rid of this const_cast
-    node.set_output_layout(new_layout);
-}
-
 void reshape_inst::on_execute() {
     if (!node.can_be_optimized())
         return;
@@ -203,5 +166,4 @@ void reshape_inst::reuse_input() {
     build_deps();  // reshape need deps
     _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
 }
-
 }  // namespace cldnn
