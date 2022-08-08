@@ -77,7 +77,7 @@ struct reshape : public primitive_base<reshape> {
         , mode(mode) {}
 
     /// @brief Requested memory shape.
-    ov::PartialShape output_shape = {};
+    ov::PartialShape output_shape;
 
     bool special_zero = false;
 

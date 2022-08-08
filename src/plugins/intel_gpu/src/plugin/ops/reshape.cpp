@@ -15,47 +15,39 @@
 namespace ov {
 namespace intel_gpu {
 
-static void CreateCommonReshapeOp(Program& p, const std::shared_ptr<ngraph::Node>& op, cldnn::reshape::reshape_mode mode, bool use_second_input = false) {
+static void CreateCommonReshapeOp(Program& p, const std::shared_ptr<ngraph::Node>& op, cldnn::reshape::reshape_mode mode) {
     validate_inputs_count(op, {1, 2});
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
     auto in_shape = op->get_input_partial_shape(0);
     auto out_shape = op->get_output_partial_shape(0);
-
-    // if we convert from or to 5D/6D, additional reorder also required to change format
     cldnn::primitive_id reshapeInputId = inputPrimitives[0];
-    if (in_shape.size() != out_shape.size()) {
-        cldnn::primitive_id reorderId = "reorder:" + op->get_friendly_name() + "_reorder";
-        cldnn::format outputFormat = cldnn::format::bfyx;
-
-        switch (out_shape.size()) {
-        case 5: outputFormat = cldnn::format::bfzyx; break;
-        case 6: outputFormat = cldnn::format::bfwzyx; break;
-        default: break;
-        }
-
-        cldnn::layout outputLayout(out_shape, cldnn::element_type_to_data_type(op->get_output_element_type(0)), outputFormat);
-        p.add_primitive(*op, cldnn::reorder(reorderId,
-                                            reshapeInputId,
-                                            outputLayout,
-                                            std::vector<float>(),
-                                            cldnn::reorder_mean_mode::subtract));
-        reshapeInputId = reorderId;
-    }
-
-    if (op->get_input_size() == 1 || out_shape.is_static() || !use_second_input) {
-        auto reshapePrim = cldnn::reshape(layerName,
-                                          reshapeInputId,
-                                          out_shape,
-                                          mode);
-
+    auto reshapeOp = std::dynamic_pointer_cast<ngraph::op::v1::Reshape>(op);
+    if (in_shape.is_dynamic()) {
+        auto reshapePrim = cldnn::reshape(layerName, reshapeInputId, inputPrimitives[1], reshapeOp->get_special_zero(), out_shape);
         p.add_primitive(*op, reshapePrim);
     } else {
-        auto shape_prim_id = inputPrimitives[1];
+        // if we convert from or to 5D/6D, additional reorder also required to change format
+        if (in_shape.size() != out_shape.size()) {
+            cldnn::primitive_id reorderId = "reorder:" + op->get_friendly_name() + "_reorder";
+            cldnn::format outputFormat = cldnn::format::bfyx;
+
+            switch (out_shape.size()) {
+                case 5: outputFormat = cldnn::format::bfzyx; break;
+                case 6: outputFormat = cldnn::format::bfwzyx; break;
+                default: break;
+            }
+
+            cldnn::layout outputLayout(out_shape, cldnn::element_type_to_data_type(op->get_output_element_type(0)), outputFormat);
+            p.add_primitive(*op, cldnn::reorder(reorderId,
+                                                reshapeInputId,
+                                                outputLayout,
+                                                std::vector<float>(),
+                                                cldnn::reorder_mean_mode::subtract));
+            reshapeInputId = reorderId;
+        }
         auto reshapePrim = cldnn::reshape(layerName,
                                           reshapeInputId,
-                                          shape_prim_id,
-                                          false,
                                           out_shape);
 
         p.add_primitive(*op, reshapePrim);
@@ -63,7 +55,7 @@ static void CreateCommonReshapeOp(Program& p, const std::shared_ptr<ngraph::Node
 }
 
 static void CreateReshapeOp(Program& p, const std::shared_ptr<ngraph::op::v1::Reshape>& op) {
-    CreateCommonReshapeOp(p, op, cldnn::reshape::reshape_mode::base, true);
+    CreateCommonReshapeOp(p, op, cldnn::reshape::reshape_mode::base);
 }
 
 static void CreateSqueezeOp(Program& p, const std::shared_ptr<ngraph::op::v0::Squeeze>& op) {

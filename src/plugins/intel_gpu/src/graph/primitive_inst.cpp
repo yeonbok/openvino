@@ -206,7 +206,6 @@ void primitive_inst::update_shape() {
     }
     _impl_params->output_layout = new_layout;
 }
-
 void primitive_inst::realloc_if_needed() {
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
@@ -306,9 +305,8 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
 
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
-    if (is_dynamic() || has_mutable_input() || is_output()) {
+    if (is_dynamic() || has_mutable_input() || is_output())
         set_arguments();
-    }
 
     on_execute();
 
@@ -354,6 +352,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     }
     return _impl->execute(dependencies, *this);
 }
+
 
 void primitive_inst::set_arguments() {
     OPENVINO_ASSERT(_has_valid_input, id(), " has invalid/unset input");

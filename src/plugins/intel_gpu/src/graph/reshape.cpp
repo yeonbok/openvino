@@ -175,5 +175,4 @@ void reshape_inst::reuse_input() {
     build_deps();  // reshape need deps
     _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
 }
-
 }  // namespace cldnn
