@@ -430,7 +430,10 @@ bool layout_optimizer::can_fuse_reorder_to_prev(program_node& prev, program_node
          fmt_next == format::b_fs_yx_fsv16 || fmt_next == format::b_fs_zyx_fsv16 ||fmt_next == format::bs_fs_yx_bsv16_fsv16))
         return true;
 
-    if (prev.is_type<permute>()) {
+    if (prev.is_type<permute>() && (prev.get_output_layout().get_shape().size() >= 4 && next->get_output_layout().get_shape().size() >= 4)) {
+        std::cout << prev.id() << " : " << prev.get_output_layout().get_shape().size() << " ( " << prev.get_output_layout().to_string() << std::endl;
+        std::cout << next->id() << " : " << next->get_output_layout().get_shape().size() << " ( " << next->get_output_layout().to_string() << std::endl;
+
         auto& permute_order = prev.as<permute>().get_primitive()->permute_order;
         if ((fmt_prev == format::b_fs_yx_fsv4 || fmt_prev == format::b_fs_yx_fsv32 || fmt_prev == format::b_fs_zyx_fsv32 ||
          fmt_prev == format::b_fs_yx_fsv16 || fmt_prev == format::b_fs_zyx_fsv16 || fmt_prev == format::bs_fs_yx_bsv16_fsv16)
