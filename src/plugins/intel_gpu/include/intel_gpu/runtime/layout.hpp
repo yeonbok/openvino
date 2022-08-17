@@ -469,8 +469,6 @@ struct layout {
 
     bool is_dynamic() const;
 
-    bool is_static() const;
-
     ov::PartialShape get_partial_shape() const;
 
     ov::Shape get_shape() const;
