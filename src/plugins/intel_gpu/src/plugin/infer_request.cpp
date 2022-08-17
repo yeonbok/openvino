@@ -865,13 +865,34 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
                     } else {
                         convertAndCopy<double, float>(inputBlob.get(), ptr.data());
                     }
-                } else if (prec == Precision::U64 || prec == Precision::U32) {
+                } else if (prec == Precision::U64 || prec == Precision::I64) {
                     cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
                     if (prec == Precision::U64) {
                         convertAndCopy<uint64_t, int32_t>(inputBlob.get(), ptr.data());
                     } else {
                         convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
                     }
+                } else if (prec == Precision::U32) {
+                    cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
+                    convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
+                } else {
+                    auto src_lock = inputBlob->cbuffer();
+                    auto src_ptr = src_lock.as<uint8_t*>();
+                    if (!same_host_mem(inputMem, src_ptr)) {
+                        auto ev = inputMem->copy_from(stream, src_ptr);
+                        dependencies.push_back(ev);
+                        convertAndCopy<double, float>(inputBlob.get(), ptr.data());
+                    }
+                } else if (prec == Precision::U64 || prec == Precision::I64) {
+                    cldnn::mem_lock<int64_t> ptr{ inputMem, stream };
+                    if (prec == Precision::U64) {
+                        convertAndCopy<uint64_t, int64_t>(inputBlob.get(), ptr.data());
+                    } else if (prec == Precision::I64) {
+                        convertAndCopy<int64_t, int64_t>(inputBlob.get(), ptr.data());
+                    }
+                } else if (prec == Precision::U32) {
+                    cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
+                    convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
                 } else {
                     auto src_lock = inputBlob->cbuffer();
                     auto src_ptr = src_lock.as<uint8_t*>();
