@@ -33,10 +33,9 @@ void strided_slice_optimize::run(program& p) {
                     node->remove_dependency(i);
 
             auto node_layout = strided_slice_node.get_output_layout();
-            auto output_dims_sizes = node_layout.get_shape();
 
-            auto is_shift_possible = [&](const std::vector<int32_t>& dims) -> bool {
-                if (dims.empty())
+            auto is_shift_possible = [&](const ov::PartialShape& dims) -> bool {
+                if (dims.rank().get_length() == 0)
                     CLDNN_ERROR_MESSAGE(node->id(), "Error while adding new axis: node has incorrect dimensions");
 
                 if (dims[dims.size() - 1] == 1)

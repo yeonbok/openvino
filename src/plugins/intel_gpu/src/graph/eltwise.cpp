@@ -121,7 +121,7 @@ std::vector<layout> eltwise_inst::calc_output_layouts(eltwise_node const& node, 
     auto desc = impl_param.typed_desc<eltwise>();
     auto output_type = desc->output_data_type ? *desc->output_data_type : input_node_layout.data_type;
 
-    auto get_output_layout = [&](){
+    auto get_output_layout = [&]() {
         auto format = input_node_layout.format;
         ov::PartialShape out_pshape;
         for (size_t i = 0; i < node.inputs_count(); i++) {
@@ -134,15 +134,10 @@ std::vector<layout> eltwise_inst::calc_output_layouts(eltwise_node const& node, 
             else if (l.format == format::bs_fs_zyx_bsv16_fsv16)
                 format = format::bs_fs_zyx_bsv16_fsv16;
         }
+        return layout(out_pshape, output_type, format);
     };
 
-        if (l.format == format::b_fs_zyx_fsv16)  // use optimized 5D
-            format = format::b_fs_zyx_fsv16;
-        else if (l.format == format::bs_fs_zyx_bsv16_fsv16)
-            format = format::bs_fs_zyx_bsv16_fsv16;
-    }
-    auto output_layout = layout(output_type, format, out_pshape);
-
+    auto output_layout = get_output_layout();
     auto mode = desc->mode;
     // list of operations supported for integer types
     if (input_node_layout.data_type == data_types::i8 || input_node_layout.data_type == data_types::u8 ||
@@ -334,7 +329,6 @@ eltwise_inst::typed_primitive_inst(network& network, eltwise_node const& node) :
     //                                   "Eltwise output_x",
     //                                   out_x,
     //                                   "");
-
 }
 
 void eltwise_inst::check_inputs_count(eltwise_node const& node) {
