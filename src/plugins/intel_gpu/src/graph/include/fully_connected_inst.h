@@ -42,8 +42,8 @@ class typed_primitive_inst<fully_connected> : public typed_primitive_inst_base<f
     using parent = typed_primitive_inst_base<fully_connected>;
 
 public:
-    template<typename ShapeType>
     static layout calc_output_layout(fully_connected_node const& node, kernel_impl_params const& impl_param);
+    template<typename ShapeType>
     static std::vector<layout> calc_output_layouts(fully_connected_node const& node, kernel_impl_params const& impl_param);
     static std::string to_string(fully_connected_node const& node);
 
@@ -56,7 +56,7 @@ public:
 
     bool bias_term() const { return !argument.bias.empty(); }
 
-    virtual event::ptr update_weights() override;
+    event::ptr update_weights() override;
 
     memory::ptr reordered_weights = nullptr;
 };

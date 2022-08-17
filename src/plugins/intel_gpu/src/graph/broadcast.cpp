@@ -28,6 +28,7 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node, kernel_imp
     return {input_layout.data_type, input_layout.format, ov::intel_gpu::tensor_from_dims(desc->broadcast_sizes.to_shape())};
 }
 
+template<typename ShapeType>
 std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& node, kernel_impl_params const& impl_param) {
     assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
            "Output data type forcing is not supported for broadcast_node!");

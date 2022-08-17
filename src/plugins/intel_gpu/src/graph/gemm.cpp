@@ -65,8 +65,8 @@ std::vector<layout> gemm_inst::calc_output_layouts(gemm_node const& node, kernel
 
     std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
     std::vector<ov::PartialShape> input_shapes = {
-        node.get_dependency(0).get_output_layout().size,
-        node.get_dependency(1).get_output_layout().size,
+        input0_layout.get_partial_shape(),
+        input1_layout.get_partial_shape(),
     };
 
     shape_infer(&op, input_shapes, output_shapes);

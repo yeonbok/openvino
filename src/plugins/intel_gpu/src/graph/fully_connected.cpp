@@ -172,7 +172,7 @@ fully_connected_inst::typed_primitive_inst(network& network, fully_connected_nod
 // override this for fc/conv/etc
 // and in common primitive_execute we call
 // if (is_weightable_layer()) update_weights();
-virtual event::ptr fully_connected_inst::update_weights() {
+event::ptr fully_connected_inst::update_weights() {
     if (!_impl)
         return nullptr;
 

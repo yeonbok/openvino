@@ -21,6 +21,7 @@ struct typed_program_node<reshape> : public typed_program_node_base<reshape> {
     }
 
     mutable bool _shape_ready = false;
+
 public:
     using parent::parent;
 

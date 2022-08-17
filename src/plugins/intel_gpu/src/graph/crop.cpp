@@ -40,6 +40,7 @@ layout crop_inst::calc_output_layout(crop_node const& node, kernel_impl_params c
     return layout({in_layout.data_type, in_layout.format, ref_in_sizes});
 }
 
+template<typename ShapeType>
 std::vector<layout> crop_inst::calc_output_layouts(crop_node const& node, kernel_impl_params const& impl_param) {
     assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
            "Output data type forcing is not supported for crop_node!");

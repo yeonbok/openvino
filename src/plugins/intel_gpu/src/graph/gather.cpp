@@ -68,9 +68,10 @@ layout gather_inst::calc_output_layout(gather_node const& node, kernel_impl_para
 template<typename ShapeType>
 std::vector<layout> gather_inst::calc_output_layouts(gather_node const& node, kernel_impl_params const& impl_param) {
     auto desc = impl_param.typed_desc<gather>();
-    auto input_layout = impl_param.input_layouts[0];
+    auto input0_layout = impl_param.get_input_layout(0);
+    auto input1_layout = impl_param.get_input_layout(1);
 
-    auto output_type = input_layout.data_type;
+    auto output_type = input0_layout.data_type;
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;
     }
@@ -79,8 +80,8 @@ std::vector<layout> gather_inst::calc_output_layouts(gather_node const& node, ke
     op.set_batch_dims(desc->batch_dim);
     std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
     std::vector<ov::PartialShape> input_shapes = {
-        node.get_dependency(0).get_output_layout().get_partial_shape(),
-        node.get_dependency(1).get_output_layout().get_partial_shape(),
+        input0_layout.get<ShapeType>(),
+        input1_layout.get<ShapeType>(),
         ov::PartialShape{1} // axis input is removed on gather primitive creation, so we can't user get_dependency(2)
     };
 
@@ -90,7 +91,7 @@ std::vector<layout> gather_inst::calc_output_layouts(gather_node const& node, ke
     std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {{2, axis_tensor}};
     ov::op::util::shape_infer(&op, input_shapes, output_shapes, const_data);
 
-    format output_format = input_layout.format.adjust_to_rank(output_shapes[0].size());
+    format output_format = format::adjust_to_rank(input0_layout.format, output_shapes[0].size());
 
     return { layout{output_shapes[0], output_type, output_format} };
 }
