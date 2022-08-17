@@ -16,8 +16,6 @@
 #include "intel_gpu/runtime/debug_configuration.hpp"
 #include "openvino/core/preprocess/input_tensor_info.hpp"
 #include <ie_algorithm.hpp>
-#include <ie_ngraph_utils.hpp>
-#include <transformations/utils/utils.hpp>
 #include <debug.h>
 
 using namespace InferenceEngine;
@@ -186,7 +184,6 @@ namespace intel_gpu {
 // ---------------------------- IE API impl ------------------------------------------------ //
 // ----------------------------------------------------------------------------------------- //
 Blob::Ptr InferRequest::GetBlob(const std::string& name) {
-    std::cout << "GPU Plugin :: GetBlob " << name << std::endl;
     OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "InferRequest::GetBlob");
     Blob::Ptr data;
     InputInfo::Ptr foundInput;
@@ -202,34 +199,8 @@ Blob::Ptr InferRequest::GetBlob(const std::string& name) {
             data = it->second->getRoiBlob();
         } else {
             data = _inputs[name];
-            if (!isDynamic) {
+            if (!isDynamic)
                 checkInputBlob(data, name, foundInput);
-            } else {
-                auto inputNode = modelInputsMap.find(name);
-                if (inputNode != modelInputsMap.end()) {
-                    if (!inputNode->second) {
-                        IE_THROW() << "Can't get blob with name: " << name << ", because has null pointer to input node";
-                    }
-
-                    const auto shape = inputNode->second->get_output_partial_shape(0);
-                    const bool isDynamic = shape.is_dynamic();
-                    InferenceEngine::SizeVector dims;
-                    if (isDynamic) {
-                        dims = InferenceEngine::SizeVector(shape.rank().get_length(), 0);
-                    } else {
-                        dims = shape.to_shape();
-                    }
-
-                    InferenceEngine::TensorDesc desc(InferenceEngine::details::convertPrecision(inputNode->second->get_output_element_type(0)),
-                            dims, InferenceEngine::TensorDesc::getLayoutByRank(dims.size()));
-
-                    _inputs[name] = make_blob_with_precision(desc);
-                    _inputs[name]->allocate();
-                } else {
-                    IE_THROW() << "Blob with name: " << name << " exists in CPU plugin graph, but absents in network inputs";
-                }
-            }
-            data = _inputs[name];
         }
     } else {
         data = _outputs[name];
@@ -659,13 +630,6 @@ InferRequest::InferRequest(const std::vector<std::shared_ptr<const ov::Node>>& i
                                      const CompiledModel::Ptr& execNetwork)
         : IInferRequestInternal(inputs, outputs) {
     IE_ASSERT(nullptr != execNetwork);
-    for (const std::shared_ptr<const ov::Node>& in : inputs) {
-        modelInputsMap[ngraph::op::util::get_ie_output_name(ngraph::Output<const ngraph::Node>(in))] = in;
-    }
-    for (const std::shared_ptr<const ov::Node>& out : outputs) {
-        modelOutputsMap[ngraph::op::util::get_ie_output_name(out->input_value(0))] = out;
-    }
-
     streamExecutor = dynamic_cast<InferenceEngine::IStreamsExecutor*>(execNetwork->m_taskExecutor.get());
 }
 
@@ -1107,7 +1071,7 @@ void InferRequest::allocate_inputs() {
             GPU_DEBUG_IF(debug_config->verbose >= 2) {
                 GPU_DEBUG_COUT << "[" << name << ": input blob]" << std::endl;
             }
-            if (desc.getPrecision() == Precision::I16 || desc.getPrecision() == Precision::U16 || desc.getPrecision() == Precision::I64) {
+            if (desc.getPrecision() == Precision::I16 || desc.getPrecision() == Precision::U16) {
                 TensorDesc desc_fp32 = desc;
                 desc_fp32.setPrecision(Precision::FP32);
                 auto blobPtr = create_device_blob(desc_fp32);
@@ -1237,10 +1201,7 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
     if (inputLayoutItr == m_graph->GetInputLayouts().end()) {
         IE_THROW() << "Input name mismatch.";
     }
-    // taylor below
-    auto node = findInputByNodeName(inputName);
-    bool isDynamic = (node && node->get_output_partial_shape(0).is_dynamic());
-
+    auto reqBlob = _deviceInputs.at(inputName)->as<gpu::ClBlob>();
     auto _nw_ptr = m_graph->GetNetwork();
     cldnn::primitive_id internalName = "parameter:" + inputName;
     const auto& prec = inputBlob->getTensorDesc().getPrecision();
@@ -1261,67 +1222,53 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
         case Precision::U32:
         case Precision::U64:
         case Precision::I64: {
-            if (false) {
-            } else {
-                if (isDynamic) {
-#if 0
-                    inputBlob->allocate();
-                    inputMem = inputBlob->getMemory();
-                    auto input_layout = m_graph->GetInputLayouts().find(inputName);
-                    if (input_layout != m_graph->GetInputLayouts().end()) {
-                        if (input_layout->second.format != inputMem->get_layout().format) {
-                            inputMem = m_graph->GetNetwork()->get_engine().reinterpret_buffer(*inputMem, input_layout->second);
-                        }
-                    }
-#endif
-                    SetBlob(inputName, inputBlob);
-                }
-                auto impl = getBlobImpl(is_dev_input ? remote_ptr : _deviceInputs.at(inputName)->as<gpu::ClBlob>());
-                if (!impl->is_allocated()) {
-                    IE_THROW() << str_input_not_allocated;
-                }
-                inputMem = impl->getMemory();
-
-                auto input_layout = m_graph->GetInputLayouts().find(inputName);
-                if (input_layout != m_graph->GetInputLayouts().end()) {
-                    if (input_layout->second.format != inputMem->get_layout().format) {
-                        inputMem = m_graph->GetNetwork()->get_engine().reinterpret_buffer(*inputMem, input_layout->second);
-                    }
-                }
-
-                if (!is_dev_input) {
-                    if (prec == Precision::I16 || prec == Precision::U16 || prec == Precision::FP64) {
-                        // GPU plugin doesn't support I16 input precision,
-                        // so have to convert input data to fp32 precision
-                        cldnn::mem_lock<float> ptr{ inputMem, stream };
-                        if (prec == Precision::I16) {
-                            convertAndCopy<int16_t, float>(inputBlob.get(), ptr.data());
-                        } else if (prec == Precision::U16) {
-                            convertAndCopy<uint16_t, float>(inputBlob.get(), ptr.data());
-                        } else {
-                            convertAndCopy<double, float>(inputBlob.get(), ptr.data());
-                        }
-                    } else if (prec == Precision::U64 || prec == Precision::I64) {
-                        cldnn::mem_lock<int64_t> ptr{ inputMem, stream };
-                        if (prec == Precision::U64) {
-                            convertAndCopy<uint64_t, int64_t>(inputBlob.get(), ptr.data());
-                        } else if (prec == Precision::I64) {
-                            convertAndCopy<int64_t, int64_t>(inputBlob.get(), ptr.data());
-                        }
-                    } else if (prec == Precision::U32) {
-                        cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
-                        convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
-                    } else {
-                        auto src_lock = inputBlob->cbuffer();
-                        auto src_ptr = src_lock.as<uint8_t*>();
-                        if (!same_host_mem(inputMem, src_ptr)) {
-                            auto ev = inputMem->copy_from(stream, src_ptr);
-                            dependencies.push_back(ev);
-                        }
-                    }
-                }
-                _nw_ptr->set_input_data(internalName, inputMem);
+            auto impl = getBlobImpl(is_dev_input ?
+                                    remote_ptr :
+                                    reqBlob);
+            if (!impl->is_allocated()) {
+                IE_THROW() << str_input_not_allocated;
             }
+            inputMem = impl->getMemory();
+
+            auto input_layout = m_graph->GetInputLayouts().find(inputName);
+            if (input_layout != m_graph->GetInputLayouts().end()) {
+                if (input_layout->second.format != inputMem->get_layout().format) {
+                    inputMem = m_graph->GetNetwork()->get_engine().reinterpret_buffer(*inputMem, input_layout->second);
+                }
+            }
+
+            if (!is_dev_input) {
+                if (prec == Precision::I16 || prec == Precision::U16 || prec == Precision::FP64) {
+                    // GPU plugin doesn't support I16 input precision,
+                    // so have to convert input data to fp32 precision
+                    cldnn::mem_lock<float> ptr{ inputMem, stream };
+                    if (prec == Precision::I16) {
+                        convertAndCopy<int16_t, float>(inputBlob.get(), ptr.data());
+                    } else if (prec == Precision::U16) {
+                        convertAndCopy<uint16_t, float>(inputBlob.get(), ptr.data());
+                    } else {
+                        convertAndCopy<double, float>(inputBlob.get(), ptr.data());
+                    }
+                } else if (prec == Precision::U64 || prec == Precision::I64) {
+                    cldnn::mem_lock<int64_t> ptr{ inputMem, stream };
+                    if (prec == Precision::U64) {
+                        convertAndCopy<uint64_t, int64_t>(inputBlob.get(), ptr.data());
+                    } else if (prec == Precision::I64) {
+                        convertAndCopy<int64_t, int64_t>(inputBlob.get(), ptr.data());
+                    }
+                } else if (prec == Precision::U32) {
+                    cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
+                    convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
+                } else {
+                    auto src_lock = inputBlob->cbuffer();
+                    auto src_ptr = src_lock.as<uint8_t*>();
+                    if (!same_host_mem(inputMem, src_ptr)) {
+                        auto ev = inputMem->copy_from(stream, src_ptr);
+                        dependencies.push_back(ev);
+                    }
+                }
+            }
+            _nw_ptr->set_input_data(internalName, inputMem);
             break;
         }
         default:
