@@ -660,26 +660,22 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         _shape_changed = false;
         std::vector<memory::ptr> in_out_mem;
         for (auto& inst : _inputs) {
+#if 0
             if (inst->get_node().is_dynamic()) {
                 std::cout << "Input is dynamic!" << std::endl;
                 return;
             }
+#endif
 
             if (inst->output_memory_ptr())
                 in_out_mem.push_back(inst->output_memory_ptr());
             if (inst->shape_changed())
                 _shape_changed = true;
-        }
-
-        for (auto& inst : _outputs) {
-            if (inst->output_memory_ptr())
-                in_out_mem.push_back(inst->output_memory_ptr());
-        }
 
         surf_lock = surfaces_lock::create(get_engine().type(), in_out_mem, get_stream());
     }
 
-    // set_arguments();
+    set_arguments();
     for (auto& inst : _exec_order) {
         GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
             auto& node = _program->get_node(inst->id());
