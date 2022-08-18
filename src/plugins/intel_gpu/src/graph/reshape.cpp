@@ -56,7 +56,7 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& /*node
     assert(static_cast<bool>(impl_param.typed_desc<reshape>()->output_data_type) == false &&
            "Output data type forcing is not supported for reshape_node!");
     auto prim = impl_param.typed_desc<reshape>();
-    auto input_layout = impl_param.get_input_layout(0);
+    auto input_layout = impl_param.get_non_padded_input_layout();
 
     ShapeType pattern_shape = impl_param.input_layouts.size() == 2 ? impl_param.get_input_layout(1).get<ShapeType>()
                                                            : ShapeType(ov::Shape{ prim->output_pattern.size() });
@@ -186,6 +186,6 @@ void reshape_inst::on_execute() {
 
 void reshape_inst::reuse_input() {
     build_deps();  // reshape need deps
-    _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
+    _output = _network.get_engine().reinterpret_buffer(input_memory(), _impl_params->output_layout);
 }
 }  // namespace cldnn
