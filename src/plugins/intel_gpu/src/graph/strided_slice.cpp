@@ -138,7 +138,9 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
     ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
     auto output_format = format::get_default_format(output_shapes[0].size());
 
-    return { layout{output_shapes[0], input0_layout.data_type, output_format} };
+    auto new_layout = layout{ layout{output_shapes[0], input0_layout.data_type, output_format} };
+    _impl_params->output_layout = new_layout;
+    return new_layout;
 }
 
 std::string strided_slice_inst::to_string(strided_slice_node const& node) {

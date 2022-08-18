@@ -49,7 +49,7 @@ struct softmax_impl : typed_primitive_impl_ocl<softmax> {
         auto sm_optional_params =
             get_default_optional_params<kernel_selector::softmax_optional_params>(arg.get_program());
 
-        size_t rank = arg.get_output_layout().get_rank();
+        size_t rank = impl_param.output_layout.get_rank();
         sm_params.dim = get_softmax_dim(primitive->dimension, rank);
 
         auto& kernel_selector = kernel_selector::softmax_kernel_selector::Instance();

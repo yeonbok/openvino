@@ -49,11 +49,17 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
         output_type = impl_param.get_fused_output_layout().data_type;
     }
 
-
     ov::op::v3::Broadcast op;
     op.set_broadcast_spec(desc->broadcast_mode);
     bool third_input_needed = desc->broadcast_mode == ov::op::BroadcastType::EXPLICIT;
     auto target_shape = desc->target_shape;
+
+    for (size_t i = 0; i < _deps.size(); i++) {
+        auto new_shape = _deps[i]->_impl_params->output_layout;
+        if (_impl_params->input_layouts[i] != new_shape) {
+            _impl_params->input_layouts[i] = new_shape;
+        }
+    }
 
     ShapeType pattern_shape = impl_param.input_layouts.size() == 2 ? impl_param.get_input_layout(1).get<ShapeType>()
                                                                    : ShapeType(ov::Shape{ target_shape.size() });
@@ -65,7 +71,6 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
 
     auto axes_mapping = desc->axes_mapping.to_vector();
     ShapeType axes_mapping_shape = ov::Shape{axes_mapping.size()};
-
     std::map<size_t, ngraph::HostTensorPtr> const_data;
     if (third_input_needed) {
         input_shapes.emplace_back(axes_mapping_shape);
@@ -90,7 +95,9 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
 
     format output_format = format::adjust_to_rank(input0_layout.format, output_shapes[0].size());
 
-    return { layout{output_shapes[0], output_type, output_format} };
+    auto new_layout = layout{ layout{output_shapes[0], output_type, output_format} };
+    _impl_params->output_layout = new_layout;
+    return new_layout;
 }
 
 std::string broadcast_inst::to_string(broadcast_node const& node) {

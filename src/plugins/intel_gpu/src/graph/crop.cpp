@@ -45,14 +45,14 @@ std::vector<layout> crop_inst::calc_output_layouts(crop_node const& node, kernel
     assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
            "Output data type forcing is not supported for crop_node!");
 
-    const auto in_layout = node.input().get_output_layout();
+    const auto in_layout = impl_param.input_layouts[0];
     const auto desc = node.get_primitive();
     std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
     std::vector<ov::PartialShape> input_shapes = {
-        node.input().get_output_layout().get_partial_shape(),
+        impl_param.input_layouts[0].get_partial_shape(),
     };
     for (size_t i = 1; i < node.get_dependencies().size(); ++i) {
-        input_shapes.push_back(node.get_dependency(i).get_output_layout().get_partial_shape());
+        input_shapes.push_back(impl_param.input_layouts[i].get_partial_shape());
     }
 
     // TODO: calling shape_infer for all cropped outpus is redundant... Need to optimize.
