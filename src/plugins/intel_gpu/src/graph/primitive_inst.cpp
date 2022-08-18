@@ -151,9 +151,6 @@ void primitive_inst::set_output_memory(memory::ptr mem_new, bool check) {
 
 void primitive_inst::update_shape() {
     GPU_DEBUG_GET_INSTANCE(debug_config);
-    if (!_node.is_dynamic())
-        return;
-
     bool input_shape_changed = false;
     for (size_t i = 0; i < _deps.size(); i++) {
         auto new_shape = _deps[i]->_impl_params->output_layout;
@@ -208,6 +205,7 @@ void primitive_inst::update_shape() {
             GPU_DEBUG_COUT << id() << ": update shape: was: " << _impl_params->output_layout << "\nnow: " << new_layout << std::endl;
         }
         set_shape_change();
+        _impl_params->output_layout = new_layout;
     }
 }
 void primitive_inst::realloc_if_needed() {
@@ -234,14 +232,12 @@ void primitive_inst::update_impl() {
     if (!_node.is_type<data>() && !(_node.is_type<mutable_data>() && _node.get_dependencies().empty())) {
         auto get_layout_key = [&]()->std::string {
             std::string layout_key_str = "";
-            if (_node.is_valid_output_layout()) {
-                layout_key_str = id() + "_" + std::to_string(_node.get_unique_id());
-                layout_key_str += "_" + _impl_params->output_layout.to_string();
+            layout_key_str = id() + "_" + std::to_string(_node.get_unique_id());
+            layout_key_str += "_" + _impl_params->output_layout.to_string();
 
-                for (auto in : _node.get_dependencies()) {
-                    if (!in->is_constant()) {
-                        layout_key_str += "_" + in->get_output_layout().to_string();
-                    }
+            for (auto in : _node.get_dependencies()) {
+                if (!in->is_constant()) {
+                    layout_key_str += "_" + in->get_output_layout().to_string();
                 }
             }
             return layout_key_str;
@@ -281,7 +277,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
     std::vector<event::ptr> dependencies;
-    if (is_dynamic()) {
+    if (get_network().is_dynamic()) {
         static std::mutex m;
         {
             PRINT_TIME(update_shape());
@@ -308,7 +304,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     }
 
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
-    if (is_dynamic() || has_mutable_input() || is_output())
+    if (get_network().is_dynamic() || has_mutable_input() || is_output())
         set_arguments();
 
     auto queue_type = get_network().get_stream().get_queue_type();

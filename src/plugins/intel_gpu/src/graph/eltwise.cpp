@@ -124,8 +124,8 @@ std::vector<layout> eltwise_inst::calc_output_layouts(eltwise_node const& node, 
     auto get_output_layout = [&]() {
         auto format = input_node_layout.format;
         ov::PartialShape out_pshape;
-        for (size_t i = 0; i < node.inputs_count(); i++) {
-            auto l = node.input(i).get_non_padded_output_layout();
+        for (size_t i = 0; i < impl_param.input_layouts.size(); i++) {
+            auto l = impl_param.get_non_padded_input_layout(i);
             if (!ov::PartialShape::broadcast_merge_into(out_pshape, l.get_partial_shape(), ov::op::AutoBroadcastSpec(ov::op::AutoBroadcastType::NUMPY))) {
                 IE_THROW() << "incorrect input shapes\n";
             }
@@ -182,8 +182,8 @@ std::vector<layout> eltwise_inst::calc_output_layouts(eltwise_node const& node, 
         output_layout.data_type = *desc->output_data_type;
     }
 
-    if (node.has_fused_primitives()) {
-        output_layout.data_type = node.get_fused_output_layout().data_type;
+    if (impl_param.has_fused_primitives()) {
+        output_layout.data_type = impl_param.get_fused_output_layout().data_type;
     }
 
     if (!desc->stride.empty()) {

@@ -47,17 +47,20 @@ void broadcast_inst::update_shape() {
     if (!_network.shape_changed())
         return;
 
-    auto& node = const_cast<broadcast_node&>(dynamic_cast<const broadcast_node&>(_node));
+    for (size_t i = 0; i < _deps.size(); i++) {
+        auto new_shape = _deps[i]->_impl_params->output_layout;
+        if (_impl_params->input_layouts[i] != new_shape) {
+            _impl_params->input_layouts[i] = new_shape;
+        }
+    }
 
     auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
     auto output_shape = ov::PartialShape(read_vector<size_t>(shape_mem, _network.get_stream()));
     auto new_layout = layout{output_shape, cldnn::data_types::i32, cldnn::format::bfyx};
-    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::i32, format::bfyx, tensor{});
-    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
-    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
+    if (_impl_params->output_layout != new_layout)
         set_shape_change();
 
-    node.set_output_layout(new_layout);
+    _impl_params->output_layout = new_layout;
 }
 
 std::string broadcast_inst::to_string(broadcast_node const& node) {

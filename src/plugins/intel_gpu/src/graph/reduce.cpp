@@ -43,7 +43,7 @@ layout reduce_inst::calc_output_layout(reduce_node const& node, kernel_impl_para
     auto output_type = input_layout.data_type;
     auto mode = desc->mode;
     auto reduce_axes = convert_axes(desc->axes, input_layout.get_rank());
-    auto in_dims = input_layout.get_tensor().sizes();
+    auto in_dims = input_layout.get_partial_shape().to_shape();
 
     for (size_t a = 0; a < reduce_axes.size(); a++) {
         in_dims[reduce_axes[a]] = 1;

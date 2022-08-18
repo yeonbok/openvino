@@ -24,7 +24,7 @@ primitive_type_id count_nonzero::type_id() {
 layout count_nonzero_inst::calc_output_layout(count_nonzero_node const& node, kernel_impl_params const& impl_param) {
     assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
            "Output data type forcing is not supported for count_nonzero_node!");
-    return layout{cldnn::data_types::i32, cldnn::format::bfyx, tensor{1, 1, 1, 4}};
+    return layout{ov::PartialShape{4}, cldnn::data_types::i32, cldnn::format::bfyx};
 }
 
 std::string count_nonzero_inst::to_string(count_nonzero_node const& node) {
@@ -36,7 +36,7 @@ std::string count_nonzero_inst::to_string(count_nonzero_node const& node) {
 
     json_composite count_nonzero_info;
     count_nonzero_info.add("input id", input.id());
-    count_nonzero_info.add("output shape", tensor{1, 1, 1, 4});
+    count_nonzero_info.add("output shape", ov::PartialShape{4});
 
     node_info->add("count_nonzero info", count_nonzero_info);
     node_info->dump(primitive_description);
@@ -107,21 +107,25 @@ std::string gather_nonzero_inst::to_string(gather_nonzero_node const& node) {
 gather_nonzero_inst::typed_primitive_inst(network& network, gather_nonzero_node const& node) : parent(network, node, false) {}
 
 void gather_nonzero_inst::update_shape() {
-    auto& node = const_cast<gather_nonzero_node&>(dynamic_cast<const gather_nonzero_node&>(_node));
+    for (size_t i = 0; i < _deps.size(); i++) {
+        auto new_shape = _deps[i]->_impl_params->output_layout;
+        if (_impl_params->input_layouts[i] != new_shape) {
+            _impl_params->input_layouts[i] = new_shape;
+        }
+    }
 
     auto shape_mem = _network.get_output_memory(_node.get_dependency(1).id());
     auto output_shape = ov::PartialShape(read_vector(shape_mem, _network.get_stream()));
     auto new_layout = layout{output_shape, cldnn::data_types::i32, cldnn::format::bfyx};
-    auto out_layout = _node.is_valid_output_layout() ? _node.get_output_layout() : layout(data_types::i32, format::bfyx, tensor{});
-    auto out_layout_str = _node.is_valid_output_layout() ? out_layout.to_string() : "invalid";
+    auto out_layout_str = _impl_params->output_layout.to_string();
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_IF(debug_config->verbose >= 4) {
         GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
     }
-    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
+    if (_impl_params->output_layout != new_layout)
         set_shape_change();
 
-    node.set_output_layout(new_layout);
+    _impl_params->output_layout = new_layout;
 }
 
 }  // namespace cldnn

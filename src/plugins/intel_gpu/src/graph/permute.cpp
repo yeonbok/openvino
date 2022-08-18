@@ -60,7 +60,7 @@ std::vector<layout> permute_inst::calc_output_layouts(permute_node const& node, 
         output_shape.push_back(input_shape[permute_order[x]]);
     }
 
-    auto op = node.get_primitive()->output_padding;
+    auto op = desc->output_padding;
 
     if (impl_param.has_fused_primitives()) {
         input_layout.data_type = impl_param.get_fused_output_layout().data_type;

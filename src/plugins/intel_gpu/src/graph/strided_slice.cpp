@@ -96,6 +96,13 @@ void strided_slice_inst::update_shape() {
     if (!_network.shape_changed())
         return;
 
+    for (size_t i = 0; i < _deps.size(); i++) {
+        auto new_shape = _deps[i]->_impl_params->output_layout;
+        if (_impl_params->input_layouts[i] != new_shape) {
+            _impl_params->input_layouts[i] = new_shape;
+        }
+    }
+
     auto& node = const_cast<strided_slice_node&>(dynamic_cast<const strided_slice_node&>(_node));
     auto in_mem1 = _network.get_output_memory(_node.get_dependency(1).id());
     auto in_mem2 = _network.get_output_memory(_node.get_dependency(2).id());
@@ -111,10 +118,10 @@ void strided_slice_inst::update_shape() {
     GPU_DEBUG_IF(debug_config->verbose >= 4) {
         GPU_DEBUG_COUT << id() << " update shape: was: " << out_layout_str << " now: " << new_layout.to_string() << std::endl;
     }
-    if (!_node.is_valid_output_layout() || _node.get_output_layout() != new_layout)
+    if (_impl_params->output_layout!= new_layout)
         set_shape_change();
     // TODO: Get rid of this const_cast
-    node.set_output_layout(new_layout);
+    _impl_params->output_layout = new_layout;
 }
 
 std::string strided_slice_inst::to_string(strided_slice_node const& node) {

@@ -161,6 +161,12 @@ struct kernel_impl_params {
         return result;
     }
 
+    layout get_non_padded_output_layout() const {
+        auto result = layout({output_layout.get_partial_shape(), output_layout.data_type, output_layout.format});
+        return result;
+    }
+
+
     bool has_fused_primitives() const { return !fused_desc.empty(); }
 
     layout get_fused_output_layout() const {
