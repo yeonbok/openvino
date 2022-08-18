@@ -26,8 +26,9 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node, kernel_imp
     auto input_layout = impl_param.get_input_layout();
     auto desc = impl_param.typed_desc<broadcast>();
 
-    if (!desc->target_shape.empty()) {
-        std::vector<tensor::value_type> dims_converted(desc->target_shape.begin(), desc->target_shape.end());
+    if (desc->target_shape.is_static()) {
+        auto target_shape = desc->target_shape.to_shape();
+        std::vector<tensor::value_type> dims_converted(target_shape.begin(), target_shape.end());
         for (size_t i = dims_converted.size(); i < 4; i++)
             dims_converted.push_back(1);  // extend shape to 4d
 
@@ -43,12 +44,17 @@ template<typename ShapeType>
 std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*node*/, const kernel_impl_params& impl_param) {
     auto desc = impl_param.typed_desc<broadcast>();
     auto input0_layout = impl_param.get_input_layout(0);
+    for (auto& in_l : impl_param.input_layouts) {
+        if (in_l.is_dynamic()) {
+            return { layout{ov::PartialShape::dynamic(input0_layout.get_partial_shape().size()),
+                    input0_layout.data_type, input0_layout.format.adjust_to_rank(input0_layout.format, input0_layout.get_partial_shape().size())} };
+        }
+    }
 
     auto output_type = input0_layout.data_type;
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;
     }
-
 
     ov::op::v3::Broadcast op;
     op.set_broadcast_spec(desc->broadcast_mode);
@@ -65,7 +71,6 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
 
     auto axes_mapping = desc->axes_mapping.to_vector();
     ShapeType axes_mapping_shape = ov::Shape{axes_mapping.size()};
-
     std::map<size_t, ngraph::HostTensorPtr> const_data;
     if (third_input_needed) {
         input_shapes.emplace_back(axes_mapping_shape);
@@ -83,7 +88,7 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
         ov::op::v3::shape_infer(&op, input_shapes, output_shapes, const_data);
     } else {
         auto target_shape_tensor = make_host_tensor({pattern_shape, data_types::i64, format::bfyx},
-                                                     static_cast<void*>(target_shape.data()));
+                                                     static_cast<void*>(target_shape.to_shape().data()));
         const_data.emplace(1, target_shape_tensor);
         ov::op::v3::shape_infer(&op, input_shapes, output_shapes, const_data);
     }
