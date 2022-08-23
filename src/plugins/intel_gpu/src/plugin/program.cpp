@@ -70,6 +70,7 @@ auto getParamName = [](const std::shared_ptr<ov::Node>& param) -> std::string {
 bool Program::IsDynBatchModel(const std::shared_ptr<ov::Model>& model,
                               std::map<std::string, ov::PartialShape>& shapes,
                               std::map<std::string, std::pair<int64_t, int64_t>>& batch_dim) {
+    return false; // Taylor // To be removed from new InferRequest
     for (const auto& param : model->get_parameters()) {
         auto pname = getParamName(param);
         batch_dim[pname] = { -1, -1 };
@@ -155,6 +156,16 @@ Program::Program(InferenceEngine::CNNNetwork& network, std::shared_ptr<cldnn::en
         shapes[pname] = param->get_output_partial_shape(0);
         batch_dim[pname].first = 0;
         batch_dim[pname].second = m_config.max_dynamic_batch;
+    } else {
+        dyn_shape_batch_found = IsDynBatchModel(func, shapes, batch_dim);
+        if (dyn_shape_batch_found) {
+            m_config.max_dynamic_batch = batch_dim.begin()->second.second;
+        } else {
+            if (!batch_dim.empty() && shapes.empty()) {
+                // more than on dynamic dim or dynamic rank
+                IE_THROW() << "Only dynamic batch is supported!";
+            }
+        }
     }
 
     int m_bv_sz = GetMaxBatchSizeForSingleProgram();

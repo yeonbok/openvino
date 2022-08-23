@@ -7,6 +7,7 @@
 #include "intel_gpu/primitives/data.hpp"
 #include "intel_gpu/primitives/mutable_data.hpp"
 #include "intel_gpu/primitives/input_layout.hpp"
+#include "intel_gpu/primitives/reshape.hpp"
 
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "intel_gpu/runtime/memory.hpp"
@@ -24,7 +25,6 @@
 #include "primitive_inst.h"
 #include "input_layout_inst.h"
 #include "mutable_data_inst.h"
-#include "reshape_inst.h"
 #include "condition_inst.h"
 #include "loop_inst.h"
 #include "kernel_selector_helper.h"
@@ -321,7 +321,7 @@ void network::validate_primitives() {
 }
 
 void network::set_arguments() {
-    if (!_reset_arguments || is_dynamic())
+    if (!_reset_arguments)
         return;
 
     for (auto const& prim : _exec_order) {
@@ -651,12 +651,6 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     _shape_changed = false;
     std::vector<memory::ptr> in_out_mem;
     for (auto& inst : _inputs) {
-#if 0
-        if (inst->get_node().is_dynamic()) {
-            std::cout << "Input is dynamic!" << std::endl;
-            return;
-        }
-#endif
         if (inst->output_memory_ptr())
             in_out_mem.push_back(inst->output_memory_ptr());
         if (inst->shape_changed())
@@ -670,7 +664,9 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 
     auto surf_lock = surfaces_lock::create(get_engine().type(), in_out_mem, get_stream());
 
-    set_arguments();
+    if (!_is_dynamic)
+        set_arguments();
+
     for (auto& inst : _exec_order) {
         GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
             auto& node = _program->get_node(inst->id());
@@ -887,6 +883,7 @@ void network::allocate_primitive_instance(program_node const& node) {
     }
     if (std::dynamic_pointer_cast<assign_inst>(inst) || std::dynamic_pointer_cast<read_value_inst>(inst))
         _variable_state_primitives.push_back(inst);
+
     if (node.is_constant())
         transfer_memory_to_device(inst, node);
 }

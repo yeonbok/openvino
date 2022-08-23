@@ -4,6 +4,7 @@
 
 #include "broadcast_inst.h"
 
+#include "intel_gpu/runtime/debug_configuration.hpp"
 #include "intel_gpu/plugin/common_utils.hpp"
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "json_object.h"
@@ -60,6 +61,10 @@ void broadcast_inst::update_shape() {
     if (_impl_params->output_layout != new_layout)
         set_shape_change();
 
+    GPU_DEBUG_GET_INSTANCE(debug_config);
+    GPU_DEBUG_IF(debug_config->verbose >= 4) {
+        GPU_DEBUG_COUT << "updated shape" << id() << " was : " << _impl_params->output_layout.to_string() << " now : " << new_layout.to_string() << std::endl;
+    }
     _impl_params->output_layout = new_layout;
 }
 
