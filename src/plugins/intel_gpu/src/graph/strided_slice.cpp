@@ -19,7 +19,7 @@ primitive_type_id strided_slice::type_id() {
     return &instance;
 }
 
-layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, kernel_impl_params const& impl_param) {
+layout strided_slice_inst::calc_output_layout(strided_slice_node const& /*node*/, kernel_impl_params const& impl_param) {
     auto desc = impl_param.typed_desc<strided_slice>();
     auto input_layout = impl_param.input_layouts[0];
     auto output_format = format::get_default_format(desc->out_size.size());
@@ -34,64 +34,6 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, ke
 }
 
 template<typename ShapeType>
-std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& node, const kernel_impl_params& impl_param) {
-    auto desc = impl_param.typed_desc<strided_slice>();
-    auto input_layout = impl_param.input_layouts[0];
-    auto output_format = format::get_default_format(desc->out_size.size());
-    if (!node.const_mem.empty()) {
-        ov::op::v1::StridedSlice op;
-        std::vector<ov::PartialShape> input_shapes = {
-            node.get_dependency(0).get_output_layout().get_partial_shape(),
-            node.get_dependency(1).get_output_layout().get_partial_shape(),
-            node.get_dependency(2).get_output_layout().get_partial_shape(),
-            node.get_dependency(3).get_output_layout().get_partial_shape()
-        };
-        std::vector<ov::PartialShape> output_shapes = {ov::PartialShape()};
-        auto begin_mask = desc->begin_mask;
-        auto end_mask = desc->end_mask;
-        auto new_axis_mask = desc->new_axis_mask;
-        auto shrink_axis_mask = desc->shrink_axis_mask;
-
-        op.set_begin_mask(desc->begin_mask);
-        op.set_end_mask(desc->end_mask);
-        op.set_new_axis_mask(desc->new_axis_mask);
-        op.set_shrink_axis_mask(desc->shrink_axis_mask);
-
-        cldnn::mem_lock<uint8_t, mem_lock_type::read> lock1(node.const_mem[0], node.get_program().get_stream());
-        cldnn::mem_lock<uint8_t, mem_lock_type::read> lock2(node.const_mem[1], node.get_program().get_stream());
-        cldnn::mem_lock<uint8_t, mem_lock_type::read> lock3(node.const_mem[2], node.get_program().get_stream());
-
-        auto ptr1 = lock1.data();
-        auto ptr2 = lock2.data();
-        auto ptr3 = lock3.data();
-
-        auto make_tensor = [](layout l, void* memory_pointer) {
-            ov::element::Type et;
-
-            switch (l.data_type) {
-                case data_types::i64: et = ov::element::i64; break;
-                case data_types::i32: et = ov::element::i32; break;
-                default: IE_THROW() << "unsupported element type in strided slice primitive";
-            }
-
-            return std::make_shared<ngraph::runtime::HostTensor>(et, l.get_partial_shape().to_shape(), memory_pointer);
-        };
-
-        auto tensor1 = make_tensor(node.const_mem[0]->get_layout(), ptr1);
-        auto tensor2 = make_tensor(node.const_mem[1]->get_layout(), ptr2);
-        auto tensor3 = make_tensor(node.const_mem[2]->get_layout(), ptr3);
-
-        std::map<size_t, std::shared_ptr<ngraph::runtime::HostTensor>> const_data = {
-            {1, tensor1},
-            {2, tensor2},
-            {3, tensor3},
-        };
-        ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
-        return {layout{output_shapes[0], input_layout.data_type, output_format}};
-    }
-    return {layout{desc->out_size, input_layout.data_type, output_format}};
-}
-
 std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& /*node*/, const kernel_impl_params& impl_param) {
     auto desc = impl_param.typed_desc<strided_slice>();
     auto input0_layout = impl_param.get_input_layout(0);
@@ -138,9 +80,7 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
     ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
     auto output_format = format::get_default_format(output_shapes[0].size());
 
-    auto new_layout = layout{ layout{output_shapes[0], input0_layout.data_type, output_format} };
-    _impl_params->output_layout = new_layout;
-    return new_layout;
+    return { layout{output_shapes[0], input0_layout.data_type, output_format} };
 }
 
 std::string strided_slice_inst::to_string(strided_slice_node const& node) {

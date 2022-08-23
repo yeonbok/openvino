@@ -5,6 +5,7 @@
 #include "broadcast_inst.h"
 #include "broadcast_shape_inference.hpp"
 
+#include "intel_gpu/runtime/debug_configuration.hpp"
 #include "intel_gpu/plugin/common_utils.hpp"
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "json_object.h"
@@ -54,13 +55,6 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
     bool third_input_needed = desc->broadcast_mode == ov::op::BroadcastType::EXPLICIT;
     auto target_shape = desc->target_shape;
 
-    for (size_t i = 0; i < _deps.size(); i++) {
-        auto new_shape = _deps[i]->_impl_params->output_layout;
-        if (_impl_params->input_layouts[i] != new_shape) {
-            _impl_params->input_layouts[i] = new_shape;
-        }
-    }
-
     ShapeType pattern_shape = impl_param.input_layouts.size() == 2 ? impl_param.get_input_layout(1).get<ShapeType>()
                                                                    : ShapeType(ov::Shape{ target_shape.size() });
     std::vector<ShapeType> output_shapes = {ShapeType{}};
@@ -95,9 +89,7 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
 
     format output_format = format::adjust_to_rank(input0_layout.format, output_shapes[0].size());
 
-    auto new_layout = layout{ layout{output_shapes[0], output_type, output_format} };
-    _impl_params->output_layout = new_layout;
-    return new_layout;
+    return { layout{output_shapes[0], output_type, output_format} };
 }
 
 std::string broadcast_inst::to_string(broadcast_node const& node) {
@@ -128,11 +120,9 @@ std::string broadcast_inst::to_string(broadcast_node const& node) {
 }
 
 broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& node) : parent(network, node) {
-    if (node.get_primitive()->broadcast_sizes.is_dynamic())
-        return;
+//    if (node.get_primitive()->broadcast_sizes.is_dynamic())
+//        return;
     auto input_layout = node.input().get_output_layout();
-
-    const auto& output_sizes = argument.broadcast_sizes;
 
     std::vector<tensor::value_type> input_dims = input_layout.get_dims();
     size_t max_axes_num = input_layout.get_rank();
@@ -177,16 +167,6 @@ broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& nod
             reordered_input_dims.at(i) = input_dims.at(input_index);
             ++input_index;
         }
-    }
-    tensor input_sizes_to_compare = tensor(format::get_default_format(reordered_input_dims.size()), reordered_input_dims);
-
-    if (output_sizes.is_static()) {
-        CLDNN_ERROR_TENSOR_SIZES_NOT_DIVIDABLE(node.id(),
-                                              "Broadcast sizes",
-                                              ov::intel_gpu::tensor_from_dims(output_sizes.to_shape()),
-                                              "input sizes",
-                                              input_sizes_to_compare,
-                                              "Invalid broadcast size: not dividable by input size");
     }
 }
 }  // namespace cldnn

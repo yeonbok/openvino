@@ -41,10 +41,10 @@ input_layout_inst::typed_primitive_inst(network& network, input_layout_node cons
 }
 
 void input_layout_inst::set_data(memory::ptr mem) {
-    auto ol = node.get_output_layout();
+    auto ol = _impl_params->output_layout;
 
-    // if (!_node.is_dynamic())
-    //     check_memory_to_set(*mem, ol);
+    if (!node.is_dynamic())
+         check_memory_to_set(*mem, ol);
 
     if (mem->get_layout().is_dynamic())
         throw std::runtime_error("[GPU] set_data: invalid memory object passed. Layout can't be dynamic");
@@ -62,10 +62,19 @@ void input_layout_inst::set_data(memory::ptr mem) {
     _shape_changed = mem->get_layout() != ol;
 
     if (_shape_changed) {
-        node.invalidate_users();
         auto il_prim = std::const_pointer_cast<input_layout>(node.get_primitive());
         il_prim->change_layout(mem->get_layout());
+        _impl_params->output_layout = mem->get_layout();
     }
+}
+
+void input_layout_inst::update_shape() {
+    OPENVINO_ASSERT(_output != nullptr, "[GPU] input memory is not set");
+    auto mem_layout = _output->get_layout();
+    if (_impl_params->output_layout != mem_layout) {
+        set_shape_change();
+    }
+    _impl_params->output_layout = mem_layout;
 }
 
 std::string input_layout_inst::to_string(input_layout_node const& node) {

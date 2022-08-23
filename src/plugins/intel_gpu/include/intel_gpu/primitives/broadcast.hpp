@@ -131,14 +131,10 @@ struct broadcast : public primitive_base<broadcast> {
     ov::Shape target_shape;
     /// @brief The axis positions (0-based) in the result that correspond to input axes.
     ov::AxisSet axes_mapping;
-
-    // legacy? (taylor)
-    /// @brief Expected sizes of output from broadcast primitive.
-    ov::PartialShape broadcast_sizes;
-
     /// @brief Broadcast mode to use for determining broadcast axes.
     ov::op::BroadcastModeSpec broadcast_mode;
-
+    /// @brief Expected sizes of output from broadcast primitive.
+    tensor broadcast_sizes;
     /// @brief Array of axes positions from output shape (0-based, from left to right)
     ///        along which broadcast should happen.
     std::vector<uint16_t> broadcast_axes;

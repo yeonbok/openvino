@@ -127,7 +127,7 @@ std::vector<layout> eltwise_inst::calc_output_layouts(eltwise_node const& node, 
         for (size_t i = 0; i < impl_param.input_layouts.size(); i++) {
             auto l = impl_param.get_non_padded_input_layout(i);
             if (!ov::PartialShape::broadcast_merge_into(out_pshape, l.get_partial_shape(), ov::op::AutoBroadcastSpec(ov::op::AutoBroadcastType::NUMPY))) {
-                IE_THROW() << "incorrect input shapes\n";
+                IE_THROW() << node.id() << " : incorrect input shapes (" <<  out_pshape << " and " << l.get_partial_shape() << "\n";
             }
             if (l.format == format::b_fs_zyx_fsv16)  // use optimized 5D
                 format = format::b_fs_zyx_fsv16;
