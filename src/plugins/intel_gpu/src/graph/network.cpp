@@ -7,6 +7,7 @@
 #include "intel_gpu/primitives/data.hpp"
 #include "intel_gpu/primitives/mutable_data.hpp"
 #include "intel_gpu/primitives/input_layout.hpp"
+#include "intel_gpu/primitives/reshape.hpp"
 
 #include "intel_gpu/runtime/error_handler.hpp"
 #include "intel_gpu/runtime/memory.hpp"
@@ -24,7 +25,6 @@
 #include "primitive_inst.h"
 #include "input_layout_inst.h"
 #include "mutable_data_inst.h"
-#include "reshape_inst.h"
 #include "condition_inst.h"
 #include "loop_inst.h"
 #include "kernel_selector_helper.h"
@@ -891,6 +891,7 @@ void network::allocate_primitive_instance(program_node const& node) {
     }
     if (std::dynamic_pointer_cast<assign_inst>(inst) || std::dynamic_pointer_cast<read_value_inst>(inst))
         _variable_state_primitives.push_back(inst);
+
     if (node.is_constant())
         transfer_memory_to_device(inst, node);
 }

@@ -172,6 +172,7 @@ void regclass_InferRequest(py::module m) {
     cls.def(
         "infer",
         [](InferRequestWrapper& self, const ov::Tensor& inputs) {
+            printf("infer called : run_sync_infer! (tensor)");
             self._request.set_input_tensor(inputs);
             return run_sync_infer(self);
         },
@@ -199,7 +200,9 @@ void regclass_InferRequest(py::module m) {
         "infer",
         [](InferRequestWrapper& self, const py::dict& inputs) {
             // Update inputs if there are any
+            printf("infer called : run_sync_infer! (dict)");
             Common::set_request_tensors(self._request, inputs);
+            printf("set request tensor finished");
             // Call Infer function
             return run_sync_infer(self);
         },

@@ -16,6 +16,8 @@
 #include "intel_gpu/runtime/debug_configuration.hpp"
 #include "openvino/core/preprocess/input_tensor_info.hpp"
 #include <ie_algorithm.hpp>
+#include <ie_ngraph_utils.hpp>
+#include <transformations/utils/utils.hpp>
 #include <debug.h>
 
 using namespace InferenceEngine;
@@ -149,6 +151,7 @@ namespace intel_gpu {
 // ---------------------------- IE API impl ------------------------------------------------ //
 // ----------------------------------------------------------------------------------------- //
 Blob::Ptr InferRequest::GetBlob(const std::string& name) {
+    std::cout << "GPU Plugin :: GetBlob " << name << std::endl;
     OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "InferRequest::GetBlob");
     Blob::Ptr data;
     InputInfo::Ptr foundInput;
@@ -164,12 +167,47 @@ Blob::Ptr InferRequest::GetBlob(const std::string& name) {
             data = it->second->getRoiBlob();
         } else {
             data = _inputs[name];
-            if (!isDynamic)
+            if (!isDynamic) {
                 checkInputBlob(data, name, foundInput);
+            } else {
+                auto inputNode = modelInputsMap.find(name);
+                if (inputNode != modelInputsMap.end()) {
+                    if (!inputNode->second) {
+                        IE_THROW() << "Can't get blob with name: " << name << ", because has null pointer to input node";
+                    }
+
+                    const auto shape = inputNode->second->get_output_partial_shape(0);
+                    const bool isDynamic = shape.is_dynamic();
+                    InferenceEngine::SizeVector dims;
+                    if (isDynamic) {
+                        dims = InferenceEngine::SizeVector(shape.rank().get_length(), 0);
+                    } else {
+                        dims = shape.to_shape();
+                    }
+
+                    InferenceEngine::TensorDesc desc(InferenceEngine::details::convertPrecision(inputNode->second->get_output_element_type(0)),
+                            dims, InferenceEngine::TensorDesc::getLayoutByRank(dims.size()));
+
+                    _inputs[name] = make_blob_with_precision(desc);
+                    _inputs[name]->allocate();
+                } else {
+                    IE_THROW() << "Blob with name: " << name << " exists in CPU plugin graph, but absents in network inputs";
+                }
+            }
+            data = _inputs[name];
         }
     } else {
         data = _outputs[name];
-        if (!isDynamic) {
+        if (isDynamic) {
+            auto outputNode = modelOutputsMap.find(name);
+            if (!data) {
+                auto dims = InferenceEngine::SizeVector(outputNode->second->get_input_partial_shape(0).rank().get_length(), 0);
+                InferenceEngine::TensorDesc desc(InferenceEngine::details::convertPrecision(outputNode->second->get_input_element_type(0)),
+                                                 dims, InferenceEngine::TensorDesc::getLayoutByRank(dims.size()));
+                data = make_blob_with_precision(desc);
+                data->allocate();
+            }
+        } else {
             checkOutputBlob(data, name, foundOutput);
         }
     }
@@ -409,6 +447,13 @@ InferRequest::InferRequest(const std::vector<std::shared_ptr<const ov::Node>>& i
                                      const CompiledModel::Ptr& execNetwork)
         : IInferRequestInternal(inputs, outputs) {
     IE_ASSERT(nullptr != execNetwork);
+    for (const std::shared_ptr<const ov::Node>& in : inputs) {
+        modelInputsMap[ngraph::op::util::get_ie_output_name(ngraph::Output<const ngraph::Node>(in))] = in;
+    }
+    for (const std::shared_ptr<const ov::Node>& out : outputs) {
+        modelOutputsMap[ngraph::op::util::get_ie_output_name(out->input_value(0))] = out;
+    }
+
     streamExecutor = dynamic_cast<InferenceEngine::IStreamsExecutor*>(execNetwork->m_taskExecutor.get());
 }
 
@@ -484,6 +529,18 @@ void InferRequest::enqueue() {
         Blob::Ptr& inputBlob = item.second;
         prepare_input(inputName, inputBlob, dependencies);
     }
+    // Taylor tmp for acc test
+    for (auto& item : _inputs) {
+        auto input_name = item.first;
+        auto node = findInputByNodeName(input_name);
+        if (node && node->get_output_partial_shape(0).is_dynamic()) {
+            Blob::Ptr& inputBlob = item.second;
+            if (inputBlob->buffer() == nullptr) {
+                std::cout << "InferRequest::enqueue) node is dynamic! " << std::endl;
+                return;
+            }
+        }
+    }
 
     cldnn::network::variables_states_map variables_states;
     for (auto &variable_state_pair : variables_states_)
@@ -516,6 +573,24 @@ void InferRequest::wait_notify() {
 }
 
 void InferRequest::wait() {
+    // Taylor tmp for acc test
+    for (auto& item : _inputs) {
+        auto input_name = item.first;
+        auto node = findInputByNodeName(input_name);
+        if (node && node->get_output_partial_shape(0).is_dynamic()) {
+            Blob::Ptr& inputBlob = item.second;
+            if (inputBlob->buffer() == nullptr) {
+                std::cout << "InferRequest::enqueue) node is dynamic! " << std::endl;
+                return;
+            }
+        }
+    }
+
+    if (m_graph->GetMaxDynamicBatchSize() > 1) {
+        wait_dynamic();
+        return;
+    }
+
     if (internal_outputs.empty()) {
         IE_THROW() << "Inference was not started!\n";
     }
@@ -817,7 +892,11 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
     if (inputLayoutItr == m_graph->GetInputLayouts().end()) {
         IE_THROW() << "Input name mismatch.";
     }
-    auto reqBlob = _deviceInputs.at(inputName)->as<gpu::ClBlob>();
+    // Taylor below
+    // Need to support dynamic input blob
+    auto node = findInputByNodeName(inputName);
+    bool isDynamic = (node && node->get_output_partial_shape(0).is_dynamic());
+
     auto _nw_ptr = m_graph->GetNetwork();
     cldnn::primitive_id internalName = "parameter:" + inputName;
     const auto& prec = inputBlob->getTensorDesc().getPrecision();
@@ -838,9 +917,10 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
         case Precision::U32:
         case Precision::U64:
         case Precision::I64: {
-            auto impl = getBlobImpl(is_dev_input ?
-                                    remote_ptr :
-                                    reqBlob);
+            if (isDynamic) {
+                SetBlob(inputName, inputBlob);
+            }
+            auto impl = getBlobImpl(is_dev_input ? remote_ptr : _deviceInputs.at(inputName)->as<gpu::ClBlob>());
             if (!impl->is_allocated()) {
                 IE_THROW() << str_input_not_allocated;
             }

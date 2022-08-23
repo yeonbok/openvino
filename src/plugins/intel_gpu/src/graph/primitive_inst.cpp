@@ -7,9 +7,11 @@
 #include "mutable_data_inst.h"
 #include "generic_layer_inst.h"
 #include "input_layout_inst.h"
+#include "shape_of_inst.h"
 #include "arg_max_min_inst.h"
 #include "fully_connected_inst.h"
 #include "convolution_inst.h"
+#include "strided_slice_inst.h"
 #include "deconvolution_inst.h"
 #include "shape_of_inst.h"
 #include "experimental_detectron_roi_feature_extractor_inst.hpp"
@@ -138,7 +140,10 @@ void primitive_inst::set_output_memory(memory::ptr mem_new, bool check) {
         return;
     }
 
-    auto ol = _node.get_output_layout();
+    auto& ol = _impl_params->output_layout;
+
+    if (ol.is_dynamic() && !mem_new->get_layout().is_dynamic())
+        ol = mem_new->get_layout();
 
     if (check)
         check_memory_to_set(*mem_new, ol);
@@ -170,7 +175,9 @@ void primitive_inst::update_shape() {
 
     if (!input_shape_changed && !_node.generates_dynamic_output() && _impl_params->output_layout.is_static())
         return;
-
+    }
+    if (input_shape_changed)
+        set_shape_change(); // if input_layout is changed, the choose_impl should be called again
     auto memory_deps = _node.get_const_memory_deps();
     std::vector<event::ptr> dependencies_events;
     for (auto& i : _node.get_shape_infer_dependencies()) {
@@ -210,7 +217,6 @@ void primitive_inst::realloc_if_needed() {
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
     auto actual_layout = _impl_params->output_layout;
-    OPENVINO_ASSERT(!actual_layout.is_dynamic(), "[GPU] Can't realloc mem for dynamic layout");
 
     // input_layout node is supposed to always use external memory in dynamic case
     if (_node.is_type<input_layout>())
@@ -242,10 +248,8 @@ void primitive_inst::update_impl() {
             layout_key_str = id() + "_" + std::to_string(_node.get_unique_id());
             layout_key_str += "_" + _impl_params->output_layout.to_string();
 
-            for (auto in : _node.get_dependencies()) {
-                if (!in->is_constant()) {
-                    layout_key_str += "_" + in->get_output_layout().to_string();
-                }
+            for (auto in : _impl_params->input_layouts) {
+                layout_key_str += "_" + in.to_string();
             }
             return layout_key_str;
         };
@@ -260,8 +264,9 @@ void primitive_inst::update_impl() {
                 _impl = _node.type()->choose_impl(_node, *_impl_params);
                 bool lru_popped = cache.add(layout_key, _impl->clone());
                 if (lru_popped) {
-                    for (auto& id : lru->get_kernel_ids())
+                    for (auto& id : lru->get_kernel_ids()) {
                         _network.get_program()->remove_kernel(id);
+                    }
                 }
                 _network.get_program()->compile();
             }
@@ -287,6 +292,12 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     if (get_network().is_dynamic()) {
         static std::mutex m;
         {
+            for (auto p : _node.get_dependencies()) {
+                if (p->is_type<shape_of>()) {
+                    auto dep_event = _network.get_primitive_event(p->id());
+                    _network.get_stream().wait_for_events({dep_event});
+                }
+            }
             PRINT_TIME(update_shape());
             if (shape_changed() || !_impl) {
                 PRINT_TIME(update_impl());
@@ -322,6 +333,9 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
     if (is_dynamic() || has_mutable_input() || is_output())
         set_arguments();
+
+    if (_exec_deps.empty() && dependencies.empty())
+        return _impl->execute(events, *this);
 
     auto queue_type = get_network().get_stream().get_queue_type();
     if (queue_type == queue_types::out_of_order) {
