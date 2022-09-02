@@ -599,7 +599,7 @@ TEST(reshape_gpu_f32, basic_runtime_static_shape) {
     topology.add(input_layout("input", input->get_layout()));
     topology.add(shape_of("shape_of_input", "input", 6, data_types::i32));
     topology.add(reduce("reduced_shape", "shape_of_input", reduce_mode::prod, {0}, true));
-    topology.add(reshape("reshape", "input", "reduced_shape", {}));
+    topology.add(reshape("reshape", "input", "reduced_shape", false, {}));
 
     // clang-format off
     std::vector<float> input_data = {

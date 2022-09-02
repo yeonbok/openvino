@@ -692,7 +692,7 @@ TEST(gather7_gpu_fp16, d44_axisY_bdim1) {
     topology.add(input_layout("InputDictionary", input1->get_layout()));
     topology.add(input_layout("InputText", input2->get_layout()));
     topology.add(
-        gather("gather", "InputDictionary", "InputText", axis, ov::Shape{4, 3, 4, 1}, batch_dim)
+        gather("gather", "InputDictionary", "InputText", axis, format::bfyx, ov::Shape{4, 3, 4, 1}, batch_dim)
     );
 
     network network(engine, topology);
