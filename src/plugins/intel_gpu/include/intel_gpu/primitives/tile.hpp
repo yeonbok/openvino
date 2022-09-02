@@ -24,8 +24,8 @@ struct tile : public primitive_base<tile> {
     /// @param repeats Per-dimension replication factor.
     tile(const primitive_id& id,
          const primitive_id& input,
-         const std::vector<int64_t> repeats,
          const primitive_id& ext_prim_id = "",
+         const std::vector<int64_t> repeats = {},
          const padding& output_padding = padding())
         : primitive_base(id, {input}, ext_prim_id, output_padding),
           repeats(repeats) {}
