@@ -35,6 +35,8 @@ class typed_primitive_inst<count_nonzero> : public typed_primitive_inst_base<cou
     using parent = typed_primitive_inst_base<count_nonzero>;
 
 public:
+    template <typename ShapeType>
+    static std::vector<layout> calc_output_layouts(count_nonzero_node const& /*node*/, kernel_impl_params const& impl_param);
     static layout calc_output_layout(count_nonzero_node const& node, kernel_impl_params const& impl_param);
     static std::string to_string(count_nonzero_node const& node);
 

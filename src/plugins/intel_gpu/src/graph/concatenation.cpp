@@ -21,6 +21,14 @@ layout concatenation_inst::calc_output_layout(concatenation_node const& node, ke
     auto desc = impl_param.typed_desc<concatenation>();
 
     auto input_layout = impl_param.get_input_layout();
+
+    for (auto& in_l : impl_param.input_layouts) {
+        if (in_l.is_dynamic()) {
+            return { layout{ov::PartialShape::dynamic(input_layout.get_partial_shape().size()),
+                    input_layout.data_type, input_layout.format.adjust_to_rank(input_layout.format, input_layout.get_partial_shape().size())} };
+        }
+    }
+
     auto output_format = input_layout.format;
     auto result_sizes = input_layout.get_partial_shape();
 
@@ -70,6 +78,8 @@ std::string concatenation_inst::to_string(concatenation_node const& node) {
 concatenation_inst::typed_primitive_inst(network& network, concatenation_node const& node)
     : parent(network, node) {
     auto input_layout = node.input().get_output_layout();
+    if (input_layout.is_dynamic()) return;
+
     auto output_layout = node.get_output_layout();
 
     tensor::value_type concat_count = 0;

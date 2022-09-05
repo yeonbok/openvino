@@ -66,6 +66,11 @@ std::vector<layout> crop_inst::calc_output_layouts(crop_node const& node, kernel
         shape_infer(ov_op, input_shapes, output_shapes);
     } else if (node.get_dependencies().size() == 1) {
         // Legacy usage
+        if (in_layout.is_dynamic()) {
+            return { layout{ov::PartialShape::dynamic(in_layout.get_partial_shape().size()),
+                    in_layout.data_type, in_layout.format.adjust_to_rank(in_layout.format, in_layout.get_partial_shape().size())} };
+        }
+
         const auto& ref_in_sizes = node.get_primitive()->reference_input;
         const auto& in_sizes = in_layout.get_tensor();
         const auto& offsets = node.get_primitive()->offsets;

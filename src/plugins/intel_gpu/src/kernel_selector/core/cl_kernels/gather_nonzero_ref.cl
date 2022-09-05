@@ -56,30 +56,45 @@ KERNEL (gather_nonzero_ref)(const __global INPUT0_TYPE* input,
         int output_b = pos;
         int output_f = pos + num_nonzero;
 
-        output[output_b] = b;
-        output[output_f] = f;
 
-        #if INPUT0_DIMS == 6
+        #if OV_INPUT_RANK == 6
             int output_w = pos + num_nonzero * 2;
             int output_z = pos + num_nonzero * 3;
             int output_y = pos + num_nonzero * 4;
             int output_x = pos + num_nonzero * 5;
-
+            output[output_b] = b;
+            output[output_f] = f;
             output[output_w] = w;
             output[output_z] = z;
-        #elif INPUT0_DIMS == 5
+            output[output_y] = y;
+            output[output_x] = x;
+        #elif OV_INPUT_RANK == 5
             int output_z = pos + num_nonzero * 2;
             int output_y = pos + num_nonzero * 3;
             int output_x = pos + num_nonzero * 4;
-
+            output[output_b] = b;
+            output[output_f] = f;
             output[output_z] = z;
-        #elif INPUT0_DIMS == 4
+            output[output_y] = y;
+            output[output_x] = x;
+        #elif OV_INPUT_RANK == 4
             int output_y = pos + num_nonzero * 2;
             int output_x = pos + num_nonzero * 3;
+            output[output_b] = b;
+            output[output_f] = f;
+            output[output_y] = y;
+            output[output_x] = x;
+        #elif OV_INPUT_RANK == 3
+            int output_y = pos + num_nonzero * 2;
+            output[output_b] = b;
+            output[output_f] = f;
+            output[output_y] = y;
+        #elif OV_INPUT_RANK == 2
+            output[output_b] = b;
+            output[output_f] = f;
+        #elif OV_INPUT_RANK == 1
+            output[output_b] = b;
         #endif
-
-        output[output_y] = y;
-        output[output_x] = x;
     }
 }
 

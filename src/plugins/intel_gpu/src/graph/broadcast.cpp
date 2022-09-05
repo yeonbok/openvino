@@ -130,7 +130,8 @@ broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& nod
 //    if (node.get_primitive()->broadcast_sizes.is_dynamic())
 //        return;
     auto input_layout = node.input().get_output_layout();
-
+    if (input_layout.is_dynamic())
+        return;
     std::vector<tensor::value_type> input_dims = input_layout.get_dims();
     size_t max_axes_num = input_layout.get_rank();
 

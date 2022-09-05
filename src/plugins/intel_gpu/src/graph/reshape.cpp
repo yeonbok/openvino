@@ -147,6 +147,7 @@ std::string reshape_inst::to_string(reshape_node const& node) {
 reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) : parent(network, node, false) {
     auto input_layout = node.input().get_output_layout();
     auto output_layout = node.get_output_layout();
+#if 0
     CLDNN_ERROR_DATA_TYPES_MISMATCH(node.id(),
                                     "Input layout data typr",
                                     input_layout.data_type,
@@ -160,7 +161,7 @@ reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) :
                               "input layout count",
                               input_layout.count(),
                               "Output layout of reshape primitive changes size of input buffer");
-
+#endif
     // if reshape operated in-place, postpone creation of the output until network run,
     // then create new memory object as the reinterpreted output of the previous primitive
     if (_node.get_output_layout().is_static()) {
