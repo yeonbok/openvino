@@ -68,6 +68,11 @@ layout gather_inst::calc_output_layout(gather_node const& node, kernel_impl_para
 template<typename ShapeType>
 std::vector<layout> gather_inst::calc_output_layouts(gather_node const& /*node*/, const kernel_impl_params& impl_param) {
     auto desc = impl_param.typed_desc<gather>();
+    for (auto& in_l : impl_param.input_layouts) {
+        if (in_l.is_dynamic()) {
+            return { layout{ov::PartialShape::dynamic(in_l.get_rank()), in_l.data_type, in_l.format} };
+        }
+    }
 
     auto input0_layout = impl_param.get_input_layout(0);
     auto input1_layout = impl_param.get_input_layout(1);
@@ -94,7 +99,8 @@ std::vector<layout> gather_inst::calc_output_layouts(gather_node const& /*node*/
 
     format output_format = format::adjust_to_rank(input0_layout.format, output_shapes[0].size());
 
-    return { layout{output_shapes[0], output_type, output_format} };
+    auto output_layout = layout{output_shapes[0], output_type, output_format};
+    return {output_layout};
 }
 
 std::string gather_inst::to_string(gather_node const& node) {

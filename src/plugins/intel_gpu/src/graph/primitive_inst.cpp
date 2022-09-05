@@ -165,6 +165,15 @@ void primitive_inst::update_shape() {
         }
     }
 
+    // Even though the predecessors' shapes are not changed, the output shape might be udpated by the mem_dep
+    auto memory_deps = _node.get_const_memory_deps();
+    for (auto& i : _node.get_shape_infer_dependencies()) {
+        if (memory_deps.count(i) > 0) {
+            continue;
+        }
+        input_shape_changed = true;
+    }
+
     if (!input_shape_changed && !_node.generates_dynamic_output() && !_impl_params->output_layout.is_dynamic()) {
         GPU_DEBUG_IF(debug_config->verbose >= 4) {
             GPU_DEBUG_COUT << "update_shape for " << id() << " was not needed" << std::endl;
@@ -173,7 +182,6 @@ void primitive_inst::update_shape() {
     }
     if (input_shape_changed)
         set_shape_change(); // if input_layout is changed, the choose_impl should be called again
-    auto memory_deps = _node.get_const_memory_deps();
     std::vector<event::ptr> dependencies_events;
     for (auto& i : _node.get_shape_infer_dependencies()) {
         if (memory_deps.count(i) > 0) {
@@ -498,8 +506,11 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
         return pool.get_memory(layout, type);
     };
 
-    auto layout = impl_params.output_layout;
-    OPENVINO_ASSERT(!layout.is_dynamic(), "[GPU] Can't allocate output for dynamic layout");
+    auto out_layout = impl_params.output_layout;
+    //OPENVINO_ASSERT(!layout.is_dynamic(), "[GPU] Can't allocate output for dynamic layout");
+    if (out_layout.is_dynamic()) {
+        out_layout = cldnn::layout{ov::PartialShape{1}, out_layout.data_type, format::bfyx};
+    }
     auto device_mem_acc = [&](size_t a, const cldnn::layout& l) {
         if (l.is_static())
             return a + l.bytes_count();
@@ -511,13 +522,15 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
     if (total_device_input_mem_size > _engine.get_device_info().max_global_mem_size)
         usm_device_allocatable = false;
 
+    // Memory reuse not support for dynamic shape
     bool memory_reuse_by_user = true;
 
-    std::function<bool(const program_node&)> user_requesting_mem_reuse_false = [&user_requesting_mem_reuse_false](const program_node& node) {
+    std::function<bool(const program_node&)> user_requesting_mem_reuse_false = [&user_requesting_mem_reuse_false, &impl_params](const program_node& node) {
         for (auto& user : node.get_users()) {
             if ((user->get_selected_impl() != nullptr) && (user->get_selected_impl()->can_reuse_memory == false)) {
                 return true;
             } else if (user->get_selected_impl() == nullptr) {
+                if (user->is_dynamic()) return true;
                 if (user_requesting_mem_reuse_false(*user)) {
                     return true;
                 }
@@ -526,17 +539,16 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
         return false;
     };
 
-    if (user_requesting_mem_reuse_false(_node)) {
+    if (impl_params.output_layout.is_dynamic() || user_requesting_mem_reuse_false(_node)) {
         memory_reuse_by_user = false;
     }
-
     // For outputs, cpu prim we want to have lockable alloc type
     // Also if the successor of a node is an cpu, then memory needs to be lockable.
     bool is_cpu = _node.get_selected_impl() ? _node.get_selected_impl()->is_cpu() : false;
     auto use_lockable_memory = is_output_buffer(_node) || is_cpu || is_any_user_cpu(_node.get_users()) ||
                                !_engine.supports_allocation(allocation_type::usm_device);
     GPU_DEBUG_GET_INSTANCE(debug_config);
-    const auto& lockable_mem_type = _engine.get_lockable_preferred_memory_allocation_type(layout.format.is_image_2d());
+    const auto& lockable_mem_type = _engine.get_lockable_preferred_memory_allocation_type(out_layout.format.is_image_2d());
     const auto& alloc_type = use_lockable_memory ? lockable_mem_type
         : usm_device_allocatable ? allocation_type::usm_device : lockable_mem_type;
 
@@ -545,7 +557,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
             GPU_DEBUG_COUT << "[" << _node.id() << ": output]" << std::endl;
         }
         return get_memory_from_pool(_engine,
-                layout,
+                out_layout,
                 _node.id(),
                 _node.get_memory_dependencies(),
                 alloc_type,
@@ -555,22 +567,22 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
             GPU_DEBUG_COUT << "[" << _node.id() << ": output]" << std::endl;
         }
-        return _engine.allocate_memory(layout, allocation_type::usm_device, false);
+        return _engine.allocate_memory(out_layout, allocation_type::usm_device, false);
     } else if (is_internal && !_node.is_output() && _node.is_type<input_layout>()) {
         // Skip memory reset for input_layout primitives, since data will be copied from cldnn::data primitive
         // or just reuse primitive's memory
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
             GPU_DEBUG_COUT << "[" << _node.id() << ": constant]" << std::endl;
         }
-        return _engine.allocate_memory(layout, alloc_type, false);
+        return _engine.allocate_memory(out_layout, alloc_type, false);
     } else if (is_internal || (!_node.can_share_buffer()) || _node.can_be_optimized() || _node.is_output()) {
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
             GPU_DEBUG_COUT << "[" << _node.id() << ": output]" << std::endl;
         }
-        return _engine.allocate_memory(layout, alloc_type);
+        return _engine.allocate_memory(out_layout, alloc_type);
     } else {
         return get_memory_from_pool(_engine,
-                layout,
+                out_layout,
                 _node.id(),
                 _node.get_memory_dependencies(),
                 alloc_type,

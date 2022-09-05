@@ -100,7 +100,7 @@ struct broadcast : public primitive_base<broadcast> {
     ///                       than explicit (none) is used.
     broadcast(const primitive_id& id,
               const primitive_id& input,
-              const ov::Shape& target_shape,
+              const ov::PartialShape& target_shape,
               const ngraph::AxisSet& axes_mapping,
               const ov::op::BroadcastModeSpec& broadcast_spec = ov::op::BroadcastType::EXPLICIT,
               const primitive_id& ext_prim_id = "",
@@ -128,7 +128,7 @@ struct broadcast : public primitive_base<broadcast> {
       broadcast_axes({}) {}
 
     /// @brief The shape of the output tensor.
-    ov::Shape target_shape;
+    ov::PartialShape target_shape;
     /// @brief The axis positions (0-based) in the result that correspond to input axes.
     ov::AxisSet axes_mapping;
     /// @brief Broadcast mode to use for determining broadcast axes.

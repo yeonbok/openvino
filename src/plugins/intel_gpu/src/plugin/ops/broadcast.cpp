@@ -20,65 +20,6 @@ static void CreateCommonBroadcastOp(Program& p, const std::shared_ptr<ngraph::No
     auto inputPrimitives = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
 
-    auto inputShape = op->get_input_shape(0);
-    auto outputShape = op->get_output_shape(0);
-    auto inputRank = inputShape.size();
-    auto outputRank = outputShape.size();
-
-    auto inputPrimitive = inputPrimitives[0];
-
-    if (inputRank != outputRank) {
-        // Add reorder if changing number of dimensions requires changing format
-        auto targetFormat = cldnn::format::get_default_format(outputRank);
-        if (targetFormat.value != cldnn::format::get_default_format(inputRank).value) {
-            auto reorderName = layerName + "_cldnn_in_reorder";
-            auto targetDatatype = DataTypeFromPrecision(op->get_input_element_type(0));
-            auto reorderPrim = cldnn::reorder(reorderName,
-                                              inputPrimitive,
-                                              targetFormat,
-                                              targetDatatype,
-                                              std::vector<float>(),
-                                              cldnn::reorder_mean_mode::subtract,
-                                              op->get_friendly_name());
-            p.AddPrimitive(reorderPrim);
-            p.AddInnerPrimitiveToProfiler(reorderName, layerName, op);
-
-            inputPrimitive = reorderName;
-        }
-
-        auto reshapeName = layerName + "_cldnn_in_reshape";
-
-        // Extend input dimensions with ones
-        if (axis_mapping.empty()) {
-            // If axis_mapping is not specified, then we prepend shape with neccesary count of 1-s
-            inputShape.insert(inputShape.begin(), outputRank - inputRank, 1ul);
-        } else {
-            // If axis_mapping is specified, then ones are inserted according to it.
-            ngraph::Shape tmp_shape;
-            int prev_axis = -1;
-            int next_axis = -1;
-            size_t currentRank = 0;
-            for (auto& axis : axis_mapping) {
-                prev_axis = next_axis;
-                next_axis = static_cast<int>(axis);
-
-                int ones_count = std::max(next_axis - prev_axis - 1, 0);
-                tmp_shape.insert(tmp_shape.begin() + currentRank, ones_count, 1ul);
-                tmp_shape.push_back(outputShape[axis]);
-
-                currentRank += ones_count + 1;
-            }
-            inputShape = tmp_shape;
-        }
-
-
-        auto reshapePrim = cldnn::reshape(reshapeName, inputPrimitive, inputShape, op->get_friendly_name());
-        p.AddPrimitive(reshapePrim);
-        p.AddInnerPrimitiveToProfiler(reshapeName, layerName, op);
-
-        inputPrimitive = reshapeName;
-    }
-
     ov::op::BroadcastModeSpec mode = ov::op::BroadcastType::NONE;
     if (auto broadcast_v3 = std::dynamic_pointer_cast<ngraph::op::v3::Broadcast>(op)) {
         mode = broadcast_v3->get_broadcast_spec();
@@ -88,21 +29,18 @@ static void CreateCommonBroadcastOp(Program& p, const std::shared_ptr<ngraph::No
             case ov::op::AutoBroadcastType::NUMPY: mode = ov::op::BroadcastType::NUMPY; break;
             case ov::op::AutoBroadcastType::PDPD: mode = ov::op::BroadcastType::PDPD; break;
             default:
-                throw ov::Exception("[GPU] Can't match Broadcast v1 mode with v3 version");
+                                                  throw ov::Exception("[GPU] Can't match Broadcast v1 mode with v3 version");
         }
     } else {
         throw ov::Exception("[GPU] Can't cast Broadcast operation to any supported version");
     }
 
     auto broadcastPrim = cldnn::broadcast(layerName,
-                                          inputPrimitive,
-                                          outputShape,
-                                          axis_mapping,
-                                          mode,
-                                          op->get_friendly_name());
-
+            inputPrimitives[0],
+            inputPrimitives[1], axis_mapping, mode, op->get_friendly_name());
     p.AddPrimitive(broadcastPrim);
     p.AddPrimitiveToProfiler(op);
+    return;
 }
 
 static void CreateBroadcastOp(Program& p, const std::shared_ptr<ngraph::op::v1::Broadcast>& op) {

@@ -522,17 +522,17 @@ void program::pre_optimize_graph(bool is_internal) {
 
     reorder_factory rf;
     if (options.get<build_option_type::optimize_data>()->enabled()) {
-        apply_opt_pass<prepare_primitive_fusing_through>();
+//        apply_opt_pass<prepare_primitive_fusing_through>();
 
         apply_opt_pass<pre_replace_deconv>(lo);
 
-        apply_opt_pass<prepare_primitive_fusing>(lo);
+//        apply_opt_pass<prepare_primitive_fusing>(lo);
 
         apply_opt_pass<reorder_inputs>(lo, rf);
         // Ideally this should be done before fusing to simplify logic and make the pass more powerful,
         // but after format selection to select correct alignment.
         // Unfortunately those passes currently happen in reverse order.
-        apply_opt_pass<concat_input_order>();
+        //apply_opt_pass<concat_input_order>();
 
         // TODO this code should be moved to post compilation after kernel selector will support handling reorder bias
         apply_opt_pass<pre_optimize_bias>(rf);
@@ -561,7 +561,7 @@ void program::pre_optimize_graph(bool is_internal) {
 
     // try to fuse buffers (i.e. depth_concat in bfyx format) after padding calculations
     if (options.get<build_option_type::optimize_data>()->enabled()) {
-        apply_opt_pass<prepare_buffer_fusing>();
+        //apply_opt_pass<prepare_buffer_fusing>();
     }
 
     // check if there exists some layout incompatibilities and add an reorder node if required

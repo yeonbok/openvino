@@ -16,8 +16,14 @@ primitive_type_id shape_of::type_id() {
     return &instance;
 }
 
-layout shape_of_inst::calc_output_layout(shape_of_node const& node, kernel_impl_params const& impl_param) {
+layout shape_of_inst::calc_output_layout(shape_of_node const&, kernel_impl_params const& impl_param) {
     auto prim = impl_param.typed_desc<shape_of>();
+
+    for (auto& in_l : impl_param.input_layouts) {
+        if (in_l.is_dynamic()) {
+            return { layout{ov::PartialShape::dynamic(in_l.get_rank()), in_l.data_type, in_l.format} };
+        }
+    }
 
     data_types dt = data_types::i32;
 

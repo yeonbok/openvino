@@ -27,8 +27,9 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node, kernel_imp
     auto input_layout = impl_param.get_input_layout();
     auto desc = impl_param.typed_desc<broadcast>();
 
-    if (!desc->target_shape.empty()) {
-        std::vector<tensor::value_type> dims_converted(desc->target_shape.begin(), desc->target_shape.end());
+    if (desc->target_shape.is_static()) {
+        auto target_shape = desc->target_shape.to_shape();
+        std::vector<tensor::value_type> dims_converted(target_shape.begin(), target_shape.end());
         for (size_t i = dims_converted.size(); i < 4; i++)
             dims_converted.push_back(1);  // extend shape to 4d
 
@@ -44,6 +45,12 @@ template<typename ShapeType>
 std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*node*/, const kernel_impl_params& impl_param) {
     auto desc = impl_param.typed_desc<broadcast>();
     auto input0_layout = impl_param.get_input_layout(0);
+    for (auto& in_l : impl_param.input_layouts) {
+        if (in_l.is_dynamic()) {
+            return { layout{ov::PartialShape::dynamic(input0_layout.get_partial_shape().size()),
+                    input0_layout.data_type, input0_layout.format.adjust_to_rank(input0_layout.format, input0_layout.get_partial_shape().size())} };
+        }
+    }
 
     auto output_type = input0_layout.data_type;
     if (impl_param.has_fused_primitives()) {
@@ -82,7 +89,7 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
         ov::op::v3::shape_infer(&op, input_shapes, output_shapes, const_data);
     } else {
         auto target_shape_tensor = make_host_tensor({pattern_shape, data_types::i64, format::bfyx},
-                                                     static_cast<void*>(target_shape.data()));
+                                                     static_cast<void*>(target_shape.to_shape().data()));
         const_data.emplace(1, target_shape_tensor);
         ov::op::v3::shape_infer(&op, input_shapes, output_shapes, const_data);
     }
@@ -123,7 +130,8 @@ broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& nod
 //    if (node.get_primitive()->broadcast_sizes.is_dynamic())
 //        return;
     auto input_layout = node.input().get_output_layout();
-
+    if (input_layout.is_dynamic())
+        return;
     std::vector<tensor::value_type> input_dims = input_layout.get_dims();
     size_t max_axes_num = input_layout.get_rank();
 
