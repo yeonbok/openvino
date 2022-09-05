@@ -22,6 +22,14 @@ layout reverse_sequence_inst::calc_output_layout(reverse_sequence_node const& no
     return layout{input_layout.data_type, input_format, input_layout.get_tensor()};
 }
 
+template<typename ShapeType>
+std::vector<layout> reverse_sequence_inst::calc_output_layouts(reverse_sequence_node const& /*node*/, const kernel_impl_params& impl_param) {
+    auto input_layout = impl_param.get_input_layout();
+    auto input_format = input_layout.format;
+
+    return {layout{input_layout.get<ShapeType>(), input_layout.data_type, input_format}};
+}
+
 std::string reverse_sequence_inst::to_string(reverse_sequence_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();

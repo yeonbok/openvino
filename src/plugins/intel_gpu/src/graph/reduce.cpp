@@ -36,8 +36,15 @@ static std::vector<uint16_t> convert_axes(std::vector<int64_t> axes, size_t rank
 
 layout reduce_inst::calc_output_layout(reduce_node const& node, kernel_impl_params const& impl_param) {
     auto desc = impl_param.typed_desc<reduce>();
-
     auto input_layout = impl_param.get_input_layout();
+
+    for (auto& in_l : impl_param.input_layouts) {
+        if (in_l.is_dynamic()) {
+            return { layout{ov::PartialShape::dynamic(input_layout.get_partial_shape().size()),
+                    input_layout.data_type, input_layout.format.adjust_to_rank(input_layout.format, input_layout.get_partial_shape().size())} };
+        }
+    }
+
     auto input_format = input_layout.format;
     auto format_dim = input_format.dimension();
     auto output_type = input_layout.data_type;
