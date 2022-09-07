@@ -127,6 +127,7 @@ public:
         for (size_t i = 0; i < std::min(input_layouts.size(), first_fused_input_idx); i++) {
             gemm_params.inputs.push_back(convert_data_tensor(input_layouts[i]));
         }
+        gemm_params.outputs[0] = convert_data_tensor(output_layout);
 
         gemm_params.alpha = desc->alpha;
         gemm_params.beta = desc->beta;
