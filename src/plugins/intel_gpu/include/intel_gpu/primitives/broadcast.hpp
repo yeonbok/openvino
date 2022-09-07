@@ -75,7 +75,7 @@ struct broadcast : public primitive_base<broadcast> {
     /// @param output_padding  Optional padding for output from primitive.
     broadcast(const primitive_id& id,
               const primitive_id& input,
-              const tensor& broadcast_sizes,
+              const ov::PartialShape& broadcast_sizes,
               const std::vector<uint16_t>& broadcast_axes = {},
               const primitive_id& ext_prim_id = "",
               const padding& output_padding = padding())
@@ -134,7 +134,7 @@ struct broadcast : public primitive_base<broadcast> {
     /// @brief Broadcast mode to use for determining broadcast axes.
     ov::op::BroadcastModeSpec broadcast_mode;
     /// @brief Expected sizes of output from broadcast primitive.
-    tensor broadcast_sizes;
+    ov::PartialShape broadcast_sizes;
     /// @brief Array of axes positions from output shape (0-based, from left to right)
     ///        along which broadcast should happen.
     std::vector<uint16_t> broadcast_axes;

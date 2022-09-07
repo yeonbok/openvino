@@ -37,7 +37,7 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node, kernel_imp
                  input_layout.format,
                  tensor(format::get_default_format(dims_converted.size()), dims_converted) };
     } else {
-        return { input_layout.data_type, input_layout.format, desc->broadcast_sizes };
+        return { desc->broadcast_sizes, input_layout.data_type, input_layout.format };
     }
 }
 

@@ -29,7 +29,7 @@ static void CreateTileOp(Program& p, const std::shared_ptr<ngraph::op::v0::Tile>
     for (size_t i = repeats.size(); i < rank; ++i) {
         repeats.insert(repeats.begin(), defaultSize);
     }
-
+#if 0
     if (repeats.size() > rank) {
         std::string reshapeName = layerName + "_reshape";
         auto inputDims = op->get_input_partial_shape(0);
@@ -44,10 +44,10 @@ static void CreateTileOp(Program& p, const std::shared_ptr<ngraph::op::v0::Tile>
 
         inputPrimitives[0] = reshapeName;
     }
-
+#endif
     auto tilePrim = cldnn::tile(layerName,
                                 inputPrimitives[0],
-                                op->get_output_partial_shape(0),
+                                repeats,
                                 op->get_friendly_name());
 
     p.AddPrimitive(tilePrim);
