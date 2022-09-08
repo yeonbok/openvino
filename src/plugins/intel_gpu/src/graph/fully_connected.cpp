@@ -44,6 +44,9 @@ bool is_batch_after_spatial(const std::string order) {
 format::type get_preferred_format(const kernel_impl_params& impl_param) {
     auto input_layout = impl_param.get_input_layout();
 
+    if (input_layout.is_dynamic())
+        return format::bfyx;
+
     // for 3d output we have to chose bfyx format
     if (impl_param.typed_desc<fully_connected>()->input_size == 3)
         return format::bfyx;
@@ -139,9 +142,9 @@ std::vector<layout> fully_connected_inst::calc_output_layouts(fully_connected_no
         weights_layout.get<ShapeType>()
     };
 
-    ov::op::v0::shape_infer(&op, input_shapes, output_shapes);
-
     bool is_static = input_layout.is_static() && weights_layout.is_static();
+
+    ov::op::v0::shape_infer(&op, input_shapes, output_shapes);
 
     format::type output_format = is_static ? get_preferred_format(impl_param) :
                                              input_layout.format.value;

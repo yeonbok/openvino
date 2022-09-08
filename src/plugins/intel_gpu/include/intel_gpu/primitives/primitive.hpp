@@ -116,8 +116,9 @@ protected:
     explicit primitive_base(const primitive_id& id,
                             const std::vector<primitive_id>& input,
                             const padding& output_padding = padding(),
-                            optional_data_type output_data_type = optional_data_type())
-        : primitive(PType::type_id(), id, input, output_padding, output_data_type) {}
+                            optional_data_type output_data_type = optional_data_type(),
+                            std::shared_ptr<ov::Node> ov_op = nullptr)
+        : primitive(PType::type_id(), id, input, output_padding, output_data_type, ov_op) {}
 };
 
 struct primitive_info {
