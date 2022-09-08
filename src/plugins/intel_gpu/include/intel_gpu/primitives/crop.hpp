@@ -62,7 +62,7 @@ struct crop : public primitive_base<crop> {
          const int split_size = 0,
          const optional_data_type output_data_type = optional_data_type(),
          std::shared_ptr<ov::Node> orig_op = nullptr)
-        : primitive_base(id, inputs, output_padding), reference_input(tensor{1, 1, 1, 1}), offsets(offsets),
+        : primitive_base(id, inputs, output_padding, output_data_type, orig_op), reference_input(tensor{1, 1, 1, 1}), offsets(offsets),
           output_idx(output_idx), split_size(split_size) {}
     /// @brief Constructs crop primitive (borders variant).
     ///

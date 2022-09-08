@@ -77,8 +77,7 @@ static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::Mat
     auto shape_b = op->get_input_partial_shape(1);
 
     bool is_fc = IsNodeOnConstPath(op->get_input_node_shared_ptr(1));
-    auto shape_b_ = shape_b.to_shape();
-    is_fc &= std::count_if(shape_b_.begin(), shape_b_.end(), [](size_t x) { return x != 1; }) <= 2;
+    is_fc &= std::count_if(shape_b.begin(), shape_b.end(), [](ov::Dimension x) { return x != 1; }) <= 2;
     // TODO: This conditions can be relaxed with proper handling in FC path
     is_fc &= shape_b.size() > 1 && shape_a.size() > 1;
 
