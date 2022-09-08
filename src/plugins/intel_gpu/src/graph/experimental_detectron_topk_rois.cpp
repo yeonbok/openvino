@@ -29,7 +29,7 @@ layout experimental_detectron_topk_rois_inst::calc_output_layout(
     return {input_layout.data_type, input_layout.format,  {roi_num,
                                                                  input_layout.get_tensor().sizes()[1], 1, 1 }};
 }
-
+#if 0 // TODO(taylor)
 std::string experimental_detectron_topk_rois_inst::to_string(experimental_detectron_topk_rois_node const &node) {
     auto node_info = node.desc_to_json();
     json_composite experimental_detectron_topk_rois_info;
@@ -41,5 +41,5 @@ std::string experimental_detectron_topk_rois_inst::to_string(experimental_detect
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 } // namespace cldnn

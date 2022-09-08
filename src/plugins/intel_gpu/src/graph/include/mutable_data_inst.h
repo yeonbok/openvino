@@ -18,14 +18,15 @@ struct typed_program_node<mutable_data> : public typed_program_node_base<mutable
 
     typed_program_node(const std::shared_ptr<mutable_data> prim, program& prog);
 
-    memory& get_attached_memory() const { return *mem; }
-    memory::ptr get_attached_memory_ptr() const { return mem; }
-    void attach_memory(memory::ptr new_mem, bool invalidate_users_if_changed = true);
+    memory& get_attached_memory(int32_t idx = 0) const { return *mems[idx]; }
+    memory::ptr get_attached_memory_ptr(int32_t idx = 0) const { return mems[idx]; }
+    std::vector<memory::ptr> get_attached_memory_ptrs() const { return mems; }
+    void attach_memory(memory::ptr new_mem, bool invalidate_users_if_changed = true, int32_t idx = 0);
 
-    program_node& input(size_t idx = 0) const { return get_dependency(idx); }
+    program_node& input(size_t idx = 0) const { return *get_dependency(idx).first; }
 
 private:
-    memory::ptr mem;
+    std::vector<memory::ptr> mems;
 };
 
 using mutable_data_node = typed_program_node<mutable_data>;

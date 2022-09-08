@@ -23,7 +23,7 @@ layout batch_to_space_inst::calc_output_layout(batch_to_space_node const& node, 
     auto input_layout = impl_param.get_input_layout();
     auto input_format = input_layout.format;
 
-    auto output_type = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
+    auto output_type = desc->output_data_types.size() > 0 ? *desc->output_data_types[0] : input_layout.data_type;
 
     if (impl_param.has_fused_primitives())
         output_type = impl_param.get_fused_output_layout().data_type;
@@ -69,7 +69,7 @@ layout batch_to_space_inst::calc_output_layout(batch_to_space_node const& node, 
 
     return layout{output_type, input_format, desc->out_size};
 }
-
+#if 0 // TODO(taylor)
 std::string batch_to_space_inst::to_string(batch_to_space_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -85,7 +85,7 @@ std::string batch_to_space_inst::to_string(batch_to_space_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 batch_to_space_inst::typed_primitive_inst(network& network, batch_to_space_node const& node)
     : parent(network, node) {}
 

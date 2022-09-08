@@ -17,7 +17,7 @@ struct typed_program_node<read_value> : public typed_program_node_base<read_valu
 public:
     using parent::parent;
 
-    const program_node& input(std::size_t index = 0) const { return get_dependency(index); }
+    const program_node& input(std::size_t index = 0) const { return *get_dependency(index).first; }
 };
 
 using read_value_node = typed_program_node<read_value>;

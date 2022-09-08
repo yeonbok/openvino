@@ -22,12 +22,8 @@ layout arg_max_min_inst::calc_output_layout(arg_max_min_node const& node, kernel
     bool values_first = desc->values_first;
     data_types output_data_type;
     data_types output_idx_type;
-    output_data_type = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
-    if (impl_param.input_layouts.size() == 3) {
-        output_idx_type = impl_param.get_input_layout(2).data_type;
-    } else {
-        output_idx_type = *(desc->output_data_type);
-    }
+    output_data_type = desc->output_data_types.size() > 0 ? *desc->output_data_types[0] : input_layout.data_type;
+    output_idx_type = desc->output_data_types.size() > 1 ? *desc->output_data_types[1] : *(desc->output_data_types[0]);
     auto size_check = [&](size_t tensor_size) {
         if (desc->input.size() == 1 && values_first)
             return;
@@ -67,7 +63,7 @@ layout arg_max_min_inst::calc_output_layout(arg_max_min_node const& node, kernel
     sizes[desc->axis] = desc->top_k;
     return layout{output_data_type, format, tensor(format::get_default_format(input_layout.get_rank()), sizes)};
 }
-
+#if 0 // TODO(taylor)
 std::string arg_max_min_inst::to_string(arg_max_min_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -84,6 +80,6 @@ std::string arg_max_min_inst::to_string(arg_max_min_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 arg_max_min_inst::typed_primitive_inst(network& network, arg_max_min_node const& node) : parent(network, node) {}
 }  // namespace cldnn

@@ -28,13 +28,13 @@ layout roi_align_inst::calc_output_layout(roi_align_node const& node, kernel_imp
                   input_layout.format,
                   {num_rois, num_channels, primitive->pooled_h, primitive->pooled_w});
 }
-
+#if 0 // TODO(taylor)
 std::string roi_align_inst::to_string(roi_align_node const& node) {
     auto node_info = node.desc_to_json();
     json_composite roi_align_info;
     roi_align_info.add("input id", node.input().id());
-    roi_align_info.add("rois id", node.get_dependency(1).id());
-    roi_align_info.add("batches id", node.get_dependency(2).id());
+    roi_align_info.add("rois id", node.get_dependency(1).first->id());
+    roi_align_info.add("batches id", node.get_dependency(2).first->id());
     roi_align_info.add("pooled_h", node.get_primitive()->pooled_h);
     roi_align_info.add("pooled_w", node.get_primitive()->pooled_w);
     roi_align_info.add("sampling_ratio", node.get_primitive()->sampling_ratio);
@@ -46,7 +46,7 @@ std::string roi_align_inst::to_string(roi_align_node const& node) {
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 }  // namespace cldnn
 
 namespace ov {

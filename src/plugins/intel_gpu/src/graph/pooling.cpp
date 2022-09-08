@@ -180,7 +180,7 @@ layout pooling_inst::calc_output_layout(parent::typed_node const& node, kernel_i
                        output_range.spatial[2]);
     return {output_type, input_layout.format, output_size};
 }
-
+#if 0 // TODO(taylor)
 std::string pooling_inst::to_string(pooling_node const& node) {
     auto desc = node.get_primitive();
     auto strd = desc->stride;
@@ -208,5 +208,5 @@ std::string pooling_inst::to_string(pooling_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 }  // namespace cldnn

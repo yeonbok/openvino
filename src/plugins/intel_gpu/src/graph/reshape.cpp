@@ -20,7 +20,7 @@ primitive_type_id reshape::type_id() {
 }
 
 layout reshape_inst::calc_output_layout(reshape_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for reshape_node!");
     auto input_layout = impl_param.get_non_padded_input_layout();
     auto desc = impl_param.typed_desc<reshape>();
@@ -50,7 +50,7 @@ layout reshape_inst::calc_output_layout(reshape_node const& node, kernel_impl_pa
 
 template<typename ShapeType>
 std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& /*node*/, const kernel_impl_params& impl_param) {
-    assert(static_cast<bool>(impl_param.typed_desc<reshape>()->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.typed_desc<reshape>()->output_data_types[0]) == false &&
            "Output data type forcing is not supported for reshape_node!");
     auto prim = impl_param.typed_desc<reshape>();
     auto input_layout = impl_param.get_input_layout(0);
@@ -116,7 +116,7 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& /*node
 
     return { layout{output_shapes[0], input_layout.data_type, format::adjust_to_rank(input_layout.format, output_shapes[0].size())} };
 }
-
+#if 0 // TODO(taylor)
 std::string reshape_inst::to_string(reshape_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -133,7 +133,7 @@ std::string reshape_inst::to_string(reshape_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) : parent(network, node, false) {
     auto input_layout = node.input().get_output_layout();
     auto output_layout = node.get_output_layout();
@@ -155,7 +155,7 @@ reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) :
     // then create new memory object as the reinterpreted output of the previous primitive
     if (_node.get_output_layout().is_static()) {
         if (!node.can_be_optimized())
-            _output = allocate_output();
+            _outputs = allocate_outputs();
         else
             reuse_input();
     } else {
@@ -168,7 +168,7 @@ void reshape_inst::on_execute() {
     if (!node.can_be_optimized())
         return;
 
-    if (_output && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
+    if (!_outputs.empty() && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
         return;
 
     reuse_input();
@@ -177,7 +177,7 @@ void reshape_inst::on_execute() {
 void reshape_inst::reuse_input() {
     build_deps();  // reshape need deps
     OPENVINO_ASSERT(input_memory_ptr() != nullptr, "[GPU] Failed to reuse input in ", id(), " primitive: input memory was not allocated");
-    _output = _network.get_engine().reinterpret_buffer(input_memory(), _impl_params->output_layout);
+    _outputs = {_network.get_engine().reinterpret_buffer(input_memory(), _impl_params->output_layouts[0])};
 }
 
 }  // namespace cldnn

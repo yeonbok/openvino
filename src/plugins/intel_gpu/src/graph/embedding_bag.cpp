@@ -25,7 +25,7 @@ layout embedding_bag_inst::calc_output_layout(embedding_bag_node const& node, ke
 
     return layout(input_layout.data_type, output_format, output_shape);
 }
-
+#if 0 // TODO(taylor)
 std::string embedding_bag_inst::to_string(embedding_bag_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -52,7 +52,7 @@ std::string embedding_bag_inst::to_string(embedding_bag_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 embedding_bag_inst::typed_primitive_inst(network& network, embedding_bag_node const& node)
     : parent(network, node) {}
 }  // namespace cldnn

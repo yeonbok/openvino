@@ -22,7 +22,7 @@ max_unpooling_node::typed_program_node(const std::shared_ptr<max_unpooling> prim
 }
 
 layout max_unpooling_inst::calc_output_layout(max_unpooling_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for max_unpooling_node!");
     auto desc = impl_param.typed_desc<max_unpooling>();
 
@@ -87,7 +87,7 @@ layout max_unpooling_inst::calc_output_layout(max_unpooling_node const& node, ke
                        output_range.spatial[1]);
     return {input_layout.data_type, input_layout.format, output_size};
 }
-
+#if 0 // TODO(taylor)
 std::string max_unpooling_inst::to_string(max_unpooling_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -105,7 +105,7 @@ std::string max_unpooling_inst::to_string(max_unpooling_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 max_unpooling_inst::typed_primitive_inst(network& network, max_unpooling_node const& node)
     : parent(network, node) {}
 

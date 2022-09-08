@@ -28,7 +28,7 @@ layout typed_primitive_inst<dft>::calc_output_layout(const dft_node& node, kerne
 
     return {input_layout.data_type, output_format, tensor(output_format, dims_converted)};
 }
-
+#if 0 // TODO(taylor)
 std::string typed_primitive_inst<dft>::to_string(const dft_node& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -36,5 +36,5 @@ std::string typed_primitive_inst<dft>::to_string(const dft_node& node) {
     node_info->dump(os);
     return os.str();
 }
-
+#endif
 }  // namespace cldnn

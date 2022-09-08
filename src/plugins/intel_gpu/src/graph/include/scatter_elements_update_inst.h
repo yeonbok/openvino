@@ -16,7 +16,7 @@ struct typed_program_node<scatter_elements_update> : public typed_program_node_b
 public:
     using parent::parent;
 
-    program_node& input(size_t index = 0) const { return get_dependency(index); }
+    program_node& input(size_t index = 0) const { return *get_dependency(index).first; }
 };
 
 using scatter_elements_update_node = typed_program_node<scatter_elements_update>;

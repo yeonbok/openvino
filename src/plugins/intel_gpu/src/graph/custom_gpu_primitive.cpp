@@ -15,7 +15,7 @@ primitive_type_id custom_gpu_primitive::type_id() {
     static primitive_type_base<custom_gpu_primitive> instance;
     return &instance;
 }
-
+#if 0 // TODO(taylor)
 std::string custom_gpu_primitive_inst::to_string(custom_gpu_primitive_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -34,7 +34,7 @@ std::string custom_gpu_primitive_inst::to_string(custom_gpu_primitive_node const
 
     return primitive_description.str();
 }
-
+#endif
 custom_gpu_primitive_inst::typed_primitive_inst(network& network, custom_gpu_primitive_node const& node)
     : parent(network, node) {}
 }  // namespace cldnn

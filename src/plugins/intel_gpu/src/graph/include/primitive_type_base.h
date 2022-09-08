@@ -72,10 +72,12 @@ struct primitive_type_base : primitive_type {
         return typed_primitive_inst<PType>::template calc_output_layouts<ov::PartialShape>(node, impl_param);
     }
 
+#if 0 // TODO(taylor)
     std::string to_string(const cldnn::program_node& node) const override {
         OPENVINO_ASSERT(node.type() == this, "[GPU] primitive_type_base::to_string: primitive type mismatch");
         return typed_primitive_inst<PType>::to_string(node);
     }
+#endif
 };
 
 }  // namespace cldnn

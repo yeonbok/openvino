@@ -75,15 +75,36 @@ class primitive_inst {
 public:
     virtual ~primitive_inst() = default;
 
-    const std::vector<std::shared_ptr<const primitive_inst>>& dependencies() const {
-        return reinterpret_cast<std::vector<std::shared_ptr<const primitive_inst>> const&>(_deps);
+    const std::vector<std::pair<std::shared_ptr<const primitive_inst>, int32_t>>& dependencies() const {
+        return reinterpret_cast<std::vector<std::pair<std::shared_ptr<const primitive_inst>, int32_t>> const&>(_deps);
     }
 
-    memory& dep_memory(size_t index) const { return dependencies().at(index)->output_memory(); }
-    memory::ptr dep_memory_ptr(size_t index) const { return dependencies().at(index)->output_memory_ptr(); }
-    memory& output_memory() const { return *_output; }
-    memory::ptr output_memory_ptr() const { return _output; }
+    memory& dep_memory(size_t index) const {
+        auto& dep_inst = dependencies().at(index).first;
+        auto& output_idx = dependencies().at(index).second;
+        return dep_inst->output_memory(output_idx);
+    }
+
+    memory::ptr dep_memory_ptr(size_t index) const {
+        auto& dep_inst = dependencies().at(index).first;
+        auto& output_idx = dependencies().at(index).second;
+        return dep_inst->output_memory_ptr(output_idx);
+    }
+
+    memory& output_memory(int32_t index = 0) const { return *_outputs[index]; }
+
+    memory::ptr output_memory_ptr(size_t index = 0) const {
+        return _outputs[index];
+    }
+
     size_t inputs_memory_count() const { return _node.get_primitive()->input_size(); }
+    size_t outputs_memory_count() const { return _node.get_primitive()->output_size(); }
+    bool outputs_allocated() const {
+        for (auto& m : _outputs) {
+            if (!m) return false;
+        }
+        return true;
+    }
     primitive_type_id type() const { return _node.type(); }
     primitive_id id() const { return _node.id(); }
     primitive_id org_id() const { return _node.get_org_primitive_id(); }
@@ -176,7 +197,7 @@ protected:
 
     // this is a set of dependencies in terms of memory, if execution of this primitive requires data from another one,
     // it should be added to this set
-    std::vector<std::shared_ptr<primitive_inst>> _deps;
+    std::vector<std::pair<std::shared_ptr<primitive_inst>, int32_t>> _deps;
 
     // this is a set of dependencies in terms of execution
     // execution of all primitives from this set should be enough to guarantee that all memory deps (see _deps)
@@ -185,12 +206,12 @@ protected:
     // only one fused primitive which will calculate multiple outputs (for example device enqueue can work in such
     // manner) in general - this member is introduced to relax logical connection between primitives which have to be
     // executed and memories which are used by this primitive
-    std::vector<std::shared_ptr<primitive_inst>> _exec_deps;
+    std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> _exec_deps;
 
     // _output is optional because its initialization might be postponed (reshape_inst may either allocate it's own
     // buffer or attach input as output
     // depending on reshape_node.is_in_place())
-    memory::ptr _output;
+    std::vector<memory::ptr> _outputs;
 
     std::vector<memory::cptr> _intermediates_memory;
 
@@ -205,8 +226,9 @@ protected:
     size_t max_output_layout_size = 0;
 
     memory::ptr allocate_output();
-    static std::vector<std::shared_ptr<primitive_inst>> build_exec_deps(
-        std::vector<std::shared_ptr<primitive_inst>> const& mem_deps);
+    std::vector<memory::ptr> allocate_outputs();
+    static std::vector<std::pair<std::shared_ptr<primitive_inst>, int32_t>> build_exec_deps(
+        std::vector<std::pair<std::shared_ptr<primitive_inst>, int32_t>> const& mem_deps);
 
     // event function called by primitive_inst::execute after checking if primitive should rerun and before calling
     // _impl->execute() mainly for reshape (to update output memory if reshape_node.is_in_place() == true)
@@ -296,9 +318,11 @@ protected:
     typed_primitive_inst_base(network& network, typed_node const& node, bool allocate_memory)
         : primitive_inst(network, node, allocate_memory), node(_node), argument(*node.get_primitive()) {}
 
-    typed_primitive_inst_base(network& network, typed_node const& node, memory::ptr buffer)
+    typed_primitive_inst_base(network& network, typed_node const& node, std::vector<memory::ptr> buffers)
         : typed_primitive_inst_base(network, node, false) {
-        _output = buffer;
+        for (size_t i = 0; i < buffers.size() ; ++i) {
+            _outputs.push_back(buffers[i]);
+        }
     }
 
 private:

@@ -16,7 +16,7 @@ primitive_type_id pyramid_roi_align::type_id() {
 }
 
 layout pyramid_roi_align_inst::calc_output_layout(pyramid_roi_align_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for "
            "pyramid_roi_align node!");
 
@@ -33,7 +33,7 @@ layout pyramid_roi_align_inst::calc_output_layout(pyramid_roi_align_node const& 
 
     return layout{P2_layout.data_type, P2_layout.format, {output_b, output_f, output_x, output_y}};
 }
-
+#if 0 // TODO(taylor)
 std::string pyramid_roi_align_inst::to_string(pyramid_roi_align_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -43,7 +43,7 @@ std::string pyramid_roi_align_inst::to_string(pyramid_roi_align_node const& node
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 pyramid_roi_align_inst::typed_primitive_inst(network& network, pyramid_roi_align_node const& node)
     : parent(network, node) {}
 }  // namespace cldnn

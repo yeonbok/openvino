@@ -11,7 +11,7 @@ namespace cldnn {
 /// @addtogroup cpp_api C++ API
 /// @{
 /// @addtogroup cpp_topology Network Topology
-/// @{
+/// @{s
 /// @addtogroup cpp_primitives Primitives
 /// @{
 
@@ -26,12 +26,12 @@ struct data : public primitive_base<data> {
     /// @param id This primitive id.
     /// @param mem @ref memory object which contains data.
     /// @note If memory is attached by memory::attach(), the attached buffer should be valid till network build.
-    data(const primitive_id& id, memory::ptr mem)
-        : primitive_base(id, {}, padding()), mem(mem) {}
+    data(const primitive_id& id, std::vector<memory::ptr> mems)
+        : primitive_base(id, {}, {padding()}), mems(mems) {}
 
     /// @brief @ref memory object which contains data.
     /// @note If memory is attached by memory::attach(), the attached buffer should be valid till network build.
-    memory::ptr mem;
+    std::vector<memory::ptr> mems;
 };
 /// @}
 /// @}

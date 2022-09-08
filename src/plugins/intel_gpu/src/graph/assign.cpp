@@ -23,7 +23,7 @@ assign_inst::typed_primitive_inst(network& network, const assign_node& node) :
 layout assign_inst::calc_output_layout(const assign_node& node, kernel_impl_params const& impl_param) {
     return impl_param.typed_desc<assign>()->output_layout;
 }
-
+#if 0 // TODO(taylor)
 std::string assign_inst::to_string(const assign_node& node) {
     auto node_info = node.desc_to_json();
     json_composite assign_info;
@@ -34,5 +34,5 @@ std::string assign_inst::to_string(const assign_node& node) {
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 } // namespace cldnn

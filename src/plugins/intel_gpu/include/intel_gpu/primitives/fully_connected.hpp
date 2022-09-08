@@ -46,12 +46,12 @@ struct fully_connected : public primitive_base<fully_connected> {
     /// @param weights Primitive id containing weights data.
     /// @param bias Primitive id containing bias data. Provide empty string if using Relu without bias.
     fully_connected(const primitive_id& id,
-                    const primitive_id& input,
+                    const input_info& input,
                     const primitive_id& weights,
                     const primitive_id& bias = "",
                     const padding& output_padding = padding(),
                     const size_t input_size = 2)
-        : primitive_base(id, {input}, output_padding),
+        : primitive_base(id, {input}, {output_padding}),
           weights(weights),
           bias(bias),
           input_size(input_size)
@@ -63,13 +63,13 @@ struct fully_connected : public primitive_base<fully_connected> {
     /// @param weights Primitive id containing weights data.
     /// @param bias Primitive id containing bias data. Provide empty string if using Relu without bias.
     fully_connected(const primitive_id& id,
-                    const primitive_id& input,
+                    const input_info& input,
                     const primitive_id& weights,
                     const primitive_id& bias,
                     const data_types data_type,
                     const padding& output_padding = padding(),
                     const size_t input_size = 2)
-        : primitive_base(id, { input }, output_padding, optional_data_type{data_type}),
+        : primitive_base(id, {input}, {output_padding}, {optional_data_type{data_type}}),
           weights(weights),
           bias(bias),
           input_size(input_size)
@@ -83,12 +83,12 @@ struct fully_connected : public primitive_base<fully_connected> {
     size_t input_size;
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
-        ret.push_back(weights);
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
+        ret.push_back({std::ref(weights), 0});
 
         if (!bias.empty())
-            ret.push_back(bias);
+            ret.push_back({std::ref(bias), 0});
 
         return ret;
     }

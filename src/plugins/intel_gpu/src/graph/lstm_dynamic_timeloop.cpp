@@ -17,7 +17,7 @@ primitive_type_id lstm_dynamic_timeloop::type_id() {
 }
 
 program_node& lstm_dynamic_timeloop_node::get_dependency_by_name(std::string val) const {
-    return get_dependency(get_dependency_idx(val));
+    return *get_dependency(get_dependency_idx(val)).first;
 }
 
 void lstm_dynamic_timeloop_node::init_params_list() {
@@ -37,10 +37,13 @@ void lstm_dynamic_timeloop_node::init_params_list() {
 void lstm_dynamic_timeloop_node::reverse_optional_outputs_connections() {
     auto reverse_connections = [&](program_node& mutable_data_node, const std::string& dependency_tag) {
         auto index_to_insert = get_param_list_index(dependency_tag);
-        mutable_data_node.dependencies.erase(std::remove(mutable_data_node.dependencies.begin(), mutable_data_node.dependencies.end(), this));
+        mutable_data_node.dependencies.erase(std::remove_if(mutable_data_node.dependencies.begin(), mutable_data_node.dependencies.end(),
+        [&](const std::pair<program_node*, int>& dep) {
+            return this == dep.first;
+        }));
         mutable_data_node.users.push_back(this);
         users.remove(&mutable_data_node);
-        dependencies.insert(dependencies.begin() + index_to_insert, &mutable_data_node);
+        dependencies.insert(dependencies.begin() + index_to_insert, {&mutable_data_node, 0});
         // fix inputs/outputs
         if (mutable_data_node.get_dependencies().empty()) {
             myprog.get_inputs().push_back(&mutable_data_node);
@@ -83,7 +86,7 @@ size_t lstm_dynamic_timeloop_node::get_dependency_idx(std::string val) const {
 // init_cell:      [b: batch, f: 1, x: hidden_size, y: direction]
 // output_tensor:  [b: batch, f: max_sequence_length, x: hidden_size, y: direction]
 layout lstm_dynamic_timeloop_inst::calc_output_layout(lstm_dynamic_timeloop_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for lstm_dynamic_node!");
     auto input_layout = impl_param.get_input_layout();
     auto batch = input_layout.batch();
@@ -93,7 +96,7 @@ layout lstm_dynamic_timeloop_inst::calc_output_layout(lstm_dynamic_timeloop_node
     auto direction = reccurent_layout.feature();
     return layout(input_layout.data_type, input_layout.format, tensor(batch, output_sequence, hidden_size, direction));
 }
-
+#if 0 // TODO(taylor)
 std::string lstm_dynamic_timeloop_inst::to_string(lstm_dynamic_timeloop_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -118,7 +121,7 @@ std::string lstm_dynamic_timeloop_inst::to_string(lstm_dynamic_timeloop_node con
 
     return primitive_description.str();
 }
-
+#endif
 lstm_dynamic_timeloop_inst::typed_primitive_inst(network& network, lstm_dynamic_timeloop_node const& node)
     : parent(network, node) {
     auto batch_size = node.get_output_layout().batch();

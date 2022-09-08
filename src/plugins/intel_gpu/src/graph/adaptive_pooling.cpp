@@ -19,7 +19,7 @@ layout adaptive_pooling_inst::calc_output_layout(const adaptive_pooling_node& no
     const auto prim = impl_param.typed_desc<adaptive_pooling>();
     return {data_layout.data_type, data_layout.format, prim->output_size};
 }
-
+#if 0 // TODO(taylor)
 std::string adaptive_pooling_inst::to_string(const adaptive_pooling_node& node) {
     const auto prim = node.get_primitive();
 
@@ -36,4 +36,5 @@ std::string adaptive_pooling_inst::to_string(const adaptive_pooling_node& node) 
 
     return primitive_description.str();
 }
+#endif
 }  // namespace cldnn

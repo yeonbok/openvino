@@ -23,7 +23,7 @@ public:
     typed_program_node(const std::shared_ptr<crop> prim, program& prog) : parent(prim, prog) {
         support_padding_all(true);
     }
-    program_node& input() const { return get_dependency(0); }
+    program_node& input() const { return *get_dependency(0).first; }
 };
 
 using crop_node = typed_program_node<crop>;

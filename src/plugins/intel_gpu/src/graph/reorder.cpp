@@ -25,9 +25,9 @@ layout reorder_inst::calc_output_layout(reorder_node const& node, kernel_impl_pa
     auto ifmt = input_layout.format;
 
     auto desc = impl_param.typed_desc<reorder>();
-    auto odt = *desc->output_data_type;
+    auto odt = *desc->output_data_types[0];
     auto ofmt = desc->output_format;
-    auto op = desc->output_padding;
+    auto op = desc->output_paddings[0];
 
     if (ofmt == format::any) {
         ofmt = ifmt;
@@ -169,7 +169,7 @@ layout reorder_inst::calc_output_layout(reorder_node const& node, kernel_impl_pa
             return layout(input_layout.get_partial_shape(), odt, ofmt, op);
     }
 }
-
+#if 0 // TODO(taylor)
 std::string reorder_inst::to_string(reorder_node const& node) {
     auto desc = node.get_primitive();
     auto mean = desc->mean;
@@ -190,7 +190,7 @@ std::string reorder_inst::to_string(reorder_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 reorder_inst::typed_primitive_inst(network& network, reorder_node const& node)
     : parent(network, node, !node.can_be_optimized() && !node.is_dynamic()) {
     if (node.can_be_optimized())
@@ -232,15 +232,15 @@ void reorder_inst::on_execute() {
 }
 
 void reorder_inst::reuse_input() {
-    if (static_cast<bool>(_output) && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
+    if (!_outputs.empty() && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
         return;
 
     build_deps();
 
     if (node.requires_reinterpret()) {
-        _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
+        _outputs = {_network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout())};
     } else {
-        _output = input_memory_ptr();
+        _outputs = {input_memory_ptr()};
     }
 }
 

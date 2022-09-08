@@ -22,7 +22,7 @@ layout experimental_detectron_detection_output_inst::calc_output_layout(
 
     return layout(data_layout.data_type, format::bfyx, {static_cast<int>(desc->max_detections_per_image), 4, 1, 1});
 }
-
+#if 0 // TODO(taylor)
 std::string experimental_detectron_detection_output_inst::to_string(
     const experimental_detectron_detection_output_node& node) {
     auto desc = node.get_primitive();
@@ -46,4 +46,5 @@ std::string experimental_detectron_detection_output_inst::to_string(
 
     return primitive_description.str();
 }
+#endif
 }  // namespace cldnn

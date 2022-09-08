@@ -167,13 +167,13 @@ public:
 
     layout calc_body_input_layout(const loop::io_primitive_map& inputDesc) const {
         const auto& dependency_list = this->get_dependencies();
-        auto input = std::find_if(dependency_list.begin(), dependency_list.end(), [&inputDesc](const program_node* p){
-            return p->id() == inputDesc.external_id;
+        auto input = std::find_if(dependency_list.begin(), dependency_list.end(), [&inputDesc](const std::pair<program_node*, int>& dep){
+            return dep.first->id() == inputDesc.external_id;
         });
         if (input == dependency_list.end()) {
             throw std::runtime_error("Can't find input from dependency_list");
         }
-        layout calculated_layout = (*input)->get_output_layout();
+        layout calculated_layout = input->first->get_output_layout();
         auto shape = calculated_layout.get_tensor().sizes(calculated_layout.format);
 
         if (inputDesc.axis >= 0) {
@@ -265,12 +265,12 @@ public:
         auto mem = get_program().get_engine().allocate_memory(body_input_layout);
         auto& stream = get_program().get_stream();
         write_scalar_value(mem, stream, 1);
-        body.add_primitive(std::make_shared<data>(increment_value_id, mem));
+        body.add_primitive(std::make_shared<data>(increment_value_id, std::vector<memory::ptr>{mem}));
 
         // add eltwise sum updating current_iteration with incremental data
         const primitive_id updated_currnet_iteration_id = current_iteration_id + "_update";
         body.add_primitive(std::make_shared<eltwise>(updated_currnet_iteration_id,
-            current_iteration_id, increment_value_id, eltwise_mode::sum));
+            input_info(current_iteration_id), input_info(increment_value_id), eltwise_mode::sum));
 
         // set backedge
         back_edges.emplace_back(updated_currnet_iteration_id, current_iteration_id);
@@ -284,12 +284,12 @@ public:
             auto body_output = body_topology_map.find(id);
             if (body_output == body_topology_map.end()) {
                 auto mem = get_program().get_engine().allocate_memory(body_output_layout);
-                auto md = std::make_shared<data>(id, mem);
+                auto md = std::make_shared<data>(id, std::vector<memory::ptr>{mem});
                 body.add_primitive(md);
             } else {
                 auto body_output_prim = body.at(body_output->first);
                 auto mem = get_program().get_engine().allocate_memory(body_output_layout);
-                body_output_prim.reset(new mutable_data(body_output->first, mem));
+                body_output_prim.reset(new mutable_data(body_output->first, {mem}));
             }
         }
     }

@@ -23,8 +23,8 @@ layout quantize_inst::calc_output_layout(quantize_node const& node, kernel_impl_
     auto input_layout = impl_param.get_input_layout();
     auto output_format = input_layout.format;
     auto out_dt = input_layout.data_type;
-    if (desc->output_data_type)
-        out_dt = *desc->output_data_type;
+    if (desc->output_data_types[0])
+        out_dt = *desc->output_data_types[0];
 
     if (out_dt == data_types::bin) {
         output_format = format::b_fs_yx_32fp;
@@ -32,7 +32,7 @@ layout quantize_inst::calc_output_layout(quantize_node const& node, kernel_impl_
 
     return layout{out_dt, output_format, input_layout.get_tensor()};
 }
-
+#if 0 // TODO(taylor)
 std::string quantize_inst::to_string(quantize_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -59,7 +59,7 @@ std::string quantize_inst::to_string(quantize_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 quantize_inst::typed_primitive_inst(network& network, quantize_node const& node) : parent(network, node) {}
 
 }  // namespace cldnn

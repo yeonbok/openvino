@@ -21,7 +21,7 @@ layout deformable_conv_inst::calc_output_layout(deformable_conv_node const& node
     auto input_layout = impl_param.get_input_layout();
 
     auto input_type = input_layout.data_type;
-    auto output_type = desc->output_data_type ? *desc->output_data_type : input_type;
+    auto output_type = desc->output_data_types[0] ? *desc->output_data_types[0] : input_type;
 
     tensor output_size(input_layout.batch(),
                        desc->output_size.feature[0],
@@ -68,7 +68,7 @@ layout deformable_interp_inst::calc_output_layout(deformable_interp_node const& 
 
     auto kernel_size = desc->kernel_size;
     auto input_type = input_layout.data_type;
-    auto output_type = node.get_primitive()->output_data_type ? *node.get_primitive()->output_data_type : input_type;
+    auto output_type = node.get_primitive()->output_data_types[0] ? *node.get_primitive()->output_data_types[0] : input_type;
 
     tensor output_size(input_layout.batch(),
                        input_layout.feature()*kernel_size.spatial[0]*kernel_size.spatial[1],
@@ -78,7 +78,7 @@ layout deformable_interp_inst::calc_output_layout(deformable_interp_node const& 
 
     return {output_type, input_layout.format, output_size};
 }
-
+#if 0 // TODO(taylor)
 std::string deformable_interp_inst::to_string(deformable_interp_node const& node) {
     auto desc = node.get_primitive();
     auto strd = desc->stride;
@@ -106,7 +106,7 @@ std::string deformable_interp_inst::to_string(deformable_interp_node const& node
 
     return primitive_description.str();
 }
-
+#endif
 deformable_interp_inst::typed_primitive_inst(network& network, deformable_interp_node const& node) : parent(network, node) {
 }
 

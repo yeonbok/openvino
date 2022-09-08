@@ -119,7 +119,7 @@ struct loop : public primitive_base<loop> {
     /// @param back_edges Output data primitive id.
     /// @param output_padding     Optional padding for output from primitive.
     loop(const primitive_id& id,
-         const std::vector<primitive_id>& inputs,
+         const std::vector<input_info>& inputs,
          const topology& body,
          const primitive_id& trip_count_id,
          const primitive_id& initial_condition_id,
@@ -131,7 +131,7 @@ struct loop : public primitive_base<loop> {
          const primitive_id& current_iteration_id = primitive_id(),
          const primitive_id& condition_id = primitive_id(),
          const padding& output_padding = padding())
-            : primitive_base(id, inputs, output_padding),
+            : primitive_base(id, inputs, {output_padding}),
               body(body),
               trip_count_id(trip_count_id),
               initial_execution_id(initial_condition_id),
@@ -172,15 +172,18 @@ struct loop : public primitive_base<loop> {
     int64_t max_iteration;
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret{
-            std::ref(trip_count_id), std::ref(initial_execution_id), std::ref(num_iteration_id)
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret{
+            {std::ref(trip_count_id), 0}, {std::ref(initial_execution_id), 0}, {std::ref(num_iteration_id), 0}
         };
         // add external_id in dependencies if not exist
         for (const auto& mapping : input_primitive_maps) {
-            auto target = std::find(input.begin(), input.end(), mapping.external_id);
+            auto target = std::find_if(input.begin(), input.end(),
+            [&mapping](const input_info& info) {
+                return info.pid == mapping.external_id;
+            });
             if (target == input.end()) {
-                ret.push_back(std::ref(mapping.external_id));
+                ret.push_back({std::ref(mapping.external_id), 0});
             }
         }
         return ret;

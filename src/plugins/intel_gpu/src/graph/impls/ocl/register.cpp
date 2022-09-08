@@ -12,16 +12,21 @@ namespace ocl {
 
 void register_implementations() {
     REGISTER_OCL(activation);
+#if 0 // TODO(taylor)
     REGISTER_OCL(adaptive_pooling);
+#endif
     REGISTER_OCL(arg_max_min);
+#if 0 // TODO(taylor)
     REGISTER_OCL(average_unpooling);
     REGISTER_OCL(binary_convolution);
     REGISTER_OCL(border);
     REGISTER_OCL(broadcast);
     REGISTER_OCL(bucketize);
+#endif
     REGISTER_OCL(concatenation);
     REGISTER_OCL(convolution);
     REGISTER_OCL(crop);
+#if 0 // TODO(taylor)
     REGISTER_OCL(custom_gpu_primitive);
     REGISTER_OCL(deconvolution);
     REGISTER_OCL(deformable_conv);
@@ -35,8 +40,10 @@ void register_implementations() {
     REGISTER_OCL(experimental_detectron_prior_grid_generator);
     REGISTER_OCL(experimental_detectron_roi_feature_extractor);
     REGISTER_OCL(experimental_detectron_topk_rois);
+#endif
     REGISTER_OCL(eltwise);
     REGISTER_OCL(fully_connected);
+#if 0 // TODO(taylor)
     REGISTER_OCL(gather);
     REGISTER_OCL(gather_elements);
     REGISTER_OCL(gather_nd);
@@ -47,20 +54,28 @@ void register_implementations() {
     REGISTER_OCL(max_unpooling);
     REGISTER_OCL(mutable_data);
     REGISTER_OCL(mvn);
+#endif
     REGISTER_OCL(non_max_suppression);
+    #if 0 // TODO(taylor)
     REGISTER_OCL(normalize);
     REGISTER_OCL(one_hot);
+#endif
     REGISTER_OCL(permute);
+#if 0 // TODO(taylor)
     REGISTER_OCL(pooling);
     REGISTER_OCL(pyramid_roi_align);
+#endif
     REGISTER_OCL(quantize);
+#if 0 // TODO(taylor)
     REGISTER_OCL(random_uniform);
     REGISTER_OCL(range);
     REGISTER_OCL(reduce);
     REGISTER_OCL(region_yolo);
     REGISTER_OCL(reorder);
     REGISTER_OCL(reorg_yolo);
+#endif
     REGISTER_OCL(reshape);
+#if 0 // TODO(taylor)
     REGISTER_OCL(reverse);
     REGISTER_OCL(reverse_sequence);
     REGISTER_OCL(roi_align);
@@ -80,7 +95,9 @@ void register_implementations() {
     REGISTER_OCL(tile);
     REGISTER_OCL(lstm_dynamic_input);
     REGISTER_OCL(lstm_dynamic_timeloop);
+#endif
     REGISTER_OCL(generic_layer);
+#if 0 // TODO(taylor)
     REGISTER_OCL(gather_tree);
     REGISTER_OCL(resample);
     REGISTER_OCL(grn);
@@ -91,6 +108,7 @@ void register_implementations() {
     REGISTER_OCL(convert_color);
     REGISTER_OCL(count_nonzero);
     REGISTER_OCL(gather_nonzero);
+#endif
 }
 
 }  // namespace ocl

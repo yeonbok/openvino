@@ -19,7 +19,7 @@ primitive_type_id broadcast::type_id() {
 }
 
 layout broadcast_inst::calc_output_layout(broadcast_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for broadcast_node!");
     auto input_layout = impl_param.get_input_layout();
     auto desc = impl_param.typed_desc<broadcast>();
@@ -90,7 +90,7 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
 
     return { layout{output_shapes[0], output_type, output_format} };
 }
-
+#if 0 // TODO(taylor)
 std::string broadcast_inst::to_string(broadcast_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -116,7 +116,7 @@ std::string broadcast_inst::to_string(broadcast_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 broadcast_inst::typed_primitive_inst(network& network, broadcast_node const& node) : parent(network, node) {
     auto input_layout = node.input().get_output_layout();
 

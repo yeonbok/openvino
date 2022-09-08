@@ -94,7 +94,7 @@ std::vector<layout> resample_inst::calc_output_layouts(resample_node const& /*no
 
     return { layout{output_shapes[0], input_layout.data_type, format::adjust_to_rank(input_layout.format, output_shapes[0].size())} };
 }
-
+#if 0 // TODO(taylor)
 std::string resample_inst::to_string(resample_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -153,15 +153,15 @@ std::string resample_inst::to_string(resample_node const& node) {
         resample_info.add("nearest_mode:", "simple");
 
     resample_info.add("output_size", desc->output_size);
-    resample_info.add("output padding lower size", desc->output_padding.lower_size());
-    resample_info.add("output padding upper size", desc->output_padding.upper_size());
+    resample_info.add("output padding lower size", desc->output_paddings[0].lower_size());
+    resample_info.add("output padding upper size", desc->output_paddings[0].upper_size());
 
     node_info->add("resample_info", resample_info);
     node_info->dump(primitive_description);
 
     return primitive_description.str();
 }
-
+#endif
 resample_inst::typed_primitive_inst(network& network, resample_node const& node) : parent(network, node) {
 }
 }  // namespace cldnn

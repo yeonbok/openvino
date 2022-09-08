@@ -34,7 +34,7 @@ struct arg_max_min : public primitive_base<arg_max_min> {
     /// @param axis Axis to maximize/minimize along.
     /// @param sort Type of sorting - by values or indices.
     arg_max_min(const primitive_id& id,
-                const std::vector<primitive_id>& input,
+                const std::vector<input_info>& inputs,
                 ov::op::TopKMode mode,
                 uint32_t top_k,
                 int64_t axis,
@@ -42,7 +42,7 @@ struct arg_max_min : public primitive_base<arg_max_min> {
                 bool values_first = false,
                 const padding& output_padding = padding(),
                 data_types output_data_type = data_types::f32)
-        : primitive_base(id, {input}, output_padding, optional_data_type {output_data_type}),
+        : primitive_base(id, inputs, {output_padding}, {optional_data_type{output_data_type}}, 2/*num_outputs*/),
           mode(mode),
           top_k(top_k),
           axis(axis),

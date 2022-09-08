@@ -74,7 +74,7 @@ layout space_to_depth_inst::calc_output_layout(space_to_depth_node const& node, 
             tensor(TensorValue(input_layout.batch()), TensorValue(feature), TensorValue(x), TensorValue(y))};
     }
 }
-
+#if 0 // TODO(taylor)
 std::string space_to_depth_inst::to_string(space_to_depth_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -96,7 +96,7 @@ std::string space_to_depth_inst::to_string(space_to_depth_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 space_to_depth_inst::typed_primitive_inst(network& network, space_to_depth_node const& node)
     : parent(network, node) {}
 

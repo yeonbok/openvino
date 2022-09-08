@@ -21,7 +21,7 @@ layout reverse_sequence_inst::calc_output_layout(reverse_sequence_node const& no
 
     return layout{input_layout.data_type, input_format, input_layout.get_tensor()};
 }
-
+#if 0 // TODO(taylor)
 std::string reverse_sequence_inst::to_string(reverse_sequence_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -39,7 +39,7 @@ std::string reverse_sequence_inst::to_string(reverse_sequence_node const& node) 
 
     return primitive_description.str();
 }
-
+#endif
 reverse_sequence_inst::typed_primitive_inst(network& network, reverse_sequence_node const& node)
     : parent(network, node) {}
 

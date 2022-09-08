@@ -47,13 +47,13 @@ struct pooling : public primitive_base<pooling> {
     /// @param size Pooling kernel size.
     /// @param pad Defines logical pad value added to input tensor.
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             pooling_mode mode,
             const ov::Shape& size,
             const ov::Strides& stride,
             const ov::Shape& pad = {0, 0},
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding),
+        : primitive_base(id, {input}, {output_padding}),
           argmax(""),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(false),
@@ -73,14 +73,14 @@ struct pooling : public primitive_base<pooling> {
     /// @param size Pooling kernel size.
     /// @param pad Defines logical pad value added to input tensor
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             const primitive_id& argmax,
             pooling_mode mode,
             const ov::Shape& size,
             const ov::Strides& stride,
             const ov::Shape& pad = {0, 0},
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding),
+        : primitive_base(id, {input}, {output_padding}),
           argmax(argmax),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(false),
@@ -99,7 +99,7 @@ struct pooling : public primitive_base<pooling> {
     /// @param pad Defines logical pad value added to input tensor.
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             pooling_mode mode,
             const ov::Shape& size,
             const ov::Strides& stride,
@@ -107,7 +107,7 @@ struct pooling : public primitive_base<pooling> {
             tensor output_size,
             const data_types output_data_type,
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding, optional_data_type{output_data_type}),
+        : primitive_base(id, {input}, {output_padding}, {optional_data_type{output_data_type}}),
           argmax(""),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(false),
@@ -129,7 +129,7 @@ struct pooling : public primitive_base<pooling> {
     /// @param pad Defines logical pad value added to input tensor.
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             const primitive_id& argmax,
             pooling_mode mode,
             const ov::Shape& size,
@@ -137,7 +137,7 @@ struct pooling : public primitive_base<pooling> {
             const ov::Shape& pad,
             tensor output_size,
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding),
+        : primitive_base(id, {input}, {output_padding}),
           argmax(argmax),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(false),
@@ -153,10 +153,10 @@ struct pooling : public primitive_base<pooling> {
     /// @param input Input primitive id.
     /// @param mode Pooling mode.
     pooling(const primitive_id& id,
-            const primitive_id& input,
+            const input_info& input,
             pooling_mode mode,
             const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding),
+        : primitive_base(id, {input}, {output_padding}),
           argmax(""),
           mode(static_cast<pooling_mode>(mode)),
           global_pooling(true),
@@ -179,8 +179,8 @@ struct pooling : public primitive_base<pooling> {
     /// @param index_element_type Data type of index output.
     /// @param output_size User-defined output data size of the primitive (w/o padding).
     pooling(const primitive_id& id,
-            const primitive_id& input,
-            const primitive_id& indices_output,
+            const input_info& input,
+            const input_info& indices_output,
             const ov::Shape& size,
             const ov::Strides& stride,
             const ov::Strides& dilation,
@@ -191,7 +191,7 @@ struct pooling : public primitive_base<pooling> {
             tensor output_size,
             const data_types output_data_type,
             const padding& output_padding = padding())
-            : primitive_base(id, {input, indices_output}, output_padding, optional_data_type{output_data_type}),
+            : primitive_base(id, {input, indices_output}, {output_padding}, {optional_data_type{output_data_type}}),
               argmax(""),
               indices_output(indices_output),
               mode(pooling_mode::max),
@@ -212,7 +212,7 @@ struct pooling : public primitive_base<pooling> {
     /// Indices must be in flattened bfyx format with no padding. Needs to be fp32 data type.
     primitive_id argmax;
     /// @brief Primitive id which contains indices output.
-    primitive_id indices_output;
+    input_info indices_output;
     /// @brief Pooling mode.
     pooling_mode mode;
     /// @brief Global pooling (kernel size is equal to the spatial dimension of input tensor)
@@ -238,12 +238,12 @@ struct pooling : public primitive_base<pooling> {
     bool maxPoolOpset8Features{false};
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
         if (!argmax.empty())
-            ret.push_back(argmax);
-        if (!indices_output.empty())
-            ret.push_back(indices_output);
+            ret.push_back({std::ref(argmax), 0});
+        if (!indices_output.pid.empty())
+            ret.push_back({std::ref(indices_output.pid), 0});
         return ret;
     }
 };

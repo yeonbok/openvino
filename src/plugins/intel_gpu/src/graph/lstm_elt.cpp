@@ -16,7 +16,7 @@ primitive_type_id lstm_elt::type_id() {
 }
 
 layout lstm_elt_inst::calc_output_layout(lstm_elt_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for lstm_elt_node!");
     auto input_layout = impl_param.get_input_layout();
 
@@ -31,7 +31,7 @@ layout lstm_elt_inst::calc_output_layout(lstm_elt_node const& node, kernel_impl_
                tensor(input_layout.batch(), 2, input_layout.spatial(0) / 4, input_layout.feature()));
     return result;
 }
-
+#if 0 // TODO(taylor)
 std::string lstm_elt_inst::to_string(lstm_elt_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -46,7 +46,7 @@ std::string lstm_elt_inst::to_string(lstm_elt_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 lstm_elt_inst::typed_primitive_inst(network& network, lstm_elt_node const& node) : parent(network, node) {
     auto input_size = node.input().get_output_layout();
     CLDNN_ERROR_NOT_PROPER_FORMAT(node.id(),

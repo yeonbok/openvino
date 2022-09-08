@@ -20,7 +20,7 @@ primitive_type_id permute::type_id() {
 }
 
 layout permute_inst::calc_output_layout(permute_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for permute_node!");
     auto desc = impl_param.typed_desc<permute>();
     auto input_layout = impl_param.get_input_layout();
@@ -38,7 +38,7 @@ layout permute_inst::calc_output_layout(permute_node const& node, kernel_impl_pa
     }
 
     auto output_size = tensor(format::get_default_format(input_layout.get_rank()), output_shape);
-    auto op = desc->output_padding;
+    auto op = desc->output_paddings[0];
 
     if (impl_param.has_fused_primitives()) {
         input_layout.data_type = impl_param.get_fused_output_layout().data_type;
@@ -78,9 +78,9 @@ std::vector<layout> permute_inst::calc_output_layouts(permute_node const& /*node
         output_shape.push_back(input_shape[permute_order[i]]);
     }
 
-    return { layout{output_shape, output_type, input_layout.format, desc->output_padding} };
+    return { layout{output_shape, output_type, input_layout.format, desc->output_paddings[0]} };
 }
-
+#if 0 // TODO(taylor)
 std::string permute_inst::to_string(permute_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -104,7 +104,7 @@ std::string permute_inst::to_string(permute_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 permute_inst::typed_primitive_inst(network& network, permute_node const& node) : parent(network, node) {
     auto permute_order = argument.permute_order;
 

@@ -14,7 +14,7 @@ primitive_type_id softmax::type_id() {
 }
 
 layout softmax_inst::calc_output_layout(softmax_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for softmax_node!");
 
     auto output_layout = impl_param.get_input_layout();
@@ -24,7 +24,7 @@ layout softmax_inst::calc_output_layout(softmax_node const& node, kernel_impl_pa
 
     return output_layout;
 }
-
+#if 0 // TODO(taylor)
 std::string softmax_inst::to_string(softmax_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -39,7 +39,7 @@ std::string softmax_inst::to_string(softmax_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 softmax_inst::typed_primitive_inst(network& network, softmax_node const& node) : parent(network, node) {
     //    auto& input_offset  = arg.input_offset;
     //    auto& output_offset = arg.output_offset;

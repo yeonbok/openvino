@@ -18,7 +18,7 @@ public:
     using parent::parent;
 
     program_node& input(size_t index = 0) const {
-        return get_dependency(index);
+        return *get_dependency(index).first;
     }
 };
 

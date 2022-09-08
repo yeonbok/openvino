@@ -21,7 +21,7 @@ layout experimental_detectron_generate_proposals_single_image_inst::calc_output_
 
     return layout(data_layout.data_type, format::bfyx, {static_cast<int>(desc->post_nms_count), 4, 1, 1});
 }
-
+#if 0 // TODO(taylor)
 std::string experimental_detectron_generate_proposals_single_image_inst::to_string(
         const experimental_detectron_generate_proposals_single_image_node& node) {
     auto desc = node.get_primitive();
@@ -40,4 +40,5 @@ std::string experimental_detectron_generate_proposals_single_image_inst::to_stri
 
     return primitive_description.str();
 }
+#endif
 }  // namespace cldnn

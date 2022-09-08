@@ -16,11 +16,11 @@ primitive_type_id ctc_greedy_decoder::type_id() {
 layout ctc_greedy_decoder_inst::calc_output_layout(ctc_greedy_decoder_node const& node, kernel_impl_params const& impl_param) {
     auto input_node_layout = impl_param.get_input_layout();
     auto prim = impl_param.typed_desc<ctc_greedy_decoder>();
-    auto output_type = prim->output_data_type ? *prim->output_data_type : input_node_layout.data_type;
+    auto output_type = prim->output_data_types[0] ? *prim->output_data_types[0] : input_node_layout.data_type;
 
     return layout(output_type, input_node_layout.format, prim->output_tensor);
 }
-
+#if 0 // TODO(taylor)
 std::string ctc_greedy_decoder_inst::to_string(ctc_greedy_decoder_node const& node) {
     auto node_info = node.desc_to_json();
     auto desc = node.get_primitive();
@@ -42,6 +42,6 @@ std::string ctc_greedy_decoder_inst::to_string(ctc_greedy_decoder_node const& no
 
     return primitive_description.str();
 }
-
+#endif
 ctc_greedy_decoder_inst::typed_primitive_inst(network& network, ctc_greedy_decoder_node const& node) : parent(network, node) {}
 }  // namespace cldnn

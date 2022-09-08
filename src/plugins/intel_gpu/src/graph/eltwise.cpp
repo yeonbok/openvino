@@ -29,7 +29,7 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node, kernel_impl_pa
     }
     auto input_node_layout = impl_param.get_non_padded_input_layout(primary_input_idx);
     auto desc = impl_param.typed_desc<eltwise>();
-    auto output_type = desc->output_data_type ? *desc->output_data_type : input_node_layout.data_type;
+    auto output_type = desc->output_data_types[0] ? *desc->output_data_types[0] : input_node_layout.data_type;
 
     auto size = input_node_layout.get_tensor();
     auto format = input_node_layout.format;
@@ -86,8 +86,8 @@ layout eltwise_inst::calc_output_layout(eltwise_node const& node, kernel_impl_pa
         output_layout.data_type = data_types::i8;
     }
 
-    if (desc->output_data_type) {
-        output_layout.data_type = *desc->output_data_type;
+    if (desc->output_data_types[0]) {
+        output_layout.data_type = *desc->output_data_types[0];
     }
 
     if (node.has_fused_primitives()) {
@@ -122,7 +122,7 @@ static inline std::string stringify_vector(const std::vector<float>& v) {
 
     return s.str();
 }
-
+#if 0 // TODO(taylor)
 std::string eltwise_inst::to_string(eltwise_node const& node) {
     auto node_info = node.desc_to_json();
     auto desc = node.get_primitive();
@@ -206,7 +206,7 @@ std::string eltwise_inst::to_string(eltwise_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 eltwise_inst::typed_primitive_inst(network& network, eltwise_node const& node) : parent(network, node) {
     check_inputs_count(node);
     // check for stride

@@ -388,8 +388,8 @@ layout prior_box_inst::calc_output_layout(prior_box_node const& node, kernel_imp
     // Second feature stores the variance of each prior coordinate.
 
     auto output_data_type = input_layout.data_type == data_types::f16 ? data_types::f16 : data_types::f32;
-    if (desc->output_data_type)
-        output_data_type = *desc->output_data_type;
+    if (desc->output_data_types[0])
+        output_data_type = *desc->output_data_types[0];
     return {output_data_type, cldnn::format::bfyx, cldnn::tensor(1, 2, 1, layer_width * layer_height * num_priors * 4)};
 }
 
@@ -398,7 +398,7 @@ std::string vector_to_string(std::vector<float> vec) {
     for (size_t i = 0; i < vec.size(); i++) result << vec.at(i) << ", ";
     return result.str();
 }
-
+#if 0 // TODO(taylor)
 std::string prior_box_inst::to_string(prior_box_node const& node) {
     auto desc = node.get_primitive();
     auto flip = desc->flip ? "true" : "false";
@@ -451,7 +451,7 @@ std::string prior_box_inst::to_string(prior_box_node const& node) {
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 prior_box_inst::typed_primitive_inst(network& network, prior_box_node const& node) : parent(network, node) {
     CLDNN_ERROR_MESSAGE(node.id(), "Prior box primitive instance should not be created!");
 }

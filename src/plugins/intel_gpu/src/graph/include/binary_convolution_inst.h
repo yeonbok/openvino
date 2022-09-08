@@ -27,13 +27,13 @@ public:
     void set_depthwise_sep_opt(bool node_depthwise_sep_opt) { depthwise_sep_opt = node_depthwise_sep_opt; }
     bool get_depthwise_sep_opt() const { return depthwise_sep_opt; }
 
-    program_node& input() const { return get_dependency(0); }
+    program_node& input() const { return *get_dependency(0).first; }
 
     program_node& weights(size_t idx = 0) const {
         if (static_cast<int32_t>(idx) >= this->get_split())
             throw std::range_error("weights offset too big");
 
-        return get_dependency(1 + idx);
+        return *get_dependency(1 + idx).first;
     }
 
     // Define bias functions to be able to reuse get_weights_bias_default_params<T> function
@@ -41,8 +41,8 @@ public:
         throw std::runtime_error("bias should not be used in binary convolution");
     }
 
-    std::unique_ptr<kernel_impl_params> get_kernel_impl_params(const std::vector<layout>& in_layouts, const layout& out_layout) const override {
-        auto params = parent::get_kernel_impl_params(in_layouts, out_layout);
+    std::unique_ptr<kernel_impl_params> get_kernel_impl_params(const std::vector<layout>& in_layouts, const std::vector<layout>& out_layouts) const override {
+        auto params = parent::get_kernel_impl_params(in_layouts, out_layouts);
         params->weights_layout = optional_layout(weights().get_output_layout());
         return params;
     }

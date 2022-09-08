@@ -24,7 +24,7 @@ layout extract_image_patches_inst::calc_output_layout(extract_image_patches_node
     auto output_shape = desc->output_shape;
     return layout(input_layout.data_type, input_format, output_shape);
 }
-
+#if 0 // TODO(taylor)
 std::string extract_image_patches_inst::to_string(extract_image_patches_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -49,7 +49,7 @@ std::string extract_image_patches_inst::to_string(extract_image_patches_node con
 
     return primitive_description.str();
 }
-
+#endif
 extract_image_patches_inst::typed_primitive_inst(network& network, extract_image_patches_node const& node) : parent(network, node) {}
 
 }  // namespace cldnn

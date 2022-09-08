@@ -19,7 +19,7 @@ layout convert_color_inst::calc_output_layout(convert_color_node const& node, ke
     auto desc = impl_param.typed_desc<convert_color>();
     return desc->output_layout;
 }
-
+#if 0 // TODO(taylor)
 std::string convert_color_inst::to_string(convert_color_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -38,7 +38,7 @@ std::string convert_color_inst::to_string(convert_color_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 convert_color_inst::typed_primitive_inst(network& network, convert_color_node const& node) : parent(network, node) {}
 
 }  // namespace cldnn

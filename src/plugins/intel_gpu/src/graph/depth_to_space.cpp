@@ -54,7 +54,7 @@ layout depth_to_space_inst::calc_output_layout(depth_to_space_node const& node, 
 
     return layout{input_layout.data_type, input_format, out_size};
 }
-
+#if 0 // TODO(taylor)
 std::string depth_to_space_inst::to_string(depth_to_space_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -72,7 +72,7 @@ std::string depth_to_space_inst::to_string(depth_to_space_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 depth_to_space_inst::typed_primitive_inst(network& network, depth_to_space_node const& node)
     : parent(network, node) {}
 

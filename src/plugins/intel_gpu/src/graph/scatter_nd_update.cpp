@@ -29,7 +29,7 @@ layout scatter_nd_update_inst::calc_output_layout(scatter_nd_update_node const& 
 
     return layout{output_type, input_format, output_shape};
 }
-
+#if 0 // TODO(taylor)
 std::string scatter_nd_update_inst::to_string(scatter_nd_update_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -45,7 +45,7 @@ std::string scatter_nd_update_inst::to_string(scatter_nd_update_node const& node
 
     return primitive_description.str();
 }
-
+#endif
 scatter_nd_update_inst::typed_primitive_inst(network& network, scatter_nd_update_node const& node) : parent(network, node) {}
 
 }  // namespace cldnn

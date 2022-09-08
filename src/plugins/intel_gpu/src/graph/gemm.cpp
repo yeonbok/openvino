@@ -40,8 +40,8 @@ layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params c
     output_size.spatial[0] = N;
     output_size.spatial[1] = M;
     auto output_type = input0_layout.data_type;
-    if ((output_type == data_types::u8 || output_type == data_types::i8) && prim->output_data_type)
-        output_type = *prim->output_data_type;
+    if ((output_type == data_types::u8 || output_type == data_types::i8) && !prim->output_data_types.empty())
+        output_type = *prim->output_data_types[0];
 
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;
@@ -49,7 +49,7 @@ layout gemm_inst::calc_output_layout(gemm_node const& node, kernel_impl_params c
 
     auto output_format = input0_layout.format;
 
-    return layout(output_type, output_format, output_size, prim->output_padding);
+    return layout(output_type, output_format, output_size, prim->output_paddings[0]);
 }
 
 template<typename ShapeType>
@@ -59,7 +59,7 @@ std::vector<layout> gemm_inst::calc_output_layouts(gemm_node const& /*node*/, co
     auto input1_layout = impl_param.get_input_layout(1);
 
     auto default_out_dt = data_type_traits::is_floating_point(input0_layout.data_type) ? input0_layout.data_type : data_types::f32;
-    auto output_type = prim->output_data_type.value_or(default_out_dt);
+    auto output_type = prim->output_data_types[0].value_or(default_out_dt);
 
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;
@@ -77,9 +77,9 @@ std::vector<layout> gemm_inst::calc_output_layouts(gemm_node const& /*node*/, co
 
     ov::op::v0::shape_infer(&op, input_shapes, output_shapes);
 
-    return { layout{output_shapes[0], output_type, input0_layout.format, prim->output_padding} };
+    return { layout{output_shapes[0], output_type, input0_layout.format, prim->output_paddings[0]} };
 }
-
+#if 0 // TODO(taylor)
 std::string gemm_inst::to_string(gemm_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -102,7 +102,7 @@ std::string gemm_inst::to_string(gemm_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 gemm_inst::typed_primitive_inst(network& network, gemm_node const& node) : parent(network, node) {
     auto input0_layout = node.input(0).get_output_layout();
     auto input1_layout = node.input(1).get_output_layout();

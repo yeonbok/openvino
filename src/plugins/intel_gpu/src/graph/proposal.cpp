@@ -26,7 +26,7 @@ primitive_type_id proposal::type_id() {
 }
 
 layout proposal_inst::calc_output_layout(proposal_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for proposal_node!");
     auto desc = impl_param.typed_desc<proposal>();
     layout input_layout = impl_param.get_input_layout(cls_scores_index);
@@ -51,7 +51,7 @@ static inline std::string stringify_vector(std::vector<float> v) {
 
     return s.str();
 }
-
+#if 0 // TODO(taylor)
 // TODO: rename to?
 static std::string stringify_port(const program_node& p) {
     std::stringstream res;
@@ -107,7 +107,7 @@ std::string proposal_inst::to_string(proposal_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 proposal_inst::typed_primitive_inst(network& network, proposal_node const& node) : parent(network, node) {
     generate_anchors(argument.base_bbox_size,
                      argument.ratios,

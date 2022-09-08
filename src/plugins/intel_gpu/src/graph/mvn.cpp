@@ -15,7 +15,7 @@ primitive_type_id mvn::type_id() {
 
 layout mvn_inst::calc_output_layout(mvn_node const& node, kernel_impl_params const& impl_param) {
     auto input_node_layout = impl_param.get_non_padded_input_layout();
-    auto output_type = impl_param.desc->output_data_type ? *impl_param.desc->output_data_type : input_node_layout.data_type;
+    auto output_type = impl_param.desc->output_data_types[0] ? *impl_param.desc->output_data_types[0] : input_node_layout.data_type;
 
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;
@@ -31,8 +31,8 @@ std::vector<layout> mvn_inst::calc_output_layouts(mvn_node const& /*node*/, cons
     auto desc = impl_param.typed_desc<mvn>();
     auto input_layout = impl_param.get_input_layout(0);
 
-    auto output_type = impl_param.desc->output_data_type ? *impl_param.desc->output_data_type
-                                                         : input_layout.data_type;
+    auto output_type = impl_param.desc->output_data_types[0] ? *impl_param.desc->output_data_types[0]
+                                                             : input_layout.data_type;
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;
     }
@@ -44,7 +44,7 @@ std::vector<layout> mvn_inst::calc_output_layouts(mvn_node const& /*node*/, cons
 
     return { layout{output_shape, output_type, output_format} };
 }
-
+#if 0 // TODO(taylor)
 std::string mvn_inst::to_string(mvn_node const& node) {
     auto node_info = node.desc_to_json();
     auto desc = node.get_primitive();
@@ -68,6 +68,6 @@ std::string mvn_inst::to_string(mvn_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 mvn_inst::typed_primitive_inst(network& network, mvn_node const& node) : parent(network, node) {}
 }  // namespace cldnn

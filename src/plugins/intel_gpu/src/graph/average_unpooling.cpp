@@ -16,7 +16,7 @@ primitive_type_id average_unpooling::type_id() {
 }
 
 layout average_unpooling_inst::calc_output_layout(average_unpooling_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for "
            "average_unpooling_node!");
     auto desc = impl_param.typed_desc<average_unpooling>();
@@ -57,7 +57,7 @@ layout average_unpooling_inst::calc_output_layout(average_unpooling_node const& 
                        desc->output_size.spatial[1]);
     return {input_layout.data_type, input_layout.format, output_size};
 }
-
+#if 0 // TODO(taylor)
 std::string average_unpooling_inst::to_string(average_unpooling_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -77,7 +77,7 @@ std::string average_unpooling_inst::to_string(average_unpooling_node const& node
 
     return primitive_description.str();
 }
-
+#endif
 average_unpooling_inst::typed_primitive_inst(network& network, average_unpooling_node const& node)
     : parent(network, node) {}
 

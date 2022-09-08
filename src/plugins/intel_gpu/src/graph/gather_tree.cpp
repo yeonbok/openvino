@@ -17,18 +17,18 @@ primitive_type_id gather_tree::type_id() {
 }
 
 layout gather_tree_inst::calc_output_layout(gather_tree_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
         "Output data type forcing is not supported for gather_tree_node!");
     auto input_layout = impl_param.get_input_layout();
     return input_layout;
 }
-
+#if 0 // TODO(taylor)
 std::string gather_tree_inst::to_string(gather_tree_node const& node) {
     std::stringstream primitive_description;
     node.desc_to_json()->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 gather_tree_inst::typed_primitive_inst(network& network, gather_tree_node const& node) : parent(network, node) {
     auto input_layout = node.input().get_output_layout();
 
@@ -46,16 +46,16 @@ gather_tree_inst::typed_primitive_inst(network& network, gather_tree_node const&
 
     // check input dims
     CLDNN_ERROR_NOT_EQUAL(node.id(),
-        "input0 size", dependencies.at(0)->get_output_layout().get_tensor(), "output size", input_layout.get_tensor(),
+        "input0 size", dependencies.at(0).first->get_output_layout().get_tensor(), "output size", input_layout.get_tensor(),
         "mismatch");
     CLDNN_ERROR_NOT_EQUAL(node.id(),
-        "input1 size", dependencies.at(1)->get_output_layout().get_tensor(), "output size", input_layout.get_tensor(),
+        "input1 size", dependencies.at(1).first->get_output_layout().get_tensor(), "output size", input_layout.get_tensor(),
         "mismatch");
     CLDNN_ERROR_NOT_EQUAL(node.id(),
-        "input2 size", dependencies.at(2)->get_output_layout().count(), "node's feature size", input_layout.feature(),
+        "input2 size", dependencies.at(2).first->get_output_layout().count(), "node's feature size", input_layout.feature(),
         "There can't be more than one end_token");
     CLDNN_ERROR_NOT_EQUAL(node.id(),
-        "input3 size", dependencies.at(3)->get_output_layout().count(), "one", 1,
+        "input3 size", dependencies.at(3).first->get_output_layout().count(), "one", 1,
         "There can't be more than one end_token");
 }
 }  // namespace cldnn

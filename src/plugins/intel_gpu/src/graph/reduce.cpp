@@ -81,8 +81,8 @@ layout reduce_inst::calc_output_layout(reduce_node const& node, kernel_impl_para
     else if (output_type == data_types::i8 || output_type == data_types::u8)
         output_type = data_types::f32;
 
-    if (desc->output_data_type)
-        output_type = *desc->output_data_type;
+    if (desc->output_data_types[0])
+        output_type = *desc->output_data_types[0];
 
     if (impl_param.has_fused_primitives())
         output_type = impl_param.get_fused_output_layout().data_type;
@@ -94,7 +94,7 @@ layout reduce_inst::calc_output_layout(reduce_node const& node, kernel_impl_para
     else
         return layout{output_type, input_format, tensor(batch(in_dims[0]), feature(in_dims[1]), spatial(in_dims[2], in_dims[3]))};
 }
-
+#if 0 // TODO(taylor)
 std::string reduce_inst::to_string(reduce_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -112,7 +112,7 @@ std::string reduce_inst::to_string(reduce_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 reduce_inst::typed_primitive_inst(network& network, reduce_node const& node) : parent(network, node) {}
 
 }  // namespace cldnn

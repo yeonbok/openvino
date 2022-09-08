@@ -15,7 +15,7 @@ primitive_type_id roi_pooling::type_id() {
 }
 
 layout roi_pooling_inst::calc_output_layout(roi_pooling_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for roi_pooling_node!");
     auto desc = impl_param.typed_desc<roi_pooling>();
     layout data_layout = impl_param.get_input_layout(0);
@@ -25,7 +25,7 @@ layout roi_pooling_inst::calc_output_layout(roi_pooling_node const& node, kernel
 
     return layout(data_layout.data_type, format::bfyx, {num_rois, out_fm, desc->pooled_width, desc->pooled_height});
 }
-
+#if 0 // TODO(taylor)
 std::string roi_pooling_inst::to_string(roi_pooling_node const& node) {
     auto desc = node.get_primitive();
     auto mode = desc->mode == pooling_mode::max
@@ -56,5 +56,5 @@ std::string roi_pooling_inst::to_string(roi_pooling_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 }  // namespace cldnn

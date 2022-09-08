@@ -95,7 +95,7 @@ public:
             concat_params.inputs[i] = convert_data_tensor(input_layout);
         }
 
-        concat_params.axis = convert_axis(axis, impl_param.output_layout.get_rank());
+        concat_params.axis = convert_axis(axis, impl_param.output_layouts[0].get_rank());
         concat_optional_params.kernelPerInput = true;
 
         auto& kernel_selector = kernel_selector::concatenation_kernel_selector::Instance();

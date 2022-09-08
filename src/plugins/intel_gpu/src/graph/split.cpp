@@ -16,7 +16,7 @@ primitive_type_id split::type_id() {
 }
 
 layout split_inst::calc_output_layout(split_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for split_node!");
     auto desc = impl_param.typed_desc<split>();
     auto output_ids = desc->output_ids;
@@ -62,7 +62,7 @@ layout split_inst::calc_output_layout(split_node const& node, kernel_impl_params
 
     return impl_param.get_non_padded_input_layout();
 }
-
+#if 0 // TODO(taylor)
 std::string split_inst::to_string(split_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -82,7 +82,7 @@ std::string split_inst::to_string(split_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 split_inst::typed_primitive_inst(network& network, split_node const& node) : parent(network, node) {
     CLDNN_ERROR_MESSAGE(node.id(), "Split primitive instance should not be created!");
 }

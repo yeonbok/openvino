@@ -15,7 +15,7 @@ primitive_type_id detection_output::type_id() {
 }
 
 layout detection_output_inst::calc_output_layout(detection_output_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for "
            "detection_output_node!");
     auto desc = impl_param.typed_desc<detection_output>();
@@ -56,7 +56,7 @@ layout detection_output_inst::calc_output_layout(detection_output_node const& no
     return {input_layout.data_type, cldnn::format::bfyx,
             cldnn::tensor(1, 1, DETECTION_OUTPUT_ROW_SIZE, desc->keep_top_k * input_layout.batch())};
 }
-
+#if 0 // TODO(taylor)
 std::string detection_output_inst::to_string(detection_output_node const& node) {
     auto node_info = node.desc_to_json();
     auto desc = node.get_primitive();
@@ -117,7 +117,7 @@ std::string detection_output_inst::to_string(detection_output_node const& node) 
 
     return primitive_description.str();
 }
-
+#endif
 detection_output_inst::typed_primitive_inst(network& network, detection_output_node const& node)
     : parent(network, node) {
     auto location_layout = node.location().get_output_layout();
@@ -176,7 +176,7 @@ detection_output_inst::typed_primitive_inst(network& network, detection_output_n
                      "Detection output layer doesn't support output padding.");
     CLDNN_ERROR_BOOL(node.id(),
                      "Detection output layer Prior-box input padding",
-                     node.get_dependency(2).is_padded(),
+                     node.get_dependency(2).first->is_padded(),
                      "Detection output layer doesn't support input padding in Prior-Box input");
 }
 

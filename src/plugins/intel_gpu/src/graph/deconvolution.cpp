@@ -19,7 +19,7 @@ primitive_type_id deconvolution::type_id() {
 }
 
 layout deconvolution_inst::calc_output_layout(deconvolution_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for deconvolution_node!");
     auto desc = impl_param.typed_desc<deconvolution>();
 
@@ -92,7 +92,7 @@ layout deconvolution_inst::calc_output_layout(deconvolution_node const& node, ke
                        number_of_features, x, y, z);
     return {data_type, input_layout.format, output_size};
 }
-
+#if 0 // TODO(taylor)
 std::string deconvolution_inst::to_string(deconvolution_node const& node) {
     auto desc = node.get_primitive();
     auto strd = desc->stride;
@@ -134,7 +134,7 @@ std::string deconvolution_inst::to_string(deconvolution_node const& node) {
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 deconvolution_inst::typed_primitive_inst(network& network, deconvolution_node const& node)
     : parent(network, node) {
     auto stride = argument.stride;

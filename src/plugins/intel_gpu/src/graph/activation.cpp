@@ -16,7 +16,7 @@ primitive_type_id activation::type_id() {
 }
 
 layout activation_inst::calc_output_layout(activation_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for activation_node!");
 
     auto input_node_layout = impl_param.get_non_padded_input_layout();
@@ -43,7 +43,7 @@ layout activation_inst::calc_output_layout(activation_node const& node, kernel_i
 
     return input_node_layout;
 }
-
+#if 0 // TODO(taylor)
 std::string activation_inst::to_string(activation_node const& node) {
     auto node_info = node.desc_to_json();
     auto desc = node.get_primitive();
@@ -61,7 +61,7 @@ std::string activation_inst::to_string(activation_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 activation_inst::typed_primitive_inst(network& network, activation_node const& node) : parent(network, node) {
     auto input_layout = node.input().get_output_layout();
     auto output_layout = node.get_output_layout();

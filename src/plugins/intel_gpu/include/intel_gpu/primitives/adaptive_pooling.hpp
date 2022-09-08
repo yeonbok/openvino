@@ -21,7 +21,7 @@ struct adaptive_pooling : public primitive_base<adaptive_pooling> {
     /// @param input Input primitive id.
     /// @param output_size Output data size of the primitive
     adaptive_pooling(const primitive_id &id,
-                     const primitive_id &input,
+                     const input_info &input,
                      tensor output_size)
             : primitive_base(id, {input}),
               mode{adaptive_pooling_mode::average},
@@ -35,9 +35,9 @@ struct adaptive_pooling : public primitive_base<adaptive_pooling> {
     /// @param indices_output Indices output primitive id.
     /// @param index_element_type Data type of indices output.
     adaptive_pooling(const primitive_id &id,
-                     const primitive_id &input,
+                     const input_info &input,
                      tensor output_size,
-                     const primitive_id &indices_output,
+                     const input_info &indices_output,
                      data_types index_element_type)
             : primitive_base(id, {input, indices_output}),
               mode{adaptive_pooling_mode::max},
@@ -47,14 +47,14 @@ struct adaptive_pooling : public primitive_base<adaptive_pooling> {
 
     adaptive_pooling_mode mode;
     tensor output_size;
-    primitive_id indices_output;
+    input_info indices_output;
     data_types index_element_type{data_types::i64};
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
-        if (!indices_output.empty())
-            ret.push_back(indices_output);
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
+        if (!indices_output.pid.empty())
+            ret.push_back({std::ref(indices_output.pid), 0});
         return ret;
     }
 };

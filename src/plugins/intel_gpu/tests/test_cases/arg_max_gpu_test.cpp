@@ -9,10 +9,12 @@
 #include <intel_gpu/primitives/data.hpp>
 #include <intel_gpu/primitives/input_layout.hpp>
 #include <intel_gpu/primitives/eltwise.hpp>
+#include <intel_gpu/primitives/permute.hpp>
 
 using namespace cldnn;
 using namespace ::tests;
 
+#if 0 // TODO(taylor)
 TEST(arg_max_gpu_min_axis_batch, base) {
     //  Input  : 2x4x2x2
     static const int32_t x_size = 2, y_size = 2, feature_num = 4, batch_num = 2;
@@ -343,7 +345,82 @@ TEST(arg_max_gpu_min_axis_y_yxfb_topk_2, f32) {
         EXPECT_EQ(out_buffer[i], ref_vec[i]);
     }
 }
+#endif
 
+TEST(top_k_layer_tests, second_output_taylor) {
+    static const int32_t x_size = 2, y_size = 2, feature_num = 4, batch_num = 2;
+    auto& engine = get_test_engine();
+    const int top_k = 2;
+    auto input = engine.allocate_memory({ data_types::f32, format::bfyx,{ batch_num, feature_num, x_size , y_size } });
+    auto top_k_input = engine.allocate_memory({ data_types::f32, format::bfyx,{ 1, 1, 1 , 1 } });
+
+    topology topology;
+    topology.add(input_layout("input", input->get_layout()));
+    topology.add(cldnn::data("const", {top_k_input}));
+    topology.add(arg_max_min("arg_max", {input_info("input", 0), input_info("const", 0)}, ov::op::TopKMode::MAX, top_k, 0, ov::op::TopKSortType::SORT_VALUES, false));
+    topology.add(permute("permute_1", {input_info("arg_max", 0)}, {0, 1, 2, 3}));
+    topology.add(permute("permute_2", {input_info("arg_max", 1)}, {0, 1, 2, 3}));
+    topology.add(concatenation("concat", {input_info("permute_1"), input_info("permute_2")}, 1, data_types::f32));
+
+    std::vector<float> input_vec = {
+            //y0x0 y0x1 y1x0 y1x1
+            /*b0f0*/0.1f, 0.2f, 0.3f,  0.4f,
+            /*b0f1*/0.5f, 0.6f,  0.7f, 0.8f,
+            /*b0f2*/0.9f, 1.0f,  1.1f, 1.2f,
+            /*b0f3*/1.3f, 1.4f,  1.5f, 1.6f,
+
+            /*b1f0*/2.1f, 2.2f, 2.3f, 2.4f,
+            /*b1f1*/2.5f, 2.6f, 2.7f, 2.8f,
+            /*b1f2*/2.9f, 3.0f, 3.1f, 3.2f,
+            /*b1f3*/3.3f, 3.4f, 3.5f, 3.6f,
+    };
+
+    std::vector<float> ref_result = {
+            /*indexes*/
+            /*b0*/
+            1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1,
+            /*b1*/
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            /**values*/
+            /*b0*/
+            2.1f, 2.2f, 2.3f, 2.4f,
+            2.5f, 2.6f, 2.7f, 2.8f,
+            2.9f, 3.0f, 3.1f, 3.2f,
+            3.3f, 3.4f, 3.5f, 3.6f,
+            /*b1*/
+            0.1f, 0.2f, 0.3f,  0.4f,
+            0.5f, 0.6f,  0.7f, 0.8f,
+            0.9f, 1.0f,  1.1f, 1.2f,
+            1.3f, 1.4f,  1.5f, 1.6f,
+    };
+
+    set_values(input, input_vec);
+
+    build_options build_opts;
+    build_opts.set_option(build_option::optimize_data(true));
+    network network(engine, topology, build_opts);
+
+    network.set_input_data("input", input);
+    auto outputs = network.execute();
+
+    EXPECT_EQ(outputs.size(), size_t(1));
+    EXPECT_EQ(outputs.begin()->first, "concat");
+    const int out_size = y_size * feature_num * x_size * top_k * 2;
+    auto output = outputs.at("concat").get_memory();
+    cldnn::mem_lock<float> output_ptr(output, get_test_stream());
+
+    float out_buffer[out_size];
+    for (uint32_t i = 0; i < out_size; i++) {
+        out_buffer[i] = get_value<float>(output_ptr.data(), i);
+    }
+    for (int i = 0; i < out_size; i++) {
+        EXPECT_EQ(out_buffer[i], ref_result[i]);
+    }
+}
+
+#if 0 // TODO(taylor)
 TEST(top_k_layer_tests, second_output) {
     static const int32_t x_size = 2, y_size = 2, feature_num = 4, batch_num = 2;
     auto& engine = get_test_engine();
@@ -1723,3 +1800,4 @@ TEST(top_k_layer_tests, md_sync) {
 
     EXPECT_EQ(output_ptr[0], output_ref);
 }
+#endif

@@ -81,7 +81,7 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
 
     return { layout{output_shapes[0], input0_layout.data_type, output_format} };
 }
-
+#if 0 // TODO(taylor)
 std::string strided_slice_inst::to_string(strided_slice_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -91,9 +91,9 @@ std::string strided_slice_inst::to_string(strided_slice_node const& node) {
 
     json_composite strided_slice_info;
     strided_slice_info.add("input id", input.id());
-    strided_slice_info.add("begin_param id", node.get_dependency(1).id());
-    strided_slice_info.add("end_param id", node.get_dependency(2).id());
-    strided_slice_info.add("stride_param id", node.get_dependency(3).id());
+    strided_slice_info.add("begin_param id", node.get_dependency(1).first->id());
+    strided_slice_info.add("end_param id", node.get_dependency(2).first->id());
+    strided_slice_info.add("stride_param id", node.get_dependency(3).first->id());
     strided_slice_info.add("begin mask", node.get_primitive()->begin_mask);
     strided_slice_info.add("end mask", node.get_primitive()->end_mask);
     strided_slice_info.add("new axis mask", node.get_primitive()->new_axis_mask);
@@ -105,7 +105,7 @@ std::string strided_slice_inst::to_string(strided_slice_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 strided_slice_inst::typed_primitive_inst(network& network, strided_slice_node const& node)
     : parent(network, node) {}
 

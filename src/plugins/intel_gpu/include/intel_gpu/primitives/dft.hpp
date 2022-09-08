@@ -33,12 +33,12 @@ struct dft : public primitive_base<dft> {
     /// @param output_shape Output shape.
     /// @param kind Kind of DFT operation.
     dft(const primitive_id& id,
-        const primitive_id& input,
+        const input_info& input,
         std::vector<int64_t>&& axes,
         const ov::Shape& output_shape,
         dft_kind kind,
         const padding& output_padding = {})
-        : primitive_base(id, {input}, output_padding),
+        : primitive_base(id, {input}, {output_padding}),
           axes(std::move(axes)),
           output_shape(output_shape),
           kind(kind) {}

@@ -19,7 +19,7 @@ primitive_type_id tile::type_id() {
 }
 
 layout tile_inst::calc_output_layout(tile_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for tile_node!");
     auto desc = impl_param.typed_desc<tile>();
 
@@ -74,7 +74,7 @@ std::vector<layout> tile_inst::calc_output_layouts(tile_node const& /*node*/, co
 
     return { layout{output_shapes[0], output_type, output_format} };
 }
-
+#if 0 // TODO(taylor)
 std::string tile_inst::to_string(tile_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -89,7 +89,7 @@ std::string tile_inst::to_string(tile_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 tile_inst::typed_primitive_inst(network& network, tile_node const& node) : parent(network, node) {}
 
 }  // namespace cldnn

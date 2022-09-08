@@ -20,16 +20,16 @@ public:
     typed_program_node(std::shared_ptr<primitive> prim, program& prog)
         : parent(prim, prog) {}
 
-    program_node& input() const { return get_dependency(0); }
-    program_node& weights() const { return get_dependency(1); }
-    program_node& bias() const { return get_dependency(2); }
+    program_node& input() const { return *get_dependency(0).first; }
+    program_node& weights() const { return *get_dependency(1).first; }
+    program_node& bias() const { return *get_dependency(2).first; }
     bool bias_term() const { return !get_primitive()->bias.empty(); }
 
     std::vector<size_t> get_shape_infer_dependencies() const override { return {}; }
 
     using parent::get_kernel_impl_params;
-    std::unique_ptr<kernel_impl_params> get_kernel_impl_params(const std::vector<layout>& in_layouts, const layout& out_layout) const override {
-        auto params = parent::get_kernel_impl_params(in_layouts, out_layout);
+    std::unique_ptr<kernel_impl_params> get_kernel_impl_params(const std::vector<layout>& in_layouts, const std::vector<layout>& out_layouts) const override {
+        auto params = parent::get_kernel_impl_params(in_layouts, out_layouts);
         params->weights_layout = optional_layout(weights().get_output_layout());
         if (bias_term())
             params->bias_layout = optional_layout(bias().get_output_layout());

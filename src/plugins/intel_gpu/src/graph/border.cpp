@@ -18,7 +18,7 @@ primitive_type_id border::type_id() {
 }
 
 layout border_inst::calc_output_layout(border_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for border_node!");
     auto input_layout = impl_param.get_input_layout();
     auto input_format = input_layout.format;
@@ -84,7 +84,7 @@ std::vector<layout> border_inst::calc_output_layouts(border_node const& /*node*/
 
     return { layout{output_shapes[0], output_type, output_format} };
 }
-
+#if 0 // TODO(taylor)
 std::string border_inst::to_string(border_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -101,7 +101,7 @@ std::string border_inst::to_string(border_node const& node) {
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 border_inst::typed_primitive_inst(network& network, border_node const& node) : parent(network, node) {
     auto input_layout = node.input().get_output_layout();
 

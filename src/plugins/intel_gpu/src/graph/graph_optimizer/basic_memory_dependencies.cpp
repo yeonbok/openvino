@@ -22,7 +22,7 @@ using namespace cldnn;
 void basic_memory_dependencies::run(program& p) {
     OV_ITT_SCOPED_TASK(itt::domains::CLDNN, "CLDNN::pass::BasicMemoryDependencies");
     auto itr = p.get_processing_order().begin();
-    std::vector<primitive_id> past_outputs;
+    std::vector<input_info> past_outputs;
     while (itr != p.get_processing_order().end()) {
         auto& node = *itr;
         itr++;
@@ -33,8 +33,8 @@ void basic_memory_dependencies::run(program& p) {
 
         // add my dependencies to restriction list (can't share input.output buffers)
         for (auto it : node->get_dependencies()) {
-            add_memory_dependency(node, it);
-            add_memory_dependency(it, node);
+            add_memory_dependency(node, it.first);
+            add_memory_dependency(it.first, node);
         }
 
         if (node->get_preferred_impl_type() == impl_types::onednn
@@ -48,7 +48,7 @@ void basic_memory_dependencies::run(program& p) {
                         continue;
 
                     eltw_dep = fused_op.dep_start_idx;
-                    auto& eltw_node = node->get_dependency(eltw_dep);
+                    auto& eltw_node = *node->get_dependency(eltw_dep).first;
                     eltw_node.can_share_buffer(false);
                     node->can_share_buffer(false);
                     for (auto& user : node->get_users()) {
@@ -65,12 +65,14 @@ void basic_memory_dependencies::run(program& p) {
         // if current node is an output add it to the outputs list after restriction.
         if (node->is_output()) {
             past_outputs.push_back(node->id());
+#if 0 // TODO(taylor)
             if (node->is_type<mutable_data>()) {
                 // if output is mutable data, then propagate output flag to its dependencies
                 for (auto& dep : node->get_dependencies()) {
                     dep->set_output(true);
                 }
             }
+#endif
         }
     }
 }

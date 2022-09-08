@@ -19,7 +19,7 @@ primitive_type_id lstm_dynamic_input::type_id() {
 // weights_tensor: [b: 1, f: direction, x: input_size, y: 4 * hidden_size]
 // output_tensor:  [b: batch, f: max_sequence_length, x: 4 * hidden_size, y: direction]
 layout lstm_dynamic_input_inst::calc_output_layout(lstm_dynamic_input_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for lstm_dynamic_node!");
     auto input_layout = impl_param.get_input_layout(0);
     auto weight_layout = impl_param.get_input_layout(2);
@@ -30,7 +30,7 @@ layout lstm_dynamic_input_inst::calc_output_layout(lstm_dynamic_input_node const
                   input_layout.format,
                   tensor(batch, output_sequence, weight_layout.spatial(1), direction));
 }
-
+#if 0 // TODO(taylor)
 std::string lstm_dynamic_input_inst::to_string(lstm_dynamic_input_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -49,7 +49,7 @@ std::string lstm_dynamic_input_inst::to_string(lstm_dynamic_input_node const& no
 
     return primitive_description.str();
 }
-
+#endif
 lstm_dynamic_input_inst::typed_primitive_inst(network& network, lstm_dynamic_input_node const& node)
     : parent(network, node) {
     // Check input

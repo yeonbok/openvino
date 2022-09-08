@@ -17,7 +17,7 @@ primitive_type_id reverse::type_id() {
 layout reverse_inst::calc_output_layout(reverse_node const& node, kernel_impl_params const& impl_param) {
     return impl_param.get_input_layout();
 }
-
+#if 0 // TODO(taylor)
 std::string reverse_inst::to_string(reverse_node const& node) {
     const auto prim = node.get_primitive();
 
@@ -35,7 +35,7 @@ std::string reverse_inst::to_string(reverse_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 reverse_inst::typed_primitive_inst(network& network, reverse_node const& node) : parent(network, node) {}
 
 }  // namespace cldnn

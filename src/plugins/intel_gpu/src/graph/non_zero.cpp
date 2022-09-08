@@ -22,7 +22,7 @@ primitive_type_id count_nonzero::type_id() {
 }
 
 layout count_nonzero_inst::calc_output_layout(count_nonzero_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
+    assert(static_cast<bool>(node.get_primitive()->output_data_types[0]) == false &&
            "Output data type forcing is not supported for count_nonzero_node!");
     return layout{cldnn::data_types::i32, cldnn::format::bfyx, tensor{1, 1, 1, 4}};
 }
@@ -59,7 +59,7 @@ primitive_type_id gather_nonzero::type_id() {
 }
 
 layout gather_nonzero_inst::calc_output_layout(gather_nonzero_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(node.get_primitive()->output_data_type) == false &&
+    assert(static_cast<bool>(node.get_primitive()->output_data_types[0]) == false &&
            "Output data type forcing is not supported for gather_nonzero_node!");
     if (impl_param.memory_deps.count(1)) {
         auto out_size = read_vector<int64_t>(impl_param.memory_deps.at(1), impl_param.prog.get_stream());
@@ -70,7 +70,7 @@ layout gather_nonzero_inst::calc_output_layout(gather_nonzero_node const& node, 
         return layout{ov::PartialShape({ov::Dimension::dynamic(), ov::Dimension::dynamic(), 1, 1}), cldnn::data_types::i32, cldnn::format::bfyx};
     }
 }
-
+#if 0 // TODO(taylor)
 std::string gather_nonzero_inst::to_string(gather_nonzero_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -87,7 +87,7 @@ std::string gather_nonzero_inst::to_string(gather_nonzero_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 gather_nonzero_inst::typed_primitive_inst(network& network, gather_nonzero_node const& node) : parent(network, node, false) {}
 
 }  // namespace cldnn

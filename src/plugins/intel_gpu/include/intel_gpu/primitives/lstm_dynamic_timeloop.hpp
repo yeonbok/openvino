@@ -38,7 +38,7 @@ struct lstm_dynamic_timeloop
     /// @param clip Clip threshold. Provide 0 if using lstm without activations clip threshold.
     /// @param input_forget Provide 0 if using lstm without coupled input-forget gates.
     lstm_dynamic_timeloop(const primitive_id& id,
-                          const primitive_id& input,
+                          const input_info& input,
                           const primitive_id& dyn_length,
                           const primitive_id& recurrent,
                           const primitive_id& last_hidden_state = "",
@@ -48,7 +48,7 @@ struct lstm_dynamic_timeloop
                           const float clip = 0.0f,
                           const bool input_forget = 0,
                           const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding),
+        : primitive_base(id, {input}, {output_padding}),
           dyn_length(dyn_length),
           recurrent(recurrent),
           last_hidden_state(last_hidden_state),
@@ -76,22 +76,22 @@ struct lstm_dynamic_timeloop
     bool input_forget;
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
-        ret.push_back(dyn_length);
-        ret.push_back(recurrent);
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override {
+        std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> ret;
+        ret.push_back({std::ref(dyn_length), 0});
+        ret.push_back({std::ref(recurrent), 0});
 
         if (!last_hidden_state.empty()) {
-            ret.push_back(last_hidden_state);
+            ret.push_back({std::ref(last_hidden_state), 0});
         }
         if (!last_cell_state.empty()) {
-            ret.push_back(last_cell_state);
+            ret.push_back({std::ref(last_cell_state), 0});
         }
         if (!initial_hidden.empty()) {
-            ret.push_back(initial_hidden);
+            ret.push_back({std::ref(initial_hidden), 0});
         }
         if (!initial_cell.empty()) {
-            ret.push_back(initial_cell);
+            ret.push_back({std::ref(initial_cell), 0});
         }
         return ret;
     }

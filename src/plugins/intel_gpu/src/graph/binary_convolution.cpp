@@ -20,7 +20,7 @@ primitive_type_id binary_convolution::type_id() {
 layout binary_convolution_inst::calc_output_layout(binary_convolution_node const& node, kernel_impl_params const& impl_param) {
     auto desc = impl_param.typed_desc<binary_convolution>();
 
-    auto output_type = *desc->output_data_type;
+    auto output_type = *desc->output_data_types[0];
     auto output_size = desc->output_size;
     auto layout = cldnn::layout{output_type, format::bfyx, output_size};
     if (impl_param.has_fused_primitives()) {
@@ -42,7 +42,7 @@ layout binary_convolution_inst::calc_output_layout(binary_convolution_node const
 
     return layout;
 }
-
+#if 0 // TODO(taylor)
 std::string binary_convolution_inst::to_string(binary_convolution_node const& node) {
     auto desc = node.get_primitive();
     auto strd = desc->stride;
@@ -63,7 +63,7 @@ std::string binary_convolution_inst::to_string(binary_convolution_node const& no
 
     return primitive_description.str();
 }
-
+#endif
 binary_convolution_inst::typed_primitive_inst(network& network, binary_convolution_node const& node)
     : parent(network, node) {
     auto stride = argument.stride;

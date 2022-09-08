@@ -15,7 +15,7 @@ primitive_type_id normalize::type_id() {
 }
 
 layout normalize_inst::calc_output_layout(normalize_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for normalize_node!");
     auto input_node_layout = impl_param.get_non_padded_input_layout();
     auto output_type = input_node_layout.data_type;
@@ -28,7 +28,7 @@ layout normalize_inst::calc_output_layout(normalize_node const& node, kernel_imp
 
     return layout(output_type, input_node_layout.format, input_node_layout.get_tensor());
 }
-
+#if 0 // TODO(taylor)
 std::string normalize_inst::to_string(normalize_node const& node) {
     auto node_info = node.desc_to_json();
     auto desc = node.get_primitive();
@@ -50,7 +50,7 @@ std::string normalize_inst::to_string(normalize_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 normalize_inst::typed_primitive_inst(network& network, normalize_node const& node) : parent(network, node) {
     /// Scale f dimension should be 1 (if all channels have the same scale) or equal to input feature size (one scale per channel).
     auto scale_layout = node.scale().get_output_layout();

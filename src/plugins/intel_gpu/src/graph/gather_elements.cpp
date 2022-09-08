@@ -57,7 +57,7 @@ std::vector<layout> gather_elements_inst::calc_output_layouts(gather_elements_no
 
     return { layout{output_shapes[0], output_type, output_format} };
 }
-
+#if 0 // TODO(taylor)
 std::string gather_elements_inst::to_string(gather_elements_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -75,7 +75,7 @@ std::string gather_elements_inst::to_string(gather_elements_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 gather_elements_inst::typed_primitive_inst(network& network, gather_elements_node const& node) : parent(network, node) {}
 
 }  // namespace cldnn

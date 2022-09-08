@@ -85,7 +85,7 @@ void handle_input_padding::run(program& p) {
                 convolution_prim->padding_below = ov::CoordinateDiff(spatial_rank, 0);
 
                 // create border primitive
-                primitive_id input_id = convolution_prim->input[0];
+                primitive_id input_id = convolution_prim->input[0].pid;
                 primitive_id border_id = input_id + "_border_" + convolution_prim->id;
 
                 size_t rank = node->get_input_layouts().front().get_rank();
@@ -120,7 +120,7 @@ void handle_input_padding::run(program& p) {
                 convolution_prim->padding_above = ov::CoordinateDiff(spatial_rank, 0);
                 convolution_prim->padding_below = ov::CoordinateDiff(spatial_rank, 0);
 
-                convolution_node.recalc_output_layout(true);
+                convolution_node.recalc_output_layouts(true);
             }
         }
     }

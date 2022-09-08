@@ -16,7 +16,7 @@ primitive_type_id select::type_id() {
 }
 
 layout select_inst::calc_output_layout(select_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for select_node!");
 
     auto in_layout = impl_param.get_non_padded_input_layout(1);
@@ -30,7 +30,7 @@ layout select_inst::calc_output_layout(select_node const& node, kernel_impl_para
 
     return layout(in_layout.data_type, in_layout.format, output_size);
 }
-
+#if 0 // TODO(taylor)
 std::string select_inst::to_string(select_node const& node) {
     auto node_info = node.desc_to_json();
     auto desc = node.get_primitive();
@@ -47,7 +47,7 @@ std::string select_inst::to_string(select_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 select_inst::typed_primitive_inst(network& network, select_node const& node) : parent(network, node) {
     auto& deps = node.get_dependencies();
 
@@ -58,60 +58,60 @@ select_inst::typed_primitive_inst(network& network, select_node const& node) : p
                                 3,
                                 "");
 
-    if (deps[1]->get_output_layout().get_tensor() != cldnn::tensor(1))
+    if (deps[1].first->get_output_layout().get_tensor() != cldnn::tensor(1))
         CLDNN_ERROR_NOT_EQUAL(node.id(),
                               "Mask format",
-                              deps[0]->get_output_layout().format,
+                              deps[0].first->get_output_layout().format,
                               "Positive input format",
-                              deps[1]->get_output_layout().format,
+                              deps[1].first->get_output_layout().format,
                               "");
 
-    if (deps[2]->get_output_layout().get_tensor() != cldnn::tensor(1))
+    if (deps[2].first->get_output_layout().get_tensor() != cldnn::tensor(1))
         CLDNN_ERROR_NOT_EQUAL(node.id(),
                               "Mask format",
-                              deps[0]->get_output_layout().format,
+                              deps[0].first->get_output_layout().format,
                               "Positive input format",
-                              deps[2]->get_output_layout().format,
+                              deps[2].first->get_output_layout().format,
                               "");
 
     if (node.get_primitive()->broadcast_type == "none") {
         CLDNN_ERROR_LAYOUT_MISMATCH(node.id(),
                                 "Positive input layout",
-                                deps[1]->get_output_layout(),
+                                deps[1].first->get_output_layout(),
                                 "Negative input layout",
-                                deps[2]->get_output_layout(),
+                                deps[2].first->get_output_layout(),
                                 "");
 
         CLDNN_ERROR_NOT_EQUAL(node.id(),
                                 "Mask size",
-                                deps[0]->get_output_layout().get_tensor(),
+                                deps[0].first->get_output_layout().get_tensor(),
                                 "Positive input format",
-                                deps[1]->get_output_layout().get_tensor(),
+                                deps[1].first->get_output_layout().get_tensor(),
                                 "");
     } else if (node.get_primitive()->broadcast_type == "numpy") {
-        if (deps[1]->get_output_layout().get_tensor() != cldnn::tensor(1) && deps[2]->get_output_layout().get_tensor() != cldnn::tensor(1))
+        if (deps[1].first->get_output_layout().get_tensor() != cldnn::tensor(1) && deps[2].first->get_output_layout().get_tensor() != cldnn::tensor(1))
             CLDNN_ERROR_NOT_EQUAL(node.id(),
                                   "Positive input format",
-                                  deps[1]->get_output_layout().format,
+                                  deps[1].first->get_output_layout().format,
                                   "Negative input format",
-                                  deps[2]->get_output_layout().format,
+                                  deps[2].first->get_output_layout().format,
                                   "");
 
         CLDNN_ERROR_DATA_TYPES_MISMATCH(node.id(),
                                 "Positive input data type",
-                                deps[1]->get_output_layout().data_type,
+                                deps[1].first->get_output_layout().data_type,
                                 "Negative input data type",
-                                deps[2]->get_output_layout().data_type,
+                                deps[2].first->get_output_layout().data_type,
                                 "");
 
-        auto dep1_size = deps[1]->get_output_layout().get_tensor();
-        auto dep2_size = deps[2]->get_output_layout().get_tensor();
+        auto dep1_size = deps[1].first->get_output_layout().get_tensor();
+        auto dep2_size = deps[2].first->get_output_layout().get_tensor();
         cldnn::tensor output_tensor = tensor::max(dep1_size, dep2_size);
         auto max_dim_count = output_tensor.raw.size();
 
         for (size_t i = 0; i < deps.size(); i++) {
             for (size_t d = 0; d < max_dim_count; d++) {
-                auto current_dim = deps[i]->get_output_layout().get_tensor().raw[d];
+                auto current_dim = deps[i].first->get_output_layout().get_tensor().raw[d];
 
                 CLDNN_ERROR_BOOL(node.id(),
                                     "Sizes equal or broadcast is possible",

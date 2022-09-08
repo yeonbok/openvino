@@ -18,7 +18,7 @@ primitive_type_id roll::type_id() {
 layout roll_inst::calc_output_layout(const roll_node& node, kernel_impl_params const& impl_param) {
     return impl_param.get_input_layout();
 }
-
+#if 0 // TODO(taylor)
 std::string roll_inst::to_string(const roll_node& node) {
     auto node_info = node.desc_to_json();
     json_composite roll_info;
@@ -29,5 +29,5 @@ std::string roll_inst::to_string(const roll_node& node) {
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 }  // namespace cldnn

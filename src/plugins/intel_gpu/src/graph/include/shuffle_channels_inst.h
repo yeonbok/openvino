@@ -17,7 +17,7 @@ struct typed_program_node<shuffle_channels> : public typed_program_node_base<shu
 public:
     using parent::parent;
 
-    program_node& input(size_t index = 0) const { return get_dependency(index); }
+    program_node& input(size_t index = 0) const { return *get_dependency(index).first; }
 };
 
 using shuffle_channels_node = typed_program_node<shuffle_channels>;

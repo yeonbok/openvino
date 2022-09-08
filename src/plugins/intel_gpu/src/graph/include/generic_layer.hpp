@@ -32,18 +32,18 @@ struct generic_layer : public primitive_base<generic_layer> {
     /// @param output_layout Requested memory layout.
     /// @param mean Primitive id to get mean subtract values.
     generic_layer(const primitive_id& id,
-                  const primitive_id& input,
+                  const input_info& input,
                   const layout& output_layout,
                   const kernel_selector::generic_kernel_params& generic_params,
                   const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding), output_layout(output_layout), generic_params(generic_params) {}
+        : primitive_base(id, {input}, {output_padding}), output_layout(output_layout), generic_params(generic_params) {}
 
     /// @brief Requested memory layout.
     layout output_layout;
     const kernel_selector::generic_kernel_params generic_params;
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override { return {}; }
+    std::vector<std::pair<std::reference_wrapper<const primitive_id>, int>> get_dependencies() const override { return {}; }
 };
 /// @}
 /// @}

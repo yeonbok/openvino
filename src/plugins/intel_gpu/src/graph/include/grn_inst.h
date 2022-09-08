@@ -18,7 +18,7 @@ struct typed_program_node<grn> : public typed_program_node_base<grn> {
 public:
     using parent::parent;
 
-    program_node& input() const { return get_dependency(0); }
+    program_node& input() const { return *get_dependency(0).first; }
 };
 
 using grn_node = typed_program_node<grn>;

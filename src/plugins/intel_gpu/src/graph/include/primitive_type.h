@@ -40,6 +40,8 @@ struct primitive_type {
 
     virtual layout calc_output_layout(const program_node& node, const kernel_impl_params& params) const = 0;
     virtual std::vector<layout> calc_output_layouts(const program_node& node, const kernel_impl_params& impl_param) const = 0;
+#if 0 // TODO(taylor)
     virtual std::string to_string(const program_node& node) const = 0;
+#endif
 };
 }  // namespace cldnn

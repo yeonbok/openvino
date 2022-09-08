@@ -286,7 +286,7 @@ layout convolution_inst::calc_output_layout(convolution_node const& node, kernel
     }
     return {output_type, out_fmt, output_size};
 }
-
+#if 0 // TODO(taylor)
 std::string convolution_inst::to_string(convolution_node const& node) {
     auto desc = node.get_primitive();
     auto strd = desc->stride;
@@ -324,7 +324,7 @@ std::string convolution_inst::to_string(convolution_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 convolution_inst::typed_primitive_inst(network& network, convolution_node const& node) : parent(network, node) {
     auto stride = argument.stride;
     auto pad = argument.pad;

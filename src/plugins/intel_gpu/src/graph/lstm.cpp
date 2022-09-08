@@ -16,7 +16,7 @@ primitive_type_id lstm::type_id() {
 }
 
 layout lstm_inst::calc_output_layout(lstm_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for lstm_node!");
     auto input_layout = impl_param.get_input_layout();
     auto hidden_layout = node.inital_hidden().get_output_layout();
@@ -36,7 +36,7 @@ layout lstm_inst::calc_output_layout(lstm_node const& node, kernel_impl_params c
                                 hidden_layout.spatial(1)));
     return result;
 }
-
+#if 0 // TODO(taylor)
 std::string lstm_inst::to_string(lstm_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -61,7 +61,7 @@ std::string lstm_inst::to_string(lstm_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 lstm_inst::typed_primitive_inst(network& network, lstm_node const& node) : parent(network, node) {
     auto input_layout = node.input().get_output_layout();
     CLDNN_ERROR_NOT_PROPER_FORMAT(node.id(),

@@ -18,7 +18,7 @@ primitive_type_id cum_sum::type_id() {
 layout cum_sum_inst::calc_output_layout(cum_sum_node const& node, kernel_impl_params const& impl_param) {
     return impl_param.get_input_layout();
 }
-
+#if 0 // TODO(taylor)
 std::string cum_sum_inst::to_string(cum_sum_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -36,7 +36,7 @@ std::string cum_sum_inst::to_string(cum_sum_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 cum_sum_inst::typed_primitive_inst(network& network, cum_sum_node const& node)
     : parent(network, node) {}
 

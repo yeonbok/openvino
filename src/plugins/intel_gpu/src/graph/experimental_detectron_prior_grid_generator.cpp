@@ -31,7 +31,7 @@ layout experimental_detectron_prior_grid_generator_inst::calc_output_layout(
                        static_cast<int>(data_layout.batch())});
     }
 }
-
+#if 0 // TODO(taylor)
 std::string experimental_detectron_prior_grid_generator_inst::to_string(
     experimental_detectron_prior_grid_generator_node const& node) {
     auto node_info = node.desc_to_json();
@@ -47,5 +47,5 @@ std::string experimental_detectron_prior_grid_generator_inst::to_string(
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 }  // namespace cldnn

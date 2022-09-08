@@ -23,7 +23,7 @@ primitive_type_id condition::type_id() {
     !* We can be sure, that this method was called AT LEAST once during graph compilation.*!
 */
 layout condition_inst::calc_output_layout(condition_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for condition_node!");
     node.set_branches();
 
@@ -53,7 +53,7 @@ layout condition_inst::calc_output_layout(condition_node const& node, kernel_imp
 
     return layout_true;
 }
-
+#if 0 // TODO(taylor)
 std::string condition_inst::to_string(condition_node const& node) {
     auto desc = node.get_primitive();
     auto node_info = node.desc_to_json();
@@ -65,7 +65,7 @@ std::string condition_inst::to_string(condition_node const& node) {
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 /*
 Condition primitive is resuing memory with the input.
 */

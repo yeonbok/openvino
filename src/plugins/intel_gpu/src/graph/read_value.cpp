@@ -23,7 +23,7 @@ read_value_inst::typed_primitive_inst(network& network, const read_value_node& n
 layout read_value_inst::calc_output_layout(const read_value_node& node, kernel_impl_params const& impl_param) {
     return impl_param.typed_desc<read_value>()->output_layout;
 }
-
+#if 0 // TODO(taylor)
 std::string read_value_inst::to_string(const read_value_node& node) {
     auto node_info = node.desc_to_json();
 
@@ -36,5 +36,5 @@ std::string read_value_inst::to_string(const read_value_node& node) {
     node_info->dump(primitive_description);
     return primitive_description.str();
 }
-
+#endif
 } // namespace cldnn

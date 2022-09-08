@@ -15,7 +15,7 @@ struct typed_program_node<extract_image_patches> : public typed_program_node_bas
 public:
     using parent::parent;
 
-    program_node& input(size_t index = 0) const { return get_dependency(index); }
+    program_node& input(size_t index = 0) const { return *get_dependency(index).first; }
 };
 
 using extract_image_patches_node = typed_program_node<extract_image_patches>;

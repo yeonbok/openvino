@@ -16,7 +16,7 @@ primitive_type_id crop::type_id() {
 }
 
 layout crop_inst::calc_output_layout(crop_node const& node, kernel_impl_params const& impl_param) {
-    assert(static_cast<bool>(impl_param.desc->output_data_type) == false &&
+    assert(static_cast<bool>(impl_param.desc->output_data_types[0]) == false &&
            "Output data type forcing is not supported for crop_node!");
     auto desc = impl_param.typed_desc<crop>();
     const auto& ref_in_sizes = desc->reference_input;
@@ -37,7 +37,7 @@ layout crop_inst::calc_output_layout(crop_node const& node, kernel_impl_params c
     }
     return layout({in_layout.data_type, in_layout.format, ref_in_sizes});
 }
-
+#if 0 // TODO(taylor)
 std::string crop_inst::to_string(crop_node const& node) {
     const auto& desc = node.get_primitive();
     auto ref_in_sizes = desc->reference_input;
@@ -68,7 +68,7 @@ std::string crop_inst::to_string(crop_node const& node) {
 
     return primitive_description.str();
 }
-
+#endif
 crop_inst::typed_primitive_inst(network& network, crop_node const& node) : parent(network, node) {
     const auto& ref_in_sizes = argument.reference_input;
     const auto in_layout = node.input().get_output_layout();
@@ -140,13 +140,13 @@ void crop_inst::on_execute() {
     if (!node.can_be_optimized())
         return;
 
-    if (_output && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
+    if (_outputs[0] && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
         return;
 
     reuse_input();
 }
 
 void crop_inst::reuse_input() {
-    _output = _network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout());
+    _outputs = {_network.get_engine().reinterpret_buffer(input_memory(), node.get_output_layout())};
 }
 }  // namespace cldnn
