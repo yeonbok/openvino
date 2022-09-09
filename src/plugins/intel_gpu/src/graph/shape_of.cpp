@@ -15,14 +15,30 @@ primitive_type_id shape_of::type_id() {
     static primitive_type_base<shape_of> instance;
     return &instance;
 }
+layout shape_of_inst::calc_output_layout(shape_of_node const& node, kernel_impl_params const& impl_param) {
+   auto prim = impl_param.typed_desc<shape_of>();
 
-layout shape_of_inst::calc_output_layout(shape_of_node const&, kernel_impl_params const& impl_param) {
+   data_types dt = data_types::i32;
+
+   if (prim->output_data_type)
+       dt = *prim->output_data_type;
+
+   if (impl_param.has_fused_primitives()) {
+       dt = impl_param.get_fused_output_layout().data_type;
+   }
+
+   cldnn::tensor out_size{static_cast<tensor::value_type>(prim->output_rank), 1, 1, 1};
+
+   return layout{dt, format::bfyx, out_size};
+}
+
+template<typename ShapeType>
+std::vector<layout> shape_of_inst::calc_output_layouts(shape_of_node const&, kernel_impl_params const& impl_param) {
     auto prim = impl_param.typed_desc<shape_of>();
 
-    for (auto& in_l : impl_param.input_layouts) {
-        if (in_l.is_dynamic()) {
-            return { layout{ov::PartialShape::dynamic(in_l.get_rank()), in_l.data_type, in_l.format} };
-        }
+    auto input_layout = impl_param.input_layouts[0];
+    if (input_layout.is_dynamic()) {
+        return { layout{ov::PartialShape::dynamic(input_layout.get_rank()), input_layout.data_type, input_layout.format} };
     }
 
     data_types dt = data_types::i32;
@@ -34,7 +50,7 @@ layout shape_of_inst::calc_output_layout(shape_of_node const&, kernel_impl_param
         dt = impl_param.get_fused_output_layout().data_type;
     }
 
-    return layout{ov::PartialShape{static_cast<int64_t>(prim->output_rank)}, dt, format::bfyx};
+    return {layout{ov::PartialShape{static_cast<int64_t>(input_layout.get_partial_shape().get_shape().size())}, dt, format::bfyx}};
 }
 
 std::string shape_of_inst::to_string(shape_of_node const& node) {

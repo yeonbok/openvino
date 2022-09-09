@@ -167,7 +167,7 @@ void primitive_inst::update_shape() {
     }
 
     // We assume that tensor ranks are static, thus shape_of doesn't need to update anything even if input shape is dynamic
-    if (_node.is_type<shape_of>())
+    if (_node.is_type<shape_of>() && !input_shape_changed)
         return;
 
     // Even though the predecessors' shapes are not changed, the output shape might be udpated by the mem_dep
@@ -322,11 +322,6 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
     OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
 
-    // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
-    if (is_dynamic() || has_mutable_input() || is_output()) {
-        set_arguments();
-    }
-
     on_execute();
 
     OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
@@ -336,10 +331,8 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                        << output_memory().get_allocation_type() << std::endl;
     }
 
-    if (_exec_deps.empty() && dependencies.empty())
-        return _impl->execute(events, *this);
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
-    if (is_dynamic() || has_mutable_input() || is_output())
+    if (_network.is_dynamic() || has_mutable_input() || is_output())
         set_arguments();
 
     if (_exec_deps.empty() && dependencies.empty())
