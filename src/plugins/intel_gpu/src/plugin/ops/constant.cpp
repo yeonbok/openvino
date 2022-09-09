@@ -23,33 +23,6 @@
 namespace ov {
 namespace intel_gpu {
 
-static cldnn::tensor getConstTensor(const ngraph::Shape constDims) {
-    cldnn::tensor constTensor;
-    switch (constDims.size()) {
-    case 6: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]),
-                                        TensorValue(constDims[5]), TensorValue(constDims[4]),
-                                        TensorValue(constDims[3]), TensorValue(constDims[2]));
-        break;
-    case 5: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]),
-                                        TensorValue(constDims[4]), TensorValue(constDims[3]), TensorValue(constDims[2]));
-        break;
-    case 4: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]),
-                                        TensorValue(constDims[3]), TensorValue(constDims[2]));
-        break;
-    case 3: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]),
-                                        1, TensorValue(constDims[2]));
-        break;
-    case 2: constTensor = cldnn::tensor(TensorValue(constDims[0]), TensorValue(constDims[1]), 1, 1);
-        break;
-    case 1: constTensor = cldnn::tensor(1, TensorValue(constDims[0]), 1, 1);
-        break;
-    case 0: constTensor = cldnn::tensor(1, 1, 1, 1);
-        break;
-    default: IE_THROW() << "Invalid constant blob dimensions";
-    }
-    return constTensor;
-}
-
 struct ConstProperties {
     bool needsBatchInterpretation;
     bool swapOI;
@@ -142,18 +115,25 @@ static void CreateConstantOp(Program& p, const std::shared_ptr<ngraph::op::v0::C
 }
 
 void createClDnnConstant(Program& p, const ngraph::Shape& constDims, const std::shared_ptr<ngraph::op::v0::Constant>& op, const ConstProperties& props) {
-    cldnn::tensor constTensor = getConstTensor(constDims);
+    ov::PartialShape constTensor{constDims};
     auto constFormat = cldnn::format::get_default_format(constDims.size());
-
-    if (props.needsBatchInterpretation) {
-        constTensor.batch[0] = constTensor.count();
-        constTensor.feature[0] = 1;
-    }
+    auto count = std::accumulate(constDims.begin(), constDims.end(), 1, std::multiplies<size_t>());
+//    auto const_vals = op->cast_vector<float>();
+//    std::cout << op->get_friendly_name() << "!!!!!" << std::endl;
+//    for (auto v : const_vals) {
+//        std::cout << v << ", ";
+//    }
+//    std::cout << std::endl;
+// No need now. Because it is using PartialShape now (taylor)
+//    if (props.needsBatchInterpretation) {
+//        constTensor[0] = count;
+//        constTensor[1] = 1;
+//    }
 
     // If constDims has a dimension = 0, then create tensor with single value
     // TODO: check if dim=0 is a valid case
-    if (std::accumulate(constDims.begin(), constDims.end(), 1, std::multiplies<size_t>()) == 0)
-        constTensor = cldnn::tensor{1};
+    if (count == 0)
+        constTensor = ov::PartialShape{1};
 
     // Swap O and I dimensions to match expected deconvolution weights format
     size_t inputFeatureElements = 1;
@@ -166,22 +146,21 @@ void createClDnnConstant(Program& p, const ngraph::Shape& constDims, const std::
             IE_THROW() << "Invalid constant properties or shape";
 
         if (props.hasGroupDimension) {
-            std::swap(newDims[2], newDims[1]);
+            std::swap(constTensor[2], constTensor[1]);
             inputFeatureElements = newDims[2];
             outputFeatureElements = newDims[1];
             groups = newDims[0];
         } else {
-            std::swap(newDims[1], newDims[0]);
+            std::swap(constTensor[1], constTensor[0]);
             inputFeatureElements = newDims[1];
             outputFeatureElements = newDims[0];
             groups = 1;
         }
-        constTensor = getConstTensor(newDims);
     }
 
-    cldnn::layout constLayout = cldnn::layout(cldnn::element_type_to_data_type(op->get_output_element_type(0)),
-                                              constFormat,
-                                              constTensor);
+    cldnn::layout constLayout = cldnn::layout(constTensor,
+                                              cldnn::element_type_to_data_type(op->get_output_element_type(0)),
+                                              constFormat);
 
     cldnn::primitive_id initialconstPrimID = layer_type_name_ID(op);
     cldnn::primitive_id constPrimID;
