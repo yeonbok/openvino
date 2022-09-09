@@ -71,7 +71,7 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& /*node
     // On program build stage for the cases with pattern being stored in a runtime tensor
     // we return output_partial_shape taken from the original model intead of something like PartialShape::dynamic(rank)
     // as ngraph may refine output shape using interval arithmetic
-    if (memory_deps.empty() && prim->output_pattern.empty()) {
+    if ((memory_deps.empty() && prim->output_pattern.empty()) || input_layout.is_dynamic()) {
         return { layout{prim->output_shape, input_layout.data_type, format::adjust_to_rank(input_layout.format, prim->output_partial_shape.size())} };
     }
 
@@ -147,13 +147,6 @@ std::string reshape_inst::to_string(reshape_node const& node) {
 reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) : parent(network, node, false) {
     auto input_layout = node.input().get_output_layout();
     auto output_layout = node.get_output_layout();
-#if 0
-    CLDNN_ERROR_DATA_TYPES_MISMATCH(node.id(),
-                                    "Input layout data typr",
-                                    input_layout.data_type,
-                                    "output layout data type",
-                                    output_layout.data_type,
-                                    "");
     if (output_layout.is_static())
         CLDNN_ERROR_NOT_EQUAL(node.id(),
                               "Output layout count",
@@ -161,7 +154,7 @@ reshape_inst::typed_primitive_inst(network& network, reshape_node const& node) :
                               "input layout count",
                               input_layout.count(),
                               "Output layout of reshape primitive changes size of input buffer");
-#endif
+
     // if reshape operated in-place, postpone creation of the output until network run,
     // then create new memory object as the reinterpreted output of the previous primitive
     if (_node.get_output_layout().is_static()) {
