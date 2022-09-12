@@ -69,7 +69,7 @@ std::vector<layout> permute_inst::calc_output_layouts(permute_node const& /*node
         }
     }
 
-    for (int64_t i = 0; i < input_static_rank; ++i) {
+    for (size_t i = 0; i < permute_order.size(); ++i) {
         output_shape.push_back(input_shape[permute_order[i]]);
     }
 
