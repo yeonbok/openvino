@@ -25,13 +25,17 @@ namespace intel_gpu {
 *  for example: [2, 32, 64] [3, 64, 64] it will raise an exception.
 */
 
-static std::tuple<bool, ov::PartialShape, ov::PartialShape> get_aligned_shapes(const ov::PartialShape& shape_a,
-                                                                               const ov::PartialShape& shape_b,
-                                                                               const std::shared_ptr<ngraph::op::v0::MatMul>& matmul) {
-    auto rank_a = shape_a.rank().get_length();
-    auto rank_b = shape_b.rank().get_length();
-    ov::PartialShape shape_a_aligned(shape_a), shape_b_aligned(shape_b);
+static std::tuple<bool, PartialShape, PartialShape> get_aligned_shapes(const PartialShape& shape_a,
+                                                                       const PartialShape& shape_b,
+                                                                       const std::shared_ptr<ngraph::op::v0::MatMul>& matmul) {
+    PartialShape shape_a_aligned(shape_a), shape_b_aligned(shape_b);
+    auto rank_a = shape_a_aligned.rank().get_length();
+    auto rank_b = shape_b_aligned.rank().get_length();
     size_t max_size = std::max(rank_a, rank_b);
+    if (max_size == 1) {
+        return std::make_tuple(false, shape_a_aligned, shape_b_aligned);
+    }
+
     for (size_t i = 0, cnt = max_size - rank_a; i < cnt; ++i) {
         shape_a_aligned.insert(shape_a_aligned.begin(), 1);
     }
@@ -52,20 +56,17 @@ static std::tuple<bool, ov::PartialShape, ov::PartialShape> get_aligned_shapes(c
             if (b_dim == 1) {
                 shape_a_aligned[i] = shape_b_aligned[i] = a_dim;
             } else {
-                return std::make_tuple(false, ngraph::PartialShape{shape_a_aligned}, ngraph::PartialShape{shape_b_aligned});
+                return std::make_tuple(false, shape_a_aligned, shape_b_aligned);
             }
-            continue;
+        } else {
+            if (a_dim != b_dim && a_dim.get_length() > 1 && b_dim.get_length() > 1) {
+                IE_THROW() << "Shapes can't be aligned: " << shape_a_aligned << " " << shape_b_aligned;
+            }
+            auto max_value = std::max(a_dim.get_length(), b_dim.get_length());
+            shape_a_aligned[i] = shape_b_aligned[i] = max_value;
         }
-        // both dimensions are static
-        if (a_dim != b_dim && a_dim.get_length() > 1 && b_dim.get_length() > 1) {
-            std::ostringstream stream;
-            stream << "Shapes can't be aligned: " << shape_a_aligned << " " << shape_b_aligned;
-            throw ngraph::ngraph_error(stream.str());
-        }
-        size_t max_value = std::max(a_dim.get_length(), b_dim.get_length());
-        shape_a_aligned[i] = shape_b_aligned[i] = max_value;
     }
-    return std::make_tuple(true, shape_a_aligned, shape_b_aligned);
+    return {true, shape_a_aligned, shape_b_aligned};
 }
 
 static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::MatMul>& op) {
@@ -76,120 +77,68 @@ static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::Mat
     auto shape_a = op->get_input_partial_shape(0);
     auto shape_b = op->get_input_partial_shape(1);
 
+    auto rank_a = shape_a.rank().get_length();
+    auto rank_b = shape_b.rank().get_length();
+
     bool is_fc = IsNodeOnConstPath(op->get_input_node_shared_ptr(1));
-    is_fc &= std::count_if(shape_b.begin(), shape_b.end(), [](ov::Dimension x) { return x != 1; }) <= 2;
+    is_fc &= std::count_if(shape_b.begin(), shape_b.end(), [](Dimension x) { return x != 1; }) <= 2;
     // TODO: This conditions can be relaxed with proper handling in FC path
-    is_fc &= shape_b.size() > 1 && shape_a.size() > 1;
+    is_fc &= rank_a > 1 && rank_b > 1 && shape_b.is_static();
+
+    PartialShape shape_a_aligned, shape_b_aligned;
+    bool aligned = false;
+    std::tie(aligned, shape_a_aligned, shape_b_aligned) = get_aligned_shapes(shape_a, shape_b, op);
+    is_fc &= aligned;
 
     if (is_fc) {
-        ov::PartialShape shape_a_aligned, shape_b_aligned;
-        bool success;
-        std::tie(success, shape_a_aligned, shape_b_aligned) = get_aligned_shapes(shape_a, shape_b, op);
         if (shape_a_aligned.size() < 2 || shape_b_aligned.size() < 2) {
             IE_THROW() << "MatMul " << op->get_friendly_name() << " shapes are inconsistent.";
         }
 
-        ov::Dimension K = *(shape_a_aligned.end() - 1);
-
         auto inputName = inputPrimitives[0];
         auto weightsName = inputPrimitives[1];
 
-        // Weights normalization
-        if (!op->get_transpose_b()) {
-            std::vector<uint16_t> transpose_order(shape_b.size());
+        auto create_transpose = [&](const std::string& transposeName, const std::string& transposeInputName, size_t rank) {
+            std::vector<uint16_t> transpose_order(rank);
             std::iota(transpose_order.begin(), transpose_order.end(), 0);
             std::swap(*(transpose_order.end() - 1), *(transpose_order.end() - 2));
 
-            auto permuteName = op->get_friendly_name() + "/transpose_b";
-            auto permutePrim = cldnn::permute(permuteName,
-                                              weightsName,
+            auto permutePrim = cldnn::permute(transposeName,
+                                              transposeInputName,
                                               transpose_order);
             p.add_primitive(*op, permutePrim);
-            weightsName = permuteName;
+        };
+
+        // Weights normalization
+        if (!op->get_transpose_b()) {
+            auto transposeName = op->get_friendly_name() + "/transpose_b";
+            create_transpose(transposeName, weightsName, rank_b);
+            weightsName = transposeName;
         }
 
         // Input normalization
         if (op->get_transpose_a()) {
-            std::vector<uint16_t> transpose_order(shape_a.size());
-            std::iota(transpose_order.begin(), transpose_order.end(), 0);
-            std::swap(*(transpose_order.end() - 1), *(transpose_order.end() - 2));
-
-            auto permuteName = op->get_friendly_name() + "/transpose_a";
-            auto permutePrim = cldnn::permute(permuteName,
-                                              inputName,
-                                              transpose_order);
-            p.add_primitive(*op, permutePrim);
-            inputName = permuteName;
+            auto transposeName = op->get_friendly_name() + "/transpose_a";
+            create_transpose(transposeName, inputName, rank_a);
+            inputName = transposeName;
         }
 
-        bool reshape_fc = shape_a_aligned.size() > 3;
-
-        auto reshape_to_2d = [&](const ov::PartialShape& shape, std::string inputName, size_t features, std::string suffix) -> std::string {
-            size_t total = std::accumulate(shape.begin(), shape.end(), 1, [](int b, const ov::Dimension& a){ return b * a.get_length(); });
-            std::vector<size_t> reshapeSize = { total / features, features };
-
-            if (total != reshapeSize[0] * reshapeSize[1])
-                IE_THROW() << "Inconsistent reshape in Matmul op: " << op->get_friendly_name();
-
-            auto reshapeInName = op->get_friendly_name() + suffix;
-            auto reshapeInPrim = cldnn::reshape(reshapeInName,
-                                                inputName,
-                                                ov::PartialShape(reshapeSize));
-            p.add_primitive(*op, reshapeInPrim);
-            return reshapeInName;
-        };
-
-        if (reshape_fc) {
-            inputName = reshape_to_2d(shape_a, inputName, (shape_a.end() - 1)->get_length(), "_cldnn_reshape_in");
-        }
-
-        if (shape_b.size() != 2) {
-            weightsName = reshape_to_2d(shape_b, weightsName, K.get_length(), "_cldnn_reshape_weights");
-        }
-
-        auto input_rank = reshape_fc ? 2 : shape_a.size();
         auto fcPrim = cldnn::fully_connected(layerName,
                                              inputName,
                                              weightsName,
                                              "",
                                              cldnn::element_type_to_data_type(op->get_output_element_type(0)),
                                              cldnn::padding(),
-                                             input_rank);
+                                             shape_a.size());
 
         p.add_primitive(*op, fcPrim);
 
-        auto lastLayerName = layerName;
-        if (reshape_fc) {
+        if (shape_a_aligned.size() > 3 && !p.use_new_shape_infer()) {
             auto outReshapeName = layerName + "_cldnn_out_reshape";
-
-            // add reorder
-            auto outShape = op->get_output_partial_shape(0);
-
-            if (outShape.size() > 4) {
-                cldnn::format outputFormat = cldnn::format::bfyx;
-                switch (outShape.size()) {
-                case 5: outputFormat = cldnn::format::bfzyx; break;
-                case 6: outputFormat = cldnn::format::bfwzyx; break;
-                default: break;
-                }
-
-                cldnn::primitive_id reorderId = "reorder:" + outReshapeName + "_reorder";
-                cldnn::layout outputLayout(outShape, cldnn::element_type_to_data_type(op->get_output_element_type(0)), outputFormat);
-                auto reorder_prim = cldnn::reorder(reorderId,
-                                            layerName,
-                                            outputLayout,
-                                            std::vector<float>(),
-                                            cldnn::reorder_mean_mode::subtract);
-                p.add_primitive(*op, reorder_prim);
-                lastLayerName = reorderId;
-            }
-
-            // add reshape
-            auto outReshapePrim = cldnn::reshape(outReshapeName, lastLayerName, outShape);
-
+            auto outDims = op->get_output_shape(0);
+            auto outTensor = tensor_from_dims(outDims);
+            auto outReshapePrim = cldnn::reshape(outReshapeName, layerName, outTensor);
             p.add_primitive(*op, outReshapePrim);
-
-            lastLayerName = outReshapeName;
         }
     // is_fc
     } else {
