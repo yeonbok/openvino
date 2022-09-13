@@ -34,14 +34,14 @@ static void CreateTileOp(Program& p, const std::shared_ptr<ngraph::op::v0::Tile>
 
         if (repeats.size() > rank) {
             std::string reshapeName = layerName + "_reshape";
-            auto inputDims = op->get_input_shape(0);
+            auto inputDims = op->get_input_partial_shape(0);
 
             // Extend input dimensions to the same size as repeats dimensions by prepending ones
             inputDims.insert(inputDims.begin(), repeats.size() - rank, defaultSize);
 
-            auto targetShape = tensor_from_dims(inputDims);
+//            auto targetShape = tensor_from_dims(inputDims);
 
-            auto reshapePrim = cldnn::reshape(reshapeName, inputPrimitives[0], targetShape);
+            auto reshapePrim = cldnn::reshape(reshapeName, inputPrimitives[0], inputDims);
 
             p.add_primitive(*op, reshapePrim);
 
