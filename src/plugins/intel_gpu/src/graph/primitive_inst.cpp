@@ -15,6 +15,7 @@
 #include "crop_inst.h"
 #include "deconvolution_inst.h"
 #include "shape_of_inst.h"
+#include "strided_slice_inst.h"
 #include "experimental_detectron_roi_feature_extractor_inst.hpp"
 #include "intel_gpu/plugin/common_utils.hpp"
 
@@ -180,14 +181,24 @@ void primitive_inst::update_shape() {
         input_shape_changed = true;
     }
 
-    if (!input_shape_changed && !_node.generates_dynamic_output() && !_impl_params->output_layout.is_dynamic()) {
-        GPU_DEBUG_IF(debug_config->verbose >= 4) {
-            GPU_DEBUG_COUT << "update_shape for " << id() << " was not needed" << std::endl;
+    // Strided slice loads data from {1,2,3} dependencies in impl::create method.
+    // It means that this data must be put into impl_params map
+    // Thus we treat it as "dynamic" case
+    // TODO: Remove once strided slice impl support runtime tensors for begin/end/stride
+    bool strided_slice_wa = false;
+    if (_node.is_type<strided_slice>()) {
+        for (size_t i = 1; i < _node.get_dependencies().size(); i++) {
+            if (!_node.get_dependency(i).is_type<data>())
+                strided_slice_wa = true;
         }
-        return;
     }
+
+    if (!strided_slice_wa && !input_shape_changed && !_node.generates_dynamic_output() && _impl_params->output_layout.is_static()) {
+        return;
+    } 
     if (input_shape_changed)
         set_shape_change(); // if input_layout is changed, the choose_impl should be called again
+
     std::vector<event::ptr> dependencies_events;
     for (auto& i : _node.get_shape_infer_dependencies()) {
         if (memory_deps.count(i) > 0) {
@@ -325,7 +336,6 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                 }
             }
             PRINT_TIME(update_shape());
-//            std::cout << id() << " : " << _impl_params->output_layout.to_string() << std::endl;
             if (shape_changed() || !_impl) {
                 PRINT_TIME(update_impl());
                 PRINT_TIME(auto ev = update_weights());
