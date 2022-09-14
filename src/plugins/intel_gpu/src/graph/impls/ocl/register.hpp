@@ -151,7 +151,9 @@ REGISTER_OCL(random_uniform);
 REGISTER_OCL(range);
 REGISTER_OCL(reduce);
 REGISTER_OCL(region_yolo);
+#endif
 REGISTER_OCL(reorder);
+#if 0 // TODO(taylor)
 REGISTER_OCL(reorg_yolo);
 #endif
 REGISTER_OCL(reshape);
