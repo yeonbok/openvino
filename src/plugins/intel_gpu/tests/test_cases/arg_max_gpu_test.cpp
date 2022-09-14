@@ -360,7 +360,7 @@ TEST(top_k_layer_tests, second_output_taylor) {
     topology.add(arg_max_min("arg_max", {input_info("input", 0), input_info("const", 0)}, ov::op::TopKMode::MAX, top_k, 0, ov::op::TopKSortType::SORT_VALUES, false));
     topology.add(permute("permute_1", {input_info("arg_max", 0)}, {0, 1, 2, 3}));
     topology.add(permute("permute_2", {input_info("arg_max", 1)}, {0, 1, 2, 3}));
-    topology.add(concatenation("concat", {input_info("permute_1"), input_info("permute_2")}, 1, data_types::f32));
+    topology.add(concatenation("concat", {input_info("permute_1"), input_info("permute_2")}, 0, data_types::f32));
 
     std::vector<float> input_vec = {
             //y0x0 y0x1 y1x0 y1x1
@@ -398,9 +398,13 @@ TEST(top_k_layer_tests, second_output_taylor) {
 
     set_values(input, input_vec);
 
+#if 0
     build_options build_opts;
     build_opts.set_option(build_option::optimize_data(true));
     network network(engine, topology, build_opts);
+#else
+    network network(engine, topology);
+#endif
 
     network.set_input_data("input", input);
     auto outputs = network.execute();

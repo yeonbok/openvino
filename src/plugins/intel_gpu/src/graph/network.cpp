@@ -700,7 +700,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
             GPU_DEBUG_IF(debug_config->verbose >= 2) {
                 std::cerr << get_primitive_info(inst->id()) << std::endl;
             }
-
+#endif
             GPU_DEBUG_IF(debug_config->dump_layers_dst_only == 0 &&
                             debug_config->is_dumped_layer(layer_name)) {
                 for (size_t i = 0; i < get_primitive(inst->id())->dependencies().size(); i++) {
@@ -708,7 +708,6 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
                                     layer_name + "_src_" + std::to_string(i));
                 }
             }
-#endif
         }
 
         execute_primitive(inst, events);
@@ -718,7 +717,10 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
             auto& node = _program->get_node(inst->id());
             const std::string layer_name = node.id();
             GPU_DEBUG_IF(debug_config->is_dumped_layer(layer_name, node.is_output())) {
-                log_memory_to_file(get_primitive(inst->id())->output_memory_ptr(), get_stream(), layer_name + "_dst_0");
+                for (size_t i = 0; i < get_primitive(inst->id())->outputs_memory_count(); i++) {
+                    log_memory_to_file(get_primitive(inst->id())->output_memory_ptr(i), get_stream(),
+                                       layer_name + "_dst_" + std::to_string(i));
+                }
             }
         }
     }

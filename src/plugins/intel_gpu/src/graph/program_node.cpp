@@ -248,7 +248,15 @@ layout program_node::calc_output_layout() const {
 }
 
 std::vector<layout> program_node::calc_output_layouts() const {
+#if 0
     return type()->calc_output_layouts(*this, *get_kernel_impl_params());
+#else
+    std::vector<layout> layouts;
+    for (int32_t i = 0; i < get_primitive()->num_outputs; ++i) {
+        layouts.push_back(calc_output_layout());
+    }
+    return layouts;
+#endif
 }
 
 layout program_node::get_output_layout(int32_t idx) const {

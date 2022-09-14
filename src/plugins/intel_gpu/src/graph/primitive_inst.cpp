@@ -394,7 +394,7 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
     if (_impl)
         _impl->set_node_params(node);
 
-    if (_outputs[0])
+    if (_outputs.size() > 0)
         max_output_layout_size = _outputs[0]->get_layout().count();
 }
 
