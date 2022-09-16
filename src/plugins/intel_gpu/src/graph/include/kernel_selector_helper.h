@@ -126,6 +126,7 @@ struct kernel_impl_params {
     optional_layout compensation_layout = optional_layout();
 
     std::map<size_t, memory::ptr> memory_deps = {};
+    size_t primary_input_idx = 0;
 
     memory::ptr reordered_weights = nullptr;
 
@@ -145,7 +146,8 @@ struct kernel_impl_params {
                        , output_layout(_out_layout)
                        , fused_desc(_fused_descs)
                        , fused_act_funcs(_fused_act_funcs)
-                       , activation_params(_act_params) {
+                       , activation_params(_act_params)
+                       , primary_input_idx(0) {
         if (!_in_layouts.empty() && !_in_layouts[0].get_partial_shape().rank().is_dynamic()) {
             ov_input_rank = _in_layouts[0].get_partial_shape().rank().get_length();
         }
