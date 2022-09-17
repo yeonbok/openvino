@@ -24,6 +24,14 @@ public:
         support_padding_all(true);
     }
     program_node& input() const { return get_dependency(0); }
+
+    using parent::get_kernel_impl_params;
+    std::unique_ptr<kernel_impl_params> get_kernel_impl_params(const std::vector<layout>& in_layouts, const layout& out_layout) const override {
+        auto params = parent::get_kernel_impl_params(in_layouts, out_layout);
+        params->input_offsets.reserve(1);
+        params->input_offsets[0] = get_primitive()->offsets;
+        return params;
+    }
 };
 
 using crop_node = typed_program_node<crop>;

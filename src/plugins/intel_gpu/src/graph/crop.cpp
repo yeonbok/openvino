@@ -88,7 +88,11 @@ std::vector<layout> crop_inst::calc_output_layouts(crop_node const& node, kernel
         }
         return {layout({in_layout.data_type, in_layout.format, ref_in_sizes})};
     }
-    return {layout({output_shapes[desc->output_idx], in_layout.data_type, in_layout.format})};
+    std::vector<layout> output_layouts;
+    for (size_t i = 0; i < output_shapes.size(); ++i) {
+        output_layouts.push_back(layout({output_shapes[i], in_layout.data_type, in_layout.format}));
+    }
+    return output_layouts;
 }
 
 std::string crop_inst::to_string(crop_node const& node) {
