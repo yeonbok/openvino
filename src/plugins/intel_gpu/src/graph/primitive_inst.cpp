@@ -307,6 +307,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                 }
             }
             PRINT_TIME(update_shape());
+//            std::cout << id() << " : " << _impl_params->output_layout.to_string() << std::endl;
             if (shape_changed() || !_impl) {
                 PRINT_TIME(update_impl());
                 PRINT_TIME(auto ev = update_weights());
@@ -317,6 +318,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         }
     }
 
+//    std::cout << id() << " : " << _impl_params->output_layout.to_string() << std::endl;
     OPENVINO_ASSERT(_impl_params->output_layout.is_static(),
                     "[GPU] Can't execute ", primitive_id, " primitive as output layout is dynamic in runtime");
 
@@ -593,7 +595,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
                 _node.id(),
                 _node.get_memory_dependencies(),
                 alloc_type,
-                true);
+                false);
     }
 }
 

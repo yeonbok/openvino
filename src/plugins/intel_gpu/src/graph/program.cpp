@@ -545,7 +545,7 @@ void program::pre_optimize_graph(bool is_internal) {
         apply_opt_pass<eltwise_remove_stride>();
     }
 
-    apply_opt_pass<strided_slice_optimize>();
+//    apply_opt_pass<strided_slice_optimize>();
 
     apply_opt_pass<handle_reshape>();
 
