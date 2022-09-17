@@ -51,8 +51,11 @@ public:
 
         const auto& input_layout = impl_param.input_layouts[0];
         auto desc = impl_param.typed_desc<crop>();
-        auto output_idx = desc->output_idx;
-        ew_params.inputs[0] = convert_data_tensor(input_layout, 1, {0, 0, 0, output_idx * 1});
+        if (arg.get_dependencies().size() > 1) {
+            ew_params.inputs[0] = convert_data_tensor(input_layout, 1, impl_param.input_offsets[0]);
+        } else {
+            ew_params.inputs[0] = convert_data_tensor(input_layout, 1, primitive->offsets);
+        }
 
         auto& kernel_selector = kernel_selector::eltwise_kernel_selector::Instance();
         auto best_kernels = kernel_selector.GetBestKernels(ew_params, ew_optional_params);
