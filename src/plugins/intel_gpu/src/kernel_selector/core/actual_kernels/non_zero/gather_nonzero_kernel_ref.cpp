@@ -46,12 +46,12 @@ KernelsData GatherNonzeroKernelRef::GetKernelsData(const Params& params, const o
     auto cldnn_jit = MakeBaseParamsJitConstants(newParams);
     auto jit = CreateJit(kernelName, cldnn_jit, entry_point);
 
-    const auto& in = newParams.inputs[0];
     auto& kernel = kd.kernels[0];
+#if 0
+    const auto& in = newParams.inputs[0];
     const auto& in_dims = in.GetDims();
 
     std::vector<std::vector<Tensor::DataChannelName>> dims_by_gws;
-
     if (in_dims.size() == 4) {
         kernel.params.workGroups.global = {in_dims[0].v, in_dims[1].v, in_dims[2].v * in_dims[3].v};
         dims_by_gws = {{Tensor::DataChannelName::X},
@@ -68,13 +68,16 @@ KernelsData GatherNonzeroKernelRef::GetKernelsData(const Params& params, const o
                        {Tensor::DataChannelName::Z, Tensor::DataChannelName::W},
                        {Tensor::DataChannelName::FEATURE, Tensor::DataChannelName::BATCH}};
     }
-
+#endif
+    kernel.params.workGroups.global = {1, 1, 1};
+    kernel.params.workGroups.local = {1, 1, 1};
+#if 0
     kernel.params.workGroups.local = GetOptimalLocalWorkGroupSizes(kernel.params.workGroups.global,
                                                                    params.engineInfo,
                                                                    newParams.inputs[0].GetLayout(),
                                                                    newParams.outputs[0].GetLayout(),
                                                                    dims_by_gws);
-
+#endif
     kernel.code.kernelString = GetKernelString(kernelName, jit, entry_point, params.engineInfo, DEFAULT);
     kernel.params.arguments = GetArgsDesc(2, false, false);
 
