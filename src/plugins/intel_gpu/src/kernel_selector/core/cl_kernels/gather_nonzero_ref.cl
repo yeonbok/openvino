@@ -11,6 +11,8 @@ KERNEL (gather_nonzero_ref)(const __global INPUT0_TYPE* input,
                             volatile __global INPUT1_TYPE* output_shape,
                             __global OUTPUT_TYPE* output)
 {
+
+#if 0
     const uint gdim0 = (uint)get_global_id(0);
     const uint gdim1 = (uint)get_global_id(1);
     const uint gdim2 = (uint)get_global_id(2);
@@ -34,10 +36,9 @@ KERNEL (gather_nonzero_ref)(const __global INPUT0_TYPE* input,
 
     const uint f = gdim2 % INPUT0_FEATURE_NUM;
     const uint b = gdim2 / INPUT0_FEATURE_NUM;
-
     int num_nonzero_acc = (input[INPUT0_GET_INDEX1(INPUT_ORDER)] == INPUT0_VAL_ZERO) ? 0 : 1;
     num_nonzero_acc = sub_group_scan_inclusive_add(num_nonzero_acc);
-    
+
     int pos;
 
     if (get_sub_group_local_id() == (get_sub_group_size() - 1)) {
@@ -46,7 +47,7 @@ KERNEL (gather_nonzero_ref)(const __global INPUT0_TYPE* input,
     }
 
     pos = sub_group_broadcast(pos, (get_sub_group_size() - 1));
-  
+
     // output_shape = {rank, # nonzero, 1, 1}
     if (input[INPUT0_GET_INDEX1(INPUT_ORDER)] != INPUT0_VAL_ZERO) {
         const int num_nonzero = output_shape[1];
@@ -96,6 +97,54 @@ KERNEL (gather_nonzero_ref)(const __global INPUT0_TYPE* input,
             output[output_b] = b;
         #endif
     }
+#endif
+    #if OV_INPUT_RANK == 1
+        int pos = 0;
+        for (int b = 0; b < INPUT0_BATCH_NUM; ++b) {
+            if (input[b] != INPUT0_VAL_ZERO) {
+                output[pos++] = b;
+            }
+        }
+    #elif OV_INPUT_RANK == 2
+        int pos = 0;
+        for (int b = 0; b < INPUT0_BATCH_NUM; ++b) {
+            for (int f = 0; f < INPUT0_FEATURE_NUM; ++f) {
+                if (input[b * INPUT0_FEATURE_NUM + f] != INPUT0_VAL_ZERO) {
+                    output[pos++] = b;
+                    output[pos++] = f;
+                }
+            }
+        }
+    #elif OV_INPUT_RANK == 3
+        int pos = 0;
+        for (int b = 0; b < INPUT0_BATCH_NUM; ++b) {
+            for (int f = 0; f < INPUT0_FEATURE_NUM; ++f) {
+                for (int y = 0; y < INPUT0_SIZE_Y; ++y) {
+                if (input[b * INPUT0_FEATURE_NUM * INPUT0_SIZE_Y + f * INPUT0_SIZE_Y + y] != INPUT0_VAL_ZERO) {
+                    output[pos++] = b;
+                    output[pos++] = f;
+                    output[pos++] = y;
+                }
+            }
+        }
+    #elif OV_INPUT_RANK == 4
+        int pos = 0;
+        for (int b = 0; b < INPUT0_BATCH_NUM; ++b) {
+            for (int f = 0; f < INPUT0_FEATURE_NUM; ++f) {
+                for (int y = 0; y < INPUT0_SIZE_Y; ++y) {
+                    for (int x = 0; x < INPUT0_SIZE_X; ++x) {
+                        if (input[b * INPUT0_FEATURE_NUM * INPUT0_SIZE_Y * INPUT0_SIZE_X + f * INPUT0_SIZE_Y * INPUT0_SIZE_X + y * INPUT0_SIZE_X] != INPUT0_VAL_ZERO) {
+                        output[pos++] = b;
+                        output[pos++] = f;
+                        output[pos++] = y;
+                        output[pos++] = x;
+                    }
+                }
+            }
+        }
+    #else
+        printf("unknown rank ! Error!!!!!!!!!!!!\n");
+    #endif
 }
 
 #undef INPUT0_GET_INDEX1
