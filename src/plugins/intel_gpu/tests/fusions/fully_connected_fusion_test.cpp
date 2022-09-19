@@ -225,7 +225,7 @@ TEST_P(fc_int8_eltwise_quantize_i8, basic) {
         data("eltwise_data", {get_mem(get_per_channel_layout(p), 1.0f / get_weights_layout(p).count() / 255)}),
         fully_connected("fc_prim", input_info("input"), "weights", "bias", data_types::f32, padding(), get_output_dim_size(p)),
         eltwise("eltwise", { input_info("fc_prim"), input_info("eltwise_data") }, eltwise_mode::prod),
-        quantize("quantize", input_info("scale"), input_info("in_lo"), input_info("in_hi"), input_info("out_lo"), input_info("out_hi"), 255, data_types::i8),
+        quantize("quantize", input_info("eltwise"), input_info("in_lo"), input_info("in_hi"), input_info("out_lo"), input_info("out_hi"), 255, data_types::i8),
         reorder("reorder_bfyx", input_info("quantize"), p.default_format, data_types::f32)
     );
 

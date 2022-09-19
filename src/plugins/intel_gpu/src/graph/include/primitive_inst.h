@@ -100,6 +100,7 @@ public:
     size_t inputs_memory_count() const { return _node.get_primitive()->input_size(); }
     size_t outputs_memory_count() const { return _node.get_primitive()->output_size(); }
     bool outputs_allocated() const {
+        if (_outputs.empty()) return false;
         for (auto& m : _outputs) {
             if (!m) return false;
         }

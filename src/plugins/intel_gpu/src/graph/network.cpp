@@ -910,13 +910,17 @@ void network::allocate_primitive_instance(program_node const& node) {
 
     _primitives[node.id()] = inst;
     if (node.is_input()) {
-        if (inst->output_memory_ptr())
-            _in_out_shared_mem_types.push_back(inst->output_memory_ptr()->get_internal_params().mem_type);
+        if (inst->outputs_allocated()) {
+            if (inst->output_memory_ptr())
+                _in_out_shared_mem_types.push_back(inst->output_memory_ptr()->get_internal_params().mem_type);
+        }
         _inputs.push_back(inst);
     }
     if (node.is_output()) {
-        if (inst->output_memory_ptr())
-            _in_out_shared_mem_types.push_back(inst->output_memory_ptr()->get_internal_params().mem_type);
+        if (inst->outputs_allocated()) {
+            if (inst->output_memory_ptr())
+                _in_out_shared_mem_types.push_back(inst->output_memory_ptr()->get_internal_params().mem_type);
+        }
         _outputs.push_back(inst);
         if (node.is_type<data>())
             _data_outputs.push_back(inst);
