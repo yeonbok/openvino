@@ -136,8 +136,7 @@ static void CreateMatMulOp(Program& p, const std::shared_ptr<ngraph::op::v0::Mat
         if (shape_a_aligned.size() > 3 && !p.use_new_shape_infer()) {
             auto outReshapeName = layerName + "_cldnn_out_reshape";
             auto outDims = op->get_output_shape(0);
-            auto outTensor = tensor_from_dims(outDims);
-            auto outReshapePrim = cldnn::reshape(outReshapeName, layerName, outTensor);
+            auto outReshapePrim = cldnn::reshape(outReshapeName, layerName, outDims);
             p.add_primitive(*op, outReshapePrim);
         }
     // is_fc
