@@ -56,7 +56,7 @@ std::vector<layout> permute_inst::calc_output_layouts(permute_node const& /*node
     ShapeType output_shape;
     ov::Rank input_rank = input_shape.rank();
 
-    if (input_rank.is_dynamic()) {
+    if (input_layout.is_dynamic()) {
         output_shape = ShapeType::dynamic(desc->permute_order.size());
         return { layout{output_shape, output_type, input_layout.format} };
     }
