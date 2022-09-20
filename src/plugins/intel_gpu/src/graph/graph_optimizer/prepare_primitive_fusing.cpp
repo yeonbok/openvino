@@ -349,7 +349,6 @@ void prepare_primitive_fusing::fuse_bias(program &p) {
             return node.as<fully_connected>().get_primitive()->input_size == 3;
         };
 
-        // FIXME: allow fusion for dynamic case
         if (node->get_output_layout().is_dynamic())
             continue;
 
@@ -554,6 +553,10 @@ void prepare_primitive_fusing::fuse_simple_primitives(program &p) {
         auto conv_supports_fusings = [&](convolution_node& node) -> bool {
             if (_lo.get_optimization_attributes().use_onednn_impls == 1)
                 return true;
+
+            if (node.get_output_layout().is_dynamic()) {
+                return true;
+            }
 
             // Since reorder inputs is called after this pass
             // we have to check that blocked formats can be used in the network and layer is optimized for it.
@@ -996,22 +999,19 @@ void prepare_primitive_fusing::fuse_simple_primitives(program &p) {
             auto parent1 = parents[0];
             auto parent2 = parents[1];
 
-            // TODO: add support for fusions with dyn shapes.
-            if (parent1->get_output_layout().is_dynamic() || parent2->get_output_layout().is_dynamic())
-                return;
-
-            // TODO: check if broadcasable
-            auto p1_raw_size = parent1->get_output_layout().get_dims();
-            auto p2_raw_size = parent2->get_output_layout().get_dims();
-            for (unsigned k = 0; k < p1_raw_size.size(); k++) {
-                if (p1_raw_size[k] < p2_raw_size[k]) {
-                    if (p1_raw_size[k] != 1)
-                        return;
-                    can_fuse_parents[0] = false;
-                } else if (p2_raw_size[k] < p1_raw_size[k]) {
-                    if (p2_raw_size[k] != 1)
-                        return;
-                    can_fuse_parents[1] = false;
+            if (parent1->get_output_layout().is_static() && parent2->get_output_layout().is_static()) {
+                auto p1_raw_size = parent1->get_output_layout().get_tensor().sizes();
+                auto p2_raw_size = parent2->get_output_layout().get_tensor().sizes();
+                for (unsigned k = 0; k < p1_raw_size.size(); k++) {
+                    if (p1_raw_size[k] < p2_raw_size[k]) {
+                        if (p1_raw_size[k] != 1)
+                            return;
+                        can_fuse_parents[0] = false;
+                    } else if (p2_raw_size[k] < p1_raw_size[k]) {
+                        if (p2_raw_size[k] != 1)
+                            return;
+                        can_fuse_parents[1] = false;
+                    }
                 }
             }
 
@@ -1043,6 +1043,8 @@ void prepare_primitive_fusing::fuse_simple_primitives(program &p) {
 
             if (_lo.get_optimization_attributes().use_onednn_impls) {
                 auto eltw_in_size = peer_node->get_output_layout();
+                if (eltw_in_size.is_dynamic())
+                    return;
                 // Temporary disable mul fusion with full tensor as onednn doesn't support it
                 if (fused_node->is_type<convolution>() && prim->mode == eltwise_mode::prod &&
                     (eltw_in_size.spatial(0) > 1 || eltw_in_size.spatial(1) > 1 || eltw_in_size.batch() > 1))

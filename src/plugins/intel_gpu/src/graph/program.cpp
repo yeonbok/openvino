@@ -521,11 +521,11 @@ void program::pre_optimize_graph(bool is_internal) {
 
     reorder_factory rf;
     if (options.get<build_option_type::optimize_data>()->enabled()) {
-//        apply_opt_pass<prepare_primitive_fusing_through>();
+        apply_opt_pass<prepare_primitive_fusing_through>();
 
         apply_opt_pass<pre_replace_deconv>(lo);
 
-//        apply_opt_pass<prepare_primitive_fusing>(lo);
+        apply_opt_pass<prepare_primitive_fusing>(lo);
 
         apply_opt_pass<reorder_inputs>(lo, rf);
         // Ideally this should be done before fusing to simplify logic and make the pass more powerful,
