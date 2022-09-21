@@ -195,7 +195,7 @@ void primitive_inst::update_shape() {
 
     if (!strided_slice_wa && !input_shape_changed && !_node.generates_dynamic_output() && _impl_params->output_layout.is_static()) {
         return;
-    } 
+    }
     if (input_shape_changed)
         set_shape_change(); // if input_layout is changed, the choose_impl should be called again
 

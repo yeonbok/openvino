@@ -49,6 +49,7 @@
 #include <thread>
 #endif
 
+int inf_count = 0;
 namespace cldnn {
 
 #ifdef GPU_DEBUG_CONFIG
@@ -522,6 +523,10 @@ memory::ptr network::get_output_memory(const primitive_id& output_id) {
     return get_primitive(output_id)->output_memory_ptr();
 }
 
+layout network::get_output_layout(const primitive_id& output_id) const {
+    return get_primitive(output_id)->get_node().get_output_layout();
+}
+
 void network::allocate_primitives() {
     std::vector<std::shared_ptr<program_node>> nodes_to_allocate{};
     auto& po = _program->get_processing_order();
@@ -682,7 +687,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
                             debug_config->is_dumped_layer(layer_name)) {
                 for (size_t i = 0; i < get_primitive(inst->id())->dependencies().size(); i++) {
                     log_memory_to_file(get_primitive(inst->id())->dep_memory_ptr(i), get_stream(),
-                                    layer_name + "_src_" + std::to_string(i));
+                                    "inf" + std::to_string(inf_count) + "_" + layer_name + "_src_" + std::to_string(i));
                 }
             }
         }
@@ -694,7 +699,8 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
             auto& node = _program->get_node(inst->id());
             const std::string layer_name = node.id();
             GPU_DEBUG_IF(debug_config->is_dumped_layer(layer_name, node.is_output())) {
-                log_memory_to_file(get_primitive(inst->id())->output_memory_ptr(), get_stream(), layer_name + "_dst_0");
+                log_memory_to_file(get_primitive(inst->id())->output_memory_ptr(), get_stream(),
+                "inf" + std::to_string(inf_count) + "_" + layer_name + "_dst_0");
             }
         }
     }
@@ -742,6 +748,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // provide proper event to execution. Flushing pipeline should prevent this kind of issues.
     // In scenarios with a big number of very small networks it can provide performance drop.
     get_stream().flush();
+    inf_count++;
 }
 
 std::vector<primitive_id> network::get_input_ids() const {
@@ -812,6 +819,11 @@ std::shared_ptr<primitive_inst> network::get_primitive(const primitive_id& id) {
     if (!_primitives.count(id))
         allocate_primitive_instance(_program->get_node(id));
 
+    return _primitives.at(id);
+}
+
+std::shared_ptr<const primitive_inst> network::get_primitive(const primitive_id& id) const {
+    OPENVINO_ASSERT(_primitives.count(id) == 1, "[GPU] Can't get primitive with ", id, " id: primitive with such name hasn't been found in processing order");
     return _primitives.at(id);
 }
 

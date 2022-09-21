@@ -428,11 +428,11 @@ void InferRequest::SetGraph(std::shared_ptr<Graph> graph) {
         IE_THROW(NetworkNotLoaded);
     }
 
-    if (!m_graph->GetNetwork()->is_dynamic()) {
+    //if (!m_graph->GetNetwork()->is_dynamic()) {
         allocate_inputs();
         allocate_outputs();
         variables_states_ = m_graph->AllocateVariablesMemories();
-    }
+    //}
 }
 
 InferRequest::InferRequest(InputsDataMap networkInputs, OutputsDataMap networkOutputs,
@@ -560,11 +560,11 @@ void InferRequest::enqueue() {
     internal_outputs = networkPtr->execute(dependencies);
 
     // If dump layers path is set, only runs first inference.
-    GPU_DEBUG_GET_INSTANCE(debug_config);
-    GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
-        GPU_DEBUG_COUT << "Only run first inference to dump layers." << std::endl;
-        exit(0);
-    }
+//    GPU_DEBUG_GET_INSTANCE(debug_config);
+//    GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
+//        GPU_DEBUG_COUT << "Only run first inference to dump layers." << std::endl;
+//        exit(0);
+//    }
 }
 
 void InferRequest::wait_notify() {
@@ -598,11 +598,13 @@ void InferRequest::wait() {
         if (outputID == "") outputID = m_graph->MapOutputName(no.first);
         auto outputMemory = internal_outputs.at(outputID).get_memory();
 
-        if (_outputs.find(no.first) == _outputs.end()) {
+        bool need_output_update = _outputs.find(no.first) == _outputs.end() || _outputs.at(no.first)->byteSize() != outputMemory->size();
+
+        if (need_output_update) {
             auto node = findOutputByNodeName(no.first);
             auto out_partial_shape = node->get_output_partial_shape(0);
-            size_t out_rank = out_partial_shape.rank().get_length();
-            auto mem_dims = outputMemory->get_layout().get_partial_shape().to_shape();
+            auto mem_dims = outputMemory->get_layout().get_shape();
+            size_t out_rank =  out_partial_shape.size();
             auto precision = InferenceEngine::Precision::FP32;
             auto dims = SizeVector(mem_dims.begin(), mem_dims.end());
             if (static_cast<int32_t>(out_rank) < static_cast<int32_t>(dims.size())) {
@@ -625,10 +627,13 @@ void InferRequest::wait() {
             };
             auto layout = layout_by_rank(out_rank);
             auto tensorDesc = InferenceEngine::TensorDesc(precision, dims, layout);
-            _outputs[no.first] = create_host_blob(tensorDesc);
+            if (_outputs.find(no.first) == _outputs.end()) {
+                _outputs[no.first] = create_host_blob(tensorDesc);
+            } else {
+                _outputs[no.first]->setShape(dims);
+            }
         }
         Blob::Ptr bptr = _outputs[no.first];
-
         // mapping remote blobs not needed -
         // let the user take care of them explicitly
         if (!bptr->is<gpu::ClBlob>()) {
@@ -665,9 +670,10 @@ void InferRequest::setup_stream_graph() {
     m_graph = streamGraphs[streamID];
 }
 
-Blob::Ptr InferRequest::create_host_blob(const TensorDesc& desc, std::shared_ptr<InferenceEngine::IAllocator> alloc) {
+Blob::Ptr InferRequest::create_host_blob(const TensorDesc& desc) {
     OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "InferRequest::create_host_blob");
-    auto blob = make_blob_with_precision(desc, alloc ? alloc : CreateDefaultAllocator());
+    auto alloc = m_graph->GetEngine()->use_unified_shared_memory() ? std::make_shared<USMHostAllocator>(m_graph->GetContext().get()) : CreateDefaultAllocator();
+    auto blob = make_blob_with_precision(desc, alloc);
     blob->allocate();
     return blob;
 }
@@ -786,6 +792,7 @@ void InferRequest::allocate_inputs() {
             if (litr == inputLayouts.end()) {
                 IE_THROW() << "Input layout for " << name << " is not found";
             }
+            auto input_layout = litr->second;
 
             GPU_DEBUG_GET_INSTANCE(debug_config);
             GPU_DEBUG_IF(debug_config->verbose >= 2) {
@@ -794,24 +801,20 @@ void InferRequest::allocate_inputs() {
             if (desc.getPrecision() == Precision::I16 || desc.getPrecision() == Precision::U16) {
                 TensorDesc desc_fp32 = desc;
                 desc_fp32.setPrecision(Precision::FP32);
-                auto blobPtr = create_device_blob(desc_fp32);
-                _deviceInputs[name] = blobPtr;
-                Blob::Ptr inputBlob = create_host_blob(desc);
-                _inputs[name] = inputBlob;
+                _inputs[name] = create_host_blob(desc);
+                if (input_layout.is_static())
+                    _deviceInputs[name] = create_device_blob(desc_fp32);
             } else {
-                if (m_graph->GetEngine()->use_unified_shared_memory()) {
-                    // For USM case we create host blob using custom USM host allocator
-                    // and then create shared device blob on top of this buffer
-                    if (_inputs.find(name) == _inputs.end()) {
-                        auto host_blob = create_host_blob(desc, std::make_shared<USMHostAllocator>(m_graph->GetContext().get()));
-                        _inputs[name] = host_blob;
-                        _deviceInputs[name] = create_shared_device_blob(desc, litr->second, host_blob->buffer().as<void*>());
+                _inputs[name] = create_host_blob(desc);
+                if (input_layout.is_static()) {
+                    if (m_graph->GetEngine()->use_unified_shared_memory()) {
+                        // For USM case we create host blob using custom USM host allocator
+                        // and then create shared device blob on top of this buffer
+                        auto host_blob = _inputs[name];
+                        _deviceInputs[name] = create_shared_device_blob(desc, input_layout, host_blob->buffer().as<void*>());
                     } else {
                         _deviceInputs[name] = create_device_blob(desc);
                     }
-                } else {
-                    _inputs[name] = create_host_blob(desc);
-                    _deviceInputs[name] = create_device_blob(desc);
                 }
             }
         }
@@ -823,8 +826,11 @@ void InferRequest::allocate_outputs() {
     // allocate outputs
     for (auto& no : _networkOutputs) {
         std::string outputID = m_graph->MapOutputName(no.first);
-        const cldnn::layout output_layout = m_graph->GetNetwork()->get_output_memory(outputID)->get_layout();
+        //const cldnn::layout output_layout = m_graph->GetNetwork()->get_output_memory(outputID)->get_layout();
+        const cldnn::layout output_layout = m_graph->GetNetwork()->get_output_layout(outputID);
         TensorDesc desc = no.second->getTensorDesc();
+        if (output_layout.is_static())
+            desc.setDims(m_graph->GetOutputSize(no.first));
         // Due to some reason TensorDesc in InferRequest contains wrong dims
         // while ExecutableNetwork contains proper ones. Thus replace dims with once from exec network
         // Can be removed once 76176 is resolved.
@@ -847,18 +853,23 @@ void InferRequest::allocate_outputs() {
 
             auto host_blob = create_host_blob(desc);
             _outputs[no.first] = host_blob;
-            auto device_blob = create_device_blob(device_blob_desc);
-            _deviceOutputs[no.first] = device_blob;
+            if (output_layout.is_static()) {
+                auto device_blob = create_device_blob(device_blob_desc);
+                _deviceOutputs[no.first] = device_blob;
+            }
         } else {
-            if (m_graph->GetEngine()->use_unified_shared_memory()) {
-                // For USM case we create host blob using custom USM host allocator
-                // and then create shared device blob on top of this buffer
-                auto host_blob = create_host_blob(desc, std::make_shared<USMHostAllocator>(m_graph->GetContext().get()));
-                _outputs[no.first] = host_blob;
-                _deviceOutputs[no.first] = create_shared_device_blob(desc, output_layout, host_blob->buffer().as<void*>());
-            } else {
-                _outputs[no.first] = create_host_blob(desc);
-                _deviceOutputs[no.first] = create_device_blob(desc);
+            _outputs[no.first] = create_host_blob(desc);
+            if (output_layout.is_static()) {
+                if (m_graph->GetEngine()->use_unified_shared_memory()) {
+                    // For USM case we create host blob using custom USM host allocator
+                    // and then create shared device blob on top of this buffer
+                    auto host_blob = _outputs[no.first];
+                    _outputs[no.first] = host_blob;
+                    _deviceOutputs[no.first] =
+                        create_shared_device_blob(desc, output_layout, host_blob->buffer().as<void*>());
+                } else {
+                    _deviceOutputs[no.first] = create_device_blob(desc);
+                }
             }
         }
     }
@@ -970,22 +981,21 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
 
 void InferRequest::prepare_output(const cldnn::primitive_id& outputName, Blob::Ptr& outputBlob) {
     OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "InferRequest::prepare_output");
+    if (_deviceOutputs.find(outputName) == _deviceOutputs.end())
+        return;
+    Blob::Ptr reqBlob = _deviceOutputs.at(outputName);
     cldnn::primitive_id internalName = outputsMap[outputName];
     auto _nw_ptr = m_graph->GetNetwork();
     auto remote_ptr = outputBlob->as<gpu::ClBlob>();
-    bool is_remote = remote_ptr != nullptr;
-    if (is_remote) {
-        Blob::Ptr reqBlob = _deviceOutputs.at(outputName);
-        auto output_blob_ptr = (reqBlob != outputBlob && remote_ptr != nullptr)
-            ? remote_ptr
-            : reqBlob->as<gpu::ClBlob>();
-        auto impl = getBlobImpl(output_blob_ptr);
-        if (!impl->is_allocated()) {
-            IE_THROW(NotAllocated) << str_output_not_allocated;
-        }
-        auto outputMem = impl->getMemory();
-        _nw_ptr->set_output_memory(internalName, outputMem);
+    auto output_blob_ptr = (reqBlob != outputBlob && remote_ptr != nullptr)
+        ? remote_ptr
+        : reqBlob->as<gpu::ClBlob>();
+    auto impl = getBlobImpl(output_blob_ptr);
+    if (!impl->is_allocated()) {
+        IE_THROW(NotAllocated) << str_output_not_allocated;
     }
+    auto outputMem = impl->getMemory();
+    _nw_ptr->set_output_memory(internalName, outputMem);
 }
 
 InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngine::TensorDesc& desc) {
