@@ -11,140 +11,52 @@ KERNEL (gather_nonzero_ref)(const __global INPUT0_TYPE* input,
                             volatile __global INPUT1_TYPE* output_shape,
                             __global OUTPUT_TYPE* output)
 {
-
-#if 0
-    const uint gdim0 = (uint)get_global_id(0);
-    const uint gdim1 = (uint)get_global_id(1);
-    const uint gdim2 = (uint)get_global_id(2);
-
-    #if INPUT0_DIMS == 6
-        #define INPUT_ORDER b,f,w,z,y,x
-        const uint x = gdim0 % INPUT0_SIZE_X;
-        const uint y = gdim0 / INPUT0_SIZE_X;
-        const uint z = gdim1 % INPUT0_SIZE_Z;
-        const uint w = gdim1 / INPUT0_SIZE_Z;
-    #elif INPUT0_DIMS == 5
-        #define INPUT_ORDER b,f,z,y,x
-        const uint x = gdim0;
-        const uint y = gdim1 % INPUT0_SIZE_Y;
-        const uint z = gdim1 / INPUT0_SIZE_Y;
-    #elif INPUT0_DIMS == 4
-        #define INPUT_ORDER b,f,y,x
-        const uint x = gdim0;
-        const uint y = gdim1;
-    #endif
-
-    const uint f = gdim2 % INPUT0_FEATURE_NUM;
-    const uint b = gdim2 / INPUT0_FEATURE_NUM;
-    int num_nonzero_acc = (input[INPUT0_GET_INDEX1(INPUT_ORDER)] == INPUT0_VAL_ZERO) ? 0 : 1;
-    num_nonzero_acc = sub_group_scan_inclusive_add(num_nonzero_acc);
-
-    int pos;
-
-    if (get_sub_group_local_id() == (get_sub_group_size() - 1)) {
-        pos = atomic_add(&(output_shape[2]), num_nonzero_acc);
-        pos = pos - 1;
-    }
-
-    pos = sub_group_broadcast(pos, (get_sub_group_size() - 1));
-
-    // output_shape = {rank, # nonzero, 1, 1}
-    if (input[INPUT0_GET_INDEX1(INPUT_ORDER)] != INPUT0_VAL_ZERO) {
-        const int num_nonzero = output_shape[1];
-
-        pos = pos + num_nonzero_acc - 1;
-
-        int output_b = pos;
-        int output_f = pos + num_nonzero;
-
-
-        #if OV_INPUT_RANK == 6
-            int output_w = pos + num_nonzero * 2;
-            int output_z = pos + num_nonzero * 3;
-            int output_y = pos + num_nonzero * 4;
-            int output_x = pos + num_nonzero * 5;
-            output[output_b] = b;
-            output[output_f] = f;
-            output[output_w] = w;
-            output[output_z] = z;
-            output[output_y] = y;
-            output[output_x] = x;
-        #elif OV_INPUT_RANK == 5
-            int output_z = pos + num_nonzero * 2;
-            int output_y = pos + num_nonzero * 3;
-            int output_x = pos + num_nonzero * 4;
-            output[output_b] = b;
-            output[output_f] = f;
-            output[output_z] = z;
-            output[output_y] = y;
-            output[output_x] = x;
-        #elif OV_INPUT_RANK == 4
-            int output_y = pos + num_nonzero * 2;
-            int output_x = pos + num_nonzero * 3;
-            output[output_b] = b;
-            output[output_f] = f;
-            output[output_y] = y;
-            output[output_x] = x;
-        #elif OV_INPUT_RANK == 3
-            int output_y = pos + num_nonzero * 2;
-            output[output_b] = b;
-            output[output_f] = f;
-            output[output_y] = y;
-        #elif OV_INPUT_RANK == 2
-            output[output_b] = b;
-            output[output_f] = f;
-        #elif OV_INPUT_RANK == 1
-            output[output_b] = b;
-        #endif
-    }
-#endif
-    #if OV_INPUT_RANK == 1
-        int pos = 0;
-        for (int b = 0; b < INPUT0_BATCH_NUM; ++b) {
-            if (input[b] != INPUT0_VAL_ZERO) {
-                output[pos++] = b;
-            }
-        }
-    #elif OV_INPUT_RANK == 2
-        int pos = 0;
-        for (int b = 0; b < INPUT0_BATCH_NUM; ++b) {
-            for (int f = 0; f < INPUT0_FEATURE_NUM; ++f) {
-                if (input[b * INPUT0_FEATURE_NUM + f] != INPUT0_VAL_ZERO) {
-                    output[pos++] = b;
-                    output[pos++] = f;
-                }
-            }
-        }
-    #elif OV_INPUT_RANK == 3
-        int pos = 0;
-        for (int b = 0; b < INPUT0_BATCH_NUM; ++b) {
-            for (int f = 0; f < INPUT0_FEATURE_NUM; ++f) {
-                for (int y = 0; y < INPUT0_SIZE_Y; ++y) {
-                if (input[b * INPUT0_FEATURE_NUM * INPUT0_SIZE_Y + f * INPUT0_SIZE_Y + y] != INPUT0_VAL_ZERO) {
-                    output[pos++] = b;
-                    output[pos++] = f;
-                    output[pos++] = y;
-                }
-            }
-        }
-    #elif OV_INPUT_RANK == 4
-        int pos = 0;
-        for (int b = 0; b < INPUT0_BATCH_NUM; ++b) {
-            for (int f = 0; f < INPUT0_FEATURE_NUM; ++f) {
-                for (int y = 0; y < INPUT0_SIZE_Y; ++y) {
-                    for (int x = 0; x < INPUT0_SIZE_X; ++x) {
-                        if (input[b * INPUT0_FEATURE_NUM * INPUT0_SIZE_Y * INPUT0_SIZE_X + f * INPUT0_SIZE_Y * INPUT0_SIZE_X + y * INPUT0_SIZE_X] != INPUT0_VAL_ZERO) {
-                        output[pos++] = b;
-                        output[pos++] = f;
-                        output[pos++] = y;
-                        output[pos++] = x;
+    int pos = 0;
+    for (int b = 0; b < INPUT0_BATCH_NUM; ++b) {
+        for (int f = 0; f < INPUT0_FEATURE_NUM; ++f) {
+            for (int w = 0; w < INPUT0_SIZE_W; ++w) {
+                for (int z = 0; z < INPUT0_SIZE_Z; ++z) {
+                    for (int y = 0; y < INPUT0_SIZE_Y; ++y) {
+                        for (int x = 0; x < INPUT0_SIZE_X; ++x) {
+                            int input_idx = GET_DATA_INDEX_6D_SAFE(INPUT0, b, f, w, z, y, x);
+                            if (input[input_idx] != INPUT0_VAL_ZERO) {
+                            #if OV_INPUT_RANK == 1
+                                output[pos++] = b;
+                            #elif OV_INPUT_RANK == 2
+                                output[pos++] = b;
+                                output[pos++] = f;
+                            #elif OV_INPUT_RANK == 3
+                                output[pos++] = b;
+                                output[pos++] = f;
+                                output[pos++] = y;
+                            #elif OV_INPUT_RANK == 4
+                                output[pos++] = b;
+                                output[pos++] = f;
+                                output[pos++] = y;
+                                output[pos++] = x;
+                            #elif OV_INPUT_RANK == 5
+                                output[pos++] = b;
+                                output[pos++] = f;
+                                output[pos++] = z;
+                                output[pos++] = y;
+                                output[pos++] = x;
+                            #elif OV_INPUT_RANK == 6
+                                output[pos++] = b;
+                                output[pos++] = f;
+                                output[pos++] = w;
+                                output[pos++] = z;
+                                output[pos++] = y;
+                                output[pos++] = x;
+                            #else
+                                printf("unknown rank !\n");
+                            #endif
+                            }
+                        }
                     }
                 }
             }
         }
-    #else
-        printf("unknown rank ! Error!!!!!!!!!!!!\n");
-    #endif
+    }
 }
 
 #undef INPUT0_GET_INDEX1
