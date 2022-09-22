@@ -295,9 +295,9 @@ static void CreateLSTMSequenceOp(Program& p, const std::shared_ptr<ngraph::op::v
     cldnn::primitive_id concatStr = layerName + ":hiddenConcat";
     p.add_primitive(*op, cldnn::concatenation(concatStr, output_ids_offsets, 1));
 
-    p.add_primitive(*op, cldnn::reshape(layerName + ".out0", concatStr, tensor_from_dims(op->get_output_shape(0))), {layerName});
-    p.add_primitive(*op, cldnn::reshape(layerName + ".out1", hiddenStr, tensor_from_dims(op->get_output_shape(1))));
-    p.add_primitive(*op, cldnn::reshape(layerName + ".out2", cellStr, tensor_from_dims(op->get_output_shape(2))));
+    p.add_primitive(*op, cldnn::reshape(layerName + ".out0", concatStr, op->get_output_shape(0)), {layerName});
+    p.add_primitive(*op, cldnn::reshape(layerName + ".out1", hiddenStr, op->get_output_shape(1)));
+    p.add_primitive(*op, cldnn::reshape(layerName + ".out2", cellStr, op->get_output_shape(2)));
 }
 
 REGISTER_FACTORY_IMPL(v4, LSTMCell);
