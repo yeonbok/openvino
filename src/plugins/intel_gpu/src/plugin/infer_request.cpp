@@ -705,7 +705,7 @@ void InferRequest::copy_output_data(cldnn::memory::ptr src, Blob::Ptr dst) {
     case Precision::I8:   copyResultToOutputBlob<int8_t, int8_t>(src, dst, stream);  break;
     case Precision::U16:  copyResultToOutputBlob<float, uint16_t>(src, dst, stream);  break;
     case Precision::U32:  copyResultToOutputBlob<int32_t, uint32_t>(src, dst, stream);  break;
-    case Precision::U64:  copyResultToOutputBlob<int64_t, uint64_t>(src, dst, stream);  break;
+    case Precision::U64:  copyResultToOutputBlob<uint64_t, uint64_t>(src, dst, stream);  break;
     case Precision::U8:   copyResultToOutputBlob<uint8_t, uint8_t>(src, dst, stream);  break;
     case Precision::BOOL: copyResultToOutputBlob<int8_t, int8_t>(src, dst, stream);  break;
     default: IE_THROW(NotImplemented) << "The plugin does not support output " << dst->getTensorDesc().getPrecision() << " precision";
@@ -846,8 +846,12 @@ void InferRequest::allocate_outputs() {
             desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64 || desc.getPrecision() == Precision::I64 ||
             desc.getPrecision() == Precision::FP64) {
             TensorDesc device_blob_desc = desc;
-            if (desc.getPrecision() == Precision::U32 || desc.getPrecision() == Precision::U64 || desc.getPrecision() == Precision::I64)
+            if (desc.getPrecision() == Precision::U32)
                 device_blob_desc.setPrecision(Precision::I32);
+            else if (desc.getPrecision() == Precision::I64)
+                device_blob_desc.setPrecision(Precision::I64);
+            else if (desc.getPrecision() == Precision::U64)
+                device_blob_desc.setPrecision(Precision::U64);
             else
                 device_blob_desc.setPrecision(Precision::FP32);
 
@@ -962,13 +966,6 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
                     } else {
                         convertAndCopy<double, float>(inputBlob.get(), ptr.data());
                     }
-                } else if (prec == Precision::U64 || prec == Precision::I64) {
-                    cldnn::mem_lock<int64_t> ptr{ inputMem, stream };
-                    if (prec == Precision::U64) {
-                        convertAndCopy<uint64_t, int64_t>(inputBlob.get(), ptr.data());
-                    } else if (prec == Precision::I64) {
-                        convertAndCopy<int64_t, int64_t>(inputBlob.get(), ptr.data());
-                    }
                 } else if (prec == Precision::U32) {
                     cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
                     convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
@@ -1028,7 +1025,7 @@ InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngin
                                                          nullptr,
                                                          0,
                                                          0,
-                                                         RemoteBlobImpl::BlobType::BT_USM_HOST_INTERNAL);
+                                                         RemoteBlobImpl::BlobType::BT_USM_DEVICE_INTERNAL);
         getBlobImpl(blobPtr.get())->allocate();
         return blobPtr;
     } else {
