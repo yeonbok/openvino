@@ -504,13 +504,13 @@ std::vector<memory::ptr> primitive_inst::allocate_outputs() {
     for (size_t i = 0; i < get_node().get_outputs_count() ; ++i) {
         // TODO(taylor) : temporal solution for argmax. Future impl should take care of different layouts
         outputs.push_back(allocate_output(get_network().get_engine(), _network.get_memory_pool(), _node, *_impl_params,
-                          get_network_id(), _network.is_internal()));
+                          get_network_id(), _network.is_internal(), i));
     }
     return outputs;
 }
 
 memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, const program_node& _node, const kernel_impl_params& impl_params,
-                                            uint32_t net_id, bool is_internal) {
+                                            uint32_t net_id, bool is_internal, int32_t output_idx) {
     auto get_memory_from_pool = [&](engine& _engine, const layout& layout, const primitive_id id, std::set<primitive_id> dependencies,
             allocation_type type, bool reusable) {
         if (_engine.configuration().use_memory_pool)
@@ -518,7 +518,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
         return pool.get_memory(layout, type);
     };
 
-    auto layout = impl_params.output_layouts[0];
+    auto layout = impl_params.output_layouts[output_idx];
     OPENVINO_ASSERT(layout.is_static(), "[GPU] Can't allocate output for dynamic layout");
     auto device_mem_acc = [&](size_t a, const cldnn::layout& l) {
         // Input shape may be dynamic is some cases (shape_of). It means that output shape of node doesn't depend on input shape

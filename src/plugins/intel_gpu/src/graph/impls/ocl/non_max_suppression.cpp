@@ -43,11 +43,9 @@ protected:
             args.inputs.push_back(instance.soft_nms_sigma_mem());
         }
 
-        args.outputs = {instance.output_memory_ptr()};
-        if (instance.has_second_output())
-            args.inputs.push_back(instance.second_output_mem());
-        if (instance.has_third_output())
-            args.inputs.push_back(instance.third_output_mem());
+        for (size_t i = 0; i < instance.outputs_memory_count(); i++) {
+            args.outputs.push_back(instance.output_memory_ptr(i));
+        }
 
         return args;
     }
@@ -106,6 +104,7 @@ public:
             }
         }
 
+#if 0
         auto get_additional_output_node_idx = [&] (bool is_third) {
             size_t offset = 2;
             offset += arg.has_num_select_per_class();
@@ -126,6 +125,10 @@ public:
             params.inputs.push_back(convert_data_tensor(impl_param.input_layouts[get_additional_output_node_idx(true)]));
             params.has_third_output = true;
         }
+#else
+        params.inputs.push_back(convert_data_tensor(impl_param.output_layouts[1]));
+        params.inputs.push_back(convert_data_tensor(impl_param.output_layouts[2]));
+#endif
 
         params.sort_result_descending = primitive->sort_result_descending;
         params.box_encoding = primitive->center_point_box ? kernel_selector::BoxEncodingType::BOX_ENCODING_CENTER

@@ -22,6 +22,26 @@ layout non_max_suppression_inst::calc_output_layout(non_max_suppression_node con
     auto output_size = tensor(batch(desc->selected_indices_num), feature(3));
     return layout(output_type, impl_param.get_input_layout().format, output_size);
 }
+
+template<typename ShapeType>
+std::vector<layout> non_max_suppression_inst::calc_output_layouts(non_max_suppression_node const& /*node*/, const kernel_impl_params& impl_param) {
+    std::vector<layout> layouts;
+    auto desc = impl_param.typed_desc<non_max_suppression>();
+
+    for (int32_t i = 0; i < desc->num_outputs; ++i) {
+        auto output_type = desc->output_data_types[0] ? *desc->output_data_types[0] : data_types::i32;
+        auto output_size = tensor(batch(desc->selected_indices_num), feature(3));
+        if (i == 1) { // selected_scores
+            output_type = impl_param.get_input_layout(1).data_type;
+        }
+        if (i == 2) { // valid_outputs
+            output_size = tensor(batch(1));
+        }
+        layouts.push_back(layout(output_type, impl_param.get_input_layout().format, output_size));
+    }
+    return layouts;
+}
+
 #if 0 // TODO(taylor)
 std::string non_max_suppression_inst::to_string(non_max_suppression_node const& node) {
     auto desc = node.get_primitive();
