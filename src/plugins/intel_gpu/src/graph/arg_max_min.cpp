@@ -63,6 +63,61 @@ layout arg_max_min_inst::calc_output_layout(arg_max_min_node const& node, kernel
     sizes[desc->axis] = desc->top_k;
     return layout{output_data_type, format, tensor(format::get_default_format(input_layout.get_rank()), sizes)};
 }
+
+template<typename ShapeType>
+std::vector<layout> arg_max_min_inst::calc_output_layouts(arg_max_min_node const& /*node*/, const kernel_impl_params& impl_param) {
+    std::vector<layout> layouts;
+    auto desc = impl_param.typed_desc<arg_max_min>();
+
+    for (int32_t i = 0; i < desc->num_outputs; ++i) {
+        auto input_layout = impl_param.get_input_layout();
+        bool values_first = desc->values_first;
+        data_types output_data_type;
+        data_types output_idx_type;
+        output_data_type = desc->output_data_types.size() > 0 ? *desc->output_data_types[0] : input_layout.data_type;
+        output_idx_type = desc->output_data_types.size() > 1 ? *desc->output_data_types[1] : *(desc->output_data_types[0]);
+        auto size_check = [&](size_t tensor_size) {
+            if (desc->input.size() == 1 && values_first)
+                return;
+            size_t max_size;
+            // lowest integer not representable in floating point type = 2^(mantissa_bits + 1) + 1
+            // https://stackoverflow.com/questions/3793838/which-is-the-first-integer-that-an-ieee-754-float-is-incapable-of-representing-e
+            if (output_idx_type == data_types::f32) {
+                max_size = (1 << std::numeric_limits<float>::digits);
+            } else if (output_idx_type == data_types::f16) {
+                // mantissa_bits for fp16 = 10
+                max_size = (1 << 11);
+            } else if (output_idx_type == data_types::u8) {
+                max_size = std::numeric_limits<uint8_t>::max();
+            } else if (output_idx_type == data_types::i32) {
+                max_size = std::numeric_limits<int32_t>::max();
+            } else {
+                max_size = std::numeric_limits<size_t>::max();
+            }
+
+            if (tensor_size > max_size) {
+                CLDNN_ERROR_GREATER_THAN(desc->id,
+                                         "Reduced tensor size",
+                                         tensor_size,
+                                         "Maximum output data type value",
+                                         max_size,
+                                         "Current output data type is unable to hold maximum index of a tensor.");
+            }
+        };
+        for (auto dim : input_layout.get_dims()) {
+            size_check(dim);
+        }
+        auto format = input_layout.format;
+        auto sizes = input_layout.get_dims();
+        if (desc->axis >= static_cast<int64_t>(sizes.size()) || desc->axis < 0) {
+            IE_THROW() << "Incorrect arg_max_min axis.";
+        }
+        sizes[desc->axis] = desc->top_k;
+        layouts.push_back(layout(output_data_type, format, tensor(format::get_default_format(input_layout.get_rank()), sizes)));
+    }
+    return layouts;
+}
+
 #if 0 // TODO(taylor)
 std::string arg_max_min_inst::to_string(arg_max_min_node const& node) {
     auto desc = node.get_primitive();

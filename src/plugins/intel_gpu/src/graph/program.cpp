@@ -515,9 +515,10 @@ void program::pre_optimize_graph(bool is_internal) {
     bool output_size_handling_enabled = analyze_output_size_handling_need();
     for (auto& node : processing_order) {
         if (!node->is_type<data>()) {
-            for (size_t i = 0; i < node->get_outputs_count(); ++i) {
-                node->get_output_layout(true, i);
-            }
+            // for (size_t i = 0; i < node->get_outputs_count(); ++i) {
+            //     node->get_output_layout(true, i);
+            // }
+            node->get_output_layouts();
         }
     }
 
@@ -1532,7 +1533,7 @@ void program::set_layout_optimizer_attributes(layout_optimizer& lo) {
         lo.set_optimization_attribute(layout_optimizer::optimization_attributes_type::use_onednn_impls, 1);
 #endif
 }
-
+#if 0 // TODO(taylor)
 std::pair<int64_t, int64_t> program::get_estimated_device_mem_usage() {
     auto max_alloc_size = get_engine().get_device_info().max_alloc_mem_size;
     memory_pool pool(get_engine());
@@ -1603,7 +1604,7 @@ std::pair<int64_t, int64_t> program::get_estimated_device_mem_usage() {
 
     return std::make_pair(const_sum, get_engine().get_used_device_memory(allocation_type::usm_device));
 }
-
+#endif
 void program::remove_kernel(kernel_id id) {
     _kernels_cache->remove_kernel(id);
 }
