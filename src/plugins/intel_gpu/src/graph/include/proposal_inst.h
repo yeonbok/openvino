@@ -54,7 +54,7 @@ public:
 
     // indices of the image info parameters inside the image_info memory object (the object
     // is an integer array of these parameters)
-    enum image_info_size_index {
+enum image_info_size_index {
         image_info_height_index,
         image_info_width_index,
         image_info_depth_index,
@@ -63,6 +63,8 @@ public:
         image_info_scale_depth_index,
     };
 
+    template<typename ShapeType>
+    static std::vector<layout> calc_output_layouts(proposal_node const& /*node*/, const kernel_impl_params& impl_param);
     static layout calc_output_layout(proposal_node const& node, kernel_impl_params const& impl_param);
     static std::string to_string(proposal_node const& node);
 
