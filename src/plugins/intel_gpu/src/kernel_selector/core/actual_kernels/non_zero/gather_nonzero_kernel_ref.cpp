@@ -44,6 +44,8 @@ KernelsData GatherNonzeroKernelRef::GetKernelsData(const Params& params, const o
 
     auto entry_point = GetEntryPoint(kernelName, newParams.layerID, params, options);
     auto cldnn_jit = MakeBaseParamsJitConstants(newParams);
+    cldnn_jit.AddConstant(MakeJitConstant("TOTAL_DATA_SIZE", newParams.inputs[0].LogicalSize()));
+
     auto jit = CreateJit(kernelName, cldnn_jit, entry_point);
 
     auto& kernel = kd.kernels[0];
