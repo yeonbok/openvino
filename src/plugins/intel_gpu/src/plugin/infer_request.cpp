@@ -18,6 +18,7 @@
 #include <ie_algorithm.hpp>
 #include <ie_ngraph_utils.hpp>
 #include <transformations/utils/utils.hpp>
+#include <debug.h>
 
 using namespace InferenceEngine;
 
@@ -160,9 +161,41 @@ Blob::Ptr InferRequest::GetBlob(const std::string& name) {
     bool isDynamic = (node && node->get_output_partial_shape(0).is_dynamic());
 
     if (is_input) {
-        data = _inputs[name];
-        if (!isDynamic)
-            checkInputBlob(data, name, foundInput);
+        // ROI blob is returned only if it was set previously. Otherwise default blob is returned.
+        auto it = _preProcData.find(name);
+        if (it != _preProcData.end()) {
+            data = it->second->getRoiBlob();
+        } else {
+            data = _inputs[name];
+            if (!isDynamic) {
+                checkInputBlob(data, name, foundInput);
+            } else {
+                auto inputNode = modelInputsMap.find(name);
+                if (inputNode != modelInputsMap.end()) {
+                    if (!inputNode->second) {
+                        IE_THROW() << "Can't get blob with name: " << name << ", because has null pointer to input node";
+                    }
+
+                    const auto shape = inputNode->second->get_output_partial_shape(0);
+                    const bool isDynamic = shape.is_dynamic();
+                    InferenceEngine::SizeVector dims;
+                    if (isDynamic) {
+                        dims = InferenceEngine::SizeVector(shape.rank().get_length(), 0);
+                    } else {
+                        dims = shape.to_shape();
+                    }
+
+                    InferenceEngine::TensorDesc desc(InferenceEngine::details::convertPrecision(inputNode->second->get_output_element_type(0)),
+                            dims, InferenceEngine::TensorDesc::getLayoutByRank(dims.size()));
+
+                    _inputs[name] = make_blob_with_precision(desc);
+                    _inputs[name]->allocate();
+                } else {
+                    IE_THROW() << "Blob with name: " << name << " exists in CPU plugin graph, but absents in network inputs";
+                }
+            }
+            data = _inputs[name];
+        }
     } else {
         data = _outputs[name];
         if (isDynamic) {
@@ -796,11 +829,12 @@ void InferRequest::allocate_outputs() {
         std::string outputID = m_graph->MapOutputName(no.first);
         const cldnn::layout output_layout = m_graph->GetNetwork()->get_output_layout(outputID);
         TensorDesc desc = no.second->getTensorDesc();
+        if (output_layout.is_static())
+            desc.setDims(m_graph->GetOutputSize(no.first));
         // Due to some reason TensorDesc in InferRequest contains wrong dims
         // while ExecutableNetwork contains proper ones. Thus replace dims with once from exec network
         // Can be removed once 76176 is resolved.
-        if (output_layout.is_static())
-            desc.setDims(m_graph->GetOutputSize(no.first));
+        desc.setDims(m_graph->GetOutputSize(no.first));
 
         GPU_DEBUG_GET_INSTANCE(debug_config);
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
@@ -817,9 +851,12 @@ void InferRequest::allocate_outputs() {
             else
                 device_blob_desc.setPrecision(Precision::FP32);
 
-            _outputs[no.first] = create_host_blob(desc);
-            if (output_layout.is_static())
-                _deviceOutputs[no.first] = create_device_blob(device_blob_desc);
+            auto host_blob = create_host_blob(desc);
+            _outputs[no.first] = host_blob;
+            if (output_layout.is_static()) {
+                auto device_blob = create_device_blob(device_blob_desc);
+                _deviceOutputs[no.first] = device_blob;
+            }
         } else {
             _outputs[no.first] = create_host_blob(desc);
             if (output_layout.is_static()) {
@@ -827,7 +864,9 @@ void InferRequest::allocate_outputs() {
                     // For USM case we create host blob using custom USM host allocator
                     // and then create shared device blob on top of this buffer
                     auto host_blob = _outputs[no.first];
-                    _deviceOutputs[no.first] = create_shared_device_blob(desc, output_layout, host_blob->buffer().as<void*>());
+                    _outputs[no.first] = host_blob;
+                    _deviceOutputs[no.first] =
+                        create_shared_device_blob(desc, output_layout, host_blob->buffer().as<void*>());
                 } else {
                     _deviceOutputs[no.first] = create_device_blob(desc);
                 }
@@ -878,7 +917,6 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
         }
     }
     OPENVINO_ASSERT(_deviceInputs.find(inputName) != _deviceInputs.end(), "[GPU] Couldn't find device blob allocated for ", inputName, " input");
-    auto reqBlob = _deviceInputs.at(inputName)->as<gpu::ClBlob>();
     auto _nw_ptr = m_graph->GetNetwork();
     cldnn::primitive_id internalName = "parameter:" + inputName;
     const auto& prec = inputBlob->getTensorDesc().getPrecision();
@@ -899,9 +937,6 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
         case Precision::U32:
         case Precision::U64:
         case Precision::I64: {
-            if (isDynamic) {
-                SetBlob(inputName, inputBlob);
-            }
             auto impl = getBlobImpl(is_dev_input ? remote_ptr : _deviceInputs.at(inputName)->as<gpu::ClBlob>());
             if (!impl->is_allocated()) {
                 IE_THROW() << str_input_not_allocated;
@@ -993,7 +1028,7 @@ InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngin
                                                          nullptr,
                                                          0,
                                                          0,
-                                                         RemoteBlobImpl::BlobType::BT_USM_DEVICE_INTERNAL);
+                                                         RemoteBlobImpl::BlobType::BT_USM_HOST_INTERNAL);
         getBlobImpl(blobPtr.get())->allocate();
         return blobPtr;
     } else {
