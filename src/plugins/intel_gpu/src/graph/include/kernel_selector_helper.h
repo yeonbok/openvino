@@ -114,7 +114,7 @@ struct kernel_impl_params {
     std::vector<layout> input_layouts;
     layout output_layout;
     std::vector<tensor> input_offsets;
-    int32_t ov_input_rank = -1;
+    int32_t ov_input_rank = -1; // original rank
     std::vector<cldnn::fused_primitive_desc> fused_desc;
     std::vector<activation_func> fused_act_funcs;
     std::vector<activation_additional_params> activation_params;
@@ -150,7 +150,7 @@ struct kernel_impl_params {
                        , activation_params(_act_params)
                        , primary_input_idx(0) {
         if (!_in_layouts.empty() && !_in_layouts[0].get_partial_shape().rank().is_dynamic()) {
-            ov_input_rank = _in_layouts[0].get_partial_shape().rank().get_length();
+            ov_input_rank = _in_layouts[0].get_shape().size();
         }
     }
 
