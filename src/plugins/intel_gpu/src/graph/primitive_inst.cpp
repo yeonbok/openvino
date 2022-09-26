@@ -182,15 +182,11 @@ void primitive_inst::update_shape() {
         }
     }
 
-    if (!strided_slice_wa && !input_shape_changed && !_node.generates_dynamic_output() && _impl_params->output_layout.is_static()) {
-        GPU_DEBUG_IF(debug_config->verbose >= 4) {
-            GPU_DEBUG_COUT << "update_shape for " << id() << " was not needed" << std::endl;
-        }
+    if (!strided_slice_wa && !input_shape_changed && !_node.generates_dynamic_output() && _impl_params->output_layout.is_static())
         return;
-    }
 
     if (input_shape_changed)
-        set_shape_change(); // if input_layout is changed, the choose_impl should be called again
+        set_shape_change();
 
     std::vector<event::ptr> dependencies_events;
     for (auto& i : _node.get_shape_infer_dependencies()) {
