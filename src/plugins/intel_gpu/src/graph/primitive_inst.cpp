@@ -143,10 +143,7 @@ void primitive_inst::set_output_memory(memory::ptr mem_new, bool check) {
         return;
     }
 
-    auto& ol = _impl_params->output_layout;
-
-    if (ol.is_dynamic() && !mem_new->get_layout().is_dynamic())
-        ol = mem_new->get_layout();
+    auto ol = _node.get_output_layout();
 
     if (check)
         check_memory_to_set(*mem_new, ol);
