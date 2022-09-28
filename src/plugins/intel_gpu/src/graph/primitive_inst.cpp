@@ -326,12 +326,6 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     if (get_network().is_dynamic()) {
         static std::mutex m;
         {
-            for (auto p : _node.get_dependencies()) {
-                if (p->is_type<shape_of>()) {
-                    auto dep_event = _network.get_primitive_event(p->id());
-                    _network.get_stream().wait_for_events({dep_event});
-                }
-            }
             PRINT_TIME(update_shape());
             if (shape_changed() || !_impl) {
                 PRINT_TIME(update_impl());
