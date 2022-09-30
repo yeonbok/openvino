@@ -900,7 +900,6 @@ void network::allocate_primitive_instance(program_node const& node) {
     }
     if (std::dynamic_pointer_cast<assign_inst>(inst) || std::dynamic_pointer_cast<read_value_inst>(inst))
         _variable_state_primitives.push_back(inst);
-
     if (node.is_constant())
         transfer_memory_to_device(inst, node);
 }

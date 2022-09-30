@@ -21,16 +21,8 @@ layout concatenation_inst::calc_output_layout(concatenation_node const& node, ke
     auto desc = impl_param.typed_desc<concatenation>();
 
     auto input_layout = impl_param.get_input_layout();
-
-    for (auto& in_l : impl_param.input_layouts) {
-        if (in_l.is_dynamic()) {
-            return { layout{ov::PartialShape::dynamic(input_layout.get_partial_shape().size()),
-                    input_layout.data_type, input_layout.format.adjust_to_rank(input_layout.format, input_layout.get_partial_shape().size())} };
-        }
-    }
-
     auto output_format = input_layout.format;
-    auto result_sizes = input_layout.get_partial_shape();
+    auto result_sizes = input_layout.get_dims();
 
     auto output_dt = desc->output_data_type ? *desc->output_data_type : input_layout.data_type;
 
@@ -46,9 +38,9 @@ layout concatenation_inst::calc_output_layout(concatenation_node const& node, ke
         result_sizes[axis_index] += input_sizes[axis_index];
     }
 
-    //auto def_fmt = format::get_default_format(input_layout.get_rank());
+    auto def_fmt = format::get_default_format(input_layout.get_rank());
 
-    return layout{result_sizes, output_dt, output_format};
+    return layout {output_dt, output_format, tensor(def_fmt, result_sizes)};
 }
 
 template<typename ShapeType>
@@ -88,7 +80,10 @@ std::string concatenation_inst::to_string(concatenation_node const& node) {
 
     for (size_t i = 0; i < node.inputs_count(); ++i) {
         ss_inputs << node.input(i).id();
-        ss_inputs << ", count: " << node.input(i).get_output_layout().count();
+        if (node.input(i).get_output_layout().is_static())
+            ss_inputs << ", count: " << node.input(i).get_output_layout().count();
+        else
+            ss_inputs << ", count: " << "?";
         i != (node.inputs_count() - 1) ? ss_inputs << ", " : ss_inputs << "";
     }
 
