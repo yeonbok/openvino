@@ -64,6 +64,7 @@ public:
         OPENVINO_ASSERT(dependencies.size() == 2, "[GPU] Primitive ", id(), " has invalid number of depndencies");
         return get_dependency(index);
     }
+    std::vector<size_t> get_shape_infer_dependencies() const override { return {1}; }
 };
 
 using gather_nonzero_node = typed_program_node<gather_nonzero>;
@@ -77,9 +78,6 @@ public:
     static std::string to_string(gather_nonzero_node const& node);
 
     typed_primitive_inst(network& network, gather_nonzero_node const& node);
-
-private:
-    void update_shape() override;
 };
 
 using gather_nonzero_inst = typed_primitive_inst<gather_nonzero>;
