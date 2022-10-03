@@ -45,9 +45,6 @@ bool is_batch_after_spatial(const std::string order) {
 format::type get_preferred_format(const kernel_impl_params& impl_param) {
     auto input_layout = impl_param.get_input_layout();
 
-    if (input_layout.is_dynamic())
-        return format::bfyx;
-
     // for 3d output we have to chose bfyx format
     if (impl_param.typed_desc<fully_connected>()->input_size == 3)
         return format::bfyx;
@@ -107,12 +104,6 @@ layout fully_connected_inst::calc_output_layout(fully_connected_node const& node
 
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;
-    }
-
-    if (input_layout.is_dynamic()) {
-        auto rank = input_layout.get_rank();
-        format output_format = format::get_default_format(rank);
-        return layout(ov::PartialShape::dynamic(rank), output_type, output_format);
     }
 
     auto reshape_to_2d = [](const ov::PartialShape& shape, int64_t feature) {
@@ -194,43 +185,5 @@ std::string fully_connected_inst::to_string(fully_connected_node const& node) {
 
 fully_connected_inst::typed_primitive_inst(network& network, fully_connected_node const& node)
     : parent(network, node) { }
-
-// TODO: looks like we can move this logic to primitive_inst class
-// and call that based in some virtual method result which would return bool
-// I.e.
-// virual bool is_weightable_layer() { return false; }
-// override this for fc/conv/etc
-// and in common primitive_execute we call
-// if (is_weightable_layer()) update_weights();
-event::ptr fully_connected_inst::update_weights() {
-    if (!_impl)
-        return nullptr;
-
-    auto& weights_params = _impl->_weights_reorder_params;
-    layout current_layout = node.get_dependency(1).get_output_layout();
-
-    bool requires_reorder = weights_params.engine != kernel_selector::GenericKernelParams::Engine::NONE &&
-                            (!reordered_weights || reordered_weights->get_layout() != from_weights_tensor(weights_params.dest));
-    if (requires_reorder) {
-        layout expected_layout = from_weights_tensor(weights_params.dest);
-        auto& program = _node.get_program();
-        auto& engine = _network.get_engine();
-        auto& stream = _network.get_stream();
-        auto _kernel_id = program.add_kernel(weights_params.clKernel->code.kernelString);
-        program.compile();
-        auto kernel = program.get_kernel(_kernel_id);
-
-        reordered_weights = engine.allocate_memory(expected_layout, allocation_type::usm_device);
-
-        kernel_arguments_data args;
-        args.inputs.push_back(dep_memory_ptr(1));
-        args.outputs.push_back(reordered_weights);
-        stream.set_arguments(*kernel, weights_params.clKernel->params, args);
-        auto out_ev = stream.enqueue_kernel(*kernel, weights_params.clKernel->params, args, {}, true);
-        stream.wait_for_events({out_ev});
-        return out_ev;
-    }
-    return nullptr;
-}
 
 }  // namespace cldnn
