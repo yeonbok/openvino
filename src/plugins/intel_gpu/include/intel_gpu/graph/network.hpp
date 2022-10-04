@@ -11,6 +11,7 @@
 #include "intel_gpu/runtime/engine.hpp"
 #include "intel_gpu/runtime/event.hpp"
 #include "intel_gpu/runtime/stream.hpp"
+#include "intel_gpu/runtime/lru_cache.hpp"
 
 #include <map>
 #include <vector>
@@ -215,6 +216,13 @@ public:
     /// Returns memory state @p variable_id of stateful network
     VariableState& get_variable_memory(const std::string &variable_id);
 
+    /// Add APIs for handling kernels_cache
+    void compile();
+    kernel_id add_kernel(const std::shared_ptr<kernel_string>& kernel_sring);
+    kernel::ptr get_kernel(kernel_id id);
+    void remove_kernel(kernel_id id);
+    kernels_cache& get_kernels_cache() const;
+
 private:
     using output_chains_map = std::map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>>;
     uint32_t net_id = 0;
@@ -247,5 +255,7 @@ private:
     void check_names();
     void add_default_output_chains();
     output_chains_map::iterator add_output_chain(std::shared_ptr<primitive_inst>& p_inst);
+
+    std::unique_ptr<kernels_cache> _kernels_cache;
 };
 }  // namespace cldnn

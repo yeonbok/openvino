@@ -30,6 +30,7 @@
 #include "kernel_selector_helper.h"
 #include "program_helpers.h"
 #include "runtime/cldnn_itt.hpp"
+#include "kernels_cache.hpp"
 
 #include <algorithm>
 #include <string>
@@ -320,6 +321,9 @@ network::network(program::ptr program, stream::ptr stream, bool is_internal, boo
     GPU_DEBUG_IF(debug_config->after_proc.size() != 0) {
         wait_for_the_turn();
     }
+
+    _kernels_cache = std::unique_ptr<kernels_cache>(new kernels_cache(program->get_engine(), program->get_id(),
+                                                                      kernel_selector::KernelBase::get_db().get_batch_header_str()));
 
     allocate_primitives();
     configure_primitives_second_output();
@@ -1038,6 +1042,26 @@ void network::assign_variables_memories(variables_states_map &&variables_memorie
                 CLDNN_ERROR_MESSAGE(memory_state_primitive->variable_id(), "Memory state not found");
         }
     }
+}
+
+void network::compile() {
+    _kernels_cache->build_all();
+}
+
+kernel_id network::add_kernel(const std::shared_ptr<kernel_string>& kernelString) {
+    return _kernels_cache->set_kernel_source(kernelString, false);
+}
+
+kernel::ptr network::get_kernel(kernel_id id) {
+    return _kernels_cache->get_kernel(id);
+}
+
+void network::remove_kernel(kernel_id id) {
+    _kernels_cache->remove_kernel(id);
+}
+
+kernels_cache& network::get_kernels_cache() const {
+    return *_kernels_cache;
 }
 
 }  // namespace cldnn

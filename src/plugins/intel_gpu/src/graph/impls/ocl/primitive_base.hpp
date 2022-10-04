@@ -196,6 +196,14 @@ protected:
         bool group_events = (all_events.size() > 1);
         return aggregate_events(all_events, stream, group_events);
     }
+
+    void update_kernels(kernels_cache& kernels_cache) override {
+        _kernel_ids.clear();
+        _kernel_ids.reserve(_kernel_data.kernels.size());
+        for (size_t i = 0; i < _kernel_data.kernels.size(); ++i) {
+            _kernel_ids.emplace_back(kernels_cache.set_kernel_source(_kernel_data.kernels[i].code.kernelString, false));
+        }
+    }
 };
 
 }  // namespace ocl

@@ -299,21 +299,22 @@ void primitive_inst::update_impl() {
         };
 
         auto layout_key = get_layout_key();
-        auto& cache = _network.get_program()->get_implementations_cache();
+        auto& cache = get_network().get_program()->get_implementations_cache();
         if (cache.has(layout_key)) {
             _impl = cache.get(layout_key)->clone();
             GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
         } else {
             auto lru = cache.get_lru_element();
             _impl = _node.type()->choose_impl(_node, *_impl_params);
+            _impl->update_kernels(get_network().get_kernels_cache());
+            get_network().compile();
+            _impl->init_kernels(get_network().get_kernels_cache());
             bool lru_popped = cache.add(layout_key, _impl->clone());
             if (lru_popped) {
                 for (auto& id : lru->get_kernel_ids())
-                    _network.get_program()->remove_kernel(id);
+                    get_network().remove_kernel(id);
             }
-            _network.get_program()->compile();
         }
-        _impl->init_kernels(_network.get_program()->get_kernels_cache());
 
         reset_shape_change();
         GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -579,14 +580,14 @@ event::ptr primitive_inst::update_weights() {
                 GPU_DEBUG_IF(debug_config->verbose >= 4) {
                     GPU_DEBUG_COUT << id() << ": reorder weights from " << original_layout << "\nto " << expected_layout << std::endl;
                 }
-                auto _kernel_id = program.add_kernel(weights_params.clKernel->code.kernelString);
-                program.compile();
-                kernel = program.get_kernel(_kernel_id);
+                auto _kernel_id = get_network().add_kernel(weights_params.clKernel->code.kernelString);
+                get_network().compile();
+                kernel = get_network().get_kernel(_kernel_id);
                 cache.add(layout_key, kernel);
             }
         }
 
-        auto& stream = _network.get_stream();
+        auto& stream = get_network().get_stream();
 
         bool can_reuse = _impl_params->reordered_weights != nullptr && _impl_params->reordered_weights->size() <= expected_layout.bytes_count();
         if (can_reuse) {
