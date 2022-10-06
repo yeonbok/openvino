@@ -14,6 +14,15 @@ namespace cldnn {
 /// @addtogroup cpp_primitives Primitives
 /// @{
 
+/// @brief Select original ngraph op mode for the @ref crop layer.
+enum class crop_ngraph_op_mode : int32_t {
+    none,
+    /// @brief ngraph split op.
+    split,
+    /// @brief ngraph variadic split op.
+    variadic_split
+};
+
 /// @brief Marker type indicating that instead of reference input size left, top,
 ///        right and bottom borders (to cut out) should be specified.
 ///
@@ -52,18 +61,20 @@ struct crop : public primitive_base<crop> {
          const tensor& reference_input,
          const tensor& offsets,
          const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding), reference_input(reference_input), offsets(offsets) {}
+        : primitive_base(id, {input}, output_padding), reference_input(reference_input),
+            offsets(offsets), op_mode(crop_ngraph_op_mode::none) {}
 
-    crop(const primitive_id& id,
-         const std::vector<primitive_id>& inputs,
-         const tensor& offsets,
-         const padding& output_padding = padding(),
-         const int output_idx = 0,
-         const int split_size = 0,
-         const optional_data_type output_data_type = optional_data_type(),
-         std::shared_ptr<ov::Node> orig_op = nullptr)
-        : primitive_base(id, inputs, output_padding, output_data_type, orig_op), reference_input(tensor{1, 1, 1, 1}), offsets(offsets),
-          output_idx(output_idx), split_size(split_size) {}
+    // crop(const primitive_id& id,
+    //      const std::vector<primitive_id>& inputs,
+    //      const tensor& offsets,
+    //      const padding& output_padding = padding(),
+    //      const int output_idx = 0,
+    //      const int num_splits = 1,
+    //      const optional_data_type output_data_type = optional_data_type(),
+    //      std::shared_ptr<ov::Node> orig_op = nullptr)
+    //     : primitive_base(id, inputs, output_padding, output_data_type, orig_op), reference_input(tensor{1, 1, 1, 1}), offsets(offsets),
+    //       output_idx(output_idx), num_splits(num_splits) {}
+
     /// @brief Constructs crop primitive (borders variant).
     ///
     /// @details Allows to specify borders from each side that should be cut out
@@ -82,7 +93,8 @@ struct crop : public primitive_base<crop> {
          const tensor& rb_borders,
          const crop_borders_t,
          const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding), reference_input(rb_borders.negate()), offsets(lt_borders) {}
+        : primitive_base(id, {input}, output_padding), reference_input(rb_borders.negate()),
+            offsets(lt_borders), op_mode(crop_ngraph_op_mode::none) {}
 
     /// @brief Constructs crop primitive (symmetric borders variant).
     ///
@@ -99,14 +111,37 @@ struct crop : public primitive_base<crop> {
          const tensor& xy_borders,
          const crop_borders_t,
          const padding& output_padding = padding())
-        : primitive_base(id, {input}, output_padding), reference_input(xy_borders.negate()), offsets(xy_borders) {}
+        : primitive_base(id, {input}, output_padding), reference_input(xy_borders.negate()),
+            offsets(xy_borders), op_mode(crop_ngraph_op_mode::none) {}
+
+    /// @brief Constructs crop primitive.
+    /// @param id This primitive id.
+    /// @param inputs Input primitive id vector.
+    /// @param reference_input Reference input tensor with the required dimensions.
+    /// @param offsets Input offsets.
+    /// @param output_idx Output data index of splited output.
+    /// @param num_splits The number of pieces that the data tensor should be split into.
+    crop(const primitive_id& id,
+         const std::vector<primitive_id>& inputs,
+         const tensor& reference_input,
+         const tensor& offsets,
+         const crop_ngraph_op_mode op_mode,
+         const int output_idx,
+         const size_t num_splits = 1,
+         const padding& output_padding = padding())
+        : primitive_base(id, inputs, output_padding), reference_input(reference_input),
+            offsets(offsets), output_idx(output_idx), num_splits(num_splits), op_mode(op_mode) {}
 
     /// @brief Reference input tensor with the required dimensions.
     tensor reference_input;
     /// @brief Input offsets.
     tensor offsets;
+    /// @brief data index of splited output.
     int output_idx = 0;
-    int split_size = 1;
+    /// @brief num_splits which Split has number of split as property
+    size_t num_splits = 1;
+    /// @brief original ngraph operation type
+    crop_ngraph_op_mode op_mode;
 };
 /// @}
 /// @}

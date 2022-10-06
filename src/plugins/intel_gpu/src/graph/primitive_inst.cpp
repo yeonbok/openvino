@@ -169,6 +169,7 @@ void primitive_inst::update_shape() {
     // We assume that tensor ranks are static, thus shape_of doesn't need to update anything even if input shape is dynamic
     if (_node.is_type<shape_of>() && !input_shape_changed)
         return;
+
     // Even though the predecessors' shapes are not changed, the output shape might be udpated by the mem_dep
     auto memory_deps = _node.get_const_memory_deps();
     for (auto& i : _node.get_shape_infer_dependencies()) {
@@ -217,6 +218,7 @@ void primitive_inst::update_shape() {
         _network.get_stream().wait_for_events(dependencies_events);
 
     _impl_params->memory_deps = memory_deps;
+
     auto new_layouts = _node.type()->calc_output_layouts(_node, *_impl_params);
 
     int output_idx = _node.is_type<crop>() ? _impl_params->typed_desc<crop>()->output_idx : 0;
