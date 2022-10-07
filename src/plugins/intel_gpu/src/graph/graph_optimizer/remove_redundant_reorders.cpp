@@ -37,6 +37,8 @@ void remove_redundant_reorders::run(program& p) {
 
         node.set_unique_id();
         auto new_impl = node.type()->choose_impl(node);
+        if (new_impl)
+            new_impl->add_kernels(p.get_kernels_cache());
         node.set_selected_impl(std::move(new_impl));
     };
 

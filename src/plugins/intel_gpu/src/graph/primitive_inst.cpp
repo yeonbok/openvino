@@ -304,16 +304,11 @@ void primitive_inst::update_impl() {
             _impl = cache.get(layout_key)->clone();
             GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
         } else {
-            auto lru = cache.get_lru_element();
             _impl = _node.type()->choose_impl(_node, *_impl_params);
-            _impl->update_kernels(get_network().get_kernels_cache());
+            _impl->add_kernels(get_network().get_kernels_cache());
             get_network().compile();
             _impl->init_kernels(get_network().get_kernels_cache());
-            bool lru_popped = cache.add(layout_key, _impl->clone());
-            if (lru_popped) {
-                for (auto& id : lru->get_kernel_ids())
-                    get_network().remove_kernel(id);
-            }
+            get_network().get_kernels_cache().reset();
         }
 
         reset_shape_change();
@@ -556,7 +551,6 @@ event::ptr primitive_inst::update_weights() {
         auto original_layout = original_weights_memory->get_layout();
         layout expected_layout = from_weights_tensor(weights_params.dest);
 
-        auto& program = _node.get_program();
         auto& engine = _network.get_engine();
 
         auto get_layout_key = [&]() -> std::string {
@@ -569,7 +563,7 @@ event::ptr primitive_inst::update_weights() {
         cldnn::kernel::ptr kernel = nullptr;
         auto layout_key = get_layout_key();
         if (layout_key != "") {
-            auto& cache = program.get_in_mem_kernels_cache();
+            auto& cache = get_network().get_program()->get_in_mem_kernels_cache();
             if (cache.has(layout_key)) {
                 GPU_DEBUG_IF(debug_config->verbose >= 4) {
                     GPU_DEBUG_COUT << id() << ": reorder weights (cached) from " << original_layout << "\nto " << expected_layout << std::endl;
