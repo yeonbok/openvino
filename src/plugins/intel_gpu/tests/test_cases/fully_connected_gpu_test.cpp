@@ -1042,6 +1042,33 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(fully_connected_random_test_f16, basic) {
     run_test();
 }
+INSTANTIATE_TEST_SUITE_P(
+    taylor_127,
+    fully_connected_random_test_f16,
+    ::testing::Combine(
+        // Batch 1 is disabled due to sporadic failures in `fully_connected_gpu_bs_f_bsv16_b1`
+        // - there are nans in output.
+        ::testing::Values(127), // batch_num
+        ::testing::Values(shared_dims{1024, 1, 1}), // f, x, y
+        ::testing::Values(512), // out_f
+        ::testing::Values(format::bfyx),
+        ::testing::Values(format::bfyx),
+        ::testing::Values("fully_connected_gpu_bf_tiled"))
+);
+
+INSTANTIATE_TEST_SUITE_P(
+    taylor_128,
+    fully_connected_random_test_f16,
+    ::testing::Combine(
+        // Batch 1 is disabled due to sporadic failures in `fully_connected_gpu_bs_f_bsv16_b1`
+        // - there are nans in output.
+        ::testing::Values(128), // batch_num
+        ::testing::Values(shared_dims{1024, 1, 1}), // f, x, y
+        ::testing::Values(512), // out_f
+        ::testing::Values(format::bfyx),
+        ::testing::Values(format::bfyx),
+        ::testing::Values("fully_connected_gpu_bf_tiled"))
+);
 
 INSTANTIATE_TEST_SUITE_P(
     smoke_bfyx_b2,
