@@ -258,6 +258,12 @@ void primitive_inst::realloc_if_needed() {
     if (_node.is_type<input_layout>())
         return;
 
+    if (_node.is_type<fully_connected>()) {
+        auto orig_tensor = actual_layout.get_tensor();
+        orig_tensor.feature[0] = kernel_selector::Align(orig_tensor.feature[0], 16);
+        actual_layout.set_tensor(orig_tensor);
+    }
+
     bool can_reuse_buffer = _output && actual_layout.count() <= max_output_layout_size;
 
     if (can_reuse_buffer) {
@@ -275,24 +281,35 @@ void primitive_inst::realloc_if_needed() {
         max_output_layout_size = _output->get_layout().count();
     }
 }
-
 void primitive_inst::update_impl() {
     GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::update_implementation);
     auto prev_impl_str =  _impl != nullptr ? _impl->get_kernel_name() : "nullptr";
     if (!_node.is_type<data>() && !(_node.is_type<mutable_data>() && _node.get_dependencies().empty())) {
         auto get_layout_key = [&]() -> size_t {
             size_t seed = 0;
+            auto tmp_impl_param = *_impl_params;
+            //if (_impl && _node.is_type<fully_connected>() && _impl->get_kernel_name() == "fully_connected_gpu_bf_tiled") {
+            // taylor trial
+            if (_node.is_type<fully_connected>()) {
+                auto orig_tensor = tmp_impl_param.input_layouts[0].get_tensor();
+                orig_tensor.feature[0] = kernel_selector::Align(orig_tensor.feature[0], 16);
+                tmp_impl_param.input_layouts[0].set_tensor(orig_tensor);
+
+                orig_tensor = tmp_impl_param.output_layout.get_tensor();
+                orig_tensor.feature[0] = kernel_selector::Align(orig_tensor.feature[0], 16);
+                tmp_impl_param.output_layout.set_tensor(orig_tensor);
+            }
             auto& id = _impl_params->desc->id;
             for (size_t i = 0; i < id.size(); i++) {
                 seed = hash_combine(seed, id[i]);
             }
             seed = hash_combine(seed, _node.get_unique_id());
-            for (auto& layout : _impl_params->input_layouts) {
+            for (auto& layout : tmp_impl_param.input_layouts) {
                 for (auto& d : layout.get_shape()) {
                     seed = hash_combine(seed, d);
                 }
             }
-            for (auto& d : _impl_params->output_layout.get_shape()) {
+            for (auto& d : tmp_impl_param.output_layout.get_shape()) {
                 seed = hash_combine(seed, d);
             }
             return seed;
@@ -306,6 +323,7 @@ void primitive_inst::update_impl() {
         } else {
             auto lru = cache.get_lru_element();
             _impl = _node.type()->choose_impl(_node, *_impl_params);
+
             bool lru_popped = cache.add(layout_key, _impl->clone());
             if (lru_popped) {
                 for (auto& id : lru->get_kernel_ids())
@@ -624,7 +642,14 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
         return pool.get_memory(layout, type);
     };
 
-    auto layout = impl_params.output_layout;
+    auto orig_layout = impl_params.output_layout;
+    auto layout = orig_layout;
+    if (_node.get_selected_impl() && _node.is_type<fully_connected>() && (_node.get_selected_impl()->get_kernel_name() == "fully_connected_gpu_bf_tiled")) {
+        const auto orig_tensor = layout.get_tensor();
+        cldnn::tensor new_shape = orig_tensor;
+        new_shape.batch[0] = kernel_selector::Align(orig_tensor.batch[0], 16);
+        layout.set_tensor(new_shape);
+    }
     OPENVINO_ASSERT(layout.is_static(), "[GPU] Can't allocate output for dynamic layout");
     auto device_mem_acc = [&](size_t a, const cldnn::layout& l) {
         // Input shape may be dynamic is some cases (shape_of). It means that output shape of node doesn't depend on input shape

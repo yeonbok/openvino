@@ -273,7 +273,6 @@ KernelsPriority FullyConnected_bf_tiled::GetKernelsPriority(const Params& params
 
 JitConstants FullyConnected_bf_tiled::GetJitConstants(const fully_connected_params& params, const DispatchData& dispatchData) const {
     JitConstants jit = Parent::GetJitConstants(params, dispatchData);
-
     jit.AddConstant(MakeJitConstant("SIMD", simd));
     jit.AddConstant(MakeJitConstant("TILE_B", dispatchData.tile_m));
     jit.AddConstant(MakeJitConstant("TILE_OFM", dispatchData.tile_n));
@@ -374,7 +373,19 @@ KernelsData FullyConnected_bf_tiled::GetKernelsDataForAutoTune(const Params& par
 
 KernelsData FullyConnected_bf_tiled::GetKernelsData(const Params& params, const optional_params& optParams) const {
     KernelsData res = {};
-    auto& fc_params = static_cast<const fully_connected_params&>(params);
+
+    auto& fc_params = const_cast<fully_connected_params&>(static_cast<const fully_connected_params&>(params));
+    auto input_shape = fc_params.inputs[0];
+    auto weight_shape = fc_params.weights;
+    auto output_shape = fc_params.outputs[0];
+    fc_params.inputs[0] = DataTensor({input_shape.X().v, input_shape.Y().v, input_shape.Feature().v, Align(input_shape.Batch().v, 16)},
+                                       input_shape.GetDType(), input_shape.GetLayout());
+//    fc_params.weights = WeightsTensor({weight_shape.X().v, weight_shape.Y().v, weight_shape.IFM().v, Align(weight_shape.OFM().v, 16)},
+//                                       weight_shape.GetDType(), weight_shape.GetLayout());
+
+    fc_params.outputs[0] = DataTensor({output_shape.Feature().v, Align(output_shape.Batch().v, 16)},
+                                       output_shape.GetDType(), output_shape.GetLayout());
+
     auto tparams = GetAutoTuneParams(fc_params);
 
     KernelsData kds = GetTunedKernelsDataByIndex(params, optParams, -1);
