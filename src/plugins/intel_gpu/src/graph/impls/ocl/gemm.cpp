@@ -91,15 +91,7 @@ public:
                         output_shape[j] = std::max(output_shape[j], input_shape[j]);
                     }
                 }
-#if 0
-                layout.size = ov::PartialShape(output_shape);
-                auto get_spatial_idx = [](cldnn::format format, size_t spatial_idx) {
-                    const size_t idx = (format::is_grouped(format) ? 3 : 2) + (format.spatial_num() - 1 - spatial_idx);
-                    return idx;
-                };
-                layout.size[get_spatial_idx(layout.format, 0)] = N;
-                layout.size[get_spatial_idx(layout.format, 1)] = M;
-#endif
+
                 auto get_spatial_idx = [](cldnn::format format, size_t spatial_idx) {
                     const size_t idx = (format::is_grouped(format) ? 3 : 2) + (format.spatial_num() - 1 - spatial_idx);
                     return idx;
