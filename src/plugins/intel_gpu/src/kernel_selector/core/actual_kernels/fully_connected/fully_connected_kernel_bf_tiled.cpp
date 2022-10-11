@@ -378,12 +378,17 @@ KernelsData FullyConnected_bf_tiled::GetKernelsData(const Params& params, const 
     auto input_shape = fc_params.inputs[0];
     auto weight_shape = fc_params.weights;
     auto output_shape = fc_params.outputs[0];
+    #if 0
     fc_params.inputs[0] = DataTensor({input_shape.X().v, input_shape.Y().v, input_shape.Feature().v, Align(input_shape.Batch().v, 16)},
                                        input_shape.GetDType(), input_shape.GetLayout());
-//    fc_params.weights = WeightsTensor({weight_shape.X().v, weight_shape.Y().v, weight_shape.IFM().v, Align(weight_shape.OFM().v, 16)},
-//                                       weight_shape.GetDType(), weight_shape.GetLayout());
 
     fc_params.outputs[0] = DataTensor({output_shape.Feature().v, Align(output_shape.Batch().v, 16)},
+                                       output_shape.GetDType(), output_shape.GetLayout());
+    #endif
+    fc_params.inputs[0] = DataTensor({input_shape.X().v, input_shape.Y().v, Align(input_shape.Feature().v, 16), input_shape.Batch().v},
+                                       input_shape.GetDType(), input_shape.GetLayout());
+
+    fc_params.outputs[0] = DataTensor({output_shape.X().v, output_shape.Y().v, Align(output_shape.Feature().v, 16), output_shape.Batch().v},
                                        output_shape.GetDType(), output_shape.GetLayout());
 
     auto tparams = GetAutoTuneParams(fc_params);
