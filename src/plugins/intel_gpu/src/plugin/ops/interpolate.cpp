@@ -23,9 +23,15 @@ static void CreateInterpolateOp(Program& p, const std::shared_ptr<ngraph::op::v4
     static const size_t AXES_INDEX = 3;
 
     auto attrs = op->get_attrs();
-    auto inputRank = op->get_input_shape(0).size();
-    auto outShape = op->get_output_shape(0);
-    auto outputPattern = std::vector<int64_t>(outShape.begin(), outShape.end());
+    auto inputRank = op->get_input_partial_shape(0).size();
+    //auto outShape = op->get_output_partial_shape(0);
+    auto outShape = op->get_input_partial_shape(1);
+    auto outputPatternDims = std::vector<ov::Dimension>(outShape.begin(), outShape.end());
+    std::vector<int64_t> outputPattern;
+    for (size_t i = 0; i < outputPatternDims.size(); ++i) {
+        outputPattern.push_back(outputPatternDims[i].get_length());
+    }
+
 
     auto scales_constant = std::dynamic_pointer_cast<ngraph::op::Constant>(op->get_input_node_shared_ptr(SCALES_INDEX));
     if (!scales_constant) {

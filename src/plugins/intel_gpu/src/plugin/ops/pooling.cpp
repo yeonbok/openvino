@@ -35,9 +35,9 @@ static void CreateAvgPoolOp(Program& p, const std::shared_ptr<ngraph::op::v1::Av
                                    op->get_exclude_pad() ? cldnn::pooling_mode::average_no_padding : cldnn::pooling_mode::average,
                                    kernel,
                                    strides,
-                                   pads_begin,
-                                   tensor_from_dims(op->get_output_shape(0)),
-                                   cldnn::element_type_to_data_type(op->get_output_element_type(0)));
+                                   pads_begin);
+                                   //tensor_from_dims(op->get_output_shape(0)),
+                                   //cldnn::element_type_to_data_type(op->get_output_element_type(0)));
     poolPrim.pad_end = pads_end;
     p.add_primitive(*op, poolPrim);
 }
@@ -63,9 +63,9 @@ static void CreateMaxPoolOp(Program& p, const std::shared_ptr<ngraph::op::v1::Ma
                                    cldnn::pooling_mode::max,
                                    kernel,
                                    strides,
-                                   pads_begin,
-                                   tensor_from_dims(op->get_output_shape(0)),
-                                   cldnn::element_type_to_data_type(op->get_output_element_type(0)));
+                                   pads_begin);
+                                   //tensor_from_dims(op->get_output_shape(0)),
+                                   //cldnn::element_type_to_data_type(op->get_output_element_type(0)));
     poolPrim.pad_end = pads_end;
     p.add_primitive(*op, poolPrim);
 }

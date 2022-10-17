@@ -31,9 +31,12 @@ static void CreateTopKOp(Program& p, const std::shared_ptr<ngraph::op::v1::TopK>
             mutable_precision = ngraph::element::i32;
         }
 
+        //cldnn::layout mutableLayout = cldnn::layout(cldnn::element_type_to_data_type(mutable_precision),
+//                                                    cldnn::format::get_default_format(op->get_output_shape(1).size()),
+                                                    //tensor_from_dims(op->get_output_shape(1)));
         cldnn::layout mutableLayout = cldnn::layout(cldnn::element_type_to_data_type(mutable_precision),
-                                                    cldnn::format::get_default_format(op->get_output_shape(1).size()),
-                                                    tensor_from_dims(op->get_output_shape(1)));
+                                                    cldnn::format::get_default_format(4),
+                                                    tensor_from_dims({1, 1, 1, 1}));
 
         GPU_DEBUG_GET_INSTANCE(debug_config);
         GPU_DEBUG_IF(debug_config->verbose >= 2) {
