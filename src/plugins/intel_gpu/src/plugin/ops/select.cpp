@@ -73,14 +73,12 @@ static void CreateSelectOp(Program& p, const std::shared_ptr<ngraph::op::v1::Sel
         }
     }
 
-    std::string bc_string = broadcast_type.m_type == ngraph::op::AutoBroadcastType::NUMPY ? "numpy" : "none";
-
     auto selectPrim = cldnn::select(layerName,
                                     inputPrimitives[0],
                                     inputPrimitives[1],
                                     inputPrimitives[2],
-                                    cldnn::padding(),
-                                    bc_string);
+                                    broadcast_type,
+                                    cldnn::padding());
 
     p.add_primitive(*op, selectPrim);
 }
