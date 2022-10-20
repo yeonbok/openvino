@@ -182,7 +182,6 @@ enum class ActivationFunction {
 enum class PoolType {
     MAX,
     AVG,
-    MAX_WITH_ARGMAX,
     BILINEAR,
     DEFORMABLE_BILINEAR
 };
