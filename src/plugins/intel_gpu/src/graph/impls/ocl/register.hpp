@@ -41,7 +41,6 @@
 #include "intel_gpu/primitives/lstm_dynamic.hpp"
 #include "intel_gpu/primitives/lstm_dynamic_input.hpp"
 #include "intel_gpu/primitives/lstm_dynamic_timeloop.hpp"
-#include "intel_gpu/primitives/max_unpooling.hpp"
 #include "intel_gpu/primitives/mutable_data.hpp"
 #include "intel_gpu/primitives/mvn.hpp"
 #include "intel_gpu/primitives/non_max_suppression.hpp"
@@ -124,7 +123,6 @@ REGISTER_OCL(generate_proposals);
 REGISTER_OCL(lrn);
 REGISTER_OCL(lstm_gemm);
 REGISTER_OCL(lstm_elt);
-REGISTER_OCL(max_unpooling);
 REGISTER_OCL(mutable_data);
 REGISTER_OCL(mvn);
 REGISTER_OCL(non_max_suppression);
