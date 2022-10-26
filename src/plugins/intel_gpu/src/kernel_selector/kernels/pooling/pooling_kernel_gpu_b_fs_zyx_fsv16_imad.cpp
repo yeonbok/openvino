@@ -47,28 +47,16 @@ PoolingKernelBase::DispatchData PoolingKernelGPU_b_fs_zyx_fsv16_imad::SetDefault
     auto f = out.Feature().v;
     auto b = out.Batch().v;
 
-    if (IsGlobalPooling(params)) {
-        y = params.inputs[0].Y().v;
-        z = params.inputs[0].Z().v;
-        dispatchData.gws[0] = b;
-        dispatchData.gws[1] = Align(std::min(y * z, params.engineInfo.maxWorkGroupSize), FEATURE_SLICE_SIZE);
-        // we got b_fs_yx_fsv16 format, we process 16 features per workitem
-        dispatchData.gws[2] = CeilDiv(f, FEATURE_SLICE_SIZE);
+    dispatchData.gws[0] = x;
+    dispatchData.gws[1] = y * z;
+    // we got b_fs_yx_fsv16 format, we process 16 features per workitem
+    dispatchData.gws[2] = CeilDiv(f, FEATURE_SLICE_SIZE) * b;
 
-        dispatchData.lws[0] = 1;
-        dispatchData.lws[1] = dispatchData.gws[1];
-        dispatchData.lws[2] = 1;
-    } else {
-        dispatchData.gws[0] = x;
-        dispatchData.gws[1] = y * z;
-        // we got b_fs_yx_fsv16 format, we process 16 features per workitem
-        dispatchData.gws[2] = CeilDiv(f, FEATURE_SLICE_SIZE) * b;
+    dims_by_gws = {{Tensor::DataChannelName::X},
+                   {Tensor::DataChannelName::Y, Tensor::DataChannelName::Z},
+                   {Tensor::DataChannelName::FEATURE, Tensor::DataChannelName::BATCH }};
+    dispatchData.lws = GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo, in_layout, out_layout, dims_by_gws);
 
-        dims_by_gws = {{Tensor::DataChannelName::X},
-                       {Tensor::DataChannelName::Y, Tensor::DataChannelName::Z},
-                       {Tensor::DataChannelName::FEATURE, Tensor::DataChannelName::BATCH }};
-        dispatchData.lws = GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo, in_layout, out_layout, dims_by_gws);
-    }
     return dispatchData;
 }
 
@@ -116,8 +104,6 @@ JitConstants PoolingKernelGPU_b_fs_zyx_fsv16_imad::GetJitConstants(const pooling
     jit.AddConstant(MakeJitConstant("IN_Z_PITCH", in_z_pitch));
     jit.Merge(MakeTypeJitConstants(GetActivationType(params), "ACTIVATION"));
     jit.Merge(MakeTypeJitConstants(GetAccumulatorType(params), "ACCUMULATOR"));
-    if (IsGlobalPooling(params))
-        jit.AddConstant(MakeJitConstant("GLOBAL_POOLING", 1));
 
     if (!params.fused_ops.empty()) {
         auto input_dt = EnableRound(params) ? Datatype::INT32 : GetActivationType(params);
@@ -130,10 +116,6 @@ JitConstants PoolingKernelGPU_b_fs_zyx_fsv16_imad::GetJitConstants(const pooling
     }
 
     return jit;
-}
-
-bool PoolingKernelGPU_b_fs_zyx_fsv16_imad::IsGlobalPooling(const pooling_params& params) const {
-    return params.outputs[0].X().v == 1 && params.outputs[0].Y().v == 1 && params.outputs[0].Z().v == 1;
 }
 
 KernelsData PoolingKernelGPU_b_fs_zyx_fsv16_imad::GetKernelsData(const Params& params, const optional_params& options) const {
