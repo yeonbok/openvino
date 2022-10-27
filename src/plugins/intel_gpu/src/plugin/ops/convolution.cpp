@@ -36,6 +36,7 @@ static void CreateGroupConvolutionOp(Program& p, const std::shared_ptr<ngraph::o
 
     auto strides = op->get_strides();
     auto pads_begin = op->get_pads_begin();
+    auto pads_end = op->get_pads_end();
     auto dilations = op->get_dilations();
 
     // Extend 1d vectors to 2d as 1d can't be handled properly by the graph optimizer for now
@@ -43,19 +44,33 @@ static void CreateGroupConvolutionOp(Program& p, const std::shared_ptr<ngraph::o
     pads_begin.resize(std::max<size_t>(2, pads_begin.size()), 0);
     dilations.resize(std::max<size_t>(2, dilations.size()), 1);
 
-    auto convPrim = cldnn::convolution(layerName,
-                                       inputs[0],
-                                       weights,
-                                       {},
-                                       groups,
-                                       strides,
-                                       pads_begin,
-                                       dilations,
-                                       tensor_from_dims(outDims),
-                                       cldnn::element_type_to_data_type(outPrecision),
-                                       weights_have_group_dim);
-
-    p.add_primitive(*op, convPrim);
+    if (!op->is_dynamic()) {
+        auto convPrim = cldnn::convolution(layerName,
+                                           inputs[0],
+                                           weights,
+                                           {},
+                                           groups,
+                                           strides,
+                                           pads_begin,
+                                           dilations,
+                                           tensor_from_dims(outDims),
+                                           cldnn::element_type_to_data_type(outPrecision),
+                                           weights_have_group_dim);
+        p.add_primitive(*op, convPrim);
+    } else {
+        auto convPrim = cldnn::convolution(layerName,
+                                           inputs[0],
+                                           weights,
+                                           {},
+                                           groups,
+                                           strides,
+                                           pads_begin,
+                                           dilations,
+                                           pads_begin,
+                                           pads_end,
+                                           weights_have_group_dim);
+        p.add_primitive(*op, convPrim);
+    }
 }
 
 static void CreateConvolutionOp(Program& p, const std::shared_ptr<ngraph::op::v1::Convolution>& op) {

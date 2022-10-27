@@ -438,15 +438,24 @@ std::vector<layout> convolution_inst::calc_output_layouts(convolution_node const
     };
     std::vector<ShapeType> output_shapes = {ShapeType()};
 
-    ov::op::v1::Convolution op;
-    op.set_dilations(desc->dilation);
-    op.set_strides(desc->stride);
-    op.set_auto_pad(ov::op::PadType::EXPLICIT);
-    auto pad_begin = desc->padding_above;
-    auto pad_end = desc->padding_below;
-    ov::op::v1::shape_infer(&op, pad_begin, pad_end, input_shapes, output_shapes);
+    if (desc->groups > 1) {
+        ov::op::v1::GroupConvolution op;
+        op.set_dilations(desc->dilation);
+        op.set_strides(desc->stride);
+        op.set_auto_pad(ov::op::PadType::EXPLICIT);
+        auto pad_begin = desc->padding_above;
+        auto pad_end = desc->padding_below;
+        ov::op::v1::shape_infer(&op, pad_begin, pad_end, input_shapes, output_shapes);
+    } else {
+        ov::op::v1::Convolution op;
+        op.set_dilations(desc->dilation);
+        op.set_strides(desc->stride);
+        op.set_auto_pad(ov::op::PadType::EXPLICIT);
+        auto pad_begin = desc->padding_above;
+        auto pad_end = desc->padding_below;
+        ov::op::v1::shape_infer(&op, pad_begin, pad_end, input_shapes, output_shapes);
+    }
     format::type output_format = input_layout.format.value;
-
     return {layout{output_shapes[0], output_type, output_format}};
 }
 
