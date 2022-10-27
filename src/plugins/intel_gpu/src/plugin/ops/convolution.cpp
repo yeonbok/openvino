@@ -27,8 +27,8 @@ static void CreateGroupConvolutionOp(Program& p, const std::shared_ptr<ngraph::o
     auto inputs = p.GetInputPrimitiveIDs(op);
     std::string layerName = layer_type_name_ID(op);
 
-    uint32_t groups = op->get_input_shape(1)[0];
-    auto outDims = op->get_output_shape(0);
+    uint32_t groups = op->get_input_partial_shape(1)[0].get_length();
+    auto outDims = op->get_output_partial_shape(0);
     auto outPrecision = op->get_output_element_type(0);
 
     std::vector<cldnn::primitive_id> weights = {inputs[1]};
@@ -39,12 +39,11 @@ static void CreateGroupConvolutionOp(Program& p, const std::shared_ptr<ngraph::o
     auto pads_end = op->get_pads_end();
     auto dilations = op->get_dilations();
 
-    // Extend 1d vectors to 2d as 1d can't be handled properly by the graph optimizer for now
-    strides.resize(std::max<size_t>(2, strides.size()), 1);
-    pads_begin.resize(std::max<size_t>(2, pads_begin.size()), 0);
-    dilations.resize(std::max<size_t>(2, dilations.size()), 1);
-
     if (!op->is_dynamic()) {
+        // Extend 1d vectors to 2d as 1d can't be handled properly by the graph optimizer for now
+        strides.resize(std::max<size_t>(2, strides.size()), 1);
+        pads_begin.resize(std::max<size_t>(2, pads_begin.size()), 0);
+        dilations.resize(std::max<size_t>(2, dilations.size()), 1);
         auto convPrim = cldnn::convolution(layerName,
                                            inputs[0],
                                            weights,
@@ -53,7 +52,7 @@ static void CreateGroupConvolutionOp(Program& p, const std::shared_ptr<ngraph::o
                                            strides,
                                            pads_begin,
                                            dilations,
-                                           tensor_from_dims(outDims),
+                                           tensor_from_dims(outDims.to_shape()),
                                            cldnn::element_type_to_data_type(outPrecision),
                                            weights_have_group_dim);
         p.add_primitive(*op, convPrim);

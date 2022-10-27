@@ -20,7 +20,7 @@ namespace GPULayerTestsDefinitions {
 using LayerTestsDefinitions::groupConvSpecificParams;
 
 typedef std::tuple<
-        convSpecificParams,
+        groupConvSpecificParams,
         ElementType,     // Net precision
         ElementType,     // Input precision
         ElementType,     // Output precision
@@ -29,11 +29,11 @@ typedef std::tuple<
 > groupConvLayerTestParamsSet;
 
 
-class GroupConvolutionLayerGPUTest : public testing::WithParamInterface<groupConvLayerTestParamsSet>,
+class GroupConvolutionLayerGPUTestDynamic : public testing::WithParamInterface<groupConvLayerTestParamsSet>,
                              virtual public SubgraphBaseTest {
 public:
     static std::string getTestCaseName(const testing::TestParamInfo<groupConvLayerTestParamsSet>& obj) {
-        convSpecificParams convParams;
+        groupConvSpecificParams groupConvParams;
         ElementType netType;
         ElementType inType, outType;
         InputShape inputShape;
@@ -43,8 +43,9 @@ public:
         ngraph::op::PadType padType;
         InferenceEngine::SizeVector kernel, stride, dilation;
         std::vector<ptrdiff_t> padBegin, padEnd;
-        size_t groupConvOutChannels;
-        std::tie(kernel, stride, padBegin, padEnd, dilation, groupConvOutChannels, padType) = groupConvParams;
+        size_t convOutChannels;
+        size_t numGroups;
+        std::tie(kernel, stride, padBegin, padEnd, dilation, convOutChannels, numGroups, padType) = groupConvParams;
 
         std::ostringstream result;
         result << "IS=";
@@ -59,7 +60,8 @@ public:
         result << "PB" << CommonTestUtils::vec2str(padBegin) << "_";
         result << "PE" << CommonTestUtils::vec2str(padEnd) << "_";
         result << "D=" << CommonTestUtils::vec2str(dilation) << "_";
-        result << "O=" << groupConvOutChannels << "_";
+        result << "O=" << convOutChannels << "_";
+        result << "G=" << numGroups << "_";
         result << "AP=" << padType << "_";
         result << "netPRC=" << netType << "_";
         result << "inPRC=" << inType << "_";
@@ -81,79 +83,82 @@ protected:
         ngraph::op::PadType padType;
         InferenceEngine::SizeVector kernel, stride, dilation;
         std::vector<ptrdiff_t> padBegin, padEnd;
-        size_t groupConvOutChannels;
-        std::tie(kernel, stride, padBegin, padEnd, dilation, groupConvOutChannels, padType) = groupConvParams;
+        size_t convOutChannels;
+        size_t numGroups;
+        std::tie(kernel, stride, padBegin, padEnd, dilation, convOutChannels, numGroups, padType) = groupConvParams;
 
         auto inputParams = ngraph::builder::makeDynamicParams(inType, inputDynamicShapes);
         auto paramOuts = ngraph::helpers::convert2OutputVector(ngraph::helpers::castOps2Nodes<ngraph::op::Parameter>(inputParams));
 
         auto groupConvolutionNode = ngraph::builder::makeGroupConvolution(paramOuts.front(), netType, kernel, stride, padBegin,
-                                                                padEnd, dilation, padType, groupConvOutChannels);
+                                                                padEnd, dilation, padType, convOutChannels, numGroups);
 
         ngraph::ResultVector results;
-        for (int i = 0; i < gropuConvolutionNode->get_output_size(); i++)
+        for (int i = 0; i < groupConvolutionNode->get_output_size(); i++)
                 results.push_back(std::make_shared<ngraph::opset1::Result>(groupConvolutionNode->output(i)));
 
         function = std::make_shared<ngraph::Function>(results, inputParams, "GroupConvolution");
     }
 };
 
-TEST_P(groupConvolutionLayerGPUTest, CompareWithRefs) {
+TEST_P(GroupConvolutionLayerGPUTestDynamic, CompareWithRefs) {
     SKIP_IF_CURRENT_TEST_IS_DISABLED()
     run();
 }
 
 namespace {
-// Check 3D input tensor for convolution is handled properly and its output is correct comparing with ngraph runtime.
-INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolutionLayerGPUTest_3D_tensor_basic, GroupConvolutionLayerGPUTest,
-        ::testing::Combine(
-                ::testing::Combine(
-                        ::testing::Values(SizeVector{3}),
-                        ::testing::Values(SizeVector{1}),
-                        ::testing::Values(std::vector<ptrdiff_t>{0}),
-                        ::testing::Values(std::vector<ptrdiff_t>{0}),
-                        ::testing::Values(SizeVector{1}),
-                        ::testing::Values(13),
-                        ::testing::Values(ngraph::op::PadType::SAME_UPPER)),
-                ::testing::Values(ElementType::f16),
-                ::testing::Values(ElementType::f16),
-                ::testing::Values(ElementType::undefined),
-                ::testing::Values(InputShape{{}, {{1, 13, 30}}}),
-                ::testing::Values<std::string>(CommonTestUtils::DEVICE_GPU)),
-                GroupConvolutionLayerGPUTest::getTestCaseName);
-
 const std::vector<ov::test::InputShape> dynInputShapes4D = {
     {
-        {1, 10, ov::Dimension::dynamic(), ov::Dimension::dynamic()},
-        {{1, 10, 20, 20}, {1, 10, 30, 30}, {1, 10, 40, 20}}
+        {1, 12, ov::Dimension::dynamic(), ov::Dimension::dynamic()},
+        {{1, 12, 224, 224}, {1, 12, 48, 48}, {1, 12, 64, 16}}
     },
 };
 
-const std::vector<ov::test::InputShape> dynInputShapes3D = {
+const std::vector<ov::test::InputShape> dynInputShapes1D = {
     {
-        {1, 10, ov::Dimension::dynamic()},
-        {{1, 10, 20}, {1, 10, 30}, {1, 10, 50}}
+        {1, 12, ov::Dimension::dynamic()},
+        {{1, 12, 20}, {1, 12, 30}, {1, 12, 50}}
     },
 };
-
-INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolutionLayerGPUTest_dynamic3DSymPad, GroupConvolutionLayerGPUTest,
+INSTANTIATE_TEST_SUITE_P(smoke_DwGroupConvolutionLayerGPUTest_dynamic1DSymPad, GroupConvolutionLayerGPUTestDynamic,
         ::testing::Combine(
                 ::testing::Combine(
                         ::testing::Values(SizeVector{3}),
                         ::testing::Values(SizeVector{1}),
-                        ::testing::Values(std::vector<ptrdiff_t>{1}),
-                        ::testing::Values(std::vector<ptrdiff_t>{1}),
+                        ::testing::Values(std::vector<ptrdiff_t>{0}),
+                        ::testing::Values(std::vector<ptrdiff_t>{0}),
                         ::testing::Values(SizeVector{1}),
-                        ::testing::Values(10),
+                        ::testing::Values(12),
+                        ::testing::Values(12),
                         ::testing::ValuesIn({ngraph::op::PadType::EXPLICIT, ngraph::op::PadType::VALID})),
                 ::testing::Values(ElementType::f16),
                 ::testing::Values(ElementType::f16),
                 ::testing::Values(ElementType::undefined),
-                ::testing::ValuesIn(dynInputShapes3D),
+                ::testing::ValuesIn(dynInputShapes1D),
                 ::testing::Values<std::string>(CommonTestUtils::DEVICE_GPU)),
-                GroupConvolutionLayerGPUTest::getTestCaseName);
+                GroupConvolutionLayerGPUTestDynamic::getTestCaseName);
 
-INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolutionLayerGPUTest_dynamic4DSymPad, GroupConvolutionLayerGPUTest,
+// group convolution is not working for static case too
+INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolutionLayerGPUTest_dynamic1DSymPad_Disabled, GroupConvolutionLayerGPUTestDynamic,
+        ::testing::Combine(
+                ::testing::Combine(
+                        ::testing::Values(SizeVector{3}),
+                        ::testing::Values(SizeVector{1}),
+                        ::testing::Values(std::vector<ptrdiff_t>{0}),
+                        ::testing::Values(std::vector<ptrdiff_t>{0}),
+                        ::testing::Values(SizeVector{1}),
+                        ::testing::Values(4),
+                        ::testing::Values(4),
+                        ::testing::ValuesIn({ngraph::op::PadType::EXPLICIT, ngraph::op::PadType::VALID})),
+                ::testing::Values(ElementType::f16),
+                ::testing::Values(ElementType::f16),
+                ::testing::Values(ElementType::undefined),
+                ::testing::ValuesIn(dynInputShapes1D),
+                ::testing::Values<std::string>(CommonTestUtils::DEVICE_GPU)),
+                GroupConvolutionLayerGPUTestDynamic::getTestCaseName);
+
+
+INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolutionLayerGPUTest_dynamic4DSymPad, GroupConvolutionLayerGPUTestDynamic,
         ::testing::Combine(
                 ::testing::Combine(
                         ::testing::Values(SizeVector{3, 3}),
@@ -161,16 +166,17 @@ INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolutionLayerGPUTest_dynamic4DSymPad, Gro
                         ::testing::Values(std::vector<ptrdiff_t>{1, 2}),
                         ::testing::Values(std::vector<ptrdiff_t>{1, 2}),
                         ::testing::Values(SizeVector{1, 1}),
-                        ::testing::Values(10),
+                        ::testing::Values(4),
+                        ::testing::Values(4),
                         ::testing::ValuesIn({ngraph::op::PadType::EXPLICIT, ngraph::op::PadType::VALID})),
                 ::testing::Values(ElementType::f16),
                 ::testing::Values(ElementType::f16),
                 ::testing::Values(ElementType::undefined),
                 ::testing::ValuesIn(dynInputShapes4D),
                 ::testing::Values<std::string>(CommonTestUtils::DEVICE_GPU)),
-                GroupConvolutionLayerGPUTest::getTestCaseName);
+                GroupConvolutionLayerGPUTestDynamic::getTestCaseName);
 
-INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolutionLayerGPUTest_dynamic4D_AsymPad, GroupConvolutionLayerGPUTest,
+INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolutionLayerGPUTest_dynamic4D_AsymPad, GroupConvolutionLayerGPUTestDynamic,
         ::testing::Combine(
                 ::testing::Combine(
                         ::testing::Values(SizeVector{3, 3}),
@@ -178,15 +184,15 @@ INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolutionLayerGPUTest_dynamic4D_AsymPad, G
                         ::testing::Values(std::vector<ptrdiff_t>{1, 2}),
                         ::testing::Values(std::vector<ptrdiff_t>{2, 1}),
                         ::testing::Values(SizeVector{1, 1}),
-                        ::testing::Values(10),
+                        ::testing::Values(4),
+                        ::testing::Values(4),
                         ::testing::ValuesIn({ngraph::op::PadType::EXPLICIT, ngraph::op::PadType::VALID})),
                 ::testing::Values(ElementType::f16),
                 ::testing::Values(ElementType::f16),
                 ::testing::Values(ElementType::undefined),
                 ::testing::ValuesIn(dynInputShapes4D),
                 ::testing::Values<std::string>(CommonTestUtils::DEVICE_GPU)),
-                GroupConvolutionLayerGPUTest::getTestCaseName);
-
+                GroupConvolutionLayerGPUTestDynamic::getTestCaseName);
 }  // namespace
 
 } // namespace GPULayerTestsDefinitions
