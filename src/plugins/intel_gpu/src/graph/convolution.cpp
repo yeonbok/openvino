@@ -242,6 +242,9 @@ std::vector<layout> convolution_inst::calc_output_layouts(convolution_node const
     auto weights_layout = *impl_param.weights_layout;
     weights_layout = weights_layout.convert_to_weights_layout(desc->grouped_weights_shape);
 
+    if (input_layout.is_dynamic())
+        return {layout{ShapeType::dynamic(input_layout.get<ShapeType>().rank()), input_layout.data_type, input_layout.format}};
+
     auto pad = desc->pad;
     auto stride = desc->stride;
     auto dilation = desc->dilation;
