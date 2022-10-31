@@ -29,11 +29,11 @@ static void CreateSelectOp(Program& p, const std::shared_ptr<ngraph::op::v1::Sel
         IE_THROW() << "Unsupported broadcast type (" << broadcast_type.m_type << ") in layer " + op->get_friendly_name();
     }
 
-    if (broadcast_type.m_type == ngraph::op::AutoBroadcastType::NUMPY) {
+    if (broadcast_type.m_type == ngraph::op::AutoBroadcastType::NUMPY && !op->is_dynamic()) {
         // Preprocess inputs
         for (size_t i = 0; i < inputPrimitives.size(); ++i) {
             auto input_pshape = op->get_input_partial_shape(i);
-            OPENVINO_ASSERT(input_pshape.is_static(), "Dynamic shapes are not supported for v1::Select with NUMPY mode yet");
+//            OPENVINO_ASSERT(input_pshape.is_static(), "Dynamic shapes are not supported for v1::Select with NUMPY mode yet");
             auto input_shape = input_pshape.to_shape();
             auto input_rank = input_shape.size();
 

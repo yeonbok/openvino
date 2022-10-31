@@ -75,6 +75,7 @@ std::string select_inst::to_string(select_node const& node) {
 }
 
 select_inst::typed_primitive_inst(network& network, select_node const& node) : parent(network, node) {
+    if (node.is_dynamic()) return;
     auto& deps = node.get_dependencies();
 
     CLDNN_ERROR_LESS_THAN(node.id(),

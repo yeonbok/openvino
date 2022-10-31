@@ -76,10 +76,10 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
         {2, tensor2},
         {3, tensor3},
     };
-    ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
+//    ov::op::v1::shape_infer(&op, input_shapes, output_shapes, const_data);
     auto output_format = format::get_default_format(output_shapes[0].size());
 
-    return { layout{output_shapes[0], input0_layout.data_type, output_format} };
+    return { layout{input_shapes[0], input0_layout.data_type, output_format} };
 }
 
 template std::vector<layout> strided_slice_inst::calc_output_layouts<ov::PartialShape>(strided_slice_node const& node, const kernel_impl_params& impl_param);

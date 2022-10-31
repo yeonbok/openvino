@@ -53,8 +53,8 @@ static void CreateReduceOp(Program& p, const std::shared_ptr<ngraph::Node>& op, 
     p.add_primitive(*op, reducePrim);
 
     auto resultLayerName = layerName;
-    auto out_dims = op->get_output_shape(0).size();
-    if (out_dims == 3 && !keep_dims && rank >= 4) {
+    auto out_dims = op->get_output_partial_shape(0).size();
+    if (out_dims == 3 && !keep_dims && rank >= 4 && !op->is_dynamic()) {
         resultLayerName = layerName + "_reshape";
         auto out_shape = op->get_output_shape(0);
         cldnn::tensor outTensor;
@@ -76,7 +76,7 @@ static void CreateReduceOp(Program& p, const std::shared_ptr<ngraph::Node>& op, 
     auto reorderLayerName = layerName + "_reorder";
     cldnn::format out_format = cldnn::format::any;
     auto out_dt = cldnn::element_type_to_data_type(op->get_output_element_type(0));
-    if (!keep_dims && rank > 4) {
+    if (!keep_dims && rank > 4 && !op->is_dynamic()) {
         if (rank - axes.size() == 6)
             out_format = cldnn::format::bfwzyx;
         else if (rank - axes.size() == 5)

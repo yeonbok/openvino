@@ -72,6 +72,8 @@ void handle_reshape::run(program& p) {
 
             if (input_node.is_type<reorder>())
                 continue;
+            if (node->is_dynamic())
+                continue;
 
             node->get_output_layout();
 

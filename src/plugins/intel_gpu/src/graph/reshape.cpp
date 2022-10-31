@@ -117,6 +117,9 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& /*node
         run_shape_infer(prim->mode);
     } else {
         auto pattern_data = prim->output_pattern;
+        if (input_shapes[0].size() == 0) {
+            input_shapes[0] = {1};
+        }
         auto pattern_tensor = make_host_tensor({pattern_shape, data_types::i64, format::bfyx}, static_cast<void*>(pattern_data.data()));
 
         const_data.emplace(1, pattern_tensor);
