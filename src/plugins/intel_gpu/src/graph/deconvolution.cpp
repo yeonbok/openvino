@@ -25,6 +25,7 @@ layout deconvolution_inst::calc_output_layout(deconvolution_node const& node, ke
 
     auto input_layout = impl_param.get_input_layout();
     auto weights_layout = *impl_param.weights_layout;
+    return input_layout;
     weights_layout = weights_layout.convert_to_weights_layout(desc->grouped_weights_shape);
 
     auto data_type = input_layout.data_type;
@@ -142,6 +143,7 @@ std::string deconvolution_inst::to_string(deconvolution_node const& node) {
 
 deconvolution_inst::typed_primitive_inst(network& network, deconvolution_node const& node)
     : parent(network, node) {
+    return;
     auto stride = argument.stride;
     auto pad = argument.pad;
 

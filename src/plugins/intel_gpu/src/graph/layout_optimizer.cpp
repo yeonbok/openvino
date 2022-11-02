@@ -1025,7 +1025,10 @@ layout layout_optimizer::get_expected_layout(layout const& current_layout,
     auto expected_format = current_layout.format;
 
     if (node.is_dynamic()) {
-        expected_format = format::b_fs_yx_fsv16;
+        if (node.get_output_layout().get_partial_shape().size() <= 4)
+            expected_format = format::b_fs_yx_fsv16;
+        if (node.get_output_layout().get_partial_shape().size() == 5)
+            expected_format = format::b_fs_zyx_fsv16;
         return layout(current_layout.get_partial_shape(), expected_data_type, expected_format);
     } else {
         auto input_layout = node.get_dependency(0).get_output_layout();
@@ -1128,34 +1131,11 @@ layout layout_optimizer::get_expected_layout(layout const& current_layout,
                                              deconvolution_node const& node,
                                              layout const& output_or_weights_layout) {
     auto prim = node.get_primitive();
-    auto expected_tensor = current_layout.get_tensor();
     auto expected_data_type = current_layout.data_type;
-    auto expected_format = current_layout.format;
+    auto expected_format = format::b_fs_yx_fsv16;
     bool use_onednn_impls = _optimization_attributes.use_onednn_impls;
 
-    if (use_onednn_impls && is_node_for_onednn(node)) {
-        // XXX: need to take the situation into consideration where it is called from prepare_primitive_fusing
-        expected_format = node.get_preferred_output_fmt();
-    } else if (_optimization_attributes.b_fs_zyx_fsv16_network &&
-        deconvolution_b_fs_zyx_fsv16_opt(current_layout, output_or_weights_layout, prim)) {
-        if ((current_layout.data_type == data_types::f32 && expected_tensor.batch[0] % 16 == 0) ||
-            (current_layout.data_type == data_types::f16 && expected_tensor.batch[0] % 32 == 0))
-            expected_format = cldnn::format::bs_fs_zyx_bsv16_fsv16;
-        else
-            expected_format = cldnn::format::b_fs_zyx_fsv16;
-    } else if ((_optimization_attributes.b_fs_yx_fsv16_network) &&
-               deconvolution_b_fs_yx_fsv16_opt(current_layout, output_or_weights_layout, prim)) {
-        auto input_tensor = node.get_dependency(0).get_output_layout().get_tensor();
-        int input_features = input_tensor.feature[0];
-        int output_features = expected_tensor.feature[0];
-        float f_cost = static_cast<float>(input_features * output_features) / (align_to(input_features, 16) * align_to(output_features, 16));
-        float stride_cost = 1 / static_cast<float>(prim->stride[prim->stride.size() - 1]);
-        if (f_cost * stride_cost > 0.1f)
-            expected_format = cldnn::format::b_fs_yx_fsv16;
-        else
-            expected_format = cldnn::format::bfyx;
-    }
-    return layout(expected_data_type, expected_format, expected_tensor);
+    return layout(current_layout.get_partial_shape(), expected_data_type, expected_format);
 }
 
 layout layout_optimizer::get_expected_layout(layout const& current_layout,

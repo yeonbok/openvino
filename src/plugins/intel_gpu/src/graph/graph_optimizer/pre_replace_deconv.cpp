@@ -22,7 +22,7 @@ void pre_replace_deconv::run(program& p) {
     bool update_processing_order = false;
 
     auto& stream = p.get_stream();
-
+    return;
     auto itr = p.nodes_map.begin();
     while (itr != p.nodes_map.end()) {
         auto node_itr = itr++;

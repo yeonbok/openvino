@@ -40,6 +40,7 @@ std::vector<layout> resample_inst::calc_output_layouts(resample_node const& /*no
     auto desc = impl_param.typed_desc<resample>();
     auto input_layout = impl_param.get_input_layout(0);
 
+    return {input_layout};
     auto& memory_deps = impl_param.memory_deps;
 
     ov::op::v4::Interpolate op;

@@ -23,33 +23,31 @@ static void CreateInterpolateOp(Program& p, const std::shared_ptr<ngraph::op::v4
     static const size_t AXES_INDEX = 3;
 
     auto attrs = op->get_attrs();
-    auto inputRank = op->get_input_shape(0).size();
-    auto outShape = op->get_output_shape(0);
-    auto outputPattern = std::vector<int64_t>(outShape.begin(), outShape.end());
+    auto inputRank = op->get_input_partial_shape(0).size();
+    auto outPShape = op->get_output_partial_shape(0);
 
+    std::vector<float> scales = {};
     auto scales_constant = std::dynamic_pointer_cast<ngraph::op::Constant>(op->get_input_node_shared_ptr(SCALES_INDEX));
-    if (!scales_constant) {
-        IE_THROW() << "Unsupported parameter node type in " << op->get_friendly_name() << " (" << op->get_type_name() << ")";
+    if (scales_constant) {
+        scales = scales_constant->cast_vector<float>();
     }
-    std::vector<float> scales = scales_constant->cast_vector<float>();
-
-    std::vector<int64_t> axes;
+    std::vector<int64_t> axes = {};
+#if 1
     if (op->get_input_size() == 4) {
         auto axes_constant = std::dynamic_pointer_cast<ngraph::op::Constant>(op->get_input_node_shared_ptr(AXES_INDEX));
-        if (!axes_constant) {
-            IE_THROW() << "Unsupported parameter node type in " << op->get_friendly_name() << " (" << op->get_type_name() << ")";
+        if (axes_constant) {
+            axes = axes_constant->cast_vector<int64_t>();
+            ov::normalize_axes(op.get(), inputRank, axes);
         }
-        axes = axes_constant->cast_vector<int64_t>();
-        ov::normalize_axes(op.get(), inputRank, axes);
     } else {
         for (size_t i = 0; i < inputRank; ++i) {
             axes.push_back(ov::normalize_axis(op.get(), i, inputRank));
         }
     }
 
-    if (axes.size() != scales.size())
-        IE_THROW() << op->get_friendly_name() << " Incorrect axes and scales should be the same size";
-
+//    if (axes.size() != scales.size())
+//        IE_THROW() << op->get_friendly_name() << " Incorrect axes and scales should be the same size";
+#endif
     // TODO shouldn't be all this checking done in ngraph::op::v4::Interpolate?
     auto interpolateMode = attrs.mode;
     if (interpolateMode == ov::op::v4::Interpolate::InterpolateMode::LINEAR_ONNX) {
@@ -82,7 +80,7 @@ static void CreateInterpolateOp(Program& p, const std::shared_ptr<ngraph::op::v4
 
     auto resamplePrim = cldnn::resample(layerName,
                                         inputPrimitives[0],
-                                        outputPattern,
+                                        inputPrimitives[1],
                                         scales,
                                         axes,
                                         attrs.pads_begin,

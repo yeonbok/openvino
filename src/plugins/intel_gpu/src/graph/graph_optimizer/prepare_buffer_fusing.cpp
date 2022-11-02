@@ -86,7 +86,8 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
         return false;
     if (node.has_fused_primitives() || !node.get_fused_activations_funcs().empty())
         return false;
-
+    if (node.is_valid_output_layout() && node.is_dynamic())
+        return false;
     bool is_onednn_impl = false;
 
     for (auto& input : node.get_dependencies()) {

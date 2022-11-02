@@ -173,7 +173,7 @@ static void CreateConvolutionBackpropDataOp(Program& p, const std::shared_ptr<ng
                                            1,
                                            strides,
                                            pads_begin,
-                                           tensor_from_dims(op->get_output_tensor(0).get_shape()),
+                                           cldnn::tensor{0, 0, 0, 0},
                                            weights_have_group_dim);
 
     p.add_primitive(*op, deconvPrim);

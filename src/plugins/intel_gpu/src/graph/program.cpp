@@ -242,7 +242,7 @@ bool program::analyze_output_size_handling_need() {
 
             if (!prim->with_output_size)
                 continue;
-
+            if (node->is_dynamic()) continue;
             tensor specified_output_range(
                 {0, 0, prim->output_size.spatial[0], prim->output_size.spatial[1], prim->output_size.spatial[2]},
                 1);
@@ -262,6 +262,7 @@ bool program::analyze_output_size_handling_need() {
             if (specified_output_range != calc_output_range)
                 handling_needed = true;
         } else if (node->is_type<binary_convolution>()) {
+            if (node->is_dynamic()) continue;
             auto& prim_node = node->as<binary_convolution>();
             const auto& prim = prim_node.get_primitive();
 
@@ -286,7 +287,7 @@ bool program::analyze_output_size_handling_need() {
             auto& prim_node = node->as<deconvolution>();
             const auto& prim = prim_node.get_primitive();
 
-            if (!prim->with_output_size)
+            if (!prim->with_output_size || node->is_dynamic())
                 continue;
 
             tensor specified_output_range(
