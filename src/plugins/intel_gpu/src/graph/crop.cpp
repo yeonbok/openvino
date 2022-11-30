@@ -145,7 +145,7 @@ std::string crop_inst::to_string(crop_node const& node) {
     auto ref_in_sizes = desc->reference_input;
     const auto& offsets = desc->offsets;
     const auto in_layout = node.input().get_output_layout();
-    const auto& in_sizes = in_layout.get_tensor();
+    const auto& in_sizes = !in_layout.is_dynamic() ? in_layout.get_tensor() : tensor{0, 0, 0, 0};
 
     auto node_info = node.desc_to_json();
 

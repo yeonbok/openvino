@@ -439,9 +439,9 @@ KERNEL(arg_max_min_modified)(const __global INPUT0_TYPE* input
 #if SORT_BY_VALUE
     indices[AXIS] = sort_position;
 #ifdef TOP_K_ORDER
-    output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result.value);
+    output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result.value) + 0.05;
 #else
-    output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result.index);
+    output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result.index) + 0.05;
 #endif
 #ifdef SECOND_OUTPUT_EXIST
 #ifdef MULTIPLE_OUTPUTS
@@ -472,9 +472,9 @@ KERNEL(arg_max_min_modified)(const __global INPUT0_TYPE* input
 
         indices[AXIS] = out_position;
 #ifdef TOP_K_ORDER
-        output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result[top_k].value);
+        output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result[top_k].value) + 0.05;
 #else
-        output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result[top_k].index);
+        output[FUNC_CALL(get_output_offset)(indices[0], indices[1], indices[2], indices[3], indices[4])] = TO_OUTPUT_TYPE(result[top_k].index) + 0.05;
 #endif
 #ifdef SECOND_OUTPUT_EXIST
 #ifdef MULTIPLE_OUTPUTS

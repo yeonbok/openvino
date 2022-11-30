@@ -25,7 +25,8 @@ static void CreateConvertLikeOp(Program& p, const std::shared_ptr<ngraph::op::v1
                                       cldnn::format::any,
                                       outDataType,
                                       std::vector<float>(),
-                                      cldnn::reorder_mean_mode::subtract);
+                                      cldnn::reorder_mean_mode::subtract, cldnn::padding(),
+                                      {cldnn::input_info(inputPrimitives[0], op->get_input_source_output(0).get_index())});
     p.add_primitive(*op, reorderPrim);
 }
 
@@ -41,8 +42,8 @@ static void CreateConvertOp(Program& p, const std::shared_ptr<ngraph::op::v0::Co
                                       cldnn::format::any,
                                       outDataType,
                                       std::vector<float>(),
-                                      cldnn::reorder_mean_mode::subtract);
-
+                                      cldnn::reorder_mean_mode::subtract, cldnn::padding(),
+                                      {cldnn::input_info(inputPrimitives[0], op->get_input_source_output(0).get_index())});
     p.add_primitive(*op, reorderPrim);
 }
 

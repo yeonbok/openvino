@@ -6,6 +6,7 @@
 #include "intel_gpu/plugin/common_utils.hpp"
 
 #include "ngraph/op/topk.hpp"
+#include "ngraph/op/util/op_types.hpp"
 
 #include "intel_gpu/primitives/arg_max_min.hpp"
 #include "intel_gpu/primitives/mutable_data.hpp"
@@ -23,6 +24,9 @@ static void CreateTopKOp(Program& p, const std::shared_ptr<ngraph::op::v1::TopK>
     ov::op::TopKSortType stype = op->get_sort_type();
 
     uint32_t top_k = op->get_k();
+    if (top_k == 0) {
+        top_k = 2;
+    }
     uint64_t chosen_axis = op->get_axis();
 
     if (p.use_new_shape_infer()) {

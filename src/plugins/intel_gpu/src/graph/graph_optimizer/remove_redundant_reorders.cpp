@@ -250,7 +250,8 @@ void remove_redundant_reorders::run(program& p) {
         auto node = *itr++;
         if (!node->is_type<reorder>())  // only care for reorders
             continue;
-
+        if (node->is_dynamic())
+            continue;
         auto& r_node = node->as<reorder>();
 
         bool no_output_optimization = remove_output_reorders ?

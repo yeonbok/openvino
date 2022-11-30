@@ -134,16 +134,18 @@ std::string resample_inst::to_string(resample_node const& node) {
     else
         resample_info.add("shape_calculation_mode:", "scales");
 
-    if (desc->shape_calc_mode == resample::InterpolateOp::ShapeCalcMode::SCALES) {
-        std::string axesAndScalesDump;
-        std::string delim = "";
-        for (size_t i = 0; i < desc->axes.size(); i++) {
-            axesAndScalesDump += delim;
-            delim = ", ";
-            axesAndScalesDump += std::to_string(desc->axes[i]) + ": ";
-            axesAndScalesDump += std::to_string(desc->scales[i]);
+    if (!node.is_dynamic()) {
+        if (desc->shape_calc_mode == resample::InterpolateOp::ShapeCalcMode::SCALES) {
+            std::string axesAndScalesDump;
+            std::string delim = "";
+            for (size_t i = 0; i < desc->axes.size(); i++) {
+                axesAndScalesDump += delim;
+                delim = ", ";
+                axesAndScalesDump += std::to_string(desc->axes[i]) + ": ";
+                axesAndScalesDump += std::to_string(desc->scales[i]);
+            }
+            resample_info.add("scales:", axesAndScalesDump);
         }
-        resample_info.add("scales:", axesAndScalesDump);
     }
 
     if (desc->coord_trans_mode == resample::InterpolateOp::CoordinateTransformMode::HALF_PIXEL)
