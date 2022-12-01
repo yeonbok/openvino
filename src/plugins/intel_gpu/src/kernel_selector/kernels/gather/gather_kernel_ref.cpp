@@ -233,8 +233,9 @@ bool GatherKernelRef::Validate(const Params& p, const optional_params& o) const 
     const gather_params& params = static_cast<const gather_params&>(p);
 
     for (auto& fused_op : params.fused_ops) {
-        if (!IsFusedPrimitiveSupported(fused_op))
+        if (!IsFusedPrimitiveSupported(fused_op)) {
             return false;
+        }
     }
 
     if (params.outputs[0].is_dynamic()) {
