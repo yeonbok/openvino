@@ -162,6 +162,12 @@ KernelsPriority ConvolutionKernel_b_fs_yx_fsv16::GetKernelsPriority(const Params
 
 bool ConvolutionKernel_b_fs_yx_fsv16::Validate(const Params& p, const optional_params& o) const {
     if (!ConvolutionKernelBase::Validate(p, o) || !ConvolutionCheckInput(p, o)) {
+//        std::cout << "   convolution_kernel_b_fs_yx_fsv16::Validate: failed because " << std::endl;
+        if (!ConvolutionKernelBase::Validate(p, o)) {
+//            std::cout << "      Validate(p,o) " << std::endl;
+        } else {
+//            std::cout << "      CheckInput " << std::endl;
+        }
         return false;
     }
 
@@ -189,18 +195,25 @@ bool ConvolutionKernel_b_fs_yx_fsv16::Validate(const Params& p, const optional_p
     }
 
     // Check that padding before features doesn't miss-align the blocks
-    if (input.Feature().pad.before % tuning_data.feature_block_size != 0 || output.Feature().pad.before % tuning_data.feature_block_size != 0)
+    if (input.Feature().pad.before % tuning_data.feature_block_size != 0 || output.Feature().pad.before % tuning_data.feature_block_size != 0) {
+//        std::cout << "   convolution_kernel_b_fs_yx_fsv16::Validate: failed because feature pad" << std::endl;
         return false;
+    }
 
     // Not supporting batch padding for different format (reorder-fused case)
     if (input.GetLayout() == DataLayout::b_fs_yx_fsv16 && output.GetLayout() == DataLayout::bfyx) {
-        if (output.Batch().pad.before != 0 || output.Batch().pad.after != 0)
+        if (output.Batch().pad.before != 0 || output.Batch().pad.after != 0) {
+//            std::cout << "   convolution_kernel_b_fs_yx_fsv16::Validate: failed because batch pad" << std::endl;
             return false;
+        }
     }
 
-    if (!params.bias.empty() && params.bias[0].GetDType() != input.GetDType())
+    if (!params.bias.empty() && params.bias[0].GetDType() != input.GetDType()) {
+//        std::cout << "   convolution_kernel_b_fs_yx_fsv16::Validate: failed because type" << std::endl;
         return false;
+    }
 
+//    std::cout << "   convolution_kernel_b_fs_yx_fsv16::Validate: sucess " << std::endl;
     return true;
 }
 

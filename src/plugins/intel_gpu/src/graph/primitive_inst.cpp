@@ -222,8 +222,8 @@ void primitive_inst::update_shape() {
         layout.data_padding = padding::max(_node->get_primitive()->output_padding, layout.data_padding);
         if (_impl_params->get_output_layout(idx) != layout) {
             GPU_DEBUG_IF(debug_config->verbose >= 4) {
-                GPU_DEBUG_COUT << id() << ": update shape: was: " << _impl_params->get_output_layout(idx).to_short_string()
-                               << " now: " << layout.to_short_string() << std::endl;
+                GPU_DEBUG_COUT << id() << ": update shape: was: " << _impl_params->get_output_layout(idx).to_string()
+                               << " now: " << layout.to_string() << std::endl;
             }
             set_shape_change();
         }
@@ -393,10 +393,15 @@ void primitive_inst::update_impl() {
                 _impl->update_dispatch_data(updated_params);
                 update_shape_info(updated_params);
             } else {
+//                if (_node->is_type<convolution>())
+//                    std::cout << "conv" << std::endl;
                 _impl = _node->type()->choose_impl(*_node, updated_params);
                 auto& kernels_cache = get_network().get_kernels_cache();
                 auto kernel_ids = kernels_cache.add_kernels_source(_impl->get_kernels_source());
                 _impl->set_kernel_ids(kernel_ids);
+//                if (kernel_ids.size() > 0)
+//                    std::cout << _node->id() << " : " << kernel_ids[0] << std::endl;
+
                 kernels_cache.compile();
                 _impl->init_kernels(kernels_cache);
                 kernels_cache.reset();

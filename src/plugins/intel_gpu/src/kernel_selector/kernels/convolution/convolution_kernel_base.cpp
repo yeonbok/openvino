@@ -270,18 +270,29 @@ KernelsData ConvolutionKernelBase::GetCommonKernelsData(const Params& params,
 }
 
 bool CheckConvolutionPaddedInputDesc(const convolution_params& params, const DataTensor& reqDesc) {
+//    std::cout << "--- CheckConvolutionPaddedInputDesc"<< std::endl;
     assert(params.inputs.size() >= 1);
-
+//    std::cout << "reqDesc.X().pad.before : " << reqDesc.X().pad.before << ", params.inputs[0].X().pad.before : " << params.inputs[0].X().pad.before << std::endl;
+//    std::cout << "reqDesc.Y().pad.before : " << reqDesc.Y().pad.before << ", params.inputs[0].Y().pad.before : " << params.inputs[0].Y().pad.before << std::endl;
+//    std::cout << "reqDesc.F().pad.before : " << reqDesc.Feature().pad.before << ", params.inputs[0].F().pad.before : " << params.inputs[0].Feature().pad.before << std::endl;
+//    std::cout << "reqDesc.B().pad.before : " << reqDesc.Batch().pad.before << ", params.inputs[0].B().pad.before : " << params.inputs[0].Batch().pad.before << std::endl;
     bool properPadding = reqDesc.X().pad.before <= params.inputs[0].X().pad.before &&
                          reqDesc.Y().pad.before <= params.inputs[0].Y().pad.before &&
                          reqDesc.Feature().pad.before <= params.inputs[0].Feature().pad.before &&
                          reqDesc.Batch().pad.before <= params.inputs[0].Batch().pad.before;
+
+//    std::cout << "reqDesc.X().pad.after : " << reqDesc.X().pad.after << ", params.inputs[0].X().pad.after : " << params.inputs[0].X().pad.after << std::endl;
+//    std::cout << "reqDesc.Y().pad.after : " << reqDesc.Y().pad.after << ", params.inputs[0].Y().pad.after : " << params.inputs[0].Y().pad.after << std::endl;
+//    std::cout << "reqDesc.F().pad.after : " << reqDesc.Feature().pad.after << ", params.inputs[0].F().pad.after : " << params.inputs[0].Feature().pad.after << std::endl;
+//    std::cout << "reqDesc.B().pad.after : " << reqDesc.Batch().pad.after << ", params.inputs[0].B().pad.after : " << params.inputs[0].Batch().pad.after << std::endl;
 
     properPadding &= reqDesc.X().pad.after <= params.inputs[0].X().pad.after &&
                      reqDesc.Y().pad.after <= params.inputs[0].Y().pad.after &&
                      reqDesc.Feature().pad.after <= params.inputs[0].Feature().pad.after &&
                      reqDesc.Batch().pad.after <= params.inputs[0].Batch().pad.after;
 
+//    std::cout << "params.padding.x = " << params.padding.x << ", params.padding.y : " << params.padding.y << std::endl;
+//    std::cout << "params.inputs[0].GetPaddedVal() " << params.inputs[0].GetPaddedVal() << std::endl;
     properPadding &= ((params.padding.x == 0 && params.padding.y == 0) || params.inputs[0].GetPaddedVal() == 0.f);
 
     return properPadding;
@@ -297,8 +308,9 @@ static DataTensor GetConvolutionBFYXPaddedTensor(const convolution_params& cp) {
     pad[0].before = cp.padding.x;
     pad[1].before = cp.padding.y;
     pad[2].before = cp.padding.z;
-
-
+//    std::cout << "---GetConvolutionBFYXPAddedTensor" << std::endl;
+//    std::cout << "cp.padding.x : " << cp.padding.x << " cp.inputs[0].X().pad.before : " << cp.inputs[0].X().pad.before << std::endl;
+//    std::cout << "pad[0].before : " << pad[0].before << std::endl;
     const auto inputLimitX = (cp.outputs[0].X().v - 1) * cp.stride.x + (cp.filterSize.x - 1) * cp.dilation.x + 1;
     const auto inputLimitY = (cp.outputs[0].Y().v - 1) * cp.stride.y + (cp.filterSize.y - 1) * cp.dilation.y + 1;
     const auto inputLimitZ = (cp.outputs[0].Z().v - 1) * cp.stride.z + (cp.filterSize.z - 1) * cp.dilation.z + 1;
@@ -318,6 +330,7 @@ static DataTensor GetConvolutionBFYXPaddedTensor(const convolution_params& cp) {
         pitch *= dims[i].LogicalDimPadded();
     }
 
+//    std::cout << "pad[0].before : " << pad[0].before << std::endl;
     return {dims, t.GetDType(), t.GetLayout()};
 }
 
@@ -330,6 +343,7 @@ bool ConvolutionCheckInput(const Params& p, const optional_params& o) {
     const bool bInputPadded = optParams.allowInputReordering || bProperInputDesc;
 
     if (!bInputPadded) {
+//        std::cout << " *** bInputPAdded is false" << std::endl;
         return false;
     }
 

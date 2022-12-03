@@ -372,29 +372,49 @@ void ParamsKey::EnableQuantization(QuantizationType q) {
 }
 
 bool ParamsKey::Support(const ParamsKey& k) const {
-    if (!((key.restrict.raw & k.key.restrict.raw) == k.key.restrict.raw))  // check if this kernel supports this params
+    if (!((key.restrict.raw & k.key.restrict.raw) == k.key.restrict.raw)) { // check if this kernel supports this params
+        //std::cout << "fail at 1" << std::endl;
         return false;
+    }
     if (!((key.machineInfo.raw & k.key.machineInfo.raw) ==
-          key.machineInfo.raw))  // check if machine supports this kernel
+          key.machineInfo.raw)) { // check if machine supports this kernel
+        //std::cout << "fail at 2" << std::endl;      
         return false;
-    if (!((key.inputType.raw & k.key.inputType.raw) == k.key.inputType.raw))
+    }
+    if (!((key.inputType.raw & k.key.inputType.raw) == k.key.inputType.raw)) {
+        //std::cout << "fail at 3" << std::endl;      
         return false;
-    if (!((key.outputType.raw & k.key.outputType.raw) == k.key.outputType.raw))
+    }
+    if (!((key.outputType.raw & k.key.outputType.raw) == k.key.outputType.raw)) {
+        //std::cout << "fail at 4" << std::endl;      
         return false;
-    if (!((key.inputWeightsType.raw & k.key.inputWeightsType.raw) == k.key.inputWeightsType.raw))
+    }
+    if (!((key.inputWeightsType.raw & k.key.inputWeightsType.raw) == k.key.inputWeightsType.raw)) {
+        //std::cout << "fail at 5" << std::endl;      
         return false;
-    if (!((key.outputWeightsType.raw & k.key.outputWeightsType.raw) == k.key.outputWeightsType.raw))
+    }
+    if (!((key.outputWeightsType.raw & k.key.outputWeightsType.raw) == k.key.outputWeightsType.raw)) {
+        //std::cout << "fail at 6" << std::endl;      
         return false;
-    if (!((key.inputLayout & k.key.inputLayout) != 0 || key.inputLayout == k.key.inputLayout))
+    }
+    if (!((key.inputLayout & k.key.inputLayout) != 0 || key.inputLayout == k.key.inputLayout)) {
+        //std::cout << "fail at 7" << std::endl;      
         return false;
-    if (!((key.outputLayout & k.key.outputLayout) != 0 || key.outputLayout == k.key.outputLayout))
+    }
+    if (!((key.outputLayout & k.key.outputLayout) != 0 || key.outputLayout == k.key.outputLayout)) {
+        //std::cout << "fail at 8" << std::endl;      
         return false;
+    }
     if (!((key.weightsInputLayout & k.key.weightsInputLayout) != 0 ||
-          key.weightsInputLayout == k.key.weightsInputLayout))
+          key.weightsInputLayout == k.key.weightsInputLayout)) {
+        //std::cout << "fail at 9" << std::endl;      
         return false;
+    }
     if (!((key.weightsOutputLayout & k.key.weightsOutputLayout) != 0 ||
-          key.weightsOutputLayout == k.key.weightsOutputLayout))
+          key.weightsOutputLayout == k.key.weightsOutputLayout)) {
+        //std::cout << "fail at 10" << std::endl;      
         return false;
+    }
 
     return true;
 }

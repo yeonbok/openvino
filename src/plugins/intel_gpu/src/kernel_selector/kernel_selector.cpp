@@ -78,7 +78,7 @@ KernelsData kernel_selector_base::GetNaiveBestKernel(const Params& params,
     std::string kernelName;
 
     auto allImplementations = GetAllImplementations(params, options, kType);
-
+//    std::cout << "###### GetNaiveBestKernel" << std::endl;
     for (const auto& implementation : allImplementations) {
         // TODO: Unify this check with the Validate virtual method. Make
         // sure that the method is called here only, not in all the
@@ -130,6 +130,7 @@ KernelsData kernel_selector_base::GetAutoTuneBestKernel(const Params& params,
                                                         KernelType kType) const {
     KernelsData kernelsData;
     std::string kernelName;
+//    std::cout << "###### GetAutoTuneBestKernel" << std::endl;
 
     auto allImplementations = GetAllImplementations(params, options, kType);
     auto kernel_params = static_cast<const base_params&>(params);
@@ -270,12 +271,18 @@ KernelList kernel_selector_base::GetAllImplementations(const Params& params, con
         ParamsKey requireKey = params.GetParamsKey().Merge(options.GetSupportedKey());
         bool forceImplementation = !params.forceImplementation.empty();
         for (auto& impl : implementations) {
+//            std::cout << "-- try " << impl->GetName() << std::endl;
             const ParamsKey implKey = impl->GetSupportedKey();
-            if (!implKey.Support(requireKey))
+            if (!implKey.Support(requireKey)) {
+//                std::cout << " ! impl key does not support" << std::endl;
                 continue;
+            } else {
+//                std::cout << " @ impl key supported" << std::endl;
+            }
             if (forceImplementation && params.forceImplementation != impl->GetName())
                 continue;
             sortedImpls.emplace(impl->GetKernelsPriority(params, options), impl);
+//            std::cout << " @ kernel priority : " << impl->GetKernelsPriority(params, options) << std::endl;
         }
 
         std::transform(

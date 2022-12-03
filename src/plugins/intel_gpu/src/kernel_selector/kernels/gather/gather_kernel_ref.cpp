@@ -54,7 +54,7 @@ ParamsKey GatherKernelRef::GetSupportedKey() const {
     k.EnableTensorPitches();
     k.EnableBatching();
     k.EnableDifferentTypes();
-    k.EnableDynamicShapesSupport();
+//    k.EnableDynamicShapesSupport();
     return k;
 }
 
