@@ -220,6 +220,24 @@ void primitive_inst::update_shape() {
 
     auto update_output_layout = [&](layout& layout, size_t idx) {
         layout.data_padding = padding::max(_node->get_primitive()->output_padding, layout.data_padding);
+
+        // Taylor trial
+        // check user convolution node's required padding 
+        for (auto u : _node->get_users()) {
+            if (u->is_type<convolution>()) {
+                const auto& conv_prim = u->as<convolution>().get_primitive();
+                auto pad_a = conv_prim->padding_above;
+                tensor::value_type pad_a_y = pad_a.size() >= 2 ? pad_a[pad_a.size() - 2] : 0;
+                tensor::value_type pad_a_x = pad_a.size() >= 1 ? pad_a[pad_a.size() - 1] : 0;
+                auto pad_b = conv_prim->padding_below;
+                tensor::value_type pad_b_y = pad_b.size() >= 2 ? pad_b[pad_b.size() - 2] : 0;
+                tensor::value_type pad_b_x = pad_b.size() >= 1 ? pad_b[pad_b.size() - 1] : 0;
+                cldnn::padding needed_padding({0, 0, pad_a_x, pad_a_y}, {0, 0, pad_b_x, pad_b_y}, 0);
+                needed_padding = padding::max(layout.data_padding, needed_padding);
+                layout.data_padding = needed_padding;
+            }
+        }
+
         if (_impl_params->get_output_layout(idx) != layout) {
             GPU_DEBUG_IF(debug_config->verbose >= 4) {
                 GPU_DEBUG_COUT << id() << ": update shape: was: " << _impl_params->get_output_layout(idx).to_string()
