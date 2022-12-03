@@ -95,6 +95,7 @@ public:
 namespace detail {
 
 attach_gather_impl::attach_gather_impl() {
+#if 0
     auto dyn_types = {
         data_types::f32,
         data_types::f16,
@@ -108,12 +109,12 @@ attach_gather_impl::attach_gather_impl() {
         format::bfzyx,
         format::bfwzyx
     };
-
-    implementation_map<gather>::add(impl_types::ocl,
-                                    shape_types::dynamic_shape,
-                                    typed_primitive_impl_ocl<gather>::create<gather_impl>,
-                                    dyn_types,
-                                    dyn_formats);
+#endif
+//    implementation_map<gather>::add(impl_types::ocl,
+//                                    shape_types::dynamic_shape,
+//                                    typed_primitive_impl_ocl<gather>::create<gather_impl>,
+//                                    dyn_types,
+//                                    dyn_formats);
 
     implementation_map<gather>::add(impl_types::ocl, shape_types::static_shape, typed_primitive_impl_ocl<gather>::create<gather_impl>, {
         std::make_tuple(data_types::f32, format::fyxb),
