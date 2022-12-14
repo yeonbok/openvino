@@ -264,6 +264,7 @@ void remove_redundant_reorders::run(program& p) {
             r_node.get_primitive()->has_surface_input())
             continue;
 
+        if(r_node.is_dynamic()) continue;
         auto o_layout = r_node.get_output_layout();
         auto i_layout = r_node.get_dependency(0).get_output_layout();
 

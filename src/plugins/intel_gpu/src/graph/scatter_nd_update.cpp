@@ -13,17 +13,20 @@ namespace cldnn {
 GPU_DEFINE_PRIMITIVE_TYPE_ID(scatter_nd_update)
 
 layout scatter_nd_update_inst::calc_output_layout(scatter_nd_update_node const& node, kernel_impl_params const& impl_param) {
+
+    auto desc = impl_param.typed_desc<scatter_nd_update>();
+
     auto input_layout = impl_param.get_input_layout();
 
-    auto output_shape = input_layout.get_tensor();
-    auto input_format = input_layout.format;
-    auto output_type = input_layout.data_type;
-
+    auto output_format = input_layout.format;
+    auto output_shape = input_layout.get_partial_shape();
+    auto output_type = desc->output_data_types[0].value_or(input_layout.data_type);
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;
     }
 
-    return layout{output_type, input_format, output_shape};
+    return layout{output_shape, output_type, output_format};
+
 }
 
 std::string scatter_nd_update_inst::to_string(scatter_nd_update_node const& node) {

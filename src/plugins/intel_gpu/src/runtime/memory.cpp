@@ -27,6 +27,10 @@ memory::memory(engine* engine, const layout& layout, allocation_type type, bool 
                            << " (current=" << _engine->get_used_device_memory(type) << ";"
                            << " max=" << _engine->get_max_used_device_memory(type) << ")" << std::endl;
         }
+        std::cout << "Allocate " << _bytes_count << " bytes of " << type << " allocation type"
+            << " (current=" << _engine->get_used_device_memory(type) << ";"
+            << " max=" << _engine->get_max_used_device_memory(type) << ")" << std::endl;
+
     }
 }
 

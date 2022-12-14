@@ -125,8 +125,8 @@ public:
 };
 
 namespace detail {
-
 attach_eltwise_impl::attach_eltwise_impl() {
+#if 0
     auto dyn_types = {
         data_types::f32,
         data_types::f16,
@@ -147,7 +147,7 @@ attach_eltwise_impl::attach_eltwise_impl() {
                                      typed_primitive_impl_ocl<eltwise>::create<eltwise_impl>,
                                      dyn_types,
                                      dyn_formats);
-
+#endif
     implementation_map<eltwise>::add(impl_types::ocl, shape_types::static_shape, typed_primitive_impl_ocl<eltwise>::create<eltwise_impl>, {
         std::make_tuple(data_types::f32, format::yxfb),
         std::make_tuple(data_types::f16, format::yxfb),

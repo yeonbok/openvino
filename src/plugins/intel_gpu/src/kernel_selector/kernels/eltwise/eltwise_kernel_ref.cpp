@@ -29,7 +29,7 @@ ParamsKey EltwiseKernelRef::GetSupportedKey() const {
     k.EnableBatching();
     k.EnableEltwiseStride();
     k.EnableEltwiseBroadcast();
-    k.EnableDynamicShapesSupport();
+    //k.EnableDynamicShapesSupport();
     return k;
 }
 

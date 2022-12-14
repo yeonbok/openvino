@@ -245,6 +245,44 @@ static void CreateStridedSliceOp(Program& p, const std::shared_ptr<ngraph::op::v
     // To be removed once we enable internal shape infer for all operations
     auto output_shape = output_pshape.is_static() ? output_pshape.to_shape() : ov::Shape{};
 
+    if (auto begin_node = std::dynamic_pointer_cast<ngraph::op::v0::Constant>(op->input_value(1).get_node_shared_ptr())) {
+        if (begin_node->get_element_type() == ov::element::i64) {
+            auto begin = begin_node->cast_vector<int64_t>();
+            if (layerName.compare("stridedslice:onnx::Transpose_705") == 0) {
+                std::cout << "stop" << std::endl;
+            }
+        }
+        if (begin_node->get_element_type() == ov::element::i32) {
+            auto begin = begin_node->cast_vector<int64_t>();
+            if (layerName.compare("stridedslice:onnx::Transpose_705") == 0) {
+                std::cout << "stop" << std::endl;
+            }
+        }
+
+    }
+
+    if (auto end_node = std::dynamic_pointer_cast<ngraph::op::v0::Constant>(op->input_value(2).get_node_shared_ptr())) {
+        std::cout << op->input_value(1).get_node_shared_ptr()->get_friendly_name() << std::endl;
+        if (end_node->get_element_type() == ov::element::i64) {
+            auto end = end_node->cast_vector<int64_t>();
+            if (layerName.compare("stridedslice:onnx::Concat_739") == 0) {
+                std::cout << "stop" << std::endl;
+            }
+        }
+        if (end_node->get_element_type() == ov::element::i32) {
+            auto end = end_node->cast_vector<int32_t>();
+            if (layerName.compare("stridedslice:onnx::Concat_739") == 0) {
+                auto end = end_node->cast_vector<int32_t>();
+                std::cout << "stridedslice::onnx::Concat_739 's end node: " << std::endl;
+                for (auto i : end) {
+                    std::cout << i << ", ";
+                }
+                std::cout << std::endl;
+            }
+        }
+
+    }
+
     auto stridedSlicePrim = cldnn::strided_slice(layerName,
                                                  inputs[0],
                                                  inputs[1],

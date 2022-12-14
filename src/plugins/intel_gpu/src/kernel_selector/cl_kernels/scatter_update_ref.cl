@@ -126,8 +126,10 @@ KERNEL(scatter_update_ref)(const __global INPUT0_TYPE* dictionary,
     #if HAS_FUSED_OPS
         FUSED_OPS_FIRST_KERNEL;
         output[output_idx] = TO_OUTPUT_TYPE(FUSED_OPS_RESULT_FIRST_KERNEL);
+        printf("first_iter) output[%d] = %d\n", output_idx, TO_OUTPUT_TYPE(FUSED_OPS_RESULT_FIRST_KERNEL));
     #else
         output[output_idx] = ACTIVATION(val, ACTIVATION_PARAMS);
+        printf("first_iter) output[%d] = %d\n", output_idx, val);
     #endif
 
 #else // Second kernel
@@ -226,8 +228,11 @@ KERNEL(scatter_update_ref)(const __global INPUT0_TYPE* dictionary,
     #if HAS_FUSED_OPS
         FUSED_OPS_SECOND_KERNEL;
         output[output_idx] = TO_OUTPUT_TYPE(FUSED_OPS_RESULT_SECOND_KERNEL);
+        printf("second_iter) output[%d] = %d\n", output_idx, TO_PUTPUT_TYPE(FUSED_OPS_RESULT_SECOND_KERNEL));
     #else
         output[output_idx] = ACTIVATION(val, ACTIVATION_PARAMS);
+        printf("updates_idx = %d, update[0] = %d, update[1] = %d\n", updates_idx, updates[0], updates[1]);
+        printf("second_iter) output[%d] = %d\n", output_idx, ACTIVATION(val, ACTIVATION_PARAMS));
     #endif
 #endif
 }

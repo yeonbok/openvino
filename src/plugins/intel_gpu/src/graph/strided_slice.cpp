@@ -30,7 +30,7 @@ layout strided_slice_inst::calc_output_layout(strided_slice_node const& node, ke
 }
 
 template<typename ShapeType>
-std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& /*node*/, const kernel_impl_params& impl_param) {
+std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node const& node, const kernel_impl_params& impl_param) {
     auto desc = impl_param.typed_desc<strided_slice>();
     auto input0_layout = impl_param.get_input_layout(0);
 
@@ -60,10 +60,42 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
     auto mem2 = constant_mem.at(2);
     auto mem3 = constant_mem.at(3);
 
-    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock1(mem1, impl_param.prog->get_stream());
-    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock2(mem2, impl_param.prog->get_stream());
-    cldnn::mem_lock<uint8_t, mem_lock_type::read> lock3(mem3, impl_param.prog->get_stream());
+    cldnn::mem_lock<int32_t, mem_lock_type::read> lock1(mem1, impl_param.prog->get_stream());
+    cldnn::mem_lock<int32_t, mem_lock_type::read> lock2(mem2, impl_param.prog->get_stream());
+    cldnn::mem_lock<int32_t, mem_lock_type::read> lock3(mem3, impl_param.prog->get_stream());
+#if 0
+    // begin
+    for (size_t i = 0; i < lock1.size(); ++i) { // or, i < input0_layout.get_partial_shape().size()?
+        if (lock1[i] < 0 && std::abs(lock1[i]) > lock1.size()) {
+            std::cout << "begin " << i << lock1[i] << std::endl;
+            lock1[i] = 0;
+        }
+    }
 
+    bool valid = false;
+    for (size_t i = 0; i < lock2.size(); ++i) {
+        if (lock2[i] > 0) valid = true;
+    }
+    if (!valid)
+        lock2[lock2.size() - 1] = 1;
+#endif
+    // begin
+    for (size_t i = 0; i < lock1.size(); ++i) { // or, i < input0_layout.get_partial_shape().size()?
+        std::cout << "begin " << i << ":" << lock1[i] << std::endl;
+        if (lock1[i] < 0 && std::abs(lock1[i]) > lock1.size()) {
+            lock1[i] = 0;
+        }
+    }
+
+
+    bool valid_end = false;
+    for (size_t i = 0; i < lock2.size(); ++i) { // or, i < input0_layout.get_partial_shape().size()?
+        std::cout << "end " << i << ": " << lock2[i] << std::endl;
+        if (lock2[i] != 0) valid_end = true;
+    }
+    if (!input0_layout.is_dynamic() && !valid_end) {
+        std::cerr << "Invalid end !! all end indices are 0" << std::endl;
+    }
     auto tensor1 = make_host_tensor(mem1->get_layout(), lock1.data());
     auto tensor2 = make_host_tensor(mem2->get_layout(), lock2.data());
     auto tensor3 = make_host_tensor(mem3->get_layout(), lock3.data());

@@ -4,6 +4,7 @@
 
 #include "primitive_inst.h"
 #include "data_inst.h"
+#include "scatter_update_inst.h"
 #include "mutable_data_inst.h"
 #include "generic_layer_inst.h"
 #include "input_layout_inst.h"
@@ -176,7 +177,7 @@ void primitive_inst::update_shape() {
     // Thus we treat it as "dynamic" case
     // TODO: Remove once strided slice impl support runtime tensors for begin/end/stride
     bool strided_slice_wa = false;
-    if (_node->is_type<strided_slice>()) {
+    if (_node->is_type<strided_slice>() || _node->is_type<scatter_update>()) {
         for (size_t i = 1; i < _node->get_dependencies().size(); i++) {
             if (!_node->get_dependency(i).is_type<data>())
                 strided_slice_wa = true;
@@ -221,10 +222,19 @@ void primitive_inst::update_shape() {
     auto update_output_layout = [&](layout& layout, size_t idx) {
         layout.data_padding = padding::max(_node->get_primitive()->output_paddings[idx], layout.data_padding);
         if (_impl_params->get_output_layout(idx) != layout) {
-            GPU_DEBUG_IF(debug_config->verbose >= 4) {
-                GPU_DEBUG_COUT << id() << ": update shape: was: " << _impl_params->get_output_layout(idx).to_short_string()
-                               << " now: " << layout.to_short_string() << std::endl;
+            GPU_DEBUG_IF(debug_config->verbose >= 1) {
+                GPU_DEBUG_COUT << "############ update shape for " << id() << "\n"
+                    << " original shape : " << _impl_params->get_output_layout(idx).to_string() << std::endl;
             }
+            for (size_t i = 0; i < _deps.size(); ++i) {
+                GPU_DEBUG_IF(debug_config->verbose >= 1) {
+                    GPU_DEBUG_COUT << " --- input " << i << " (" << _deps[i].first->get_node().id() << " : " << _deps[i].first->_impl_params->output_layouts[0].to_short_string() << std::endl;
+                }
+            }
+            GPU_DEBUG_IF(debug_config->verbose >= 1) {
+                GPU_DEBUG_COUT << " ===>  now: " << layout.to_string() << std::endl;
+            }
+
             set_shape_change();
         }
         _impl_params->output_layouts[idx] = layout;
@@ -420,6 +430,9 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
     std::vector<event::ptr> dependencies;
+    std::cout << "execute " << _node->id() << std::endl;
+    if (id().compare("scatterupdate:ScatterUpdate_1770093") == 0)
+        std::cout << "hello" << std::endl;
     if (is_dynamic()) {
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
         update_shape();

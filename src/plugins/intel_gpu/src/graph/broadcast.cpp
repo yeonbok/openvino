@@ -84,7 +84,7 @@ std::vector<layout> broadcast_inst::calc_output_layouts(broadcast_node const& /*
         ov::op::v3::shape_infer(&op, input_shapes, output_shapes, const_data);
     } else {
         // Pattern shape is set as second input. Even though the input is scalar, the shape should be propagaterd as dynamic
-        auto output_rank = input_shapes[0].size();
+        auto output_rank = impl_param.get_input_layout(1).get_shape()[0];
         output_shapes[0] = ShapeType::dynamic(std::max(output_rank, static_cast<size_t>(1)));
     }
 

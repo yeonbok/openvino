@@ -70,6 +70,12 @@ std::vector<layout> gather_inst::calc_output_layouts(gather_node const& /*node*/
     auto input0_layout = impl_param.get_input_layout(0);
     auto input1_layout = impl_param.get_input_layout(1);
 
+    if (!input1_layout.is_dynamic()) {
+            if (input1_layout.get_partial_shape().size() == 0) {
+                std::cout << "here!" << std::endl;
+                input1_layout = layout{ov::PartialShape{1}, input1_layout.data_type, input1_layout.format};
+            }
+    }   
     auto output_type = input0_layout.data_type;
     if (impl_param.has_fused_primitives()) {
         output_type = impl_param.get_fused_output_layout().data_type;

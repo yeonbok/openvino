@@ -591,7 +591,7 @@ void program::pre_optimize_graph(bool is_internal) {
 
         apply_opt_pass<pre_replace_deconv>(lo);
 
-        apply_opt_pass<prepare_primitive_fusing>(lo);
+        //apply_opt_pass<prepare_primitive_fusing>(lo);
 
         apply_opt_pass<select_preferred_formats>(lo);
 

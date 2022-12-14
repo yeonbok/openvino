@@ -37,6 +37,14 @@ static void CreatePadOp(Program& p, const std::shared_ptr<ngraph::op::v1::Pad>& 
         pads_end.insert(pads_end.end(), zeros_to_add, 0);
     }
 
+    if (pads_end.size() < pads_begin.size()){
+        int size_diff = pads_begin.size() - pads_end.size();
+        while(size_diff){
+            pads_end.push_back(0);
+            size_diff--;
+        }
+    }
+
     auto tilePrim = cldnn::border(layerName,
                                   inputs[0],
                                   pads_begin,
