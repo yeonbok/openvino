@@ -1167,9 +1167,21 @@ layout layout_optimizer::get_expected_layout(layout const& current_layout,
                                              deconvolution_node const& node,
                                              layout const& output_or_weights_layout) {
     auto prim = node.get_primitive();
-    auto expected_tensor = current_layout.get_tensor();
-    auto expected_data_type = current_layout.data_type;
+
     auto expected_format = current_layout.format;
+    auto expected_data_type = current_layout.data_type;
+
+    auto input_layout = node.get_dependency(0).get_output_layout();
+    auto output_layout = node.calc_output_layout();
+    if (input_layout.is_dynamic() || output_layout.is_dynamic()) {
+        if (input_layout.get_partial_shape().size() <= 4)
+            expected_format = format::b_fs_yx_fsv16;
+        else if (input_layout.get_partial_shape().size() == 5)
+            expected_format = format::b_fs_zyx_fsv16;
+        return layout(current_layout.get_partial_shape(), expected_data_type, expected_format);
+    }
+
+    auto expected_tensor = current_layout.get_tensor();
     bool use_onednn_impls = _optimization_attributes.use_onednn_impls;
 
     if (use_onednn_impls && is_node_for_onednn(node)) {
@@ -1652,7 +1664,21 @@ format layout_optimizer::get_preferred_format(program_node& node) {
     format expected = format::any;
     auto output_layout = node.get_output_layout();
     bool use_onednn_impls = _optimization_attributes.use_onednn_impls;
+    bool allow_new_shape_infer = 
+        node.get_program().get_options().get<build_option_type::allow_new_shape_infer>()->enabled();
 
+    if (allow_new_shape_infer) {
+        for (auto u : node.get_users()) {
+            for (auto i : u->get_shape_infer_dependencies()) {
+                if (u->get_dependencies().size() >= i) break;
+                if (u->get_dependency(i).get_unique_id() == node.get_unique_id()) {
+                    std::cout << "node " << node.id() << " is " << u->id() << "'s shape infer dep" << std::endl;
+                    expected = format::get_default_format(output_layout.get_rank(), false, false);
+                    return expected;
+                }
+            }
+        }
+    }
     if (!_forcing_map.empty() && _forcing_map.count(node.id()) != 0) {
         expected = _forcing_map.at(node.id()).first;
     } else if (node.is_type<convolution>()) {

@@ -166,17 +166,31 @@ static void CreateConvolutionBackpropDataOp(Program& p, const std::shared_ptr<ng
     strides.resize(std::max<size_t>(2, strides.size()), 1);
     pads_begin.resize(std::max<size_t>(2, pads_begin.size()), 0);
 
-    auto deconvPrim = cldnn::deconvolution(layerName,
-                                           inputs[0],
-                                           weights,
-                                           {},
-                                           1,
-                                           strides,
-                                           pads_begin,
-                                           tensor_from_dims(op->get_output_tensor(0).get_shape()),
-                                           weights_have_group_dim);
+    if (!op->is_dynamic()) {
+        auto deconvPrim = cldnn::deconvolution(layerName,
+                                               inputs[0],
+                                               weights,
+                                               {},
+                                               1,
+                                               strides,
+                                               pads_begin,
+                                               tensor_from_dims(op->get_output_tensor(0).get_shape()),
+                                               weights_have_group_dim);
 
-    p.add_primitive(*op, deconvPrim);
+        p.add_primitive(*op, deconvPrim);
+    } else {
+        auto deconvPrim = cldnn::deconvolution(layerName,
+                                               inputs[0],
+                                               weights,
+                                               {},
+                                               1,
+                                               strides,
+                                               pads_begin,
+                                               false);
+
+        p.add_primitive(*op, deconvPrim);
+
+    }
 }
 
 static void CreateGroupConvolutionBackpropDataOp(Program& p, const std::shared_ptr<ngraph::op::v1::GroupConvolutionBackpropData>& op) {
@@ -226,17 +240,30 @@ static void CreateGroupConvolutionBackpropDataOp(Program& p, const std::shared_p
     strides.resize(std::max<size_t>(2, strides.size()), 1);
     pads_begin.resize(std::max<size_t>(2, pads_begin.size()), 0);
 
-    auto deconvPrim = cldnn::deconvolution(layerName,
-                                           inputs[0],
-                                           weights,
-                                           {},
-                                           groups,
-                                           strides,
-                                           pads_begin,
-                                           tensor_from_dims(op->get_output_tensor(0).get_shape()),
-                                           weights_have_group_dim);
+    if (!op->is_dynamic()) {
+        auto deconvPrim = cldnn::deconvolution(layerName,
+                                               inputs[0],
+                                               weights,
+                                               {},
+                                               groups,
+                                               strides,
+                                               pads_begin,
+                                               tensor_from_dims(op->get_output_tensor(0).get_shape()),
+                                               weights_have_group_dim);
 
-    p.add_primitive(*op, deconvPrim);
+        p.add_primitive(*op, deconvPrim);
+    } else {
+        auto deconvPrim = cldnn::deconvolution(layerName,
+                                               inputs[0],
+                                               weights,
+                                               {},
+                                               groups,
+                                               strides,
+                                               pads_begin,
+                                               weights_have_group_dim);
+
+        p.add_primitive(*op, deconvPrim);
+    }
 }
 
 static void DeformableConvolutionImpl(Program& p,

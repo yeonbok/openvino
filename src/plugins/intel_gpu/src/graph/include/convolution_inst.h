@@ -135,6 +135,7 @@ public:
         return params;
     }
 
+    std::vector<size_t> get_shape_infer_dependencies() const override { return {}; }
 private:
     int32_t split;
     bool depthwise_sep_opt;
@@ -156,7 +157,6 @@ public:
     static std::vector<layout> calc_output_layouts(convolution_node const& node, kernel_impl_params const& impl_param);
     static layout calc_output_layout(convolution_node const& node, kernel_impl_params const& impl_param);
     static std::string to_string(convolution_node const& node);
-
 public:
     typed_primitive_inst(network& network, convolution_node const& node);
 

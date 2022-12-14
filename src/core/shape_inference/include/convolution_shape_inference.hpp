@@ -424,7 +424,7 @@ int64_t calculate_num_spatial(const ConvType* op,
                               const PartialShape& output_shapes_shape,
                               const int64_t& num_non_spatial_data_dims,
                               const int64_t& num_non_spatial_filter_dims) {
-    auto num_spatial = op->m_num_spatial;
+    int64_t num_spatial = op->m_num_spatial;
     if (num_spatial == -1) {
         num_spatial = calculate_num_spatial(op,
                                             input_shape,
@@ -433,7 +433,7 @@ int64_t calculate_num_spatial(const ConvType* op,
                                             num_non_spatial_filter_dims);
         if (const auto& size = op->m_output_padding.size()) {
             NODE_VALIDATION_CHECK(op,
-                                  num_spatial == -1 || num_spatial == size,
+                                  num_spatial == -1 || num_spatial == static_cast<int64_t>(size),
                                   "Output padding should be defined for all and only spatial dimensions.");
             num_spatial = static_cast<int64_t>(size);
         }
@@ -555,12 +555,12 @@ void shape_infer(const ConvolutionBackpropData* op,
                  const T& output_shape_from_input,
                  const std::vector<T>& input_shapes,
                  std::vector<T>& output_shapes) {
-    constexpr size_t num_non_spatial_data_dims = 2, num_non_spatial_filter_dims = 2;
+    constexpr int64_t num_non_spatial_data_dims = 2, num_non_spatial_filter_dims = 2;
     size_t input_size = input_shapes.size();
     NODE_VALIDATION_CHECK(op, (input_size == 2 || input_size == 3) && output_shapes.size() == 1);
     auto input_shape = input_shapes[0], filters_shape = input_shapes[1];
 
-    const auto num_spatial = op->m_num_spatial != -1
+    const int64_t num_spatial = op->m_num_spatial != -1
                                  ? op->m_num_spatial
                                  : input_size == 3 ? calculate_num_spatial(op,
                                                                            input_shape,
@@ -604,13 +604,13 @@ void shape_infer(const ConvolutionBackpropData* op,
     output_shape[1] = filters_shape[1];
 
     NODE_VALIDATION_CHECK(op,
-                          input_shape[1].compatible(filters_shape[0]),
+                          input_shape[1].compatible(filters_shape[0]), // taylor
                           "Input channels dimension of data and filters inputs must be equal");
 
     if (input_size == 3) {
         if (output_shape_from_input.rank().is_static()) {
             NODE_VALIDATION_CHECK(op,
-                                  output_shape_from_input.size() == num_spatial,
+                                  static_cast<int64_t>(output_shape_from_input.size()) == num_spatial,
                                   "Output shape should be specified only and for all spatial dimensions.");
             for (int64_t i = 0; i < num_spatial; ++i)
                 output_shape[i + num_non_spatial_data_dims] = output_shape_from_input[i];

@@ -182,6 +182,35 @@ struct deconvolution : public primitive_base<deconvolution> {
           weights(weights),
           bias(bias) {}
 
+    // for dynamic shape
+    /// @brief Constructs deconvolution primitive (computes input paddings to match output size).
+    /// @param id This primitive id.
+    /// @param input Input primitive id.
+    /// @param weights List of primitive ids containing weights data.
+    /// @param bias List of primitive ids containing bias data. Provide empty vector if using next parameters without bias.
+    /// @param groups Number of filter groups.
+    /// @param pad Defines logical pad value added to input tensor
+    /// @param stride Defines shift in input buffer between adjacent calculations of output values.
+    /// @param with_activation Enables Relu activation.
+    /// @param activation_slp Relu activation slope.
+    deconvolution(const primitive_id& id,
+                  const input_info& input,
+                  const std::vector<primitive_id>& weights,
+                  const std::vector<primitive_id>& bias,
+                  uint32_t groups,
+                  ov::Strides stride,
+                  ov::CoordinateDiff pad,
+                  bool grouped_weights_shape,
+                  const padding& output_padding = padding())
+        : primitive_base(id, {input}, {output_padding}),
+          pad(pad),
+          stride(stride),
+          with_output_size(false),
+          groups(groups),
+          grouped_weights_shape(grouped_weights_shape),
+          weights(weights),
+          bias(bias) {}
+
     /// @brief Constructs deconvolution primitive (w/o bias, computes input paddings to match output size).
     /// @param id This primitive id.
     /// @param input Input primitive id.

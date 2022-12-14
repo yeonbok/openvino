@@ -87,7 +87,11 @@ std::vector<layout> resample_inst::calc_output_layouts(resample_node const& /*no
             ov::op::v4::shape_infer(&op, pads_begin, pads_end, input_shapes, output_shapes, {const_data});
         } else {
             auto sizes_mem = memory_deps.at(1);
-            cldnn::mem_lock<uint8_t, mem_lock_type::read> lock(sizes_mem, impl_param.prog->get_stream());
+            cldnn::mem_lock<uint32_t, mem_lock_type::read> lock(sizes_mem, impl_param.prog->get_stream());
+            std::cout << "sizes_mem:" << sizes_mem->get_layout().to_string() << std::endl;
+            for (size_t i = 0; i < lock.size(); ++i) {
+                std::cout << i << " : " << lock[i] << std::endl;
+            }
             auto sizes_tensor = make_host_tensor(sizes_mem->get_layout(), lock.data());
             const_data.emplace(1, sizes_tensor);
             ov::op::v4::shape_infer(&op, pads_begin, pads_end, input_shapes, output_shapes, {const_data});

@@ -83,6 +83,7 @@ public:
     }
 
 
+    std::vector<size_t> get_shape_infer_dependencies() const override { return {}; }
 private:
     int32_t split;
     bool depthwise_sep_opt;
@@ -98,6 +99,8 @@ class typed_primitive_inst<deconvolution> : public typed_primitive_inst_base<dec
 
 public:
     static layout calc_output_layout(deconvolution_node const& node, kernel_impl_params const& impl_param);
+    template<typename ShapeType>
+    static std::vector<layout> calc_output_layouts(deconvolution_node const& node, kernel_impl_params const& impl_param);
     static std::string to_string(deconvolution_node const& node);
 
 public:

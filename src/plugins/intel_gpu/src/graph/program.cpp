@@ -572,7 +572,8 @@ void program::pre_optimize_graph(bool is_internal) {
 
     apply_opt_pass<reverse_optional_nodes_outputs>();
 
-    bool output_size_handling_enabled = analyze_output_size_handling_need();
+    //bool output_size_handling_enabled = analyze_output_size_handling_need();
+    bool output_size_handling_enabled = false;
     for (auto& node : processing_order) {
         if (!node->is_type<data>())
             node->get_output_layouts();
@@ -589,7 +590,7 @@ void program::pre_optimize_graph(bool is_internal) {
     if (options.get<build_option_type::optimize_data>()->enabled()) {
         apply_opt_pass<prepare_primitive_fusing_through>();
 
-        apply_opt_pass<pre_replace_deconv>(lo);
+        //apply_opt_pass<pre_replace_deconv>(lo);
 
         apply_opt_pass<prepare_primitive_fusing>(lo);
 

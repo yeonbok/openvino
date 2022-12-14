@@ -7,6 +7,7 @@
 #include "primitive_type_base.h"
 #include "sliding_window_utils.hpp"
 #include "intel_gpu/runtime/error_handler.hpp"
+#include "convolution_shape_inference.hpp"
 #include "json_object.h"
 #include <string>
 
@@ -137,6 +138,71 @@ std::string deconvolution_inst::to_string(deconvolution_node const& node) {
     return primitive_description.str();
 }
 
+template<typename ShapeType>
+std::vector<layout> deconvolution_inst::calc_output_layouts(deconvolution_node const& node, kernel_impl_params const& impl_param) {
+    auto desc = impl_param.typed_desc<deconvolution>();
+    auto input_layout = impl_param.get_input_layout(0);
+    auto weights_layout = *impl_param.weights_layout;
+    weights_layout = weights_layout.convert_to_weights_layout(desc->grouped_weights_shape);
+    auto weight_shape = weights_layout.get_partial_shape();
+    std::swap(weight_shape[0], weight_shape[1]);
+    weights_layout.set_partial_shape(weight_shape);
+
+
+    if (input_layout.is_dynamic())
+        return {layout{ShapeType::dynamic(input_layout.get<ShapeType>().rank()), input_layout.data_type, input_layout.format}};
+
+    auto pad = desc->pad;
+    auto stride = desc->stride;
+    //auto dilation = desc->dilation;
+    //auto split = desc->weights.size();
+
+    auto input_type = input_layout.data_type;
+
+    auto output_type = input_type;
+    if (impl_param.has_fused_primitives()) {
+        output_type = impl_param.get_fused_output_layout().data_type;
+    }
+
+    if ((input_type == data_types::u8 || input_type == data_types::i8) &&
+         !impl_param.has_fused_primitives()) {
+        output_type = data_types::f32;
+    }
+    // dynamic case
+    std::vector<ShapeType> input_shapes = {
+        input_layout.get<ShapeType>(),
+        weights_layout.get<ShapeType>()
+    };
+    std::vector<ShapeType> output_shapes = {ShapeType()};
+
+    if (desc->groups > 1) {
+        #if 0
+        ov::op::v1::GroupConvolution op;
+        op.set_dilations(desc->dilation);
+        op.set_strides(desc->stride);
+        op.set_auto_pad(ov::op::PadType::EXPLICIT);
+        auto pad_begin = desc->padding_above;
+        auto pad_end = desc->padding_below;
+        if (input_shapes[1].size() == 4 && input_shapes[0].size() == 3) {
+            // 3D
+            input_shapes[1][3] = input_shapes[1][2];
+            input_shapes[1][2] = input_shapes[0][1].get_length()/input_shapes[1][0].get_length();
+        }
+        ov::op::v1::shape_infer(&op, pad_begin, pad_end, input_shapes, output_shapes);
+        #endif
+        std::cout << "error" << std::endl;
+    } else {
+        ov::op::v1::ConvolutionBackpropData op;
+        op.set_strides(desc->stride);
+        op.set_dilations({1, 1});
+        op.set_output_padding({0, 0});
+        op.set_auto_pad(ov::op::PadType::EXPLICIT);
+        ov::op::v1::shape_infer(&op, pad, pad, ov::PartialShape{}, input_shapes, output_shapes);
+    }
+    format::type output_format = input_layout.format.value;
+    return {layout{output_shapes[0], output_type, output_format}};
+
+}
 deconvolution_inst::typed_primitive_inst(network& network, deconvolution_node const& node)
     : parent(network, node),
     _groups(node.get_groups()),
@@ -144,6 +210,8 @@ deconvolution_inst::typed_primitive_inst(network& network, deconvolution_node co
     auto stride = argument->stride;
     auto pad = argument->pad;
 
+    if (node.is_dynamic())
+        return;
     auto input_layout = node.input().get_output_layout();
     auto output_layout = node.get_output_layout();
 
