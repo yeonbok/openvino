@@ -390,6 +390,7 @@ DEFINE_string(load_config, "", load_config_message);
 /// @brief Define flag for dumping configuration file <br>
 DEFINE_string(dump_config, "", dump_config_message);
 
+DEFINE_string(input_shapes_file, "", "hello");
 /**
  * @brief This function show a help message
  */
