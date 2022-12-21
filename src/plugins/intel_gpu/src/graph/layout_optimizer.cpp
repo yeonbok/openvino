@@ -1648,7 +1648,17 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
 
     return preferred_impl;
 }
-
+format layout_optimizer::get_preferred_input_format(program_node& node) {
+    format expected = format::any;
+    if (node.get_input_layouts().size() == 0)
+        return expected;
+    auto input_layout = node.get_input_layouts()[0];
+    if (node.is_type<shape_of>())
+        return format::get_default_format(node.get_dependency(0).get_output_layout(false).get_rank());
+    return get_preferred_format(node);
+   
+}
+// output 
 format layout_optimizer::get_preferred_format(program_node& node) {
     format expected = format::any;
     auto output_layout = node.get_output_layout();
@@ -1657,8 +1667,8 @@ format layout_optimizer::get_preferred_format(program_node& node) {
     bool allow_new_shape_infer = node.get_program().get_options().get<build_option_type::allow_new_shape_infer>()->enabled();
 
     if (allow_new_shape_infer) {
-        if (node.is_type<shape_of>())
-            return format::get_default_format(node.get_dependency(0).get_output_layout(false).get_rank());
+        //if (node.is_type<shape_of>())
+        //    return format::get_default_format(node.get_dependency(0).get_output_layout(false).get_rank());
         for (auto u : node.get_users()) {
             for (auto dep_idx : u->get_shape_infer_dependencies()) {
                 if (u->get_dependencies().size() <= dep_idx)
