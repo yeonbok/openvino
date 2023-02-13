@@ -615,7 +615,9 @@ void network::set_input_data(const primitive_id& id, memory::ptr data) {
 
     // Wait for previous execution completion
     reset_execution(true);
+    std::cout << " #### set input data for " << id << " ( data :" << data <<  std::endl;
     input->set_data(data);
+    std::cout << " #### done " << std::endl;
 }
 
 void network::add_default_output_chains() {

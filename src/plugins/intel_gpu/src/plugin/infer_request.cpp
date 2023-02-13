@@ -181,9 +181,9 @@ void InferRequest::SetBlob(const std::string& name, const Blob::Ptr& data) {
         IE_THROW(NotAllocated) << "Failed to set empty blob with name: \'" << name << "\'";
 
     size_t dataSize = data->size();
-    if (0 == dataSize) {
-        IE_THROW() << "Input data is empty. Input name: \'" << name << "\'";
-    }
+    //if (0 == dataSize) {
+//        IE_THROW() << "Input data is empty. Input name: \'" << name << "\'";
+//    }
     if (inputTensorsMap.find(name) != inputTensorsMap.end()) {
         inputTensorsMap.erase(name);
     }
@@ -906,6 +906,7 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
     OPENVINO_ASSERT(inputLayoutItr != m_graph->GetInputLayouts().end(), "[GPU] Input name mismatch");
 
     auto input_layout = inputLayoutItr->second;
+    std::cout << "##### prepare_input for " << inputName << " ( " << input_layout.to_string() << ")" << std::endl;
     auto& prec = inputBlob->getTensorDesc().getPrecision();
     auto remote_ptr = inputBlob->as<gpu::ClBlob>();
     auto& stream = m_graph->GetNetwork()->get_stream();
@@ -936,11 +937,14 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
         }
 
         if (should_allocate_device_blob) {
+            std::cout << " ------  " << inputName << " should allocate device blob" << std::endl;
             _deviceInputs[inputName] = create_device_blob(inputBlob->getTensorDesc());
         } else {
+            std::cout << " ------  " << inputName << " reinterprete device blob" << std::endl;
             _deviceInputs[inputName] = reinterpret_device_blob(_deviceInputs[inputName], inputBlob->getTensorDesc());
         }
     } else if (input_layout.is_static() && !is_dev_input && can_use_usm) {
+        std::cout << " ------  " << inputName << " allocaet dev mem if needed" << std::endl;
         allocate_dev_mem_if_needed(_deviceInputs, inputBlob, inputName, input_layout, (conv_to_supported_prec(prec) != prec));
     }
     OPENVINO_ASSERT(_deviceInputs.find(inputName) != _deviceInputs.end(), "[GPU] Couldn't find device blob allocated for ", inputName, " input");
@@ -972,14 +976,17 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
             auto input_layout = m_graph->GetInputLayouts().find(inputName);
             if (input_layout != m_graph->GetInputLayouts().end()) {
                 if (input_layout->second.format != inputMem->get_layout().format && input_layout->second.is_static()) {
+                    std::cout << "------"  << "reinterprete buffer of " << inputMem << " with " << input_layout->second.to_short_string() << std::endl;
                     inputMem = m_graph->GetNetwork()->get_engine().reinterpret_buffer(*inputMem, input_layout->second);
                 }
             }
 
             if (!is_dev_input) {
+                std::cout << "------ "  << "is not dev_input " << std::endl;
                 Precision conv_prec = conv_to_supported_prec(prec);
                 // TODO: Remove this checks once 95363 issue is solved
                 if (conv_prec != prec && conv_prec == Precision::FP32) {
+                    std::cout << "------ "  << "prec is FP32 " << std::endl;
                     // GPU plugin doesn't support I16 input precision,
                     // so have to convert input data to fp32 precision
                     cldnn::mem_lock<float> ptr{ inputMem, stream };
@@ -991,6 +998,7 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
                         convertAndCopy<double, float>(inputBlob.get(), ptr.data());
                     }
                 } else if (conv_prec != prec && conv_prec == Precision::I32) {
+                    std::cout << "------ "  << "prec is I32 " << std::endl;
                     cldnn::mem_lock<int32_t> ptr{ inputMem, stream };
                     if (prec == Precision::U64) {
                         convertAndCopy<uint64_t, int32_t>(inputBlob.get(), ptr.data());
@@ -998,9 +1006,11 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
                         convertAndCopy<uint32_t, int32_t>(inputBlob.get(), ptr.data());
                     }
                 } else {
+                    std::cout << "------ "  << " no need type conversion " << std::endl;
                     auto src_lock = inputBlob->cbuffer();
                     auto src_ptr = src_lock.as<uint8_t*>();
                     if (!same_host_mem(inputMem, src_ptr)) {
+                        std::cout << "------ "  << " !same_host_mem. need copy from " << src_ptr << std::endl;
                         auto ev = inputMem->copy_from(stream, src_ptr, false);
                         dependencies.push_back(ev);
                     }

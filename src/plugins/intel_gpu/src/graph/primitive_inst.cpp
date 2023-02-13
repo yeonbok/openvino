@@ -337,6 +337,7 @@ bool primitive_inst::update_impl() {
         }
         if (!has_cached_impl) {
             if (_dynamic_impl) {
+#if 0
                 auto& compilation_context = get_network().get_compilation_context();
                 compilation_context.push_task(impl_key, [this, updated_params, impl_key](kernels_cache& kc) {
                     auto& cache = get_network().get_implementations_cache();
@@ -358,7 +359,9 @@ bool primitive_inst::update_impl() {
                     std::lock_guard<std::mutex> lock(get_network().get_impl_cache_mutex());
                     cache.add(impl_key, impl->clone());
                 });
+#endif
                 _impl = _dynamic_impl->clone();
+                std::cout << "$$$$$$ update_dispatch_data for " << id() << std::endl;
                 _impl->update_dispatch_data(*_impl_params);
 
                 update_shape_info(*_impl_params);
@@ -388,13 +391,20 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     const auto primitive_id = id();
     OPENVINO_ASSERT(_has_valid_input, primitive_id, " has invalid/unset input");
     GPU_DEBUG_GET_INSTANCE(debug_config);
-
+    std::cout << "##### Execute " << id() << std::endl;
+    std::cout << " --- deps for " << id() << std::endl;
+    for (auto i : _deps) {
+        std::cout << "  -------- " << i.first->id() << " 's output ptr is "  << i.first->_outputs[0]  << std::endl;
+    }
     std::vector<event::ptr> dependencies;
     if (is_dynamic()) {
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
+        std::cout << "$$$$$$ update_shape : start " << id() << std::endl;
         update_shape();
+        std::cout << "$$$$$$ update_shape : done " << id() << " output layout : " << _impl_params->output_layouts[0].to_short_string() << std::endl;
         if (_impl_params->output_layouts[0].bytes_count() == 0) {
             auto ev = get_network().get_stream().create_user_event(true);
+            std::cout << "$$$$$$ update_shape : done " << id() << " do nothing and return " << std::endl;
             return ev;
         }
 
@@ -429,11 +439,15 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         // Try update impl if current impl is dynamic because opt kernel may be added to impl cache through async compilation.
         // Only try update weight and realloc when impl is updated.
         if (shape_changed() || !_impl || (!shape_changed() && _impl->is_dynamic())) {
+            std::cout << "$$$$$$ update_impl : start for " << id() << std::endl;
             if (update_impl()) {
+                std::cout << "$$$$$$ update_impl : done for " << id() << std::endl;
                 auto ev = update_weights();
                 if (ev)
                     dependencies.push_back(ev);
+                std::cout << "$$$$$$ realloc if needed " << id() << std::endl;
                 realloc_if_needed();
+                std::cout << "$$$$$$ realloc if needed done" << id() << " _output address is " << _outputs[0] << std::endl;
             }
         }
     }
@@ -445,6 +459,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
     if (is_dynamic() || has_mutable_input() || is_output()) {
+        std::cout << "$$$$$$ set arguments for " << id() << std::endl;
         set_arguments();
     }
     on_execute();

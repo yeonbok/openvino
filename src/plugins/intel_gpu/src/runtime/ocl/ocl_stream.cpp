@@ -60,6 +60,7 @@ cl_int set_kernel_arg(ocl_kernel_type& kernel, uint32_t idx, cldnn::memory::cptr
         return kernel.setArg(idx, buf);
     } else if (memory_capabilities::is_usm_type(mem->get_allocation_type())) {
         auto buf = std::dynamic_pointer_cast<const ocl::gpu_usm>(mem)->get_buffer();
+        std::cout << "kernel: " << kernel.get() << " set arg (usm) " << idx << " mem: " << mem << " ( " << buf.get() << ") size: " << mem->size() << std::endl;
         GPU_DEBUG_TRACE_DETAIL << "kernel: " << kernel.get() << " set arg (usm) " << idx << " mem: " << buf.get() << " size: " << mem->size() << std::endl;
         return kernel.setArgUsm(idx, buf);
     } else {
@@ -74,12 +75,15 @@ cl_int set_kernel_arg(ocl_kernel_type& kernel, uint32_t idx, cldnn::memory::cptr
 void set_arguments_impl(ocl_kernel_type& kernel,
                         const arguments_desc& args,
                         const kernel_arguments_data& data) {
+    std::cout << "!!!! set_arguments_impl !!! " << std::endl;
     using args_t = argument_desc::Types;
     using scalar_t = scalar_desc::Types;
     for (uint32_t i = 0; i < static_cast<uint32_t>(args.size()); i++) {
         cl_int status = CL_INVALID_ARG_VALUE;
+        std::cout << "!!!! args " << i << std::endl;
         switch (args[i].t) {
             case args_t::INPUT:
+                std::cout << "!!!! input[" << args[i].index << "] " << data.inputs[args[i].index] << std::endl;
                 if (args[i].index < data.inputs.size() && data.inputs[args[i].index]) {
                     status = set_kernel_arg(kernel, i, data.inputs[args[i].index]);
                 }

@@ -42,11 +42,14 @@ void input_layout_inst::set_data(memory::ptr mem) {
 
     if (mem->is_allocated_by(get_network().get_engine())) {
         OPENVINO_ASSERT(!_outputs.empty(), "[GPU] Can't set data for empty input memory");
+        std::cout << "---- (" << id() << ") " << "mem is allocated by same engine. Just assign _outputs " << _outputs[0] << " with " << mem << std::endl;
         _outputs[0] = mem;
     } else {
+        std::cout << "---- (" << id() << ") " << "Copy from " << mem << " => " << _outputs[0] << std::endl;
         mem_lock<char, mem_lock_type::read> src(mem, get_network().get_stream());
         mem_lock<char, mem_lock_type::write> dst(_outputs[0], get_network().get_stream());
         std::copy(src.begin(), src.end(), dst.begin());
+        std::cout << "---- (" << id() << ") " << "Finished coping " << std::endl;
     }
 
     _has_valid_input = true;
