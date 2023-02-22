@@ -171,6 +171,9 @@ void set_arguments_impl(ocl_kernel_type& kernel,
             case args_t::SHAPE_INFO:
                 status = set_kernel_arg(kernel, i, data.shape_info);
                 break;
+            case args_t::RUNTIME_OFFSET:
+                status = kernel.setArg(i, data.runtime_offsets[args[i].index]);
+                break;
             default:
                 break;
         }

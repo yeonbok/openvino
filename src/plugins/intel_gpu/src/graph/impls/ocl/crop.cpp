@@ -39,6 +39,7 @@ public:
             // but in runtime dispatch data will be generated for non-broadcast case as shapes are actually same.
             params.broadcast = true;
         }
+        params.runtime_offsets.push_back(6731);
         return {params, optional_params};
     }
         void update_dispatch_data(const kernel_impl_params& impl_param) override {

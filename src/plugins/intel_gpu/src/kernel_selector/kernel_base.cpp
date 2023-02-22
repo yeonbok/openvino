@@ -125,6 +125,16 @@ JitConstants KernelBase::MakeBaseParamsJitConstants(const base_params& params) c
         jit.AddConstant(MakeJitConstant("OPTIONAL_SHAPE_INFO_TENSOR", ""));
     }
 
+    if (params.runtime_offsets.size() > 0) {
+        for (size_t i = 0; i < params.runtime_offsets.size(); ++i) {
+            jit.AddConstant(MakeJitConstant("OPTIONAL_RUNTIME_OFFSET_ARG", "const int runtime_offset_" + toCodeString(i) + ","));
+        }
+    } else {
+        jit.AddConstant(MakeJitConstant("OPTIONAL_RUNTIME_OFFSET", ""));
+    }
+
+    jit.AddConstant(MakeJitConstant("RUNTIME_OFFSET", "70"));
+
 #ifndef NDEBUG
     jit.AddConstant(MakeJitConstant("LayerID", params.layerID));
 #endif

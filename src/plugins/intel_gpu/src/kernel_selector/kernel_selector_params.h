@@ -417,6 +417,7 @@ public:
     EngineInfo engineInfo;
     std::string uniqueID;
     bool is_shape_agnostic;
+    std::vector<size_t> runtime_offsets;
     virtual std::string to_string() const;
     virtual std::string to_cache_string_v2() const;
 };

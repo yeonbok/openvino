@@ -74,7 +74,8 @@ struct argument_desc {
         ACTIVATIONS_ZERO_POINTS,
         COMPENSATION,
         INPUT_OF_FUSED_PRIMITIVE,
-        SHAPE_INFO
+        SHAPE_INFO,
+        RUNTIME_OFFSET
     };
 
     Types t;
@@ -112,6 +113,7 @@ struct kernel_arguments_data {
 
     std::vector<memory::cptr> fused_op_inputs;
     const scalars_desc* scalars = nullptr;
+    std::vector<size_t> runtime_offsets;
 };
 
 struct kernel_arguments_data_idx {
