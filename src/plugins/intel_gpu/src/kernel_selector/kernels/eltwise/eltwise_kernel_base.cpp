@@ -330,7 +330,7 @@ JitConstants EltwiseKernelBase::MakeLoadJitConstants(const eltwise_params& param
                         jit.AddConstant(MakeJitConstant(name,
                                                         "input" + toCodeString(input.index) +
                                                         "[GET_INDEX(INPUT, " + toCodeString(input.index) +
-                                                        "," + idx_order + ")]"));
+                                                        "," + idx_order + ") " + (params.is_shape_agnostic ? "+ runtime_offset]" : "]")));
                     break;
                 case EltwiseInputMode::OUTPUT_BUFFER:
                     jit.AddConstant(MakeJitConstant(name, "output[GET_INDEX(OUTPUT,,OUTPUT_IDX_ORDER)]"));
@@ -694,8 +694,6 @@ KernelsData EltwiseKernelBase::GetCommonKernelsData(const Params& params, const 
         OPENVINO_ASSERT(kd.kernels.size() == 1, "[GPU] Invalid kernels size for update dispatch data func");
         kd.kernels[0].params.workGroups.global = dispatchData.gws;
         kd.kernels[0].params.workGroups.local = dispatchData.lws;
-        kd.params->input_runtime_offsets.clear();
-        kd.params->input_runtime_offsets.push_back(params.input_runtime_offsets[0]);
     };
 
     DispatchData dispatchData = SetDefault(newParams);
@@ -712,9 +710,10 @@ KernelsData EltwiseKernelBase::GetCommonKernelsData(const Params& params, const 
                                    false,
                                    GetFusedPrimitiveInputsCount(params),
                                    1,
-                                   is_dynamic,
-                                   params.input_runtime_offsets.size());
-
+                                   is_dynamic);
+    if (params.is_shape_agnostic) {
+        kernel.params.arguments.push_back({ArgumentDescriptor::Types::SCALAR, 0});
+    }
     return {kd};
 }
 }  // namespace kernel_selector

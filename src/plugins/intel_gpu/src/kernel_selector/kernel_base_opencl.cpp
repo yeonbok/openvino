@@ -128,15 +128,11 @@ Arguments KernelBaseOpenCL::GetArgsDesc(uint32_t num_of_input,
                                           bool use_bias,
                                           uint32_t number_of_inputs_for_fused_prim,
                                           uint32_t num_of_output,
-                                          bool is_dynamic,
-                                          uint32_t num_of_input_runtime_offset) const {
+                                          bool is_dynamic) const {
     Arguments args;
 
-    if (is_dynamic) {
+    if (is_dynamic)
         args.push_back({ArgumentDescriptor::Types::SHAPE_INFO, 0});
-        for (uint32_t i = 0; i < num_of_input_runtime_offset; ++i)
-            args.push_back({ArgumentDescriptor::Types::INPUT_RUNTIME_OFFSET, i});
-    }
 
     for (uint32_t i = 0; i < num_of_input; i++) {
         args.push_back({ArgumentDescriptor::Types::INPUT, i});
@@ -215,8 +211,7 @@ void KernelBaseOpenCL::FillCLKernelData(clKernelData& kernel,
                                         int number_of_inputs,
                                         uint32_t number_of_inputs_for_fused_prims,
                                         int number_of_outputs,
-                                        bool is_dynamic,
-                                        uint32_t number_of_runtime_offsets) const {
+                                        bool is_dynamic) const {
     if (!is_dynamic)
         KernelBase::CheckDispatchData(kernelMapName, dispatchData, engine_info.maxWorkGroupSize);
     kernel.code.kernelString = GetKernelString(kernelMapName, jit, entryPoint, engine_info, exeMode);
@@ -227,8 +222,7 @@ void KernelBaseOpenCL::FillCLKernelData(clKernelData& kernel,
                                           bias,
                                           number_of_inputs_for_fused_prims,
                                           number_of_outputs,
-                                          is_dynamic,
-                                          number_of_runtime_offsets);
+                                          is_dynamic);
 }
 
 bool KernelBaseOpenCL::layout_is_one_of(const MultiDataTensor& tensors, const std::vector<DataLayout>& allowed_layouts) const {

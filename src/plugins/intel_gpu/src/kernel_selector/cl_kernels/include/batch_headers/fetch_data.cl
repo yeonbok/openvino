@@ -6,7 +6,6 @@
 
 #define GET_DATA_INDEX(prefix, b, f, y, x)  \
     CAT(prefix, _OFFSET) +                  \
-    CAT(CAT(OPTIONAL_, prefix), _RUNTIME_OFFSET_TENSOR) + \
     (x)*CAT(prefix, _X_PITCH) +             \
     (y)*CAT(prefix, _Y_PITCH) +             \
     (f)*CAT(prefix, _FEATURE_PITCH) +       \
@@ -14,7 +13,6 @@
 
 #define GET_DATA_INDEX_RAW(prefix, i0, i1, i2, i3)                     \
     CAT(prefix, _OFFSET) +                                             \
-    CAT(CAT(OPTIONAL_, prefix), _RUNTIME_OFFSET_TENSOR) + \
     (i0)*CAT(prefix, _PITCHES)[0] + \
     (i1)*CAT(prefix, _PITCHES)[1] + \
     (i2)*CAT(prefix, _PITCHES)[2] + \
@@ -22,7 +20,6 @@
 
 #define GET_DATA_INDEX_SAFE(prefix, b, f, y, x)                     \
     CAT(prefix, _OFFSET) +                                          \
-    CAT(CAT(OPTIONAL_, prefix), _RUNTIME_OFFSET_TENSOR) + \
     (x % CAT(prefix, _SIZE_X     ))*CAT(prefix, _X_PITCH) +         \
     (y % CAT(prefix, _SIZE_Y     ))*CAT(prefix, _Y_PITCH) +         \
     (f % CAT(prefix, _FEATURE_NUM))*CAT(prefix, _FEATURE_PITCH) +   \

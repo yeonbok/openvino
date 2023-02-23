@@ -39,14 +39,20 @@ public:
             // but in runtime dispatch data will be generated for non-broadcast case as shapes are actually same.
             params.broadcast = true;
         }
-        params.input_runtime_offsets.push_back(impl_param.input_offsets[0].count());
         return {params, optional_params};
     }
         void update_dispatch_data(const kernel_impl_params& impl_param) override {
             auto kernel_params = get_kernel_params(impl_param, true);
-            auto runtime_input_tensor = convert_data_tensor(impl_param.get_input_layout(), impl_param.input_offsets[0]);
-            kernel_params.first.input_runtime_offsets.reserve(1);
-            kernel_params.first.input_runtime_offsets[0] = runtime_input_tensor.GetFirstElementOffset();
+            auto runtime_offset = convert_data_tensor(impl_param.get_input_layout(), impl_param.input_offsets[0]).GetFirstElementOffset();
+            kernel_selector::ScalarDescriptor s;
+            s.t = kernel_selector::ScalarDescriptor::Types::UINT32;
+            s.v.u32 = runtime_offset;
+
+            _kernel_data.kernels[0].params.scalars.reserve(1);
+            if (_kernel_data.kernels[0].params.scalars.empty())
+                _kernel_data.kernels[0].params.scalars.push_back(s);
+            else
+                _kernel_data.kernels[0].params.scalars[0] = s;
             (_kernel_data.update_dispatch_data_func)(kernel_params.first, _kernel_data);
             update_kernels_list_to_skip();
     }

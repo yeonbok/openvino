@@ -14,11 +14,13 @@
 
 KERNEL(eltwise)(
     OPTIONAL_SHAPE_INFO_ARG
-    OPTIONAL_INPUT0_RUNTIME_OFFSET
     INPUTS_DECLS
     __global OUTPUT_TYPE* output
 #if HAS_FUSED_OPS_DECLS
     , FUSED_OPS_DECLS
+#endif
+#if IS_DYNAMIC
+    , runtime_offset
 #endif
 )
 {
@@ -103,6 +105,7 @@ KERNEL(eltwise)(
 #endif
 
     ACCUMULATOR_TYPE res;
+
     DO_ELTWISE;
 
 #if HAS_FUSED_OPS
