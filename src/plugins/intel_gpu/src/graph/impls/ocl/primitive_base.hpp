@@ -122,12 +122,23 @@ protected:
         }
 
         args.shape_info = instance.shape_info_memory_ptr();
-        // or get from instance.impl_param ?
-        if (_kernel_data.params->runtime_offsets.size()) {
-            for (size_t i = 0; i < _kernel_data.params->runtime_offsets.size(); ++i) {
-                args.runtime_offsets.push_back(_kernel_data.params->runtime_offsets[i]);
-            }
+
+        args.input_runtime_offsets.reserve(_kernel_data.params->input_runtime_offsets.size());
+        for (size_t i = 0; i < _kernel_data.params->input_runtime_offsets.size(); ++i) {
+            args.input_runtime_offsets.push_back(_kernel_data.params->input_runtime_offsets[i]);
         }
+        args.shape_info = instance.shape_info_memory_ptr();
+
+        args.input_runtime_offsets.reserve(_kernel_data.params->input_runtime_offsets.size());
+        for (size_t i = 0; i < _kernel_data.params->input_runtime_offsets.size(); ++i) {
+            args.input_runtime_offsets.push_back(_kernel_data.params->input_runtime_offsets[i]);
+        }
+
+        args.output_runtime_offsets.reserve(_kernel_data.params->output_runtime_offsets.size());
+        for (size_t i = 0; i < _kernel_data.params->output_runtime_offsets.size(); ++i) {
+            args.output_runtime_offsets.push_back(_kernel_data.params->output_runtime_offsets[i]);
+        }
+
         return args;
     }
 

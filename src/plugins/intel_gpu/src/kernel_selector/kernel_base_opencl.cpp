@@ -129,13 +129,13 @@ Arguments KernelBaseOpenCL::GetArgsDesc(uint32_t num_of_input,
                                           uint32_t number_of_inputs_for_fused_prim,
                                           uint32_t num_of_output,
                                           bool is_dynamic,
-                                          uint32_t num_of_runtime_offset) const {
+                                          uint32_t num_of_input_runtime_offset) const {
     Arguments args;
 
     if (is_dynamic) {
         args.push_back({ArgumentDescriptor::Types::SHAPE_INFO, 0});
-        for (uint32_t i = 0; i < num_of_runtime_offset; ++i)
-            args.push_back({ArgumentDescriptor::Types::RUNTIME_OFFSET, i});
+        for (uint32_t i = 0; i < num_of_input_runtime_offset; ++i)
+            args.push_back({ArgumentDescriptor::Types::INPUT_RUNTIME_OFFSET, i});
     }
 
     for (uint32_t i = 0; i < num_of_input; i++) {

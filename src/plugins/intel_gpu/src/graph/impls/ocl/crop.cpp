@@ -39,11 +39,14 @@ public:
             // but in runtime dispatch data will be generated for non-broadcast case as shapes are actually same.
             params.broadcast = true;
         }
-        params.runtime_offsets.push_back(6731);
+        params.input_runtime_offsets.push_back(impl_param.input_offsets[0].count());
         return {params, optional_params};
     }
         void update_dispatch_data(const kernel_impl_params& impl_param) override {
             auto kernel_params = get_kernel_params(impl_param, true);
+            auto runtime_input_tensor = convert_data_tensor(impl_param.get_input_layout(), impl_param.input_offsets[0]);
+            kernel_params.first.input_runtime_offsets.reserve(1);
+            kernel_params.first.input_runtime_offsets[0] = runtime_input_tensor.GetFirstElementOffset();
             (_kernel_data.update_dispatch_data_func)(kernel_params.first, _kernel_data);
             update_kernels_list_to_skip();
     }

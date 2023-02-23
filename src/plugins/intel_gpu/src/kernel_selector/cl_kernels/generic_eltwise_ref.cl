@@ -14,7 +14,7 @@
 
 KERNEL(eltwise)(
     OPTIONAL_SHAPE_INFO_ARG
-    OPTIONAL_RUNTIME_OFFSET_ARG
+    OPTIONAL_INPUT0_RUNTIME_OFFSET
     INPUTS_DECLS
     __global OUTPUT_TYPE* output
 #if HAS_FUSED_OPS_DECLS
@@ -103,7 +103,6 @@ KERNEL(eltwise)(
 #endif
 
     ACCUMULATOR_TYPE res;
-    printf("%d !!!!!!!!!!!!!!!!\n", runtime_offset_0);
     DO_ELTWISE;
 
 #if HAS_FUSED_OPS

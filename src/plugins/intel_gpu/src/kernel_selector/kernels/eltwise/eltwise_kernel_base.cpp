@@ -694,6 +694,8 @@ KernelsData EltwiseKernelBase::GetCommonKernelsData(const Params& params, const 
         OPENVINO_ASSERT(kd.kernels.size() == 1, "[GPU] Invalid kernels size for update dispatch data func");
         kd.kernels[0].params.workGroups.global = dispatchData.gws;
         kd.kernels[0].params.workGroups.local = dispatchData.lws;
+        kd.params->input_runtime_offsets.clear();
+        kd.params->input_runtime_offsets.push_back(params.input_runtime_offsets[0]);
     };
 
     DispatchData dispatchData = SetDefault(newParams);
@@ -711,7 +713,7 @@ KernelsData EltwiseKernelBase::GetCommonKernelsData(const Params& params, const 
                                    GetFusedPrimitiveInputsCount(params),
                                    1,
                                    is_dynamic,
-                                   params.runtime_offsets.size());
+                                   params.input_runtime_offsets.size());
 
     return {kd};
 }

@@ -125,15 +125,20 @@ JitConstants KernelBase::MakeBaseParamsJitConstants(const base_params& params) c
         jit.AddConstant(MakeJitConstant("OPTIONAL_SHAPE_INFO_TENSOR", ""));
     }
 
-    if (params.runtime_offsets.size() > 0) {
-        for (size_t i = 0; i < params.runtime_offsets.size(); ++i) {
-            jit.AddConstant(MakeJitConstant("OPTIONAL_RUNTIME_OFFSET_ARG", "const int runtime_offset_" + toCodeString(i) + ","));
+    // const int runtime_input_offset_0,
+    // const int runtime_input_offset_1,
+    //for (size_t i = 0; i < params.input_runtime_offsets.size(); ++i) {
+    for (size_t i = 0; i < params.inputs.size(); ++i) {
+        if (params.input_runtime_offsets.size() > 0) {
+            jit.AddConstant(MakeJitConstant("OPTIONAL_INPUT" + toCodeString(i) + "_RUNTIME_OFFSET", "const int input_runtime_offset_" + toCodeString(i) + ","));
+            jit.AddConstant(MakeJitConstant("OPTIONAL_INPUT" + toCodeString(i) + "_RUNTIME_OFFSET_TENSOR", "input_runtime_offset_" + toCodeString(i)));
+        } else {
+            jit.AddConstant(MakeJitConstant("OPTIONAL_INPUT" + toCodeString(i) + "_RUNTIME_OFFSET", ""));
+            jit.AddConstant(MakeJitConstant("OPTIONAL_INPUT" + toCodeString(i) + "_RUNTIME_OFFSET_TENSOR",  ""));
         }
-    } else {
-        jit.AddConstant(MakeJitConstant("OPTIONAL_RUNTIME_OFFSET", ""));
     }
-
-    jit.AddConstant(MakeJitConstant("RUNTIME_OFFSET", "70"));
+    jit.AddConstant(MakeJitConstant("OPTIONAL_OUTPUT_RUNTIME_OFFSET", ""));
+    jit.AddConstant(MakeJitConstant("OPTIONAL_OUTPUT_RUNTIME_OFFSET_TENSOR", ""));
 
 #ifndef NDEBUG
     jit.AddConstant(MakeJitConstant("LayerID", params.layerID));
