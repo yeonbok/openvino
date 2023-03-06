@@ -18,6 +18,12 @@ static std::string kernel_code =
     "    uint gid = get_global_id(0);"
     "    dst[gid] = convert_float(src[gid]) * 0.33f;"
     "}";
+static std::string kernel_code2 =
+    "void kernel simple_reorder2(const __global int* src, __global int* dst) {"
+    "    uint gid = get_global_id(0);"
+    "    dst[gid] = src[gid];"
+    "}";
+
 static size_t max_iter = 1000;
 
 using time_interval = std::chrono::microseconds;
@@ -763,4 +769,76 @@ TEST(mem_perf_test_to_host_and_back_to_device, DISABLED_buffer_copy_host_ptr_eve
     });
 
     validate_result(static_cast<float*>(output_buffer_host.data()), img_size * img_size);
+}
+
+TEST(cache_test_taylor, devmem_hostmem_test) {
+    auto ocl_instance = std::make_shared<OpenCL>(false);
+    auto& ctx = ocl_instance->_context;
+    auto& device = ocl_instance->_device;
+    std::string dev_name;
+    device.getInfo(CL_DEVICE_NAME, &dev_name);
+    std::cout << "Test for " << dev_name << std::endl;
+    if (!ocl_instance->_supports_usm)
+        GTEST_SKIP();
+
+    cl::Program program1(ctx, kernel_code);
+    cl::Program program2(ctx, kernel_code2);
+    checkStatus(program1.build({device}, ""), "build");
+    checkStatus(program2.build({device}, ""), "build");
+
+    //const int big_size = 10 * 1024;
+    const int big_size = 10*1024;
+    const int small_size = 3;
+    cl::UsmMemory input_buffer1_host(*ocl_instance->_usm_helper);
+    input_buffer1_host.allocateHost(sizeof(uint8_t) * big_size);
+    cl::UsmMemory input_buffer2_host(*ocl_instance->_usm_helper);
+    input_buffer2_host.allocateHost(sizeof(uint32_t) * small_size);
+    cl::UsmMemory input_buffer1_device(*ocl_instance->_usm_helper);
+    input_buffer1_device.allocateDevice(sizeof(uint8_t) * big_size);
+    cl::UsmMemory input_buffer2_device(*ocl_instance->_usm_helper);
+    input_buffer2_device.allocateDevice(sizeof(uint32_t) * small_size);
+    
+    cl::UsmMemory output_buffer1_host(*ocl_instance->_usm_helper);
+    output_buffer1_host.allocateHost(sizeof(float) * big_size);
+    cl::UsmMemory output_buffer2_host(*ocl_instance->_usm_helper);
+    output_buffer2_host.allocateHost(sizeof(uint32_t) * small_size);
+
+    cl::CommandQueue queue(ctx, device);
+    auto usm_helper = *ocl_instance->_usm_helper;
+    fill_input(static_cast<uint8_t*>(input_buffer1_host.get()), big_size);
+
+    cl::Kernel _kernel1(program1, "simple_reorder");
+    cl::Kernel _kernel2(program2, "simple_reorder2");
+    cl::KernelIntel kernel1(_kernel1, usm_helper);
+    cl::KernelIntel kernel2(_kernel2, usm_helper);
+    kernel1.setArgUsm(0, input_buffer1_device);
+    kernel1.setArgUsm(1, output_buffer1_host);
+    kernel2.setArgUsm(0, input_buffer2_device);
+    kernel2.setArgUsm(1, output_buffer2_host);
+    for (uint32_t iter = 0; iter < max_iter; ++iter) {
+        uint32_t* small_buf = static_cast<uint32_t*>(input_buffer2_host.get());
+        small_buf[0] = iter;
+        small_buf[1] = iter;
+        small_buf[2] = iter;
+        cl::Event big_ev;
+        cl::Event small_ev;
+        usm_helper.enqueue_memcpy(queue, input_buffer1_device.get(), input_buffer1_host.get(), big_size, true, nullptr, &big_ev);
+        std::vector<cl::Event> big_dep_ev = {big_ev};
+        queue.enqueueNDRangeKernel(kernel1, cl::NDRange() , cl::NDRange(big_size), cl::NDRange(16), {&big_dep_ev}, nullptr);
+
+        usm_helper.enqueue_memcpy(queue, input_buffer2_device.get(), input_buffer2_host.get(), small_size * 4, true, nullptr, &small_ev);
+        std::vector<cl::Event> small_dep_ev = {small_ev};
+        queue.finish();
+        queue.enqueueNDRangeKernel(kernel2, cl::NDRange(), cl::NDRange(small_size), cl::NDRange(1), {&small_dep_ev}, nullptr);
+
+        queue.finish();
+        uint32_t* small_buf_out = static_cast<uint32_t*>(output_buffer2_host.get());
+//        std::cout << small_buf_out[0] << ", " << small_buf_out[1] << ", " << small_buf_out[2] << std::endl;
+        auto small_kernel_out_0 = small_buf_out[0];
+        auto small_kernel_out_1 = small_buf_out[1];
+        auto small_kernel_out_2 = small_buf_out[2];
+        ASSERT_EQ(iter, small_kernel_out_0);
+        ASSERT_EQ(iter, small_kernel_out_1);
+        ASSERT_EQ(iter, small_kernel_out_2);
+    }
 }
