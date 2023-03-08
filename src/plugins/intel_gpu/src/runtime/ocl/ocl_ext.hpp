@@ -16,6 +16,7 @@
 #include <CL/cl2.hpp>
 #endif
 
+#include <CL/cl.h>
 #include <CL/cl_ext.h>
 
 #ifdef _WIN32
@@ -962,13 +963,21 @@ private:
 */
 class KernelIntel : public Kernel {
     using Kernel::Kernel;
+    cl::Kernel* kernel = nullptr;
 public:
     explicit KernelIntel(const UsmHelper& usmHelper) : Kernel(), _usmHelper(usmHelper) {}
-    KernelIntel(const Kernel &other, const UsmHelper& usmHelper) : Kernel(other), _usmHelper(usmHelper) { }
+    KernelIntel(const Kernel &other, const UsmHelper& usmHelper) : Kernel(other), _usmHelper(usmHelper) {
+        kernel = const_cast<cl::Kernel*>(&other);
+    }
 
     KernelIntel clone() const {
-        Kernel cloned_kernel(this->getInfo<CL_KERNEL_PROGRAM>(), this->getInfo<CL_KERNEL_FUNCTION_NAME>().c_str());
-        return KernelIntel(cloned_kernel, _usmHelper);
+//        Kernel cloned_kernel(this->getInfo<CL_KERNEL_PROGRAM>(), this->getInfo<CL_KERNEL_FUNCTION_NAME>().c_str());
+//        return KernelIntel(*this, _usmHelper);
+//        return KernelIntel(clone(), _usmHelper);
+//        cl_int err;
+//        return KernelIntel(clCloneKernel(kernel, &err), _usmHelper);
+        return KernelIntel(kernel->clone(), _usmHelper);
+//        return KernelIntel(cloned_kernel, _usmHelper);
     }
 
     cl_int setArgUsm(cl_uint index, const UsmMemory& mem) {
