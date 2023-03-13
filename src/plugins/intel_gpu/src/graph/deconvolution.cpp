@@ -5,6 +5,7 @@
 #include "primitive_type_base.h"
 #include "sliding_window_utils.hpp"
 #include "intel_gpu/runtime/error_handler.hpp"
+#include "intel_gpu/plugin/common_utils.hpp"
 #include "json_object.h"
 #include <string>
 
@@ -44,30 +45,31 @@ layout deconvolution_inst::calc_output_layout(deconvolution_node const& node, ke
     }
 
     if (desc->with_output_size) {
+        tensor output_size_tensor = ov::intel_gpu::tensor_from_dims(desc->output_size.get_shape());
         CLDNN_ERROR_LESS_OR_EQUAL_THAN(desc->id,
                                        "User-defined output spatial X",
-                                       desc->output_size.spatial[0],
+                                       output_size_tensor.spatial[0],
                                        "value 0",
                                        0,
                                        "User-defined size of output layout must be positive (>= 1)");
         CLDNN_ERROR_LESS_OR_EQUAL_THAN(desc->id,
                                        "User-defined output spatial Y",
-                                       desc->output_size.spatial[1],
+                                       output_size_tensor.spatial[1],
                                        "value 0",
                                        0,
                                        "User-defined size of output layout must be positive (>= 1)");
         CLDNN_ERROR_LESS_OR_EQUAL_THAN(desc->id,
                                        "User-defined output spatial Z",
-                                       desc->output_size.spatial[2],
+                                       output_size_tensor.spatial[2],
                                        "value 0",
                                        0,
                                        "User-defined size of output layout must be positive (>= 1)");
 
         tensor output_size(input_layout.batch(),
                            number_of_features,
-                           desc->output_size.spatial[0],
-                           desc->output_size.spatial[1],
-                           desc->output_size.spatial[2]);
+                           output_size_tensor.spatial[0],
+                           output_size_tensor.spatial[1],
+                           output_size_tensor.spatial[2]);
         return {data_type, out_fmt, output_size};
     }
 
@@ -103,8 +105,6 @@ std::vector<layout> deconvolution_inst::calc_output_layouts(deconvolution_node c
     auto weights_layout = *impl_param.weights_layout;
     weights_layout = weights_layout.convert_to_weights_layout(desc->grouped_weights_shape);
 
-    if (input_layout.is_dynamic())
-        return {layout{ShapeType::dynamic(input_layout.get<ShapeType>().rank()), input_layout.data_type, input_layout.format}};
 
     auto input_type = input_layout.data_type;
     auto output_type = input_type;
@@ -121,42 +121,14 @@ std::vector<layout> deconvolution_inst::calc_output_layouts(deconvolution_node c
     auto pads_begin = desc->pads_begin;
     auto pads_end = desc->pads_end;
     auto output_padding = desc->out_padding;
-    auto output_partial_shape = desc->output_partial_shape;
-
-    int32_t number_of_features = weights_layout.group() * weights_layout.ofm();
 
     format out_fmt = input_layout.format;
     if (node.get_preferred_impl_type() == impl_types::onednn && node.get_preferred_output_fmt() != format::any) {
         out_fmt = node.get_preferred_output_fmt();
     }
 
-    if (desc->with_output_size) {
-        CLDNN_ERROR_LESS_OR_EQUAL_THAN(desc->id,
-                                       "User-defined output spatial X",
-                                       desc->output_size.spatial[0],
-                                       "value 0",
-                                       0,
-                                       "User-defined size of output layout must be positive (>= 1)");
-        CLDNN_ERROR_LESS_OR_EQUAL_THAN(desc->id,
-                                       "User-defined output spatial Y",
-                                       desc->output_size.spatial[1],
-                                       "value 0",
-                                       0,
-                                       "User-defined size of output layout must be positive (>= 1)");
-        CLDNN_ERROR_LESS_OR_EQUAL_THAN(desc->id,
-                                       "User-defined output spatial Z",
-                                       desc->output_size.spatial[2],
-                                       "value 0",
-                                       0,
-                                       "User-defined size of output layout must be positive (>= 1)");
-
-        tensor output_size(input_layout.batch(),
-                           number_of_features,
-                           desc->output_size.spatial[0],
-                           desc->output_size.spatial[1],
-                           desc->output_size.spatial[2]);
-        return {layout{output_type, out_fmt, output_size}};
-    }
+    if (input_layout.is_dynamic() && !desc->with_output_size)
+        return {layout{ShapeType::dynamic(input_layout.get<ShapeType>().rank()), input_layout.data_type, input_layout.format}};
 
     std::vector<ShapeType> input_shapes = {
         input_layout.get<ShapeType>()
@@ -175,10 +147,9 @@ std::vector<layout> deconvolution_inst::calc_output_layouts(deconvolution_node c
         op.set_auto_pad(ov::op::PadType::EXPLICIT);
         std::swap(weights_pshape[2], weights_pshape[1]);
         input_shapes.push_back(weights_pshape);
-        if (output_partial_shape.size() != 0) {
-            ShapeType output_shape = ov::Shape{ output_partial_shape.size() };
-            input_shapes.push_back(output_shape);
-            ov::op::v1::shape_infer(&op, pads_begin, pads_end, output_partial_shape, input_shapes, output_shapes);
+        if (desc->with_output_size) {
+            input_shapes.push_back(ov::Shape{desc->output_size.size()});
+            ov::op::v1::shape_infer(&op, pads_begin, pads_end, desc->output_size, input_shapes, output_shapes);
         } else if (memory_deps.count(2)) {
             auto mem = memory_deps.at(2);
             std::vector<int64_t> dims = read_vector<int64_t>(mem, impl_param.prog->get_stream());
@@ -198,10 +169,9 @@ std::vector<layout> deconvolution_inst::calc_output_layouts(deconvolution_node c
         op.set_auto_pad(ov::op::PadType::EXPLICIT);
         std::swap(weights_pshape[1], weights_pshape[0]);
         input_shapes.push_back(weights_pshape);
-        if (output_partial_shape.size() != 0) {
-            ShapeType output_shape = ov::Shape{ output_partial_shape.size() };
-            input_shapes.push_back(output_shape);
-            ov::op::v1::shape_infer(&op, pads_begin, pads_end, output_partial_shape, input_shapes, output_shapes);
+        if (desc->with_output_size) {
+            input_shapes.push_back(ov::Shape{desc->output_size.size()});
+            ov::op::v1::shape_infer(&op, pads_begin, pads_end, desc->output_size, input_shapes, output_shapes);
         } else if (memory_deps.count(2)) {
             auto mem = memory_deps.at(2);
             std::vector<int64_t> dims = read_vector<int64_t>(mem, impl_param.prog->get_stream());

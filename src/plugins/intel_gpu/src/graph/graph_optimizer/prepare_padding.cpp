@@ -8,6 +8,7 @@
 #include "convolution_inst.h"
 #include "sliding_window_utils.hpp"
 #include <algorithm>
+#include "intel_gpu/plugin/common_utils.hpp"
 
 using namespace cldnn;
 using namespace ov::intel_gpu;
@@ -80,9 +81,10 @@ void prepare_padding::run(program& p) {
                     continue;
 
                 auto filter_size = prim_node.weights().get_output_layout().get_tensor();
-
+                tensor output_size_tensor = ov::intel_gpu::tensor_from_dims(prim->output_size.get_shape());
+                // TODO : update calc_sliding_window_needed_input_paddig to use partial shape
                 auto needed_padding = calc_sliding_window_needed_input_padding(prim_node.input().get_output_layout(),
-                                                                               prim->output_size,
+                                                                               output_size_tensor,
                                                                                filter_size,
                                                                                prim->pad,
                                                                                prim->stride,

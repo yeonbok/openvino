@@ -435,7 +435,7 @@ void prepare_primitive_fusing::fuse_bias(program &p) {
                                                                          desc->stride,
                                                                          desc->pad,
                                                                          desc->dilations,
-                                                                         deconv.get_output_layout().get_tensor(),
+                                                                         deconv.get_output_layout().get_partial_shape(),
                                                                          desc->grouped_weights_shape);
 
             auto& new_deconv_node = p.get_or_create(deconv_with_bias_prim);

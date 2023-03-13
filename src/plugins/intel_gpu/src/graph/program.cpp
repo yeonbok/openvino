@@ -7,6 +7,7 @@
 #include "intel_gpu/runtime/debug_configuration.hpp"
 #include "intel_gpu/runtime/itt.hpp"
 #include "intel_gpu/graph/program.hpp"
+#include "intel_gpu/plugin/common_utils.hpp"
 
 #include <ie_system_conf.h>
 
@@ -297,6 +298,9 @@ bool program::analyze_output_size_handling_need() {
 
     // Calculate output size and compare with specified.
     for (const auto& node : processing_order) {
+        // If node is dynamic, it should be calculated at rumtime
+        if (node->is_dynamic())
+            continue;
         if (node->is_type<convolution>()) {
             auto& prim_node = node->as<convolution>();
             const auto& prim = prim_node.get_primitive();
@@ -349,9 +353,10 @@ bool program::analyze_output_size_handling_need() {
 
             if (!prim->with_output_size)
                 continue;
-
+            // TODO : Update calc_sliding_window_needed_input_range to use partial shape
+            tensor output_size_tensor = ov::intel_gpu::tensor_from_dims(prim->output_size.get_shape());
             tensor specified_output_range(
-                {0, 0, prim->output_size.spatial[0], prim->output_size.spatial[1], prim->output_size.spatial[2]},
+                {0, 0, output_size_tensor.spatial[0], output_size_tensor.spatial[1], output_size_tensor.spatial[2]},
                 1);
 
             auto filter_size = prim_node.weights().get_output_layout().get_tensor();
@@ -565,11 +570,12 @@ void program::pre_optimize_graph(bool is_internal) {
 
     apply_opt_pass<reverse_optional_nodes_outputs>();
 
-    bool output_size_handling_enabled = analyze_output_size_handling_need();
     for (auto& node : processing_order) {
         if (!node->is_type<data>())
             node->get_output_layouts();
     }
+
+    bool output_size_handling_enabled = analyze_output_size_handling_need();
 
     bool optimize_data = _config.get_property(ov::intel_gpu::optimize_data);
     if (optimize_data) {
@@ -585,7 +591,7 @@ void program::pre_optimize_graph(bool is_internal) {
 
         apply_opt_pass<pre_replace_deconv>(lo);
 
-        apply_opt_pass<prepare_primitive_fusing>(lo);
+//        apply_opt_pass<prepare_primitive_fusing>(lo);
 
         apply_opt_pass<select_preferred_formats>(lo);
 
