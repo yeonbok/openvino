@@ -61,6 +61,50 @@ TEST(prepare_buffer_fusing, optimize_reshape) {
     ASSERT_EQ(out_mem->count(), 16);
 }
 
+TEST(prepare_buffer_fusing, in_place_concat_taylor) {
+    auto& engine = get_test_engine();
+    auto in_layout1 = layout{ ov::PartialShape{1, 2, 3, 4}, data_types::f32, format::bfyx }; // => {1, 3, 4, 2}
+    auto in_layout2 = layout{ ov::PartialShape{1, 2, 4, 1}, data_types::f32, format::bfyx }; // => {1, 1, 4, 2}
+    topology topology;
+    topology.add(input_layout("input1", in_layout1));
+    topology.add(input_layout("input2", in_layout2));
+    topology.add(permute("permute1", input_info("input1"), {0, 2, 3, 1}));
+    topology.add(permute("permute2", input_info("input2"), {0, 3, 2, 1}));
+    topology.add(concatenation("concat", { input_info("permute1"), input_info("permute2") }, 1));
+    topology.add(permute("output", input_info("concat"), {0, 2, 3, 1}));
+
+    ExecutionConfig config;
+    config.set_property(ov::intel_gpu::optimize_data(true));
+    //config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
+    auto prog = program::build_program(engine, topology, config, false, false);
+
+    ASSERT_NE(prog, nullptr);
+    //ASSERT_TRUE(has_node_with_type<reshape>(*prog));
+
+    cldnn::network net(prog, 0);
+
+    auto input_memory1 = engine.allocate_memory(in_layout1);
+    auto input_memory2 = engine.allocate_memory(in_layout2);
+    set_values<float>(input_memory1,
+        {
+            0.0,   1.1,   2.2,   3.3,   4.4,     5.5,    6.6,    7.7,
+            8.8,   9.9,   10.10, 11.11, 22.22,   33.33,  44.44,  55.55,
+            66.66, 77.77, 88.88, 99.99, 100.100, 101.101,102.102,103.103
+            }
+    );
+    set_values<float>(input_memory2, {0.1, 1.1, 2.2, 3.0, 4.0, -5.0, 0.1, 0.7});
+
+    net.set_input_data("input1", input_memory1);
+    net.set_input_data("input2", input_memory2);
+    std::map<cldnn::primitive_id, cldnn::network_output> output;
+    EXPECT_NO_THROW(output = net.execute());
+    auto out_l = net.get_output_layout("output");
+    auto out_mem = output.at("output").get_memory();
+
+    ASSERT_NE(out_mem, nullptr);
+//    ASSERT_EQ(out_mem->count(), 16);
+}
+
 TEST(prepare_buffer_fusing, static_node_after_optimized_out_dyn_reshape) {
     auto& engine = get_test_engine();
     auto in_layout = layout{ ov::PartialShape{1, 2, -1}, data_types::f32, format::bfyx };

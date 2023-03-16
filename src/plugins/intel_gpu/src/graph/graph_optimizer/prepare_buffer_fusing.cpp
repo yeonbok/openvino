@@ -86,8 +86,8 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
         return false;
     if (node.has_fused_primitives())
         return false;
-    if (node.is_dynamic())
-        return false;
+    //if (node.is_dynamic())
+    //    return false;
 
     bool is_onednn_impl = false;
 
@@ -142,7 +142,7 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
 
     size_t idx = 0;
     for (auto& input : node.get_dependencies()) {
-        if (input.first->is_type<reshape>())
+        if (input.first->is_type<reshape>() && input.first->can_be_optimized())
             // reshapes should be optimized out.
             return false;
 
@@ -182,16 +182,16 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
         // reverted condition - if any of this node's inputs is used by more than one primitive
         // and is not optimized concatenation then do not fuse buffers
         // todo: we need add padding support for all optimized kernels to remove this condition
-        if (!input.first->is_type<pooling>() && !input.first->is_type<convolution>() && !input.first->is_type<quantize>() &&
+        if ((!input.first->is_type<pooling>() && !input.first->is_type<convolution>() && !input.first->is_type<quantize>() &&
             !input.first->is_type<activation>() && !input.first->is_type<deconvolution>() &&
             !input.first->is_type<concatenation>() && !input.first->is_type<crop>() && !input.first->is_type<eltwise>() &&
-            !input.first->is_type<resample>())
+            !input.first->is_type<resample>()) && lower_padd_in_axis > 0)
             return false;
 
         // if an input is marked as network output, prevent optimizations
         // which would affect a form of its output (unless debug flag is set),
         // we also need to restrict input types to those which support padding on all axis
-        if (input.first->is_output() || !input.first->is_padding_supported(concat_axis, lower_padd_in_axis))
+        if (input.first->is_output()) //|| !input.first->is_padding_supported(concat_axis, lower_padd_in_axis))
             return false;
 
         // TODO: Investigate if this condition is needed
@@ -200,13 +200,13 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
 
         // If sibling is using onednn impl and batch > 1, the onednn impl cannot process the implicit concat'ed buffer.
         // Onednn impls can process implicit concat'ed buffer only through buffer pointer manipulation.
-        if (node.get_output_layout().batch() > 1) {
-            for (auto& sib : input.first->get_users()) {
-                if (sib->get_preferred_impl_type() == impl_types::onednn) {
-                    return false;
-                }
-            }
-        }
+        //if (node.get_output_layout().batch() > 1) {
+        //    for (auto& sib : input.first->get_users()) {
+        //        if (sib->get_preferred_impl_type() == impl_types::onednn) {
+        //            return false;
+        //        }
+        //    }
+        //}
 
         // Check that input isn't optimized out concatenation along different axis.
         if (input.first->is_type<concatenation>() && input.first->can_be_optimized() &&
@@ -237,7 +237,8 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
                 return false;
         }
 
-        lower_padd_in_axis += input.first->get_output_layout().get_tensor().sizes(def_fmt)[concat_axis];
+        // lower_padd_in_axis += input.first->get_output_layout().get_tensor().sizes(def_fmt)[concat_axis];
+        // do concat opt for dynamic shape only if padding is 0
         idx += 1;
     }
 
@@ -245,6 +246,22 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
 }
 
 void concat_in_place_optimization::optimize_cascade(concatenation_node& node, std::list<concatenation_node*>& need_reoptimization) {
+    if (node.is_dynamic()) {
+        bool need_to_transform = false;
+        if (node.get_output_layout().data_padding != padding({0, 0, 0, 0}))
+            need_to_transform = true;
+        for (auto i : node.get_dependencies()) {
+            if (i.first->get_output_layout().data_padding != padding({0, 0, 0, 0}))
+                need_to_transform = true;
+        }
+        if (need_to_transform == false) {
+            node.can_be_optimized(true);
+            for (auto dep : node.get_users()) {
+                dep->can_share_buffer(false);
+            }
+            return;
+        }
+    }
     auto out_layout = node.get_output_layout();
     auto out_rank = out_layout.get_rank();
     auto concat_axis = node.get_primitive()->axis;

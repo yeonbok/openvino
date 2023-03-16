@@ -27,9 +27,9 @@ void compile_graph::run(program& p) {
         }
     }
 
-    auto task_executor = p.get_task_executor();
+    //auto task_executor = p.get_task_executor();
     auto& proc_order = p.get_processing_order();
-    std::vector<InferenceEngine::Task> tasks;
+    //std::vector<InferenceEngine::Task> tasks;
     std::exception_ptr exception;
     for (size_t idx = 0; idx < proc_order.size(); idx++) {
         auto& node = *(std::next(proc_order.begin(), idx));
@@ -59,7 +59,7 @@ void compile_graph::run(program& p) {
             can_select_impl = false;
 
         if (can_select_impl) {
-            tasks.push_back([node, &p, &exception] {
+            //tasks.push_back([node, &p, &exception] {
                 try {
                     node->selected_impl = node->type()->choose_impl(*node);
                     if (node->selected_impl) {
@@ -69,12 +69,12 @@ void compile_graph::run(program& p) {
                 } catch(...) {
                     exception = std::current_exception();
                 }
-            });
+            //});
         }
     }
 
-    task_executor->runAndWait(tasks);
-    tasks.clear();
+//    task_executor->runAndWait(tasks);
+ //   tasks.clear();
 
     if (exception) {
         std::rethrow_exception(exception);
