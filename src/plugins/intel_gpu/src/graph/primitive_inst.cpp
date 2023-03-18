@@ -145,7 +145,7 @@ void primitive_inst::set_output_memory(memory::ptr mem_new, bool check, size_t i
     }
 }
 
-void primitive_inst::update_shape() {
+void primitive_inst::update_shape(bool not_to_recurse/*TODO: refactor this*/) {
     GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::shape_inference);
 
     bool input_shape_changed = false;
@@ -163,6 +163,11 @@ void primitive_inst::update_shape() {
 
     if (input_shape_changed)
         set_shape_change();
+
+    if (set_shape_by_other) {
+        set_shape_change();
+        return;
+    }
 
     // Even though the predecessors' shapes are not changed, the output shape might be udpated by the mem_dep
     auto memory_deps = _node->get_const_memory_deps();
@@ -237,18 +242,85 @@ void primitive_inst::update_shape() {
         fused_prim.output_layout.set_partial_shape(_impl_params->get_output_layout().get_partial_shape());
     }
 
+    if (not_to_recurse)
+        return;
+
     // if user is optimizable concat, do shape infer for all the prev nodes of concat & concat
     if (_node->get_users().size() == 1 && _node->get_users().front()->is_type<concatenation>() && _node->get_users().front()->can_be_optimized()) {
         std::vector<std::shared_ptr<primitive_inst>> insts_to_shape_infer;
-        insts_to_shape_infer.push_back(_network.get_primitive(_node->get_users().front()->id()));
         auto concat_deps = _node->get_users().front()->get_dependencies();
         for (auto u : concat_deps) {
             if (u.first->id() == this->id()) continue;
             insts_to_shape_infer.push_back(_network.get_primitive(u.first->id()));
         }
+        // do concat shape infer last
+        insts_to_shape_infer.push_back(_network.get_primitive(_node->get_users().front()->id()));
         for (auto u : insts_to_shape_infer) {
-            // update shape for this node, user's other deps, and user
-            u->update_shape();
+            // update shape for user's other deps, and user (concat)
+            u->update_shape(true);
+            u->set_shape_by_other = true;
+        }
+        // Update padding of this and other deps
+        auto concat_prim = _network.get_primitive(_node->get_users().front()->id());
+        auto concat_out_layout = concat_prim->_impl_params->get_output_layout();
+        auto out_rank = concat_out_layout.get_rank();
+        auto concat_axis = concat_prim->get_node().as<concatenation>().get_primitive()->axis;
+        // We need to transform axis from bf[w][z]yx order to bfxy[z][w] due to tensor.sizes() usages here
+        // should be removed once pad representation is changed
+        auto concat_axis_legacy = concat_axis;
+        if (concat_axis_legacy >= 2) {
+            auto spatial_axis = concat_axis_legacy - 2;
+            // Default and minimum number of dimensions is 4
+            auto spatial_size = std::max<size_t>(out_rank, 4) - 2;
+            concat_axis_legacy = spatial_size - spatial_axis - 1 + 2;
+        }
+
+        // Select output padding by propagating all required input paddings.
+        auto padd = concat_out_layout.data_padding;
+        for (auto input : concat_prim->get_node().get_dependencies()) {
+            auto inputPadding = input.first->get_output_layout().data_padding;
+            padd = padding::max(padd, inputPadding);
+        }
+
+        auto lower_padd = padd.lower_size().sizes();
+        auto upper_padd = padd.upper_size().sizes();
+
+        // For cascade adjustment override padding in concat axis to output padding.
+        // In other case match(...) already checked that only first/last input have lower/upper padding.
+        lower_padd[concat_axis_legacy] = concat_out_layout.data_padding.lower_size().sizes()[concat_axis_legacy];
+        upper_padd[concat_axis_legacy] = concat_out_layout.data_padding.upper_size().sizes()[concat_axis_legacy];
+        concat_prim->_impl_params->output_layouts[0].data_padding = padding(lower_padd, upper_padd);
+
+        upper_padd[concat_axis_legacy] += concat_out_layout.get_dims()[concat_axis];
+
+        // apply concatenation in place optimization
+        for (auto input_node : concat_prim->get_node().get_dependencies()) {
+            auto input_inst = _network.get_primitive(input_node.first->id());
+            auto input_length = input_inst->_impl_params->output_layouts[0].get_dims()[concat_axis];
+
+            //if (input_node.first->is_type<concatenation>() && input.first->can_be_optimized())
+            //    need_reoptimization.push_back(&input.first->as<concatenation>());
+            // TODO : nested concat
+
+            // shrink upper pad so it points at the end of the input's buffer
+            //
+            //   |--- lower padd ---|                    |---------- upper padd -----------|
+            //   |-- output padd ---| ----- input1 ------|----- input2 -----|-- out padd --|
+            upper_padd[concat_axis_legacy] -= input_length;
+
+            // set new padding for input
+            input_inst->_impl_params->output_layouts[0].data_padding = padding(lower_padd, upper_padd);
+
+            // move lower padd further
+            //
+            //   |-------------- lower padd -------------|---------- upper padd -----------|
+            //   |-- output padd ---| ----- input1 ------|----- input2 -----|-- out padd --|
+            lower_padd[concat_axis_legacy] += input_length;
+        }
+        for (auto input_node : concat_prim->get_node().get_dependencies()) {
+            auto input_inst = _network.get_primitive(input_node.first->id());
+            std::cout << "Shape of " << input_node.first->id() << std::endl;
+            std::cout << input_inst->_impl_params->output_layouts[0].to_string() << std::endl;;
         }
     }
 }
@@ -359,6 +431,7 @@ bool primitive_inst::update_impl() {
             }
         }
         if (!cached_impl) {
+            #if 0
             if (_dynamic_impl) {
                 auto& compilation_context = get_network().get_program()->get_compilation_context();
                 compilation_context.push_task(updated_params.hash(), [this, &compilation_context, updated_params]() {
@@ -383,6 +456,9 @@ bool primitive_inst::update_impl() {
 
                 update_shape_info(*_impl_params);
             } else {
+            #else
+            {
+            #endif
                 _impl = _node->type()->choose_impl(*_node, updated_params);
                 auto& kernels_cache = get_network().get_program()->get_kernels_cache();
                 auto kernels = kernels_cache.compile(_impl->get_kernels_source());
@@ -404,8 +480,13 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     const auto primitive_id = id();
     OPENVINO_ASSERT(_has_valid_input, primitive_id, " has invalid/unset input");
     GPU_DEBUG_GET_INSTANCE(debug_config);
-    if (can_be_optimized())
+    if (can_be_optimized() && get_node().is_type<concatenation>()) {
+        for (auto dep : _deps) {
+            dep.first->set_shape_by_other = false;
+        }
+        set_shape_by_other = false;
         return get_network().get_stream().create_user_event(true);
+    }
     std::vector<event::ptr> dependencies;
     if (is_dynamic()) {
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");

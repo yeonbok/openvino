@@ -96,15 +96,24 @@ TEST(prepare_buffer_fusing, in_place_concat_taylor) {
     );
     set_values<float>(input_memory2, {0.1, 1.1, 2.2, 3.0, 4.0, -5.0, 0.1, 0.7});
 
+    std::vector<float> ref_output = {
+        0.0, 4.4, 8.8,   0.1, 22.22, 66.66, 100.100, 4.0, 1.1, 5.5, 9.9,   1.1, 33.33, 77.77, 101.101, -5.0,
+        2.2, 6.6, 10.10, 2.2, 44.44, 88.88, 102.102, 0.1, 3.3, 7.7, 11.11, 3.0, 55.55, 99.99, 103.103, 0.7
+    };
     net.set_input_data("input1", input_memory1);
     net.set_input_data("input2", input_memory2);
     std::map<cldnn::primitive_id, cldnn::network_output> output;
     EXPECT_NO_THROW(output = net.execute());
     auto out_l = net.get_output_layout("output");
     auto out_mem = output.at("output").get_memory();
+    cldnn::mem_lock<float> output_ptr(out_mem, get_test_stream());
 
     ASSERT_NE(out_mem, nullptr);
-//    ASSERT_EQ(out_mem->count(), 16);
+    ASSERT_EQ(out_mem->count(), 32);
+    for (size_t x = 0; x < out_l.count(); ++x) {
+        ASSERT_EQ(ref_output[x], output_ptr[x]);
+    }
+
 }
 
 TEST(prepare_buffer_fusing, in_place_concat_static) {

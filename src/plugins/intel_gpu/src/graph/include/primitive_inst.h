@@ -218,7 +218,7 @@ public:
     std::shared_ptr<const PType> get_typed_desc() const { return _impl_params->typed_desc<PType>(); }
 
     virtual void update_output_memory() {}
-    virtual void update_shape();
+    virtual void update_shape(bool not_to_recurse = false);
     void realloc_if_needed();
 
 protected:
@@ -229,6 +229,7 @@ protected:
     layout _node_output_layout;
 
     std::unique_ptr<kernel_impl_params> _impl_params;
+    bool set_shape_by_other = false;
     std::unique_ptr<primitive_impl> _impl;
     std::unique_ptr<primitive_impl> _dynamic_impl = nullptr;
 
