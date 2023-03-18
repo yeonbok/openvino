@@ -218,6 +218,8 @@ public:
     std::shared_ptr<const PType> get_typed_desc() const { return _impl_params->typed_desc<PType>(); }
 
     virtual void update_output_memory() {}
+    virtual void update_shape();
+    void realloc_if_needed();
 
 protected:
     primitive_inst(network& network, program_node const& node, bool allocate_memory);
@@ -294,11 +296,9 @@ protected:
     // _impl->execute() mainly for reshape (to update output memory if reshape_node.is_in_place() == true)
     virtual void on_execute() {}
 
-    virtual void update_shape();
     virtual event::ptr update_weights();
     // if primitive_inst doesn't replace impl to new impl(static impl with opt kerenl or dynamic impl), return false
     bool update_impl();
-    void realloc_if_needed();
 
     cldnn::network::ptr get_unfused_subgraph();
 

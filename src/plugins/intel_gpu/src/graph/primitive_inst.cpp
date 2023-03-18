@@ -236,12 +236,34 @@ void primitive_inst::update_shape() {
     for (auto& fused_prim : _impl_params->fused_desc) {
         fused_prim.output_layout.set_partial_shape(_impl_params->get_output_layout().get_partial_shape());
     }
+
+    // if user is optimizable concat, do shape infer for all the prev nodes of concat & concat
+    if (_node->get_users().size() == 1 && _node->get_users().front()->is_type<concatenation>() && _node->get_users().front()->can_be_optimized()) {
+        std::vector<std::shared_ptr<primitive_inst>> insts_to_shape_infer;
+        insts_to_shape_infer.push_back(_network.get_primitive(_node->get_users().front()->id()));
+        auto concat_deps = _node->get_users().front()->get_dependencies();
+        for (auto u : concat_deps) {
+            if (u.first->id() == this->id()) continue;
+            insts_to_shape_infer.push_back(_network.get_primitive(u.first->id()));
+        }
+        for (auto u : insts_to_shape_infer) {
+            // update shape for this node, user's other deps, and user
+            u->update_shape();
+        }
+    }
 }
 
 void primitive_inst::realloc_if_needed() {
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::memory_allocation);
 
+    // if user is optimizable concat, allocate mem of concat and set concat's mem to this prim
+    if (_node->get_users().size() == 1 && _node->get_users().front()->is_type<concatenation>() && _node->get_users().front()->can_be_optimized()) {
+        auto concat_prim = _network.get_primitive(_node->get_users().front()->id());
+        concat_prim->realloc_if_needed();
+        this->_outputs[0] = concat_prim->_outputs[0];
+        return;
+    }
 
     // Update param if fake_alignment is available
     auto updated_params = _node->type()->get_fake_aligned_params(*_impl_params);
@@ -382,7 +404,8 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     const auto primitive_id = id();
     OPENVINO_ASSERT(_has_valid_input, primitive_id, " has invalid/unset input");
     GPU_DEBUG_GET_INSTANCE(debug_config);
-
+    if (can_be_optimized())
+        return get_network().get_stream().create_user_event(true);
     std::vector<event::ptr> dependencies;
     if (is_dynamic()) {
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
