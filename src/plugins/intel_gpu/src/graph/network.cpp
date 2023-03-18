@@ -981,6 +981,15 @@ void network::build_exec_order() {
     GPU_DEBUG_DEFINE_MEM_LOGGER("build_exec_order");
     for (auto& node : _program->get_processing_order()) {
         if (!node->is_type<data>() && !(node->is_type<mutable_data>() && node->get_dependencies().empty())) {
+            if (node->get_users().size() == 1 &&
+                node->get_users().front()->is_type<concatenation>() &&
+                node->get_users().front()->can_be_optimized()) {
+                continue;
+            } else if (node->is_type<concatenation>() && node->can_be_optimized()) {
+                for (auto dep : node->get_dependencies()) {
+                    add_to_exec_order(dep.first->id());
+                }
+            }
             add_to_exec_order(node->id());
         }
     }
