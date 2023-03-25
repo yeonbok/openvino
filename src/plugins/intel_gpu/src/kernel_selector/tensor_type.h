@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "openvino/core/except.hpp"
 #include "common_types.h"
 #include "common_tools.h"
 #include <vector>
@@ -237,8 +238,14 @@ enum WeightsLayout {
 struct Pad {
     size_t before;
     size_t after;
-
-    size_t Total() const { return before + after; }
+    bool is_dynamic = false;
+    Pad(size_t before, size_t after, bool is_dynamic = false) : before(before), after(after), is_dynamic(is_dynamic) {}
+    size_t Total() const {
+        if (is_dynamic) {
+            OPENVINO_ASSERT("Total() is called for dynamic pad");
+        }
+        return before + after;
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -249,8 +256,18 @@ struct Dim {
     size_t pitch;
     Pad pad;
     bool is_dynamic;
+    Dim(size_t v = 0, size_t pitch = 0, Pad pad = {0, 0, false}, bool is_dynamic = false)
+        : v(v),
+          pitch(pitch),
+          pad(pad),
+          is_dynamic(is_dynamic) {}
 
-    size_t LogicalDimPadded() const { return v + pad.Total(); }
+    size_t LogicalDimPadded() const {
+        if (pad.is_dynamic) {
+            OPENVINO_ASSERT("LogicalDimPadded() is called for dynamic pad");
+        }
+        return v + pad.Total();
+    }
 };
 
 using NDims = std::vector<Dim>;
@@ -495,6 +512,10 @@ public:
         return std::any_of(dims.begin(), dims.end(), [](const Dim& d) { return d.is_dynamic; });
     }
 
+    bool is_pad_dynamic() const {
+        return std::any_of(dims.begin(), dims.end(), [](const Dim& d) { return d.pad.is_dynamic;});
+    }
+
     virtual ~TensorBase() = default;
 };
 
@@ -522,7 +543,7 @@ protected:
     template <typename ArrayT, typename ChannelName>
     static inline Dim Extract(const ArrayT& channelArr, Layout l, ChannelName channelName, const NDims& dims) {
         const int i = ChannelIndex(channelArr, l, channelName);
-        return ((i < 0) || (i >= static_cast<int>(dims.size()))) ? Dim{1, 1, {0, 0}} : dims[i];
+        return ((i < 0) || (i >= static_cast<int>(dims.size()))) ? Dim{1, 1, Pad(0, 0, false)} : dims[i];
     }
 
     template <typename ArrayT>

@@ -186,10 +186,15 @@ std::string toCodeString(size_t val) {
     return buf;
 }
 
-std::string toCodeString(const Tensor::Dim& dim, size_t offset, bool padded) {
+std::string toCodeString(const Tensor::Dim& dim, size_t offset, bool padded, size_t pad_offset) {
     if (dim.is_dynamic) {
-        if (padded && dim.pad.Total() > 0) {
-            snprintf(buf, sizeof(buf), "(shape_info[%zu] + %zu)", offset, dim.pad.Total());
+        if (padded) {
+            if (!dim.pad.is_dynamic) {
+                snprintf(buf, sizeof(buf), "(shape_info[%zu] + %zu)", offset, dim.pad.Total());
+            } else {
+                // dim's pad is dynamic
+                snprintf(buf, sizeof(buf), "(shape_info[%zu] + shape_info[%zu] + shape_info[%zu])", offset, pad_offset, pad_offset + 1);
+            }
         } else {
             snprintf(buf, sizeof(buf), "shape_info[%zu]", offset);
         }
@@ -327,12 +332,12 @@ JitDefinitions DataTensorJitConstant::GetDefinitions() const {
         auto f = toCodeString(_tensor.Feature(), idx_offset + 1);
         auto b = toCodeString(_tensor.Batch(), idx_offset + 0);
 
-        auto x_padded = toCodeString(_tensor.X(), idx_offset + 5, true);
-        auto y_padded = toCodeString(_tensor.Y(), idx_offset + 4, true);
-        auto z_padded = toCodeString(_tensor.Z(), idx_offset + 3, true);
-        auto w_padded = toCodeString(_tensor.W(), idx_offset + 2, true);
-        auto f_padded = toCodeString(_tensor.Feature(), idx_offset + 1, true);
-        auto b_padded = toCodeString(_tensor.Batch(), idx_offset + 0, true);
+        auto x_padded = toCodeString(_tensor.X(), idx_offset + 5, true, _tensor.X().pad.is_dynamic && _name == "OUTPUT" ? 12 + 5 * 2 : 0);
+        auto y_padded = toCodeString(_tensor.Y(), idx_offset + 4, true, _tensor.Y().pad.is_dynamic && _name == "OUTPUT"? 12 + 4 * 2 : 0);
+        auto z_padded = toCodeString(_tensor.Z(), idx_offset + 3, true, _tensor.Z().pad.is_dynamic && _name == "OUTPUT"? 12 + 3 * 2 : 0);
+        auto w_padded = toCodeString(_tensor.W(), idx_offset + 2, true, _tensor.W().pad.is_dynamic && _name == "OUTPUT"? 12 + 2 * 2 : 0);
+        auto f_padded = toCodeString(_tensor.Feature(), idx_offset + 1, true, _tensor.Feature().pad.is_dynamic && _name == "OUTPUT"? 12 + 1 * 2 : 0);
+        auto b_padded = toCodeString(_tensor.Batch(), idx_offset + 0, true, _tensor.Batch().pad.is_dynamic && _name == "OUTPUT"? 12 + 0 * 2  : 0);
 
         definitions = {
             {_name + "_SIZE_X", x},
@@ -341,18 +346,18 @@ JitDefinitions DataTensorJitConstant::GetDefinitions() const {
             {_name + "_SIZE_W", w},
             {_name + "_FEATURE_NUM", f},
             {_name + "_BATCH_NUM", b},
-            {_name + "_PAD_BEFORE_SIZE_X", toCodeString(_tensor.X().pad.before)},
-            {_name + "_PAD_BEFORE_SIZE_Y", toCodeString(_tensor.Y().pad.before)},
-            {_name + "_PAD_BEFORE_SIZE_Z", toCodeString(_tensor.Z().pad.before)},
-            {_name + "_PAD_BEFORE_SIZE_W", toCodeString(_tensor.W().pad.before)},
-            {_name + "_PAD_BEFORE_FEATURE_NUM", toCodeString(_tensor.Feature().pad.before)},
-            {_name + "_PAD_BEFORE_BATCH_NUM", toCodeString(_tensor.Batch().pad.before)},
-            {_name + "_PAD_AFTER_SIZE_X", toCodeString(_tensor.X().pad.after)},
-            {_name + "_PAD_AFTER_SIZE_Y", toCodeString(_tensor.Y().pad.after)},
-            {_name + "_PAD_AFTER_SIZE_Z", toCodeString(_tensor.Z().pad.after)},
-            {_name + "_PAD_AFTER_SIZE_W", toCodeString(_tensor.W().pad.after)},
-            {_name + "_PAD_AFTER_FEATURE_NUM", toCodeString(_tensor.Feature().pad.after)},
-            {_name + "_PAD_AFTER_BATCH_NUM", toCodeString(_tensor.Batch().pad.after)},
+            {_name + "_PAD_BEFORE_SIZE_X", _tensor.X().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 5 * 2]" : toCodeString(_tensor.X().pad.before)},
+            {_name + "_PAD_BEFORE_SIZE_Y", _tensor.Y().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 4 * 2]" : toCodeString(_tensor.Y().pad.before)},
+            {_name + "_PAD_BEFORE_SIZE_Z", _tensor.Z().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 3 * 2]" : toCodeString(_tensor.Z().pad.before)},
+            {_name + "_PAD_BEFORE_SIZE_W", _tensor.W().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 2 * 2]" : toCodeString(_tensor.W().pad.before)},
+            {_name + "_PAD_BEFORE_FEATURE_NUM", _tensor.Feature().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 1 * 2]" : toCodeString(_tensor.Feature().pad.before)},
+            {_name + "_PAD_BEFORE_BATCH_NUM", _tensor.Batch().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 0 * 2]" : toCodeString(_tensor.Batch().pad.before)},
+            {_name + "_PAD_AFTER_SIZE_X", _tensor.X().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 5 * 2 + 1]" : toCodeString(_tensor.X().pad.after)},
+            {_name + "_PAD_AFTER_SIZE_Y", _tensor.Y().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 4 * 2 + 1]" : toCodeString(_tensor.Y().pad.after)},
+            {_name + "_PAD_AFTER_SIZE_Z", _tensor.Z().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 3 * 2 + 1]" : toCodeString(_tensor.Z().pad.after)},
+            {_name + "_PAD_AFTER_SIZE_W", _tensor.W().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 2 * 2 + 1]" : toCodeString(_tensor.W().pad.after)},
+            {_name + "_PAD_AFTER_FEATURE_NUM", _tensor.Feature().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 1 * 2 + 1]" : toCodeString(_tensor.Feature().pad.after)},
+            {_name + "_PAD_AFTER_BATCH_NUM", _tensor.Batch().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 0 * 2 + 1]" : toCodeString(_tensor.Batch().pad.after)},
         };
         if (_tensor.GetLayout() == DataLayout::bf ||
             _tensor.GetLayout() == DataLayout::bfyx ||

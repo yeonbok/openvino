@@ -65,14 +65,23 @@ TEST(prepare_buffer_fusing, in_place_concat_taylor) {
     auto& engine = get_test_engine();
     auto in_layout1_0 = layout{ ov::PartialShape::dynamic(4), data_types::f32, format::bfyx }; // => {1, 3, 4, 2}
     auto in_layout2_0 = layout{ ov::PartialShape::dynamic(4), data_types::f32, format::bfyx }; // => {1, 3, 4, 2}
-    auto in_layout1 = layout{ ov::PartialShape{1, 2, 3, 4}, data_types::f32, format::bfyx }; // => {1, 3, 4, 2}
-    auto in_layout2 = layout{ ov::PartialShape{1, 2, 4, 1}, data_types::f32, format::bfyx }; // => {1, 1, 4, 2}
+#if 0
+   auto in_layout1 = layout{ ov::PartialShape{1, 2, 3, 4}, data_types::f32, format::bfyx }; // {1, 2, 3, 4} => {1, 3, 4, 2}
+    auto in_layout2 = layout{ ov::PartialShape{1, 2, 4, 1}, data_types::f32, format::bfyx }; // {1, 2, 4, 1} => {1, 1, 4, 2}
+#endif
+    auto in_layout1 = layout{ ov::PartialShape{1, 2, 3, 4}, data_types::f32, format::bfyx }; // {1, 2, 3, 4} =>  {1, 2, 3, 4}
+    auto in_layout2 = layout{ ov::PartialShape{1, 2, 4, 1}, data_types::f32, format::bfyx }; // {1, 2, 4, 1} =>  {1, 2, 1, 4]
+
     topology topology;
     topology.add(input_layout("input1", in_layout1_0));
     topology.add(input_layout("input2", in_layout2_0));
-    topology.add(permute("permute1", input_info("input1"), {0, 2, 3, 1}));
-    topology.add(permute("permute2", input_info("input2"), {0, 3, 2, 1}));
-    topology.add(concatenation("concat", { input_info("permute1"), input_info("permute2") }, 1));
+//    topology.add(permute("permute1", input_info("input1"), {0, 2, 3, 1}));
+//    topology.add(permute("permute2", input_info("input2"), {0, 3, 2, 1}));
+    topology.add(permute("permute1", input_info("input1"), {0, 1, 2, 3}));
+    topology.add(permute("permute2", input_info("input2"), {0, 1, 3, 2}));
+
+//    topology.add(concatenation("concat", { input_info("permute1"), input_info("permute2") }, 1));
+    topology.add(concatenation("concat", { input_info("permute1"), input_info("permute2") }, 2));
     topology.add(permute("output", input_info("concat"), {0, 2, 3, 1}));
 
     ExecutionConfig config;
@@ -95,11 +104,15 @@ TEST(prepare_buffer_fusing, in_place_concat_taylor) {
             }
     );
     set_values<float>(input_memory2, {0.1, 1.1, 2.2, 3.0, 4.0, -5.0, 0.1, 0.7});
-
+#if 0 // faxis
     std::vector<float> ref_output = {
         0.0, 4.4, 8.8,   0.1, 22.22, 66.66, 100.100, 4.0, 1.1, 5.5, 9.9,   1.1, 33.33, 77.77, 101.101, -5.0,
         2.2, 6.6, 10.10, 2.2, 44.44, 88.88, 102.102, 0.1, 3.3, 7.7, 11.11, 3.0, 55.55, 99.99, 103.103, 0.7
     };
+#endif
+    std::vector<float> ref_output = {
+        0.0, 22.22,   1.1, 33.33,   2.2,   44.44,   3.3,   55.55,   4.4, 66.66, 5.5, 77.77, 6.6, 88.88, 7.7, 99.99,
+        8.8,      100.100, 9.9, 101.101, 10.10, 102.102, 11.11, 103.103, 0.1, 4.0,   1.1, -5.0,  2.2, 0.1,   3.0, 0.7};
     net.set_input_data("input1", input_memory1);
     net.set_input_data("input2", input_memory2);
     std::map<cldnn::primitive_id, cldnn::network_output> output;

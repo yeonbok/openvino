@@ -292,8 +292,8 @@ struct padding {
     /// @param lower_sizes Top-left padding sizes. See @ref tensor::tensor(const std::vector<value_type>&, value_type) for details.
     /// @param upper_sizes Bottom-right padding sizes. See @ref tensor::tensor(const std::vector<value_type>&, value_type) for details.
     /// @param filling_value Filling value for padding area.
-    padding(const std::vector<tensor::value_type>& lower_sizes, const std::vector<tensor::value_type>& upper_sizes, float filling_value = 0.0f)
-        : _lower_size(to_abs(lower_sizes), 0), _upper_size(to_abs(upper_sizes), 0), _filling_value(filling_value) {}
+    padding(const std::vector<tensor::value_type>& lower_sizes, const std::vector<tensor::value_type>& upper_sizes, float filling_value = 0.0f, tensor is_dynamic = tensor(0))
+        : _lower_size(to_abs(lower_sizes), 0), _upper_size(to_abs(upper_sizes), 0), _filling_value(filling_value), is_dynamic_pad(is_dynamic) {}
 
     /// @brief Constrcuts symmetric padding.
     /// @param sizes Top-left and bottom-right padding sizes. See @ref tensor::tensor(const std::vector<value_type>&, value_type) for details.
@@ -311,7 +311,7 @@ struct padding {
     }
 
     friend bool operator==(const padding& lhs, const padding& rhs) {
-        return lhs._lower_size == rhs._lower_size && lhs._upper_size == rhs._upper_size && lhs._filling_value == rhs._filling_value;
+        return lhs._lower_size == rhs._lower_size && lhs._upper_size == rhs._upper_size && lhs._filling_value == rhs._filling_value && lhs.is_dynamic_pad == rhs.is_dynamic_pad;
     }
 
     friend bool operator!=(const padding& lhs, const padding& rhs) {
@@ -329,7 +329,8 @@ struct padding {
     static padding max(padding const& lhs, padding const& rhs, float filling_value = 0.0f) {
         auto lower = tensor::max(lhs.lower_size(), rhs.lower_size());
         auto upper = tensor::max(lhs.upper_size(), rhs.upper_size());
-        return padding{lower.sizes(), upper.sizes(), filling_value};
+        auto is_dynamic = tensor::max(lhs.is_dynamic_pad, rhs.is_dynamic_pad);
+        return padding{lower.sizes(), upper.sizes(), filling_value, is_dynamic};
     }
 
     size_t hash() const {
@@ -340,6 +341,14 @@ struct padding {
         return seed;
     }
 
+    void set_dynamic_pad(tensor is_dynamic) {
+        is_dynamic_pad = is_dynamic;
+    }
+
+    tensor get_dynamic_pad() const {
+        return is_dynamic_pad;
+    }
+
 private:
     tensor _lower_size;  ///< Lower padding sizes. For spatials, it means size of left (X) and top (Y) padding.
     tensor _upper_size;  ///< Upper padding sizes. For spatials, it means size of right (X) and bottom (Y) padding.
@@ -348,6 +357,7 @@ private:
                            ///< to it using round-towards-nearest-even (for floating-point data types) or round-towards-zero (for integral
                            ///< data types).
 
+    tensor is_dynamic_pad = tensor(0);
     static std::vector<tensor::value_type> to_abs(const std::vector<tensor::value_type>& sizes) {
         std::vector<tensor::value_type> result;
         result.reserve(sizes.size());

@@ -247,6 +247,7 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
 
 void concat_in_place_optimization::optimize_cascade(concatenation_node& node, std::list<concatenation_node*>& need_reoptimization) {
     if (node.is_dynamic()) {
+        #if 0
         bool need_to_transform = false;
         if (node.get_output_layout().data_padding != padding({0, 0, 0, 0}))
             need_to_transform = true;
@@ -261,6 +262,18 @@ void concat_in_place_optimization::optimize_cascade(concatenation_node& node, st
             }
             return;
         }
+#else
+        node.can_be_optimized(true);
+        for (auto dep : node.get_dependencies()) {
+            dep.first->can_share_buffer(false);
+            auto dep_output_layout = dep.first->get_output_layout();
+            dep_output_layout.data_padding.set_dynamic_pad(tensor(1)); //TODO: let only required pad to be set
+            std::vector<layout> lay = {dep_output_layout};
+            dep.first->set_output_layouts(lay, false);
+        }
+        return;
+
+#endif
     }
     auto out_layout = node.get_output_layout();
     auto out_rank = out_layout.get_rank();

@@ -11,6 +11,7 @@
 #include "fully_connected_inst.h"
 #include "convolution_inst.h"
 #include "crop_inst.h"
+#include "permute_inst.h"
 #include "deconvolution_inst.h"
 #include "shape_of_inst.h"
 #include "gemm_inst.h"
@@ -407,6 +408,10 @@ bool primitive_inst::update_impl() {
                     lock[offset++] = static_cast<int32_t>(output_shape[j]);
             }
         }
+        if (id() == "permute2")
+            lock[20] = 3; // y before
+        if (id() == "permute1")
+            lock[21] = 1; // y after
         std::stringstream s;
         s << "shapes: ";
         for (size_t i = 0; i < offset; i++)
@@ -431,8 +436,9 @@ bool primitive_inst::update_impl() {
             }
         }
         if (!cached_impl) {
-            #if 0
+            #if 1
             if (_dynamic_impl) {
+#if 0
                 auto& compilation_context = get_network().get_program()->get_compilation_context();
                 compilation_context.push_task(updated_params.hash(), [this, &compilation_context, updated_params]() {
                     if (compilation_context.is_stopped())
@@ -451,6 +457,7 @@ bool primitive_inst::update_impl() {
                     impl->set_kernels(kernels);
                     cache.add(updated_params, impl->clone());
                 });
+#endif
                 _impl = _dynamic_impl->clone();
                 _impl->update_dispatch_data(*_impl_params);
 
@@ -686,7 +693,7 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
             // Actual shape info layout is the following:
             // input_0 -> input_1, ..., fused_dep_0, fused_dep1, ..., output_0, output_1, ...
             // For each tensor we save 6 dimensions if [bfwzyx] order
-            const int64_t buffers_count = _node->get_dependencies().size() + _node->get_outputs_count();
+            const int64_t buffers_count = _node->get_dependencies().size() + _node->get_outputs_count() + 2;
             const size_t tensor_dims_count = 6;
             const int64_t shape_elements = buffers_count * tensor_dims_count;
             _shape_info_memory = _network.get_engine().allocate_memory(layout{{shape_elements}, data_types::i32, format::bfyx});

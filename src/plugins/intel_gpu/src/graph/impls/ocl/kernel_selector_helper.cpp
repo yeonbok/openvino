@@ -930,6 +930,7 @@ kernel_selector::data_tensor convert_data_tensor(const layout& l, const tensor v
     const auto& add_offsets = view_offset.sizes(l.format);
     const auto& lower_pad = pad.lower_size().sizes(l.format);
     const auto& upper_pad = pad.upper_size().sizes(l.format);
+    const auto& is_pad_dynamic = pad.get_dynamic_pad().sizes(l.format);
     const auto ks_layout = to_data_layout(l.format);
     kernel_selector::n_dims vec(kernel_selector::DataTensor::ChannelsCount(ks_layout));
 
@@ -945,6 +946,7 @@ kernel_selector::data_tensor convert_data_tensor(const layout& l, const tensor v
         auto& elm = vec[i];
         elm.v = d.is_dynamic() ? 0 : static_cast<size_t>(d.get_length() - add_offsets[tensor_index]);
         elm.pitch = pitch;
+        elm.pad.is_dynamic = is_pad_dynamic[tensor_index];
         elm.pad.before = lp;
         elm.pad.after = up;
         elm.is_dynamic = d.is_dynamic();
