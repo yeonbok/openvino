@@ -322,7 +322,9 @@ public:
 JitDefinitions DataTensorJitConstant::GetDefinitions() const {
     JitDefinitions baseDefinitions = TensorBaseTJitConstant::GetDefinitions(_tensor);
 
-    const size_t idx_offset = _dyn_array_index * 6; // 6D max
+//    const size_t idx_offset = _dyn_array_index * 6; // 6D max
+    const size_t idx_offset = _dyn_array_index; // 6D max
+    size_t pad_idx_offset = idx_offset + 6;
     JitDefinitions definitions{};
     if (_tensor.is_dynamic()) {
         auto x = toCodeString(_tensor.X(), idx_offset + 5);
@@ -331,14 +333,31 @@ JitDefinitions DataTensorJitConstant::GetDefinitions() const {
         auto w = toCodeString(_tensor.W(), idx_offset + 2);
         auto f = toCodeString(_tensor.Feature(), idx_offset + 1);
         auto b = toCodeString(_tensor.Batch(), idx_offset + 0);
-
+#if 0
         auto x_padded = toCodeString(_tensor.X(), idx_offset + 5, true, _tensor.X().pad.is_dynamic && _name == "OUTPUT" ? 12 + 5 * 2 : 0);
         auto y_padded = toCodeString(_tensor.Y(), idx_offset + 4, true, _tensor.Y().pad.is_dynamic && _name == "OUTPUT"? 12 + 4 * 2 : 0);
         auto z_padded = toCodeString(_tensor.Z(), idx_offset + 3, true, _tensor.Z().pad.is_dynamic && _name == "OUTPUT"? 12 + 3 * 2 : 0);
         auto w_padded = toCodeString(_tensor.W(), idx_offset + 2, true, _tensor.W().pad.is_dynamic && _name == "OUTPUT"? 12 + 2 * 2 : 0);
         auto f_padded = toCodeString(_tensor.Feature(), idx_offset + 1, true, _tensor.Feature().pad.is_dynamic && _name == "OUTPUT"? 12 + 1 * 2 : 0);
         auto b_padded = toCodeString(_tensor.Batch(), idx_offset + 0, true, _tensor.Batch().pad.is_dynamic && _name == "OUTPUT"? 12 + 0 * 2  : 0);
+#endif
+        auto b_padded = toCodeString(_tensor.Batch(), idx_offset + 0, true, pad_idx_offset);
+        if (_tensor.Batch().pad.is_dynamic)
+            pad_idx_offset += 2;
+        auto f_padded = toCodeString(_tensor.Feature(), idx_offset + 1, true, pad_idx_offset);
+        if (_tensor.Feature().pad.is_dynamic)
+            pad_idx_offset += 2;
+        auto w_padded = toCodeString(_tensor.W(), idx_offset + 2, true, pad_idx_offset);
+        if (_tensor.W().pad.is_dynamic)
+            pad_idx_offset += 2;
+        auto z_padded = toCodeString(_tensor.Z(), idx_offset + 3, true, pad_idx_offset);
+        if (_tensor.Z().pad.is_dynamic)
+            pad_idx_offset += 2;
+        auto y_padded = toCodeString(_tensor.Y(), idx_offset + 4, true, pad_idx_offset);
+            pad_idx_offset += 2;
+        auto x_padded = toCodeString(_tensor.X(), idx_offset + 5, true, pad_idx_offset);
 
+        size_t pad_idx_offset = idx_offset + 6;
         definitions = {
             {_name + "_SIZE_X", x},
             {_name + "_SIZE_Y", y},
@@ -346,6 +365,8 @@ JitDefinitions DataTensorJitConstant::GetDefinitions() const {
             {_name + "_SIZE_W", w},
             {_name + "_FEATURE_NUM", f},
             {_name + "_BATCH_NUM", b},
+        };
+            #if 0
             {_name + "_PAD_BEFORE_SIZE_X", _tensor.X().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 5 * 2]" : toCodeString(_tensor.X().pad.before)},
             {_name + "_PAD_BEFORE_SIZE_Y", _tensor.Y().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 4 * 2]" : toCodeString(_tensor.Y().pad.before)},
             {_name + "_PAD_BEFORE_SIZE_Z", _tensor.Z().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 3 * 2]" : toCodeString(_tensor.Z().pad.before)},
@@ -358,11 +379,63 @@ JitDefinitions DataTensorJitConstant::GetDefinitions() const {
             {_name + "_PAD_AFTER_SIZE_W", _tensor.W().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 2 * 2 + 1]" : toCodeString(_tensor.W().pad.after)},
             {_name + "_PAD_AFTER_FEATURE_NUM", _tensor.Feature().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 1 * 2 + 1]" : toCodeString(_tensor.Feature().pad.after)},
             {_name + "_PAD_AFTER_BATCH_NUM", _tensor.Batch().is_dynamic && _name == "OUTPUT" ? "shape_info[12 + 0 * 2 + 1]" : toCodeString(_tensor.Batch().pad.after)},
-        };
-        if (_tensor.GetLayout() == DataLayout::bf ||
-            _tensor.GetLayout() == DataLayout::bfyx ||
-            _tensor.GetLayout() == DataLayout::bfzyx ||
-            _tensor.GetLayout() == DataLayout::bfwzyx) {
+            #endif
+        if (_tensor.GetLayout() == DataLayout::bf || _tensor.GetLayout() == DataLayout::bfyx ||
+            _tensor.GetLayout() == DataLayout::bfzyx || _tensor.GetLayout() == DataLayout::bfwzyx) {
+            if (_tensor.Batch().is_dynamic && _tensor.Batch().pad.is_dynamic) {
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_BEFORE_BATCH_NUM", buf});
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_AFTER_BATCH_NUM", buf});
+            } else {
+                definitions.push_back({_name + "_PAD_BEFORE_BATCH_NUM", toCodeString(_tensor.Batch().pad.before)});
+                definitions.push_back({_name + "_PAD_AFTER_BATCH_NUM", toCodeString(_tensor.Batch().pad.after)});
+            }
+            if (_tensor.Feature().is_dynamic && _tensor.Feature().pad.is_dynamic) {
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_BEFORE_FEATURE_NUM", buf});
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_AFTER_FEATURE_NUM", buf});
+            } else {
+                definitions.push_back({_name + "_PAD_BEFORE_FEATURE_NUM", toCodeString(_tensor.Feature().pad.before)});
+                definitions.push_back({_name + "_PAD_AFTER_FEATURE_NUM", toCodeString(_tensor.Feature().pad.after)});
+            }
+            if (_tensor.W().is_dynamic && _tensor.W().pad.is_dynamic) {
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_BEFORE_SIZE_W", buf});
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_AFTER_SIZE_W", buf});
+            } else {
+                definitions.push_back({_name + "_PAD_BEFORE_SIZE_W", toCodeString(_tensor.W().pad.before)});
+                definitions.push_back({_name + "_PAD_AFTER_SIZE_W", toCodeString(_tensor.W().pad.after)});
+            }
+            if (_tensor.Z().is_dynamic && _tensor.Z().pad.is_dynamic) {
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_BEFORE_SIZE_Z", buf});
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_AFTER_SIZE_Z", buf});
+            } else {
+                definitions.push_back({_name + "_PAD_BEFORE_SIZE_Z", toCodeString(_tensor.Z().pad.before)});
+                definitions.push_back({_name + "_PAD_AFTER_SIZE_Z", toCodeString(_tensor.Z().pad.after)});
+            }
+            if (_tensor.Y().is_dynamic && _tensor.Y().pad.is_dynamic) {
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_BEFORE_SIZE_Y", buf});
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_AFTER_SIZE_Y", buf});
+            } else {
+                definitions.push_back({_name + "_PAD_BEFORE_SIZE_Y", toCodeString(_tensor.Y().pad.before)});
+                definitions.push_back({_name + "_PAD_AFTER_SIZE_Y", toCodeString(_tensor.Y().pad.after)});
+            }
+            if (_tensor.X().is_dynamic && _tensor.X().pad.is_dynamic) {
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_BEFORE_SIZE_X", buf});
+                snprintf(buf, sizeof(buf), "(shape_info[%zu]) ", pad_idx_offset++);
+                definitions.push_back({_name + "_PAD_AFTER_SIZE_X", buf});
+            } else {
+                definitions.push_back({_name + "_PAD_BEFORE_SIZE_X", toCodeString(_tensor.X().pad.before)});
+            }
+
             definitions.push_back({_name + "_X_PITCH", "1"});
             definitions.push_back({_name + "_Y_PITCH", x_padded});
             definitions.push_back({_name + "_Z_PITCH", toVectorMulString({x_padded, y_padded})});

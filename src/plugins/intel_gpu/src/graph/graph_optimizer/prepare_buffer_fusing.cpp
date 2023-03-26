@@ -246,6 +246,10 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
 }
 
 void concat_in_place_optimization::optimize_cascade(concatenation_node& node, std::list<concatenation_node*>& need_reoptimization) {
+    auto out_layout = node.get_output_layout();
+    auto out_rank = out_layout.get_partial_shape().size();
+    auto concat_axis = node.get_primitive()->axis;
+
     if (node.is_dynamic()) {
         #if 0
         bool need_to_transform = false;
@@ -263,11 +267,19 @@ void concat_in_place_optimization::optimize_cascade(concatenation_node& node, st
             return;
         }
 #else
+        auto concat_axis_legacy = concat_axis;
+        if (concat_axis_legacy >= 2) {
+            auto spatial_axis = concat_axis_legacy - 2;
+            auto spatial_size = std::max<size_t>(out_rank, 4) - 2;
+            concat_axis_legacy = spatial_size - spatial_axis - 1 + 2;
+        }
         node.can_be_optimized(true);
         for (auto dep : node.get_dependencies()) {
             dep.first->can_share_buffer(false);
             auto dep_output_layout = dep.first->get_output_layout();
-            dep_output_layout.data_padding.set_dynamic_pad(tensor(1)); //TODO: let only required pad to be set
+            auto info_dynamic_pad = tensor(0).sizes();
+            info_dynamic_pad[concat_axis_legacy] = 1;
+            dep_output_layout.data_padding.set_dynamic_pad(tensor(info_dynamic_pad));
             std::vector<layout> lay = {dep_output_layout};
             dep.first->set_output_layouts(lay, false);
         }
@@ -275,9 +287,6 @@ void concat_in_place_optimization::optimize_cascade(concatenation_node& node, st
 
 #endif
     }
-    auto out_layout = node.get_output_layout();
-    auto out_rank = out_layout.get_rank();
-    auto concat_axis = node.get_primitive()->axis;
     // We need to transform axis from bf[w][z]yx order to bfxy[z][w] due to tensor.sizes() usages here
     // should be removed once pad representation is changed
     auto concat_axis_legacy = concat_axis;

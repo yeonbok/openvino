@@ -56,5 +56,6 @@ KERNEL (permute_ref)(
     output[OUT_IDX] = FUSED_OPS_RESULT;
 #else
     output[OUT_IDX] = ACTIVATION(input[IN_IDX], ACTIVATION_PARAMS);
+    printf("output[%d] = input[%d] (%f) , OUTPUT_X_PAD_BEFORE = %d, OFFSET = %d\n", OUT_IDX, IN_IDX, input[IN_IDX], OUTPUT_PAD_BEFORE_SIZE_X, OUTPUT_OFFSET);
 #endif
 }

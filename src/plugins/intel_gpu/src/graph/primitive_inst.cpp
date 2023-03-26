@@ -394,24 +394,45 @@ bool primitive_inst::update_impl() {
         mem_lock<int32_t> lock(_shape_info_memory, _network.get_stream());
         size_t offset = 0;
         for (size_t i = 0; i < _node->get_dependencies().size(); i++) {
-            if (_node->get_dependency(i).get_output_layout().is_dynamic()) {
-                auto input_shape = _node->type()->extend_input_shape_to_6d(params, static_cast<uint32_t>(i));
-                for (size_t j = 0; j < input_shape.size(); j++)
-                    lock[offset++] = static_cast<int32_t>(input_shape[j]);
+            auto node_in_lay = _node->get_dependency(i).get_output_layout();
+            if (node_in_lay.is_dynamic()) {
+                auto input_shape_6d = _node->type()->extend_input_shape_to_6d(params, static_cast<uint32_t>(i));
+                for (size_t j = 0; j < input_shape_6d.size(); j++)
+                    lock[offset++] = static_cast<int32_t>(input_shape_6d[j]);
+                auto is_dynamic_pad = node_in_lay.data_padding.get_dynamic_pad();
+                auto data_padding = params.input_layouts[i].data_padding;
+                for (size_t j = 0; j < input_shape_6d.size(); j++) {
+                    if (is_dynamic_pad.sizes()[j] == 1) {
+                        lock[offset++] = data_padding.lower_size().sizes()[j]; // before
+                        lock[offset++] = data_padding.upper_size().sizes()[j]; // after
+                    }
+                }
             }
         }
 
         for (size_t i = 0; i < _node->get_output_layouts().size(); i++) {
-            if (_node->get_output_layout(i).is_dynamic()) {
-                auto output_shape = _node->type()->extend_output_shape_to_6d(params, static_cast<uint32_t>(i));
-                for (size_t j = 0; j < output_shape.size(); j++)
-                    lock[offset++] = static_cast<int32_t>(output_shape[j]);
+            auto node_out_lay = _node->get_output_layout(i);
+           if (node_out_lay.is_dynamic()) {
+                auto output_shape_6d = _node->type()->extend_output_shape_to_6d(params, static_cast<uint32_t>(i));
+                for (size_t j = 0; j < output_shape_6d.size(); j++) {
+                    lock[offset++] = static_cast<int32_t>(output_shape_6d[j]);
+                }
+                auto is_dynamic_pad = node_out_lay.data_padding.get_dynamic_pad();
+                auto data_padding = params.output_layouts[i].data_padding;
+                for (size_t j = 0; j < output_shape_6d.size(); j++) {
+                    if (is_dynamic_pad.sizes()[j] == 1) {
+                        lock[offset++] = data_padding.lower_size().sizes()[j]; // before
+                        lock[offset++] = data_padding.upper_size().sizes()[j]; // after
+                    }
+                }
             }
         }
+        #if 0
         if (id() == "permute2")
             lock[20] = 3; // y before
         if (id() == "permute1")
             lock[21] = 1; // y after
+        #endif
         std::stringstream s;
         s << "shapes: ";
         for (size_t i = 0; i < offset; i++)
