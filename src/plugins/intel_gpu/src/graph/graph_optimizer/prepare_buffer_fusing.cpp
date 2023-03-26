@@ -191,7 +191,9 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
         // if an input is marked as network output, prevent optimizations
         // which would affect a form of its output (unless debug flag is set),
         // we also need to restrict input types to those which support padding on all axis
-        if (input.first->is_output()) //|| !input.first->is_padding_supported(concat_axis, lower_padd_in_axis))
+        if (input.first->is_output()//) //|| !input.first->is_padding_supported(concat_axis, lower_padd_in_axis))
+            // TMP
+            || input.first->is_type<data>())
             return false;
 
         // TODO: Investigate if this condition is needed

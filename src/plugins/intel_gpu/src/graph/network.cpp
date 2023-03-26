@@ -985,9 +985,10 @@ void network::build_exec_order() {
                 node->get_users().front()->is_type<concatenation>() &&
                 node->get_users().front()->can_be_optimized()) {
                 continue;
-            } else if (node->is_type<concatenation>() && node->can_be_optimized()) {
+            } else if (node->is_dynamic() && node->is_type<concatenation>() && node->can_be_optimized()) {
                 for (auto dep : node->get_dependencies()) {
-                    add_to_exec_order(dep.first->id());
+                    if (!dep.first->is_type<data>())
+                        add_to_exec_order(dep.first->id());
                 }
             }
             add_to_exec_order(node->id());
