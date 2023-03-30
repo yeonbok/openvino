@@ -320,28 +320,60 @@ bool primitive_inst::update_impl() {
 
     auto update_shape_info = [this, prev_impl_str](const kernel_impl_params& params) {
         mem_lock<int32_t> lock(_shape_info_memory, _network.get_stream());
+
         size_t offset = 0;
         for (size_t i = 0; i < _node->get_dependencies().size(); i++) {
-            if (_node->get_dependency(i).get_output_layout().is_dynamic()) {
+            auto node_in_lay = _node->get_dependency(i).get_output_layout();
+            if (node_in_lay.is_dynamic()) {
+                GPU_DEBUG_TRACE_DETAIL << id() << " : update shape_info for input[" << i << "]" << std::endl;
                 auto pshape = params.get_input_layout(i).get_partial_shape();
-                auto input_shape = layout::transform(pshape,
-                                                     format::get_default_format(pshape.size()),
-                                                     format::bfwzyx).to_shape();
-
-                for (size_t j = 0; j < input_shape.size(); j++)
-                    lock[offset++] = static_cast<int32_t>(input_shape[j]);
+                auto input_shape_6d =
+                    layout::transform(pshape, format::get_default_format(pshape.size()), format::bfwzyx).to_shape();
+                for (size_t j = 0; j < input_shape_6d.size(); j++) {
+                    GPU_DEBUG_TRACE_DETAIL << " shape_info[" << offset << "] = " << input_shape_6d[j] << std::endl;
+                    lock[offset++] = static_cast<int32_t>(input_shape_6d[j]);
+                }
+                auto is_dynamic_pad = node_in_lay.data_padding.get_dynamic_pad_dims();
+                auto data_padding = params.input_layouts[i].data_padding;
+                for (size_t j = 0; j < input_shape_6d.size(); j++) {
+                    if (is_dynamic_pad.sizes()[j] == 1) {
+                        GPU_DEBUG_TRACE_DETAIL << " shape_info[" << offset << "] = " << data_padding.lower_size().sizes()[j]
+                                  << "(pad_before for input[" << i << "] " << j << "-th dim)" << std::endl;
+                        lock[offset++] = data_padding.lower_size().sizes()[j];  // pad_before
+                        GPU_DEBUG_TRACE_DETAIL << " shape_info[" << offset << "] = " << data_padding.lower_size().sizes()[j]
+                                  << "(pad_after for input[" << i << "] " << j << "-th dim)" << std::endl;
+                        lock[offset++] = data_padding.upper_size().sizes()[j];  // pad_after
+                    }
+                }
             }
         }
 
         for (size_t i = 0; i < _node->get_output_layouts().size(); i++) {
-            if (_node->get_output_layout(i).is_dynamic()) {
+            auto node_out_lay = _node->get_output_layout(i);
+            if (node_out_lay.is_dynamic()) {
+                GPU_DEBUG_TRACE_DETAIL << id() << " : update shape_info for output[" << i << "]" << std::endl;
                 auto pshape = params.get_output_layout(i).get_partial_shape();
-                auto output_shape = layout::transform(pshape,
+                auto output_shape_6d = layout::transform(pshape,
                                                       format::get_default_format(pshape.size()),
                                                       format::bfwzyx).to_shape();
 
-                for (size_t j = 0; j < output_shape.size(); j++)
-                    lock[offset++] = static_cast<int32_t>(output_shape[j]);
+
+                for (size_t j = 0; j < output_shape_6d.size(); j++) {
+                    GPU_DEBUG_TRACE_DETAIL << " shape_info[" << offset << "] = " << output_shape_6d[j] << std::endl;
+                    lock[offset++] = static_cast<int32_t>(output_shape_6d[j]);
+                }
+                auto is_dynamic_pad = node_out_lay.data_padding.get_dynamic_pad_dims();
+                auto data_padding = params.output_layouts[i].data_padding;
+                for (size_t j = 0; j < output_shape_6d.size(); j++) {
+                    if (is_dynamic_pad.sizes()[j] == 1) {
+                        GPU_DEBUG_TRACE_DETAIL << " shape_info[" << offset << "] = " << data_padding.lower_size().sizes()[j]
+                                  << "(pad_before for output[" << i << "] " << j << "-th dim)" << std::endl;
+                        lock[offset++] = data_padding.lower_size().sizes()[j];  // before
+                        GPU_DEBUG_TRACE_DETAIL << " shape_info[" << offset << "] = " << data_padding.lower_size().sizes()[j]
+                                  << "(pad_after for output[" << i << "] " << j << "-th dim)" << std::endl;
+                        lock[offset++] = data_padding.upper_size().sizes()[j];  // after
+                    }
+                }
             }
         }
         std::stringstream s;
@@ -626,9 +658,18 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
             // Actual shape info layout is the following:
             // input_0 -> input_1, ..., fused_dep_0, fused_dep1, ..., output_0, output_1, ...
             // For each tensor we save 6 dimensions if [bfwzyx] order
+            size_t num_dynamic_pads = 0;
+            for (auto in : _node->get_dependencies()) {
+                const auto& dyn_pad_dims = in.first->get_output_layout(false).data_padding.get_dynamic_pad_dims().sizes();
+                num_dynamic_pads += std::accumulate(dyn_pad_dims.begin(), dyn_pad_dims.end(), static_cast<int32_t>(0));
+            }
+            for (auto o : _node->get_output_layouts()) {
+                const auto& dyn_pad_dims = o.data_padding.get_dynamic_pad_dims().sizes();
+                num_dynamic_pads += std::accumulate(dyn_pad_dims.begin(), dyn_pad_dims.end(), static_cast<int32_t>(0));
+            }
             const int64_t buffers_count = _node->get_dependencies().size() + _node->get_outputs_count();
             const size_t tensor_dims_count = 6;
-            const int64_t shape_elements = buffers_count * tensor_dims_count;
+            const int64_t shape_elements = buffers_count * tensor_dims_count + num_dynamic_pads * 2 /*pad_before + pad_after*/;
             _shape_info_memory = _network.get_engine().allocate_memory(layout{{shape_elements}, data_types::i32, format::bfyx});
         }
     }

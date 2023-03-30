@@ -45,7 +45,7 @@ TEST(check_hash_value, eltwise_basic) {
     const auto params_hash = prog_node.get_kernel_impl_params()->hash();
 
     ASSERT_EQ(primitive_hash, 11385140218618178073UL);
-    ASSERT_EQ(params_hash, 10460622021476296271UL);
+    ASSERT_EQ(params_hash, 16194933522119352763UL);
 }
 
 TEST(check_hash_value, fc_basic) {
@@ -75,7 +75,7 @@ TEST(check_hash_value, fc_basic) {
     const auto params_hash = prog_node.type()->get_fake_aligned_params(*prog_node.get_kernel_impl_params()).hash();
 
     ASSERT_EQ(primitive_hash, 2197080758510296176UL);
-    ASSERT_EQ(params_hash, 5241462399408562393UL);
+    ASSERT_EQ(params_hash, 15821805117402559561UL);
 }
 
 TEST(check_hash_value, gather_basic) {
@@ -106,7 +106,7 @@ TEST(check_hash_value, gather_basic) {
     const auto params_hash = prog_node.get_kernel_impl_params()->hash();
 
     ASSERT_EQ(primitive_hash, 93320679543770233UL);
-    ASSERT_EQ(params_hash, 18126277300376770566UL);
+    ASSERT_EQ(params_hash, 3299404160138808755UL);
 }
 
 TEST(check_hash_value, gemm_basic) {
@@ -132,7 +132,7 @@ TEST(check_hash_value, gemm_basic) {
     const auto params_hash = prog_node.get_kernel_impl_params()->hash();
 
     ASSERT_EQ(primitive_hash, 8009877756431655269UL);
-    ASSERT_EQ(params_hash, 2966249915421110547UL);
+    ASSERT_EQ(params_hash, 3778084845375297925UL);
 }
 
 TEST(check_hash_value, permute_basic) {
@@ -155,7 +155,7 @@ TEST(check_hash_value, permute_basic) {
     const auto params_hash = prog_node.get_kernel_impl_params()->hash();
 
     ASSERT_EQ(primitive_hash, 4658575237077439700UL);
-    ASSERT_EQ(params_hash, 4319508487906266226UL);
+    ASSERT_EQ(params_hash, 14945928000246540798UL);
 }
 
 TEST(check_hash_value, reorder_basic) {
@@ -184,7 +184,7 @@ TEST(check_hash_value, reorder_basic) {
     const auto params_hash = prog_node.get_kernel_impl_params()->hash();
 
     ASSERT_EQ(primitive_hash, 16293979194373117693UL);
-    ASSERT_EQ(params_hash, 1719378641386629286UL);
+    ASSERT_EQ(params_hash, 14573456914386319544UL);
 }
 
 TEST(check_hash_value, reshape_basic) {
@@ -210,7 +210,7 @@ TEST(check_hash_value, reshape_basic) {
     const auto params_hash = prog_node.get_kernel_impl_params()->hash();
 
     ASSERT_EQ(primitive_hash, 1534749073560581535UL);
-    ASSERT_EQ(params_hash, 1686780870642992006UL);
+    ASSERT_EQ(params_hash, 7525489606549794997UL);
 }
 
 TEST(check_hash_value, conv_basic) {
@@ -237,7 +237,7 @@ TEST(check_hash_value, conv_basic) {
     const auto params_hash = prog_node.get_kernel_impl_params()->hash();
 
     ASSERT_EQ(primitive_hash, 14591385718963138714UL);
-    ASSERT_EQ(params_hash, 6876197578014654797UL);
+    ASSERT_EQ(params_hash, 12050872950450853810UL);
 }
 
 TEST(check_hash_value, quantize_basic) {
@@ -270,5 +270,5 @@ TEST(check_hash_value, quantize_basic) {
     const auto params_hash = prog_node.get_kernel_impl_params()->hash();
 
     ASSERT_EQ(primitive_hash, 4135863035456568493UL);
-    ASSERT_EQ(params_hash, 13898649554943348250UL);
+    ASSERT_EQ(params_hash, 16863278972829641301UL);
 }
