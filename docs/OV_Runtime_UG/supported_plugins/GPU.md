@@ -230,15 +230,23 @@ For more details, see the :doc:`optimization guide<openvino_docs_deployment_opti
 Dynamic Shapes
 +++++++++++++++++++++++++++++++++++++++
 
-The GPU plugin supports dynamic shapes for batch dimension only (specified as ``N`` in the :doc:`layouts terms<openvino_docs_OV_UG_Layout_Overview>`) with a fixed upper bound. 
-Any other dynamic dimensions are unsupported. Internally, GPU plugin creates ``log2(N)`` (``N`` - is an upper bound for batch dimension here) 
+The support for dynamic shapes by GPU plugin is different dipending on the OpenVINO™ API version : pre or post API 2.0. 
+Prior to OpenVINO ™ API 2.0, only dynamic batch was available, where dynamism on the batch dimension was supported only.
+Also there was a limitation that an upper bound of the batch dimension should be provided. 
+This method will be referred as 'legacy dynamic batch" in the following statemetns.
+From the API 2.0, general dynamic shape introduced in :doc:`dynamic shapes guide<openvino_docs_OV_UG_DynamicShapes>` is available. 
+
+#### Legacy dynamic batch (< API 2.0)
+
+In this mode, GPU plugin supports dynamic shapes for batch dimension only (specified as ``N`` in the :doc:`layouts terms<openvino_docs_OV_UG_Layout_Overview>`) with a fixed upper bound. 
+Any other dynamic dimensions are unsupported in this version. Internally, GPU plugin creates ``log2(N)`` (``N`` - is an upper bound for batch dimension here) 
 low-level execution graphs for batch sizes equal to powers of 2 to emulate dynamic behavior, so that incoming infer request 
 with a specific batch size is executed via a minimal combination of internal networks. For example, batch size 33 may be executed via 2 internal networks with batch size 32 and 1.
 
 .. note:: 
 
-   Such approach requires much more memory and the overall model compilation time is significantly longer, compared to the static batch scenario.
-
+   Such approach requires much more memory and the overall model compilation time is significantly longer, compared to the static batch scenario or general dynamic shape supported from API 2.0.
+ 
 The code snippet below demonstrates how to use dynamic batching in simple scenarios:
 
 .. tab-set::
@@ -246,17 +254,69 @@ The code snippet below demonstrates how to use dynamic batching in simple scenar
    .. tab-item:: C++
       :sync: cpp
 
-      .. doxygensnippet:: docs/snippets/gpu/dynamic_batch.cpp
+      .. doxygensnippet:: docs/snippets/gpu/dynamic_batch_legacy.cpp # TBD
          :language: cpp
-         :fragment: dynamic_batch
+         :fragment: dynamic_batch_legacy
 
    .. tab-item:: Python
       :sync: py
 
-      .. doxygensnippet:: docs/snippets/gpu/dynamic_batch.py
+      .. doxygensnippet:: docs/snippets/gpu/dynamic_batch_legacy.py
          :language: Python
-         :fragment: dynamic_batch
+         :fragment: dynamic_batch_legacy
 
+#### General dynamic shape (>= API 2.0)
+
+From 2023.1 release, GPU plugin supports dynamic shapes for all dimensions not only the batch dimension.
+This mode is different from the legacy dynamic batch creating multiple copies of the model with sub-batches, 
+Note that the dynamic rank is not supported.
+Unlike the legacy dynamic batch which created multiple copies of the model with sub-batch sizes and assembled them, this mode
+allowes the plugin infra to change the shapes of each layer at runtime.
+
+The code snippet below demonstrates how to use dynamic shape in GPU plugin:
+
+... note::
+    This feature is newly supported from 2023.1 release and is mainly targeting NLP modes.
+    Not all the operations are supported for dynamic shape and models with such unsupported operations may crashes.
+    Also, the legaciy dynamic batch mode is no longer supported in API 2.0 from 2023.1 release.
+    Since not all models are supported for dynamic shape yet, some models where only the batch dimension is dynamic may not work with API 2.0 from 2023.1 release, though they could work in the 2022.4 release.
+    In such cases, please try with legacy API described above.
+
+.. tab-set::
+
+   .. tab-item:: C++
+      :sync: cpp
+
+      .. doxygensnippet:: docs/snippets/gpu/dynamic_batch_api_2.0.cpp # TBD
+         :language: cpp
+         :fragment: dynamic_shape
+
+   .. tab-item:: Python
+      :sync: py
+
+      .. doxygensnippet:: docs/snippets/gpu/dynamic_shape_api_2.0.py
+         :language: Python
+         :fragment: dynamic_shape
+
+
+.. note::
+   For better performance, setting upper bound of the tensor dimensions is helpful for many cases, since it can reduce the number of runtime memory reallocation for new larger shapes. 
+
+.. tab-set::
+
+   .. tab-item:: C++
+      :sync: cpp
+
+      .. doxygensnippet:: docs/snippets/gpu/dynamic_batch_api_2.0_bounded.cpp # TBD
+         :language: cpp
+         :fragment: dynamic_shape_bounded
+
+   .. tab-item:: Python
+      :sync: py
+
+      .. doxygensnippet:: docs/snippets/gpu/dynamic_shape_api_2.0_bounded.py
+         :language: Python
+         :fragment: dynamic_shape_bounded
 
 For more details, see the :doc:`dynamic shapes guide<openvino_docs_OV_UG_DynamicShapes>`.
 
