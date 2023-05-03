@@ -8,6 +8,7 @@
 #include "input_layout_inst.h"
 #include "intel_gpu/graph/serialization/loop_serializer.hpp"
 #include "intel_gpu/runtime/error_handler.hpp"
+#include "../../runtime/ocl/ocl_memory.hpp"
 #include <vector>
 #include <algorithm>
 
@@ -127,8 +128,10 @@ struct loop_impl : typed_primitive_impl<loop> {
                 concat_output_mem_mapping.setup_concatenated_output_memory(current_iteration_idx);
             }
 
+            std::cout << "############### Execute body network" <<std::endl;
             // execute body network
             body_network->execute(loop_carried_dep);
+            std::cout << "############### body network finished" <<std::endl;
 
             loop_carried_dep.clear();
             for (const auto& backedge : _back_edges) {
@@ -153,10 +156,21 @@ struct loop_impl : typed_primitive_impl<loop> {
         body_network->reset_execution();
 
         // Concatenate sliced output to the outer network
+        std::cout << "############### Copy sliced mem to concat mem" <<std::endl;
         for (size_t i = 0; i < concatenated_output_mem_mappings.size(); ++i) {
             const auto& concat_output = concatenated_output_mem_mappings.at(i);
+            const auto concatenated_mem = concat_output.concatenated_mem;
+            std::cout << "concat prim: " << concat_output.concat_data_prim->id() << " : " << concatenated_mem.get()->buffer_ptr() << std::endl;
+            std::cout << "sliced prim: " << concat_output.sliced_data_prim->id() << std::endl;
+            if (memory_capabilities::is_usm_type(concatenated_mem->get_allocation_type())) {
+                auto buf = std::dynamic_pointer_cast<const ocl::gpu_usm>(concatenated_mem)->get_buffer();
+                std::cout << " concat_mem address " << buf.get() << std::endl;
+            }
             concat_output.restore_concatenated_mem();
         }
+        std::cout << "Loop output address"
+                  << std::dynamic_pointer_cast<const ocl::gpu_usm>(instance.output_memory_ptr())->get_buffer().get()
+                  << std::endl;
 
         if (update_num_iterations) {
             // update num_iterations (actual number of iterations)

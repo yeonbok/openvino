@@ -401,6 +401,7 @@ void Graph::InitGraph() {
     ExtractExecutableNodes();
 
     status = haveDynNodes ? Status::ReadyDynamic : Status::ReadyStatic;
+    niter++;
 }
 
 void Graph::InitNodes() {
@@ -1240,8 +1241,9 @@ void Graph::InferDynamic(InferRequestBase* request) {
     }
 }
 
-inline void Graph::ExecuteNode(const NodePtr& node, const dnnl::stream& stream) const {
-    DUMP(node, getConfig().debugCaps, infer_count);
+inline void Graph::ExecuteNode(const NodePtr& node, const dnnl::stream& stream, size_t niter) const {
+//    DUMP(node, getConfig().debugCaps, infer_count);
+    DUMP(node, getConfig().debugCaps, niter);
 
     OV_ITT_SCOPED_TASK(itt::domains::intel_cpu, node->profiling.execute);
 

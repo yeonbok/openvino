@@ -234,6 +234,7 @@ public:
 private:
     using output_chains_map = std::map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>>;
     uint32_t net_id = 0;
+    size_t niter = 0;
     program::ptr _program;
     ExecutionConfig _config;
     engine& _engine;

@@ -61,7 +61,8 @@ namespace cldnn {
 
 namespace {
 
-#ifdef GPU_DEBUG_CONFIG
+//#ifdef GPU_DEBUG_CONFIG
+#if 1
 void dump_perf_data_raw(std::string dump_path, const std::list<std::shared_ptr<primitive_inst>>& exec_order) {
     auto layouts_to_str = [](const std::vector<layout>& layouts) -> std::string {
         std::stringstream s;
@@ -193,7 +194,7 @@ void dump(memory::ptr mem, stream& stream, std::ofstream& file_stream, bool dump
                                 size_t input_it = mem->get_layout().get_linear_offset(t);
 
                                 for (cldnn::tensor::value_type x = 0; x < size.spatial[0]; ++x, input_it += x_pitch) {
-                                    buffer << std::fixed << std::setprecision(6) << convert_element(mem_ptr[input_it]) << std::endl;
+                                    buffer << std::fixed << std::setprecision(7) << convert_element(mem_ptr[input_it]) << std::endl;
                                 }
                             }
                         }
@@ -203,7 +204,8 @@ void dump(memory::ptr mem, stream& stream, std::ofstream& file_stream, bool dump
         }
     } else {
         for (size_t i = 0; i < lock.size(); ++i) {
-            buffer << std::fixed << std::setprecision(6) << convert_element(mem_ptr[i]) << std::endl;
+//            buffer << std::fixed << std::setprecision(7) << convert_element(mem_ptr[i]) << std::endl;
+            buffer << convert_element(mem_ptr[i]) << std::endl;
         }
     }
     file_stream << buffer.str();
@@ -245,7 +247,7 @@ void dump<uint32_t>(memory::ptr mem, stream& stream, std::ofstream& file_stream,
 }
 
 void log_memory_to_file(memory::ptr mem, stream& stream, std::string layerName, bool dump_raw) {
-    std::cout << "Dump " << (dump_raw ? "raw " : "") << layerName << std::endl;
+    std::cout << "Dump " << (dump_raw ? "raw " : "") << layerName << " memory_layout " << mem->get_layout().to_string() << std::endl;
     GPU_DEBUG_GET_INSTANCE(debug_config);
     std::string filename = layerName;
     std::replace(filename.begin(), filename.end(), '\\', '_');
@@ -258,7 +260,6 @@ void log_memory_to_file(memory::ptr mem, stream& stream, std::string layerName, 
         file_stream << "Empty" << std::endl;
         return;
     }
-
     auto mem_dt = mem->get_layout().data_type;
     if (mem_dt == cldnn::data_types::f32)
         dump<float>(mem, stream, file_stream, dump_raw);
@@ -1157,7 +1158,8 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
                 std::cerr << inst->id() << std::endl;
             }
 
-            GPU_DEBUG_IF(debug_config->dump_layers_dst_only == 0 && debug_config->is_dumped_layer(layer_name)) {
+//            GPU_DEBUG_IF(debug_config->dump_layers_dst_only == 0 && debug_config->is_dumped_layer(layer_name) && niter == 0) {
+            GPU_DEBUG_IF(debug_config->dump_layers_dst_only == 0) {
                 for (size_t i = 0; i < get_primitive(inst->id())->dependencies().size(); i++) {
                     log_memory_to_file(get_primitive(inst->id())->dep_memory_ptr(i),
                                        get_stream(),
@@ -1171,6 +1173,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 
         execute_primitive(inst, events);
 
+//        GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0 && niter == 0) {
         GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
             get_stream().finish();
             const std::string layer_name = inst->id();
@@ -1180,12 +1183,13 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
                                        get_stream(),
                                        "program" + std::to_string((get_program() != nullptr) ? get_program()->get_id() : 1) +
                                        "_network" + std::to_string(get_id()) +
-                                       "_" + layer_name + "_dst" + std::to_string(i),
+                                       "_" + layer_name + "_dst" + std::to_string(i) + "niter_" + std::to_string(niter),
                                        debug_config->dump_layers_raw);
                 }
             }
         }
     }
+    niter++;
 
     // Store events only in case of OOO queue or enabled Profiling
     auto store_events = get_stream().get_queue_type() == QueueTypes::out_of_order || _enable_profiling;

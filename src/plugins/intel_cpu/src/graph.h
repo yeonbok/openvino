@@ -223,7 +223,7 @@ protected:
     bool reuse_io_tensors = true;
 
     MemoryPtr memWorkspace;
-
+    size_t niter = 0;
     std::vector<NodePtr> graphNodes;
     std::vector<EdgePtr> graphEdges;
 
@@ -242,7 +242,7 @@ protected:
     void Allocate();
     void AllocateWithReuse();
     void ExtractExecutableNodes();
-    void ExecuteNode(const NodePtr& node, const dnnl::stream& stream) const;
+    void ExecuteNode(const NodePtr& node, const dnnl::stream& stream, size_t niter = 0) const;
     void CreatePrimitivesAndExecConstants() const;
     void InferStatic(InferRequestBase* request);
     void InferDynamic(InferRequestBase* request);
