@@ -185,7 +185,8 @@ bool concat_in_place_optimization::match(concatenation_node& node) {
         if (!input.first->is_type<pooling>() && !input.first->is_type<convolution>() && !input.first->is_type<quantize>() &&
             !input.first->is_type<activation>() && !input.first->is_type<deconvolution>() &&
             !input.first->is_type<concatenation>() && !input.first->is_type<crop>() && !input.first->is_type<eltwise>() &&
-            !input.first->is_type<resample>())
+            !input.first->is_type<resample>() &&
+            !input.first->is_type<permute>()) // taylor: to check perf impact
             return false;
 
         // if an input is marked as network output, prevent optimizations
