@@ -80,6 +80,61 @@ void program::nodes_ordering::calculate_BFS_processing_order() {
     return;
 }
 
+void program::nodes_ordering::calculate_BFS_processing_order_ALAP() {
+    GPU_DEBUG_DEFINE_MEM_LOGGER("calculate_BFS_processing_order_alap");
+    std::map<program_node*, int> distances;
+    for (auto itr : _processing_order) {
+        distances[itr] = -1;
+    }
+    int max_distance = 0;
+    for (auto itr : _processing_order) {
+        // Init
+        if (distances[itr] == -1) {  // this must be an input
+            distances[itr] = 0;      // initialize input
+        }
+        // RELAX
+        for (auto& user : itr->get_users()) {
+            distances[user] = std::max(distances[user], distances[itr] + 1);
+            max_distance = std::max(max_distance, distances[user]);
+        }
+    }
+
+    // Relax distances more to be ALAP scheduling
+    for (auto itr = _processing_order.rbegin(); itr != _processing_order.rend(); ++itr) {
+        const auto& node_ptr = *itr;
+        if (!node_ptr->get_users().size()) {
+            // leaf node
+            distances[node_ptr] = max_distance;
+            continue;
+        }
+        int32_t min_of_users = INT32_MAX;
+        for (auto & usr : (*itr)->get_users()) {
+            min_of_users = std::min(min_of_users, distances[usr]);
+        }
+        distances[node_ptr] = min_of_users - 1;
+    }
+
+    // bucket sort nodes based on their max distance from input
+    std::vector<std::vector<program_node*>> dist_lists;
+    dist_lists.resize(max_distance + 1);
+    for (auto itr : _processing_order) {
+        dist_lists[distances[itr]].push_back(itr);
+    }
+
+
+    // replace the old processing order by the new one, still topological.
+    _processing_order.clear();
+    for (auto& dist : dist_lists) {
+        for (auto& node : dist) {
+            _processing_order.push_back(node);
+            processing_order_iterators[node] = _processing_order.end();
+            processing_order_iterators[node]--;
+        }
+    }
+    return;
+}
+
+
 // verifies if a given node will be processed before all its dependent nodes
 bool program::nodes_ordering::is_correct(program_node* node) {
     for (auto& dep : node->get_dependencies()) {
