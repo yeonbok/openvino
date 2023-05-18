@@ -600,17 +600,19 @@ void program::post_optimize_graph(bool is_internal) {
 
     // update loop input/output primitive mappings
     apply_opt_pass<update_loop_primitive_map>();
-
-    if (_config.get_property(ov::intel_gpu::allow_new_shape_infer)) {
+    if (_config.get_property(ov::intel_gpu::allow_new_shape_infer) && std::getenv("ALAP") != nullptr) {
+        std::cout << "######################" << std::endl;
+        std::cout << "ALAP schedule used" << std::endl;
         get_processing_order().calculate_BFS_processing_order_ALAP();
     } else {
         // Recalculate processing order after all graph transformation to keep optimal primitives ordering
         // for OOO queue
+        std::cout << "######################" << std::endl;
+        std::cout << "ASAP schedule used" << std::endl;
         if (_config.get_property(ov::intel_gpu::queue_type) == QueueTypes::out_of_order)
             get_processing_order().calculate_BFS_processing_order();
     }
 }
-
 // mark if the node is constant assuming that all dependencies are marked properly
 void program::mark_if_constant(program_node& node) {
     if (node.get_dependencies().empty() || node.is_type<prior_box>() ||
