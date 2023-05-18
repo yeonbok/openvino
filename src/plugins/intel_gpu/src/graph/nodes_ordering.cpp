@@ -4,6 +4,7 @@
 
 #include "intel_gpu/graph/program.hpp"
 #include "program_node.h"
+#include "data_inst.h"
 #include <vector>
 #include <map>
 #include <algorithm>
@@ -102,6 +103,8 @@ void program::nodes_ordering::calculate_BFS_processing_order_ALAP() {
     // Relax distances more to be ALAP scheduling
     for (auto itr = _processing_order.rbegin(); itr != _processing_order.rend(); ++itr) {
         const auto& node_ptr = *itr;
+        if (node_ptr->is_type<data>())
+            continue;
         if (!node_ptr->get_users().size()) {
             // leaf node
             distances[node_ptr] = max_distance;
