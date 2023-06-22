@@ -267,8 +267,6 @@ private:
     void calculate_weights_cache_capacity();
     output_chains_map::iterator add_output_chain(std::shared_ptr<primitive_inst>& p_inst);
 
-#ifdef GPU_DEBUG_CONFIG
     int64_t iteration = 0;
-#endif
 };
 }  // namespace cldnn

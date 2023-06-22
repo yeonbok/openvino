@@ -1139,6 +1139,8 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     reset_execution(false);
     GPU_DEBUG_TRACE << "----------------------------------------------" << std::endl;
     GPU_DEBUG_TRACE << "Start network execution" << std::endl;
+    std::cout << "#########################################################" << std::endl;
+    std::cout << "Start network execution (niter : " << iteration++ << ")" << std::endl;
 
     std::vector<memory::ptr> in_out_mem;
     auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
@@ -1287,6 +1289,8 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // provide proper event to execution. Flushing pipeline should prevent this kind of issues.
     // In scenarios with a big number of very small networks it can provide performance drop.
     get_stream().flush();
+    std::cout << "Memory reuse status " << std::endl;
+    get_memory_pool().dump_all();
 }
 
 std::vector<primitive_id> network::get_input_ids() const {

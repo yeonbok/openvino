@@ -127,6 +127,25 @@ public:
     void clear_pool();
     void clear_pool_for_network(uint32_t network_id);
     void release_memory(memory* memory, const primitive_id& id, uint32_t network_id);
+    void dump_all() {
+        std::cout << "========== dump non padded pool ==========" << std::endl;
+        for (auto mem : _non_padded_pool) {
+            std::cout << mem.second._memory << " (size " << mem.first << ",  type " << mem.second._type << ")'s users: " << std::endl;
+            for (auto user : mem.second._users) {
+                std::cout << "   -- "<< user._id << std::endl;
+            }
+        }
+        std::cout << "========== dump padded pool ==========" << std::endl;
+        for (auto mem : _padded_pool) {
+            std::cout << " layout " << mem.first.to_short_string() << std::endl;
+            for (auto record : mem.second) {
+                std::cout << "    " << record._memory << " , type " << record._type << ", users : " << std::endl;
+                for (auto user : record._users) {
+                    std::cout << "    --- " << user._id << std::endl;
+                }
+            }
+        }
+    }
 };
 
 }  // namespace cldnn
