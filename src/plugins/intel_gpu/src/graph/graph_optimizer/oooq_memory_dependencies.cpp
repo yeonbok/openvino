@@ -66,7 +66,60 @@ protected:
 };
 
 }  // namespace
-
+#if 0
+void oooq_memory_dependencies::run(program& p) {
+    // check two nodes' live ranges are overlapping
+    // if overlapping => add mem dep
+    auto& processing_order = p.get_processing_order();
+    std::list<program_node*> processing_order_except_const;
+    for (auto n : processing_order) {
+        if (!n->is_type<data>()) {
+            processing_order_except_const.push_back(n);
+        }
+    }
+    // check overlaps b/w (min_x, max_x) (min_y, max_y)
+    // min_x : min_x
+    // max_x : max_of_users_of_x
+    // min_y : min_y
+    // max_y : max_of_users_of_y
+    auto x_itr = processing_order_except_const.begin();
+    while (x_itr != processing_order_except_const.end()) {
+        auto x = *(x_itr);
+        int min_x = x->min_distance;
+        int max_x = x->max_distance;
+        for (auto u: x->get_users()) {
+            max_x = std::max(max_x, u->max_distance);
+        }
+        auto y_itr = x_itr;
+        y_itr++;
+        while (y_itr != processing_order_except_const.end()) {
+            auto y = *(y_itr);
+            int min_y = y->min_distance; 
+            int max_y = y->max_distance;
+            for (auto u: y->get_users()) {
+                max_y = std::max(max_y, u->max_distance);
+            }
+            // min_x <= min_y always
+            if (min_x > min_y) {
+                std::cout << "Error!!!!!!!!!!!!! " << x->id() << " min_x : " << min_x << ", max_x: " << max_x << std::endl;
+                std::cout << "                   " << y->id() << " min_y : " << min_y << ", max_y: " << max_y << std::endl;
+            }
+ 
+            if (max_x < min_y) {
+                y_itr++;
+                continue;
+            }
+            // overlapping live range
+            add_memory_dependency(x, y);
+            add_memory_dependency(y, x);
+            y_itr++;
+        }
+        x_itr++;
+    }
+    std::cout << "memdep check finished" << std::endl;
+}
+#endif
+#if 1
 void oooq_memory_dependencies::run(program& p) {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, "pass::OooqMemoryDependencies");
     // For oooq memory dependencies nodes A and B can't share memory if
@@ -182,3 +235,4 @@ void oooq_memory_dependencies::run(program& p) {
         }
     }
 }
+#endif

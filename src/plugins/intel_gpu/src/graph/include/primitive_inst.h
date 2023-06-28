@@ -22,7 +22,7 @@
 #include "intel_gpu/graph/serialization/vector_serializer.hpp"
 #include "intel_gpu/runtime/itt.hpp"
 #include "runtime/kernels_cache.hpp"
-
+#include <mutex>
 // TODO: add generic interface for weights_reorder_params and get rid of this dependency
 #include "impls/ocl/kernel_selector_helper.h"
 
@@ -126,7 +126,16 @@ public:
     const std::vector<std::pair<std::shared_ptr<const primitive_inst>, int32_t>>& dependencies() const {
         return reinterpret_cast<std::vector<std::pair<std::shared_ptr<const primitive_inst>, int32_t>> const&>(_deps);
     }
+    std::mutex _mutex;
+    DYNAMIC_STATUS get_status() {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return dyn_status;
+    }
 
+    void set_status(DYNAMIC_STATUS new_stat) {
+        std::lock_guard<std::mutex> lock(_mutex);
+        dyn_status = new_stat;
+    }
     memory& dep_memory(size_t index) const {
         auto dep = dependencies().at(index);
         return dep.first->output_memory(dep.second);
@@ -190,6 +199,9 @@ public:
 
     memory::ptr shape_info_memory_ptr() const { return _shape_info_memory; }
 
+    bool dynamic_shape_update_shape();
+    event::ptr dynamic_shape_unfusion(const std::vector<event::ptr>& events);
+    std::vector<event::ptr> dynamic_shape_update_impl(void);
     event::ptr execute(const std::vector<event::ptr>& events);
     void init_kernels(const kernels_cache& kernels_cache) {
         _impl->init_kernels(kernels_cache, *_impl_params);
@@ -233,6 +245,31 @@ public:
     bool needs_completion_event() const { return _needs_completion_event; }
     bool has_unfused_subgraph() const { return (_unfused_subgraph != nullptr); }
     bool has_inner_networks() const;
+    bool has_mem_dep_for_shape_infer() const {
+        // Even though the predecessors' shapes are not changed, the output shape might be udpated by the mem_dep
+        auto memory_deps = _node->get_const_memory_deps();
+        bool has_mem_dep = false;
+        for (auto& i : _node->get_shape_infer_dependencies()) {
+            if (memory_deps.count(i) > 0) {
+                continue;
+            }
+            if (i >= _deps.size())
+                continue;
+
+            if (_deps[i].first->get_node().is_in_shape_of_subgraph()) {
+                bool can_skip = true;
+                const auto& insts = _deps[i].first->dependant_shape_of_insts;
+                for (auto inst : insts) {
+                    can_skip &= !inst->shape_changed();
+                }
+                if (can_skip)
+                    continue;
+            }
+
+            has_mem_dep = true;
+        }
+        return has_mem_dep;
+    }
     void allocate_internal_buffers(bool reset = true);
     static memory::ptr allocate_output(engine& engine, memory_pool& pool, const program_node& _node, const kernel_impl_params& impl_params, uint32_t net_id,
             bool is_internal, size_t idx = 0, bool reset_mem = true, bool is_output_buffer = false, memory* curr_memory = nullptr, bool runtime_alloc = false);
@@ -268,6 +305,8 @@ public:
 
     virtual void update_output_memory() {}
 
+    DYNAMIC_STATUS dyn_status = INIT;
+    int64_t processing_order = -1;
 protected:
     primitive_inst(network& network, program_node const& node, bool allocate_memory);
 
@@ -348,6 +387,7 @@ protected:
     // event function called by primitive_inst::execute after checking if primitive should rerun and before calling
     // _impl->execute() mainly for reshape (to update output memory if reshape_node.is_in_place() == true)
     virtual void on_execute() {}
+
 
     virtual void update_shape();
     virtual event::ptr update_weights();

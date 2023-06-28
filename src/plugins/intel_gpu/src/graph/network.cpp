@@ -34,7 +34,7 @@
 #include "to_string_utils.h"
 #include "kernels_cache.hpp"
 #include "compilation_context.hpp"
-
+#include "reorder_inst.h"
 // TODO: Remove once we have an abstraction for kernels_cache
 #include "kernel_base.h"
 
@@ -305,7 +305,10 @@ static uint32_t get_unique_net_id() {
     static std::atomic<uint32_t> id_gen{0};
     return ++id_gen;
 }
-
+//const std::string yellow("\033[0;33m");
+//const std::string reset_color("\033[0m");
+const std::string yellow("");
+const std::string reset_color("");
 /*
 Network will always have net_id = 0 when it will be cldnn internal micronetwork (created i.e by propagate_constants
 opt pass).
@@ -323,6 +326,7 @@ network::network(program::ptr program, const ExecutionConfig& config, stream::pt
     , _shape_predictor(new ShapePredictor(&program->get_engine(), config.get_property(ov::intel_gpu::buffers_preallocation_ratio))) {
     if (!_internal) {
         net_id = get_unique_net_id();
+        async_preproc_context1 = get_program()->get_preproc_context1();
     }
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -543,6 +547,10 @@ network::~network() {
     GPU_DEBUG_IF(!debug_config->dump_profiling_data.empty()) {
         dump_perf_data_raw(debug_config->dump_profiling_data + "/perf_raw" + std::to_string(net_id) + ".csv", _exec_order);
     }
+}
+
+bool network::compare_pq_2::operator() (std::pair<primitive_id, int32_t>& a, std::pair<primitive_id, int32_t>& b) {
+    return (a.second > b.second);
 }
 
 // Cache blob format:
@@ -1145,7 +1153,11 @@ void network::add_to_exec_order(const primitive_id& id) {
 }
 
 std::map<primitive_id, network_output> network::execute(const std::vector<event::ptr>& dependencies) {
-    execute_impl(dependencies);
+//    std::cout << "################################ Execute network ######################" << std::endl;
+    if (_internal)
+        execute_impl(dependencies);
+    else
+        execute_impl_async(dependencies);
 
     auto output_ids = get_output_ids();
     std::map<primitive_id, network_output> result;
@@ -1154,7 +1166,6 @@ std::map<primitive_id, network_output> network::execute(const std::vector<event:
     }
     return result;
 }
-
 
 void network::execute_impl(const std::vector<event::ptr>& events) {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, "NetworkImpl::Execute");
@@ -1311,6 +1322,226 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // In scenarios with a big number of very small networks it can provide performance drop.
     get_stream().flush();
 }
+void network::execute_impl_async(const std::vector<event::ptr>& events) {
+    OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, "NetworkImpl::Execute");
+    // Wait for previous execution completion
+    int64_t curr_iter = -1;
+    reset_execution(false);
+    GPU_DEBUG_TRACE << "----------------------------------------------" << std::endl;
+    GPU_DEBUG_TRACE << "Start network execution " << curr_iter << std::endl;
+
+    std::vector<memory::ptr> in_out_mem;
+    auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
+        return shared_mem_type == shared_mem_type::shared_mem_vasurface ||
+               shared_mem_type == shared_mem_type::shared_mem_dxbuffer ||
+               shared_mem_type == shared_mem_type::shared_mem_image;
+    };
+
+    bool shared_mem_found = std::any_of(_in_out_shared_mem_types.begin(),
+                                        _in_out_shared_mem_types.end(),
+                                        is_surface_lock_check_needed);
+
+    if (shared_mem_found) {
+        for (auto& inst : _inputs) {
+            if (inst->output_memory_ptr() &&
+                is_surface_lock_check_needed(inst->output_memory_ptr()->get_internal_params().mem_type))
+                in_out_mem.push_back(inst->output_memory_ptr());
+        }
+
+        for (auto& inst : _outputs) {
+            if (inst->output_memory_ptr() &&
+                is_surface_lock_check_needed(inst->output_memory_ptr()->get_internal_params().mem_type))
+                in_out_mem.push_back(inst->output_memory_ptr());
+        }
+    }
+
+    // We shouldn't call surfaces_lock::create() function constantly here, but due to
+    // some changes in assembler code, performance drops in case if we move it under
+    // `shared_mem_found` condition (it somehow connected with get_cl_queue() - this function call
+    // makes asm faster for some reasons). So, as WA we keep this surfaces_lock::create() here
+    // with empty memory vector and do nothing inside this function for saving performance
+    // in some cases.
+    auto surf_lock = surfaces_lock::create(get_engine().type(), in_out_mem, get_stream());
+
+    set_arguments();
+    GPU_DEBUG_GET_INSTANCE(debug_config);
+    GPU_DEBUG_IF(debug_config->list_layers == 1) {
+        for (auto& inst : _exec_order) {
+            GPU_DEBUG_COUT << inst->id() << std::endl;
+            if (inst->get_node().is_type<loop>()) {
+                auto& loop_node = inst->get_node().as<loop>();
+                auto loop_body_primitives = loop_node.get_body_topology().get_primitives_ids();
+                for (auto& primitive_id : loop_body_primitives) {
+                    GPU_DEBUG_COUT << "\t" << primitive_id << std::endl;
+                }
+            }
+        }
+        if (!is_internal()) exit(0);
+    }
+#ifdef GPU_DEBUG_CONFIG
+    GPU_DEBUG_IF(!debug_config->dump_iteration.empty()) {
+        curr_iter = iteration++;
+    }
+#endif
+    //auto get_iteration_prefix = [](int64_t iter) {
+    //    if (iter < 0)
+    //        return std::string("");
+    //    return std::to_string(iter) + "_";
+    //};
+
+    // ======================== Async update shape
+    int64_t order = 0;
+    for (auto& inst : _primitives) {
+        if (inst.second->get_node().is_type<data>() || inst.second->get_node().is_constant())
+            inst.second->set_status(FINISHED);
+        else
+            inst.second->set_status(INIT);
+    }
+    for (auto& inst : _exec_order) {
+      // add input nodes to start
+        inst->processing_order = order++;
+        if (inst->dependencies().size() == 0) { // input nodes
+            // update_shape_seed
+            update_shape_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
+            inst->set_status(UPDATE_SHAPE_WAIT);
+        }
+        execute_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
+    }
+    // ======================== Async update shape end
+//    std::cout << "iter " << curr_iter << "Total num of primitves to run : " << execute_Q.size() << std::endl;
+    push_shape_infer();
+
+    while (!execute_Q.empty()) {
+        auto inst = get_primitive(execute_Q.top().first);
+        execute_Q.pop();
+        if (inst->get_node().is_type<reorder>()) {
+ //           std::cout << yellow << "ExecQ popped " << inst->id() << " (status" << inst->dyn_status << reset_color << std::endl;
+        }
+        if (inst->get_status() < UPDATE_SHAPE_DONE) {
+            execute_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
+            continue;
+        } else if (inst->get_status() == FINISHED) {
+            continue;
+        }
+        bool all_parents_resolved = true;
+        for (auto dep : inst->dependencies()) {
+            if (dep.first->get_node().is_type<data>() || dep.first->get_node().is_constant())
+                continue;
+            if (dep.first->dyn_status < DYNAMIC_STATUS::FINISHED) {
+                all_parents_resolved = false;
+//                std::cout << yellow << inst->id() << "'s parent " << dep.first->id() << " is not ready (status" << inst->get_status() << reset_color<< std::endl;
+                break;
+            }
+        }
+        if (!all_parents_resolved) {
+            execute_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
+            continue;
+        }
+        //std::cout << yellow << "Execute " << inst->id() << " (status" << inst->get_status() << reset_color<< std::endl;
+        execute_primitive(inst, events);
+        inst->set_status(FINISHED);
+//        std::cout << "Done" << inst->id() << " (status is now " << inst->get_status() << std::endl;
+//        std::cout << "current execute_Q_2 size: " << execute_Q.size() << std::endl;
+    }
+//    std::cout << "ExecQueue is empty now" << std::endl;
+    #if 0
+    for (auto& inst : _exec_order) {
+        GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
+            const std::string layer_name = inst->id();
+            GPU_DEBUG_IF(debug_config->verbose >= 2) {
+                std::cerr << inst->id() << std::endl;
+            }
+
+            GPU_DEBUG_IF(debug_config->is_target_iteration(curr_iter) &&
+                        debug_config->dump_layers_dst_only == 0 && debug_config->is_dumped_layer(layer_name)) {
+                for (size_t i = 0; i < get_primitive(inst->id())->dependencies().size(); i++) {
+                    log_memory_to_file(get_primitive(inst->id())->dep_memory_ptr(i),
+                                    get_stream(),
+                                    "program" + std::to_string((get_program() != nullptr) ? get_program()->get_id() : 0) +
+                                    "_network" + std::to_string(get_id()) +
+                                    "_" + get_iteration_prefix(curr_iter) +
+                                    layer_name + "_src" + std::to_string(i),
+                                    debug_config->dump_layers_raw);
+                }
+            }
+        }
+//        execute_primitive(inst, events);
+
+//        if (inst->get_node().is_shape_infer_dep()) {
+//            for (auto user : inst->get_user_insts()) {
+//                if (user->has_mem_dep_for_shape_infer()) {
+//                    std::cout << "Pushed shape infer dep user " << user->id() << std::endl;
+//                    std::lock_guard<std::mutex> lock(_mutex);
+//                    update_shape_Q.push(user);
+//                }
+//            }
+//        }
+        inst->set_status(FINISHED);
+        GPU_DEBUG_IF(debug_config->dump_layers_path.length() > 0) {
+            get_stream().finish();
+            const std::string layer_name = inst->id();
+            auto prog_id = ((get_program() != nullptr) ? get_program()->get_id() : 0);
+            auto net_id = get_id();
+            GPU_DEBUG_IF(debug_config->is_target_iteration(curr_iter) &&
+                        debug_config->is_dumped_layer(layer_name, inst->is_output())) {
+                for (size_t i = 0; i < get_primitive(inst->id())->outputs_memory_count(); i++) {
+                    log_memory_to_file(get_primitive(inst->id())->output_memory_ptr(i),
+                                    get_stream(),
+                                    "program" + std::to_string(prog_id) +
+                                    "_network" + std::to_string(net_id) +
+                                    "_" + get_iteration_prefix(curr_iter) +
+                                    layer_name + "_dst" + std::to_string(i),
+                                    debug_config->dump_layers_raw);
+                }
+            }
+    }
+    }
+    #endif
+   // Store events only in case of OOO queue or enabled Profiling
+    auto store_events = get_stream().get_queue_type() == QueueTypes::out_of_order || _enable_profiling;
+    if (store_events) {
+        if (_program != nullptr) {
+        for (auto& inst : _program->get_processing_order()) {
+            // Special handling for mutable data. The event should be the same as the user or dependency with highest
+            // processing_num as the mutable_data can be updated when is both user or dependency.
+            if (inst->is_type<mutable_data>()) {
+                decltype(_program->get_processing_order().get_processing_number(inst)) proc_num = 0;
+                for (auto& user : inst->get_users()) {
+                    auto user_proc_num = _program->get_processing_order().get_processing_number(user);
+                    if (user_proc_num > proc_num) {
+                        _events[inst->id()] = _events[user->id()];
+                        proc_num = user_proc_num;
+                    }
+                }
+
+                if (!inst->get_dependencies().empty()) {
+                    for (auto& dep : inst->get_dependencies()) {
+                        auto dep_proc_num = _program->get_processing_order().get_processing_number(dep.first);
+                        if (dep_proc_num > proc_num) {
+                            _events[inst->id()] = _events[dep.first->id()];
+                            proc_num = dep_proc_num;
+                        }
+                    }
+                }
+            }
+        }
+        }
+
+        for (auto& dout : _data_outputs) {  // data primitives are not executed so if they are marked as output we need to add
+                                            // them valid events manually
+            _events[dout->id()] = get_stream().create_user_event(true);
+        }
+    }
+
+    for (auto& prim : _primitives) {
+        prim.second->reset_output_change();
+    }
+
+    // Using output of previous network as input to another one may cause hazard (in OOOQ mode) if user would not
+    // provide proper event to execution. Flushing pipeline should prevent this kind of issues.
+    // In scenarios with a big number of very small networks it can provide performance drop.
+    get_stream().flush();
+}
 
 std::vector<primitive_id> network::get_input_ids() const {
     std::vector<primitive_id> ret;
@@ -1417,8 +1648,24 @@ std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> network::get_primit
 
 void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive,
                                 const std::vector<event::ptr>& events) {
-    event::ptr ev = primitive->execute(events);
-
+    event::ptr ev = nullptr;
+    bool is_empty = (primitive->get_impl_params()->get_output_layout().count() == 0); // TODO fix
+    if (is_empty) {
+        GPU_DEBUG_TRACE_DETAIL << primitive->id() << " : Skipping becuase output data is empty " << std::endl;
+        ev = get_stream().create_user_event(true);
+        //       update_shape_done_by_other = false;  // reset
+    } else { // not empty
+        event::ptr unfusion_ev = primitive->dynamic_shape_unfusion(events);
+        if (unfusion_ev != nullptr) {
+            ev = unfusion_ev;
+        } else {
+            std::vector<event::ptr> dep_events = primitive->dynamic_shape_update_impl();
+            for (auto e : events) {
+                dep_events.push_back(e);
+            }
+            ev = primitive->execute(dep_events);
+        }
+    } 
     // Collect events under any of the following conditions:
     // 1) OOO queue execution
     // 2) Profiling mode is enabled
@@ -1588,4 +1835,83 @@ void network::set_variables_state_info(const std::string& variable_id, const cld
     }
 }
 
+void network::push_shape_infer() {
+    auto& update_shape_Q = this->update_shape_Q;
+    async_preproc_context1->push_task_no_check_key([&update_shape_Q, this] {
+        while (!update_shape_Q.empty()) {
+            //------- Just for dump{
+//            {
+//                std::queue<std::pair<primitive_id, int32_t>> backup_Q;
+//                std::cout << "======== print Q start ========" << std::endl;
+//                while (!update_shape_Q.empty()) {
+//                    std::cout << update_shape_Q.top().first << " (" << update_shape_Q.top().second << ")";
+//                    backup_Q.push(update_shape_Q.top());
+//                    update_shape_Q.pop();
+//                }
+//                std::cout << std::endl;
+//                while (!backup_Q.empty()) {
+//                    update_shape_Q.push(backup_Q.front());
+//                    backup_Q.pop();
+//                }
+//                std::cout << "======== print Q end ========" << std::endl;
+//            }
+            //-------
+            std::shared_ptr<primitive_inst> inst = nullptr;
+            {
+//                std::lock_guard<std::mutex> lock(_mutex);
+                auto cur_inst = update_shape_Q.top();
+                inst = this->get_primitive(cur_inst.first);
+                update_shape_Q.pop();
+            }
+//            std::cout << "popped  " << inst->id() << " " << inst->get_status() << std::endl;
+            if (inst->get_status() > UPDATE_SHAPE_WAIT) {
+            //    std::cout << "popped  " << inst->id() << " " << inst->get_status()
+            //              << " (update shape already done, nothing todo )" << std::endl;
+                continue;
+            }
+ 
+            // update shape for inst
+            bool all_parents_resolved = true;
+            for (auto dep : inst->dependencies()) {
+                if (dep.first->get_node().is_type<data>() || dep.first->get_node().is_constant())
+                    continue;
+                if (dep.first->dyn_status <= DYNAMIC_STATUS::UPDATE_SHAPE_WAIT) {
+//                    std::cout << "!! parent " << dep.first->id() << " is not ready ( status : " << dep.first->dyn_status
+//                              << ") " << std::endl;
+                    all_parents_resolved = false;
+                    break;
+                }
+                if (inst->has_mem_dep_for_shape_infer() && dep.first->dyn_status < DYNAMIC_STATUS::FINISHED) {
+//                    std::cout << "!! mem dep parent " << dep.first->id() << " is not finished (status :" << dep.first->dyn_status << std::endl;
+//                              << " is not executed yet ( status : " << dep.first->dyn_status << ") " << std::endl;
+                    all_parents_resolved = false;
+                    break;
+                }
+            }
+            if (all_parents_resolved) {
+//                std::cout << "Start update shape for " << inst->id() << std::endl;
+                inst->dynamic_shape_update_shape();
+                {
+                    inst->set_status(UPDATE_SHAPE_DONE);
+//                    std::cout << "... Finished update shape for " << inst->id() << " now status " << inst->dyn_status << std::endl;
+                    for (auto user : inst->get_user_insts()) {
+//                        std::cout << "push  user " << user->id() << std::endl;
+                        {
+                            std::lock_guard<std::mutex> lock(_mutex);
+                            if (user->dyn_status >= UPDATE_SHAPE_WAIT)
+                                continue;
+                            update_shape_Q.push(std::make_pair(user->id(), user->get_node().min_distance));
+                            user->set_status(UPDATE_SHAPE_WAIT);
+                        }
+                    }
+                }
+            } else {
+//                std::lock_guard<std::mutex> lock(_mutex);
+ //               std::cout << "inst " << inst->id() << " Not ready. pushed  again" << std::endl;
+                update_shape_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
+            }
+        }
+//        std::cout << "update shape queue is empty!" << std::endl;
+    });
+}
 }  // namespace cldnn
