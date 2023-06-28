@@ -1396,7 +1396,22 @@ std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> network::get_primit
 
 void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive,
                                 const std::vector<event::ptr>& events) {
-    event::ptr ev = primitive->execute(events);
+    bool is_empty = primitive->dynamic_shape_update_shape();
+    event::ptr ev = nullptr;
+    if (!is_empty) { // not empty
+        event::ptr unfusion_ev = primitive->dynamic_shape_unfusion(events);
+        if (unfusion_ev != nullptr) {
+            ev = unfusion_ev;
+        } else {
+            std::vector<event::ptr> dep_events = primitive->dynamic_shape_update_impl();
+            for (auto e : events) {
+                dep_events.push_back(e);
+            }
+            ev = primitive->execute(dep_events);
+        }
+    } else {  // empty
+        ev = get_stream().create_user_event(true);
+    }
 
     // Collect events under any of the following conditions:
     // 1) OOO queue execution

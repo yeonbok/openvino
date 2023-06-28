@@ -119,6 +119,7 @@ class primitive_inst {
     template <class PType>
     friend class typed_primitive_inst;
 
+    enum DYNAMIC_STATUS { INIT, ENQUEUED_PHASE_1, ENQUEUED_PHASE_2, FINISHED };
 public:
     primitive_inst(network& network);
     virtual ~primitive_inst() = default;
@@ -190,6 +191,9 @@ public:
 
     memory::ptr shape_info_memory_ptr() const { return _shape_info_memory; }
 
+    bool dynamic_shape_update_shape();
+    event::ptr dynamic_shape_unfusion(const std::vector<event::ptr>& events);
+    std::vector<event::ptr> dynamic_shape_update_impl(void);
     event::ptr execute(const std::vector<event::ptr>& events);
     void init_kernels(const kernels_cache& kernels_cache) {
         _impl->init_kernels(kernels_cache, *_impl_params);
@@ -233,6 +237,31 @@ public:
     bool needs_completion_event() const { return _needs_completion_event; }
     bool has_unfused_subgraph() const { return (_unfused_subgraph != nullptr); }
     bool has_inner_networks() const;
+    bool has_mem_dep_for_shape_infer() const {
+        // Even though the predecessors' shapes are not changed, the output shape might be udpated by the mem_dep
+        auto memory_deps = _node->get_const_memory_deps();
+        bool has_mem_dep = false;
+        for (auto& i : _node->get_shape_infer_dependencies()) {
+            if (memory_deps.count(i) > 0) {
+                continue;
+            }
+            if (i >= _deps.size())
+                continue;
+
+            if (_deps[i].first->get_node().is_in_shape_of_subgraph()) {
+                bool can_skip = true;
+                const auto& insts = _deps[i].first->dependant_shape_of_insts;
+                for (auto inst : insts) {
+                    can_skip &= !inst->shape_changed();
+                }
+                if (can_skip)
+                    continue;
+            }
+
+            has_mem_dep = true;
+        }
+        return has_mem_dep;
+    }
     void allocate_internal_buffers();
     static memory::ptr allocate_output(engine& engine, memory_pool& pool, const program_node& _node, const kernel_impl_params& impl_params, uint32_t net_id,
             bool is_internal, size_t idx = 0, bool reset_mem = true, bool is_output_buffer = false, memory* curr_memory = nullptr, bool runtime_alloc = false);
@@ -268,6 +297,7 @@ public:
 
     virtual void update_output_memory() {}
 
+    DYNAMIC_STATUS dyn_status = INIT;
 protected:
     primitive_inst(network& network, program_node const& node, bool allocate_memory);
 
@@ -347,6 +377,7 @@ protected:
     // event function called by primitive_inst::execute after checking if primitive should rerun and before calling
     // _impl->execute() mainly for reshape (to update output memory if reshape_node.is_in_place() == true)
     virtual void on_execute() {}
+
 
     virtual void update_shape();
     virtual event::ptr update_weights();

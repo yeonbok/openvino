@@ -21,7 +21,7 @@
 #include <memory>
 #include <list>
 #include <set>
-
+#include <queue>
 namespace cldnn {
 
 /// @brief Represents network output returned by @ref network::get_output().
@@ -241,6 +241,7 @@ public:
 
     const ExecutionConfig& get_config() const { return _config; }
 
+    std::queue<std::shared_ptr<primitive_inst>> q_update_shape;
 private:
     using output_chains_map = std::map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>>;
     uint32_t net_id = 0;

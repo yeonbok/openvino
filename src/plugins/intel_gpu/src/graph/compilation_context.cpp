@@ -29,6 +29,16 @@ public:
         }
     }
 
+    void push_task_no_check_key(Task task) override {
+        if (_stop_compilation)
+            return;
+
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (_task_executor != nullptr)
+            _task_executor->run(task);
+    }
+
+
     void remove_keys(std::vector<size_t>&& keys) override {
         std::lock_guard<std::mutex> lock(_mutex);
         if (!_task_keys.empty()) {
@@ -69,8 +79,8 @@ private:
     std::atomic_bool _stop_compilation{false};
 };
 
-std::unique_ptr<ICompilationContext> ICompilationContext::create(InferenceEngine::CPUStreamsExecutor::Config task_executor_config) {
-    return cldnn::make_unique<CompilationContext>(task_executor_config);
+std::shared_ptr<ICompilationContext> ICompilationContext::create(InferenceEngine::CPUStreamsExecutor::Config task_executor_config) {
+    return std::make_shared<CompilationContext>(task_executor_config);
 }
 
 }  // namespace cldnn

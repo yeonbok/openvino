@@ -239,27 +239,9 @@ void primitive_inst::update_shape() {
         }
     }
 
-    // Even though the predecessors' shapes are not changed, the output shape might be udpated by the mem_dep
-    auto memory_deps = _node->get_const_memory_deps();
-    for (auto& i : _node->get_shape_infer_dependencies()) {
-        if (memory_deps.count(i) > 0) {
-            continue;
-        }
-        if (i >= _deps.size())
-            continue;
 
-        if (_deps[i].first->get_node().is_in_shape_of_subgraph()) {
-            bool can_skip = true;
-            const auto& insts = _deps[i].first->dependant_shape_of_insts;
-            for (auto inst : insts) {
-                can_skip &= !inst->shape_changed();
-            }
-            if (can_skip)
-                continue;
-        }
-
+    if (has_mem_dep_for_shape_infer())
         input_shape_changed = true;
-    }
 
     if (!input_shape_changed && !_node->generates_dynamic_output() && _impl_params->get_output_layout().is_static())
         return;
@@ -267,6 +249,8 @@ void primitive_inst::update_shape() {
     std::vector<event::ptr> dependencies_events;
     auto queue_type = get_network().get_stream().get_queue_type();
     bool has_runtime_deps = false;
+
+    auto memory_deps = _node->get_const_memory_deps();
     for (auto& i : _node->get_shape_infer_dependencies()) {
         // Some primitives may have flexible count of deps (e.g. reshape), thus allow skipping some deps
         if (memory_deps.count(i) > 0 || i >= _node->get_dependencies().size()) {
@@ -626,80 +610,150 @@ bool primitive_inst::has_inner_networks() const {
     return (_impl_params->inner_nets.size() > 0);
 }
 
+bool primitive_inst::dynamic_shape_update_shape() {
+    std::vector<event::ptr> dependencies;
+    if (is_dynamic() && !has_inner_networks()) {
+//        do_runtime_in_place_concat();
+        OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
+        #if 0
+        auto async_preproc_context1 = get_network().get_program()->get_preproc_context1();
+        if (dyn_status == INIT) {
+            if (has_mem_dep_for_shape_infer()) {
+                update_shape();
+                this->dyn_status = ENQUEUED_PHASE_1;
+            } else {
+                std::function<void(primitive_inst*, ICompilationContext*)> update_shape_task =
+                        [&] (primitive_inst* inst, ICompilationContext* async_preproc_context1) {
+                    assert(!inst->has_mem_dep_for_shape_infer());
+                    if (inst->dyn_status != INIT)
+                        return;
+                    inst->update_shape();
+                    inst->dyn_status = ENQUEUED_PHASE_1;
+                    for (auto user : inst->get_users()) {
+                        auto user_inst = inst->get_network().get_primitive(user->id()).get();
+                        if (!user_inst->has_mem_dep_for_shape_infer()) {
+                            async_preproc_context1->push_task_no_check_key([&] {
+                                update_shape_task(user_inst, async_preproc_context1);
+                            });
+                        }
+                    }
+                };
+                async_preproc_context1->push_task_no_check_key([&] { update_shape_task(this, async_preproc_context1.get()); });
+            }
+        }
+        #elif 0
+        auto async_preproc_context1 = get_network().get_program()->get_preproc_context1();
+        if (dyn_status == INIT) {
+            if (has_mem_dep_for_shape_infer()) {
+                update_shape();
+                this->dyn_status = ENQUEUED_PHASE_1;
+            } else {
+                std::function<void(primitive_inst*, ICompilationContext*)> update_shape_task = [&] (primitive_inst* inst, ICompilationContext* async_preproc_context1) {
+                    assert(!inst->has_mem_dep_for_shape_infer());
+                    if (inst->dyn_status != INIT)
+                        return;
+                    async_preproc_context1->push_task_no_check_key([&] { inst->update_shape(); inst->dyn_status = ENQUEUED_PHASE_1; });
+                    for (auto user : inst->get_users()) {
+                        auto user_inst = inst->get_network().get_primitive(user->id()).get();
+                        if (!user_inst->has_mem_dep_for_shape_infer()) {
+                            update_shape_task(user_inst, async_preproc_context1);
+                        }
+                    }
+                };
+            } 
+        }
+        #else
+        update_shape();
+        #endif
+        if (_impl_params->output_layouts[0].count() == 0) {
+            GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
+            update_shape_done_by_other = false; // reset
+            return true;
+        }
+    }
+    return false;
+}
+
+event::ptr primitive_inst::dynamic_shape_unfusion(const std::vector<event::ptr>& events) {
+    if (!is_valid_fusion()) {
+        auto subgraph = get_unfused_subgraph();
+
+        for (auto& d : _deps) {
+            if (!d.first->get_node().is_type<data>()) {
+                auto allocated_mem = d.first->output_memory_ptr();
+                auto actual_input_layout = d.first->get_output_layout();
+                auto& engine = _network.get_engine();
+                // Need to use actual layout, not the fake aligned memory layout
+                auto actual_mem = engine.reinterpret_buffer(*allocated_mem, actual_input_layout);
+                subgraph->set_input_data(d.first->id(), actual_mem);
+            }
+        }
+        GPU_DEBUG_TRACE_DETAIL << "[Start] Executing unfused subgraph of " << id() << std::endl;
+        auto outputs = subgraph->execute(events);
+        GPU_DEBUG_TRACE_DETAIL << "[End] Finished executing unfused subgraph of " << id() << std::endl;
+
+        auto last_fd = _impl_params->fused_desc.back();
+        auto last_prim_id = last_fd.desc->id;
+
+        OPENVINO_ASSERT(outputs.find(last_prim_id) != outputs.end(),
+                        "[GPU] Can't find output primitive ",
+                        last_prim_id,
+                        " for unfused subgraph");
+
+        _outputs[0] = outputs.at(last_prim_id).get_memory();
+
+        _impl_params->output_layouts[0] = subgraph->get_output_layout(last_prim_id);
+        return outputs.at(last_prim_id).get_event();
+    } else {
+        return nullptr;
+    }
+}
+
+std::vector<event::ptr> primitive_inst::dynamic_shape_update_impl(void) {
+    // Try update impl if current impl is dynamic because opt kernel may be added to impl cache through async
+    // compilation. Only try update weight and realloc when impl is updated.
+    bool need_args_update = false;
+    std::vector<event::ptr> dependencies;
+    if (shape_changed() || !_impl || _impl->is_dynamic()) {
+        need_args_update = true;
+
+        if (update_impl()) {
+            auto ev = update_weights();
+            if (ev)
+                dependencies.push_back(ev);
+            auto ev_reset = realloc_if_needed();
+            if (ev_reset)
+                dependencies.push_back(ev_reset);
+        }
+    }
+
+    OPENVINO_ASSERT(_impl_params->get_output_layout().is_static(),
+                    "[GPU] Can't execute ",
+                    id(),
+                    " primitive as output layout is dynamic in runtime");
+
+    OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", id(), " primitive");
+    update_shape_done_by_other = false;  // reset
+    if ((is_dynamic() && need_args_update)) {
+        set_arguments();
+    }
+    return dependencies;
+}
+
 event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     const auto primitive_id = id();
     OPENVINO_ASSERT(_has_valid_input, primitive_id, " has invalid/unset input");
     GPU_DEBUG_GET_INSTANCE(debug_config);
 
-    bool need_args_update = false;
-    std::vector<event::ptr> dependencies;
-    if (is_dynamic() && !has_inner_networks()) {
-        do_runtime_in_place_concat();
-        OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
-        update_shape();
-        if (_impl_params->output_layouts[0].count() == 0) {
-            GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
-            auto ev = get_network().get_stream().create_user_event(true);
-            update_shape_done_by_other = false; // reset
-            return ev;
-        }
-
-        if (!is_valid_fusion()) {
-            auto subgraph = get_unfused_subgraph();
-
-            for (auto& d : _deps) {
-                if (!d.first->get_node().is_type<data>()) {
-                    auto allocated_mem = d.first->output_memory_ptr();
-                    auto actual_input_layout = d.first->get_output_layout();
-                    auto& engine = _network.get_engine();
-                    // Need to use actual layout, not the fake aligned memory layout
-                    auto actual_mem = engine.reinterpret_buffer(*allocated_mem, actual_input_layout);
-                    subgraph->set_input_data(d.first->id(), actual_mem);
-                }
-            }
-            GPU_DEBUG_TRACE_DETAIL << "[Start] Executing unfused subgraph of " << id() << std::endl;
-            auto outputs = subgraph->execute(events);
-            GPU_DEBUG_TRACE_DETAIL << "[End] Finished executing unfused subgraph of " << id() << std::endl;
-
-            auto last_fd = _impl_params->fused_desc.back();
-            auto last_prim_id = last_fd.desc->id;
-
-            OPENVINO_ASSERT(outputs.find(last_prim_id) != outputs.end(), "[GPU] Can't find output primitive ", last_prim_id, " for unfused subgraph");
-
-            _outputs[0] = outputs.at(last_prim_id).get_memory();
-
-            _impl_params->output_layouts[0] = subgraph->get_output_layout(last_prim_id);
-            return outputs.at(last_prim_id).get_event();
-        }
-
-        // Try update impl if current impl is dynamic because opt kernel may be added to impl cache through async compilation.
-        // Only try update weight and realloc when impl is updated.
-        if (shape_changed() || !_impl || (!shape_changed() && _impl->is_dynamic())) {
-            need_args_update = true;
-
-            if (update_impl()) {
-                auto ev = update_weights();
-                if (ev)
-                    dependencies.push_back(ev);
-                auto ev_reset = realloc_if_needed();
-                if (ev_reset)
-                    dependencies.push_back(ev_reset);
-            }
-        }
-
-        OPENVINO_ASSERT(_impl_params->get_output_layout().is_static(),
-                        "[GPU] Can't execute ", primitive_id, " primitive as output layout is dynamic in runtime");
-    }
-    update_shape_done_by_other = false; // reset
-    OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", primitive_id,  " primitive");
 
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
-    if ((is_dynamic() && need_args_update) || has_mutable_input() || is_output()) {
+    if (has_mutable_input() || is_output()) {
         set_arguments();
     }
     on_execute();
     GPU_DEBUG_TRACE << id() << ": execute " << _impl->get_kernel_name() << std::endl;
 
+    std::vector<event::ptr> dependencies;
     if (_exec_deps.empty() && dependencies.empty()) {
         dependencies = events;
     } else {

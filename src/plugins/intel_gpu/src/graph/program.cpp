@@ -211,8 +211,15 @@ void program::init_program() {
     _kernels_cache = std::unique_ptr<kernels_cache>(new kernels_cache(_engine, _config, prog_id, _task_executor,
                                                                       kernel_selector::KernelBase::get_db().get_batch_header_str()));
 
-    _compilation_context = ICompilationContext::create(make_task_executor_config(_config,
-                                                            "Task executor config for CompilationContext in GPU plugin"));
+    auto compilation_context_config = make_task_executor_config(_config, "Task executor config for CompilationContext in GPU plugin");
+    constexpr auto async_compilation_streams = 4;
+    compilation_context_config._streams = async_compilation_streams;
+    _compilation_context = ICompilationContext::create(compilation_context_config);
+
+    auto preproc_context_config = make_task_executor_config(_config, "Task executor config for CompilationContext in GPU plugin");
+    preproc_context_config._streams = 1;
+    _async_preproc_context_1 = ICompilationContext::create(preproc_context_config);
+    _async_preproc_context_2 = ICompilationContext::create(preproc_context_config);
 
     _impls_cache = cldnn::make_unique<ImplementationsCache>(_impls_cache_capacity);
     // Remove items of compilation context's internal queue when some impl is popped in kernels_cache
