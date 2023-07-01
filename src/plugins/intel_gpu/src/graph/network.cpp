@@ -1420,10 +1420,10 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
             execute_Q.push(std::make_pair(inst->id(), inst->get_node().distance));
             continue;
         }
-//        std::cout << "Execute " << inst->id() << " (status" << inst->get_status() << std::endl;
+        std::cout << "Execute " << inst->id() << " (status" << inst->get_status() << std::endl;
         execute_primitive(inst, events);
         inst->set_status(FINISHED);
-//        std::cout << "Done" << inst->id() << " (status is now " << inst->get_status() << std::endl;
+        std::cout << "Done" << inst->id() << " (status is now " << inst->get_status() << std::endl;
 //        std::cout << "current execute_Q_2 size: " << execute_Q.size() << std::endl;
     }
 //    std::cout << "ExecQueue is empty now" << std::endl;
@@ -1835,28 +1835,23 @@ void network::set_variables_state_info(const std::string& variable_id, const cld
 void network::push_shape_infer() {
     auto& update_shape_Q = this->update_shape_Q;
     async_preproc_context1->push_task_no_check_key([&update_shape_Q, this] {
-    while (!update_shape_Q.empty()) {
-//        while (1) {
-//            if (update_shape_Q.empty()) 
-//                continue;
-//            //------- Just for dump{
-            {
-//                std::lock_guard<std::mutex> lock(_mutex);
-//                std::queue<std::shared_ptr<primitive_inst>> backup_Q;
-//                std::cout << "======== print Q start ========" << std::endl;
-//                while (!update_shape_Q.empty()) {
-//
-//                    std::cout << update_shape_Q.top()->id() << " (" << update_shape_Q.top()->processing_order << ", "<< update_shape_Q.top()->get_node().distance << ")";
-//                    backup_Q.push(update_shape_Q.top());
-//                    update_shape_Q.pop();
-//                }
-//                std::cout << std::endl;
-//                while (!backup_Q.empty()) {
-//                    update_shape_Q.push(backup_Q.front());
-//                    backup_Q.pop();
-//                }
-//                std::cout << "======== print Q end ========" << std::endl;
-            }
+        while (!update_shape_Q.empty()) {
+            //------- Just for dump{
+ //           {
+ //               std::queue<std::pair<primitive_id, int32_t>> backup_Q;
+ //               std::cout << "======== print Q start ========" << std::endl;
+ //               while (!update_shape_Q.empty()) {
+ //                   std::cout << update_shape_Q.top().first << " (" << update_shape_Q.top().second << ")";
+ //                   backup_Q.push(update_shape_Q.top());
+ //                   update_shape_Q.pop();
+ //               }
+ //               std::cout << std::endl;
+ //               while (!backup_Q.empty()) {
+ //                   update_shape_Q.push(backup_Q.front());
+ //                   backup_Q.pop();
+ //               }
+ //               std::cout << "======== print Q end ========" << std::endl;
+ //           }
             //-------
             std::shared_ptr<primitive_inst> inst = nullptr;
             {

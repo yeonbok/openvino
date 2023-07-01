@@ -663,9 +663,12 @@ bool primitive_inst::dynamic_shape_update_shape() {
             } 
         }
         #else
-//        std::cout << "do update shape for " << id() << std::endl;
-        update_shape();
-//        std::cout << "After update shape for " << id() << " : " << _impl_params->output_layouts[0].to_string() << std::endl;
+        {
+//            std::lock_guard<std::mutex> lock(_mutex);
+//            std::cout << "do update shape for " << id() << std::endl;
+            update_shape();
+//            std::cout << "After update shape for " << id() << " : " << _impl_params->output_layouts[0].to_string() << std::endl;
+        }
         #endif
         if (_impl_params->output_layouts[0].count() == 0) {
             GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
