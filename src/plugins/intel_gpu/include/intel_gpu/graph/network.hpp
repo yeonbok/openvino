@@ -13,7 +13,6 @@
 #include "intel_gpu/runtime/event.hpp"
 #include "intel_gpu/runtime/stream.hpp"
 #include "intel_gpu/runtime/lru_cache.hpp"
-
 #include <map>
 #include <vector>
 #include <unordered_map>
@@ -57,6 +56,7 @@ private:
 class primitive_inst;
 class ICompilationContext;
 
+enum DYNAMIC_STATUS { INIT = 0, UPDATE_SHAPE_WAIT = 1, UPDATE_SHAPE_DONE = 2, ENQUEUED_PHASE_2 = 3, FINISHED = 4 };
 struct network {
 public:
     using ptr = std::shared_ptr<network>;
@@ -190,6 +190,7 @@ public:
     const program::graph_optimizer_info& get_optimizer_passes_info() const;
     std::map<primitive_id, primitive_id> get_ext_id_mapping() const;
     void execute_impl(const std::vector<event::ptr>& events);
+    void execute_impl_async(const std::vector<event::ptr>& events);
 
     /// @brief Executes network and returns the list of @ref network_output.
     /// @param dependencies List of @ref event objects to be waited before network execution.
@@ -240,11 +241,18 @@ public:
     void set_variables_state_info(const std::string& variable_id, const cldnn::layout& layout);
 
     const ExecutionConfig& get_config() const { return _config; }
+    struct compare_pq_2 {
+        bool operator() (std::pair<primitive_id, int32_t>& a, std::pair<primitive_id, int32_t>& b);
+    };
+ 
+    std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> update_shape_Q;
+    std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> execute_Q;
+    void push_shape_infer();
 
-    std::queue<std::shared_ptr<primitive_inst>> q_update_shape;
 private:
     using output_chains_map = std::map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>>;
     uint32_t net_id = 0;
+    std::mutex _mutex;
     program::ptr _program;
     ExecutionConfig _config;
     engine& _engine;
@@ -255,7 +263,7 @@ private:
     bool _is_dynamic = false;
     bool _enable_profiling = false;
     bool _reset_arguments;
-
+    std::shared_ptr<cldnn::ICompilationContext> async_preproc_context1;
     std::unordered_map<primitive_id, std::shared_ptr<primitive_inst>> _primitives;
     std::vector<shared_mem_type> _in_out_shared_mem_types;
     std::vector<std::shared_ptr<primitive_inst>> _inputs;

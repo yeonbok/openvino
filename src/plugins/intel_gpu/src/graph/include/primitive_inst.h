@@ -22,7 +22,7 @@
 #include "intel_gpu/graph/serialization/vector_serializer.hpp"
 #include "intel_gpu/runtime/itt.hpp"
 #include "runtime/kernels_cache.hpp"
-
+#include <mutex>
 // TODO: add generic interface for weights_reorder_params and get rid of this dependency
 #include "impls/ocl/kernel_selector_helper.h"
 
@@ -119,7 +119,6 @@ class primitive_inst {
     template <class PType>
     friend class typed_primitive_inst;
 
-    enum DYNAMIC_STATUS { INIT, ENQUEUED_PHASE_1, ENQUEUED_PHASE_2, FINISHED };
 public:
     primitive_inst(network& network);
     virtual ~primitive_inst() = default;
@@ -127,7 +126,15 @@ public:
     const std::vector<std::pair<std::shared_ptr<const primitive_inst>, int32_t>>& dependencies() const {
         return reinterpret_cast<std::vector<std::pair<std::shared_ptr<const primitive_inst>, int32_t>> const&>(_deps);
     }
+    std::mutex _mutex;
+    DYNAMIC_STATUS get_status() const {
+        return dyn_status;
+    }
 
+    void set_status(DYNAMIC_STATUS new_stat) {
+        std::lock_guard<std::mutex> lock(_mutex);
+        dyn_status = new_stat;
+    }
     memory& dep_memory(size_t index) const {
         auto dep = dependencies().at(index);
         return dep.first->output_memory(dep.second);
@@ -298,6 +305,7 @@ public:
     virtual void update_output_memory() {}
 
     DYNAMIC_STATUS dyn_status = INIT;
+    int64_t processing_order = -1;
 protected:
     primitive_inst(network& network, program_node const& node, bool allocate_memory);
 

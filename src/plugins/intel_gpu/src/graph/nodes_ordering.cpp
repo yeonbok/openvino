@@ -66,6 +66,7 @@ void program::nodes_ordering::calculate_BFS_processing_order() {
     dist_lists.resize(max_distance + 1);
     for (auto itr : _processing_order) {
         dist_lists[distances[itr]].push_back(itr);
+        itr->distance = distances[itr];
     }
 
     // replace the old processing order by the new one, still topological.

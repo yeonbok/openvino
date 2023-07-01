@@ -296,6 +296,8 @@ public:
         user_mark = val;
         return ret;
     }
+
+    int32_t distance = -1;
     void unmark() { user_mark = 0; }
     bool is_marked() const { return user_mark != 0; }
 

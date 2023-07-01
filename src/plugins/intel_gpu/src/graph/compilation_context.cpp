@@ -8,7 +8,8 @@
 #include <atomic>
 #include <unordered_set>
 #include "intel_gpu/runtime/utils.hpp"
-
+#include <queue>
+#include "primitive_inst.h"
 namespace cldnn {
 class CompilationContext : public ICompilationContext {
 public:
@@ -37,7 +38,6 @@ public:
         if (_task_executor != nullptr)
             _task_executor->run(task);
     }
-
 
     void remove_keys(std::vector<size_t>&& keys) override {
         std::lock_guard<std::mutex> lock(_mutex);

@@ -620,7 +620,7 @@ bool primitive_inst::dynamic_shape_update_shape() {
         if (dyn_status == INIT) {
             if (has_mem_dep_for_shape_infer()) {
                 update_shape();
-                this->dyn_status = ENQUEUED_PHASE_1;
+                this->dyn_status = UPDATE_SHAPE_DONE;
             } else {
                 std::function<void(primitive_inst*, ICompilationContext*)> update_shape_task =
                         [&] (primitive_inst* inst, ICompilationContext* async_preproc_context1) {
@@ -628,7 +628,7 @@ bool primitive_inst::dynamic_shape_update_shape() {
                     if (inst->dyn_status != INIT)
                         return;
                     inst->update_shape();
-                    inst->dyn_status = ENQUEUED_PHASE_1;
+                    inst->dyn_status = UPDATE_SHAPE_DONE;
                     for (auto user : inst->get_users()) {
                         auto user_inst = inst->get_network().get_primitive(user->id()).get();
                         if (!user_inst->has_mem_dep_for_shape_infer()) {
@@ -646,13 +646,13 @@ bool primitive_inst::dynamic_shape_update_shape() {
         if (dyn_status == INIT) {
             if (has_mem_dep_for_shape_infer()) {
                 update_shape();
-                this->dyn_status = ENQUEUED_PHASE_1;
+                this->dyn_status = UPDATE_SHAPE_DONE;
             } else {
                 std::function<void(primitive_inst*, ICompilationContext*)> update_shape_task = [&] (primitive_inst* inst, ICompilationContext* async_preproc_context1) {
                     assert(!inst->has_mem_dep_for_shape_infer());
                     if (inst->dyn_status != INIT)
                         return;
-                    async_preproc_context1->push_task_no_check_key([&] { inst->update_shape(); inst->dyn_status = ENQUEUED_PHASE_1; });
+                    async_preproc_context1->push_task_no_check_key([&] { inst->update_shape(); inst->dyn_status = UPDATE_SHAPE_DONE; });
                     for (auto user : inst->get_users()) {
                         auto user_inst = inst->get_network().get_primitive(user->id()).get();
                         if (!user_inst->has_mem_dep_for_shape_infer()) {
@@ -663,13 +663,19 @@ bool primitive_inst::dynamic_shape_update_shape() {
             } 
         }
         #else
+//        std::cout << "do update shape for " << id() << std::endl;
         update_shape();
+//        std::cout << "After update shape for " << id() << " : " << _impl_params->output_layouts[0].to_string() << std::endl;
         #endif
         if (_impl_params->output_layouts[0].count() == 0) {
             GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
             update_shape_done_by_other = false; // reset
             return true;
         }
+    } else {
+//        std::cout << "Skipped update shape for " << id() << std::endl;
+//        std::cout << "After update shape for " << id() << " : " << _impl_params->output_layouts[0].to_string() << std::endl;
+
     }
     return false;
 }
