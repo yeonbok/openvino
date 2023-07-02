@@ -1129,6 +1129,7 @@ void network::add_to_exec_order(const primitive_id& id) {
 }
 
 std::map<primitive_id, network_output> network::execute(const std::vector<event::ptr>& dependencies) {
+    std::cout << "################################ Execute network ######################" << std::endl;
     if (_internal)
         execute_impl(dependencies);
     else
@@ -1364,21 +1365,8 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
     //    return std::to_string(iter) + "_";
     //};
 
-//    struct compare_pq {
-//        bool operator()(std::shared_ptr<primitive_inst> a, std::shared_ptr<primitive_inst> b) {
-//            // TODO : check processing order
-//            //if (a->has_mem_dep_for_shape_infer() && !b->has_mem_dep_for_shape_infer()) {
-//            //    return true;
-//            //}
-//            int32_t score_a, score_b;
-//            
-//            return a->processing_order > b->processing_order;
-//        }
-//    };
-
     // ======================== Async update shape
     int64_t order = 0;
-    std::queue<primitive_id> tmp_q;
     for (auto& inst : _primitives) {
         if (inst.second->get_node().is_type<data>() || inst.second->get_node().is_constant())
             inst.second->set_status(FINISHED);
@@ -1392,7 +1380,6 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
             // update_shape_seed
             update_shape_Q.push(std::make_pair(inst->id(), inst->get_node().distance));
             inst->set_status(UPDATE_SHAPE_WAIT);
-            tmp_q.push(inst->id());
         }
         execute_Q.push(std::make_pair(inst->id(), inst->get_node().distance));
     }
@@ -1405,6 +1392,8 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
         execute_Q.pop();
         if (inst->get_status() < UPDATE_SHAPE_DONE) {
             execute_Q.push(std::make_pair(inst->id(), inst->get_node().distance));
+            continue;
+        } else if (inst->get_status() == FINISHED) {
             continue;
         }
         bool all_parents_resolved = true;
@@ -1480,10 +1469,7 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
     }
     }
     #endif
-    for (auto& inst : _exec_order) {
-        inst->set_status(INIT);
-    }
-    // Store events only in case of OOO queue or enabled Profiling
+   // Store events only in case of OOO queue or enabled Profiling
     auto store_events = get_stream().get_queue_type() == QueueTypes::out_of_order || _enable_profiling;
     if (store_events) {
         if (_program != nullptr) {
@@ -1634,21 +1620,13 @@ std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> network::get_primit
 
 void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive,
                                 const std::vector<event::ptr>& events) {
-    //bool is_empty = primitive->dynamic_shape_update_shape();
-//    std::cout << "Execute primitive " << primitive->id() << std::endl;
-   // if (primitive->get_status() == DYNAMIC_STATUS::INIT) {
-   //     std::lock_guard<std::mutex> lock(_mutex);
-   //     update_shape_Q.push(primitive);
-   //     primitive->set_status(UPDATE_SHAPE_WAIT);
-   // }
-   // push_shape_infer();
-   // while (primitive->get_status() <= DYNAMIC_STATUS::UPDATE_SHAPE_WAIT) {
-   //     //std::cout << " ... waiting for shape update " << primitive->id() << std::endl;
-   //     continue;
-   // }
-    bool is_empty = false; // TODO fix
     event::ptr ev = nullptr;
-    if (!is_empty) { // not empty
+    bool is_empty = (primitive->get_impl_params()->get_output_layout().count() == 0); // TODO fix
+    if (is_empty) {
+        GPU_DEBUG_TRACE_DETAIL << primitive->id() << " : Skipping becuase output data is empty " << std::endl;
+        ev = get_stream().create_user_event(true);
+        //       update_shape_done_by_other = false;  // reset
+    } else { // not empty
         event::ptr unfusion_ev = primitive->dynamic_shape_unfusion(events);
         if (unfusion_ev != nullptr) {
             ev = unfusion_ev;
@@ -1659,10 +1637,7 @@ void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive
             }
             ev = primitive->execute(dep_events);
         }
-    } else {  // empty
-        ev = get_stream().create_user_event(true);
-    }
-
+    } 
     // Collect events under any of the following conditions:
     // 1) OOO queue execution
     // 2) Profiling mode is enabled
@@ -1837,21 +1812,21 @@ void network::push_shape_infer() {
     async_preproc_context1->push_task_no_check_key([&update_shape_Q, this] {
         while (!update_shape_Q.empty()) {
             //------- Just for dump{
- //           {
- //               std::queue<std::pair<primitive_id, int32_t>> backup_Q;
- //               std::cout << "======== print Q start ========" << std::endl;
- //               while (!update_shape_Q.empty()) {
- //                   std::cout << update_shape_Q.top().first << " (" << update_shape_Q.top().second << ")";
- //                   backup_Q.push(update_shape_Q.top());
- //                   update_shape_Q.pop();
- //               }
- //               std::cout << std::endl;
- //               while (!backup_Q.empty()) {
- //                   update_shape_Q.push(backup_Q.front());
- //                   backup_Q.pop();
- //               }
- //               std::cout << "======== print Q end ========" << std::endl;
- //           }
+            {
+                std::queue<std::pair<primitive_id, int32_t>> backup_Q;
+                std::cout << "======== print Q start ========" << std::endl;
+                while (!update_shape_Q.empty()) {
+                    std::cout << update_shape_Q.top().first << " (" << update_shape_Q.top().second << ")";
+                    backup_Q.push(update_shape_Q.top());
+                    update_shape_Q.pop();
+                }
+                std::cout << std::endl;
+                while (!backup_Q.empty()) {
+                    update_shape_Q.push(backup_Q.front());
+                    backup_Q.pop();
+                }
+                std::cout << "======== print Q end ========" << std::endl;
+            }
             //-------
             std::shared_ptr<primitive_inst> inst = nullptr;
             {
@@ -1892,7 +1867,9 @@ void network::push_shape_infer() {
                     for (auto user : inst->get_user_insts()) {
 //                        std::cout << "push  user " << user->id() << std::endl;
                         {
-//                            std::lock_guard<std::mutex> lock(_mutex);
+                            std::lock_guard<std::mutex> lock(_mutex);
+                            if (user->dyn_status >= UPDATE_SHAPE_WAIT)
+                                continue;
                             update_shape_Q.push(std::make_pair(user->id(), user->get_node().distance));
                             user->set_status(UPDATE_SHAPE_WAIT);
                         }

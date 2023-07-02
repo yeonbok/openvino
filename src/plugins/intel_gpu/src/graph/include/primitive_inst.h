@@ -127,7 +127,8 @@ public:
         return reinterpret_cast<std::vector<std::pair<std::shared_ptr<const primitive_inst>, int32_t>> const&>(_deps);
     }
     std::mutex _mutex;
-    DYNAMIC_STATUS get_status() const {
+    DYNAMIC_STATUS get_status() {
+        std::lock_guard<std::mutex> lock(_mutex);
         return dyn_status;
     }
 
