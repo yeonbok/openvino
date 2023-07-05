@@ -623,7 +623,8 @@ void program::post_optimize_graph(bool is_internal) {
 
     // Recalculate processing order after all graph transformation to keep optimal primitives ordering
     // for OOO queue
-    if (_config.get_property(ov::intel_gpu::queue_type) == QueueTypes::out_of_order)
+    // Also need this for dynamic shape async execution to recalc distance for all nodes
+    if (_config.get_property(ov::intel_gpu::queue_type) == QueueTypes::out_of_order || (!is_internal && get_config().get_property(ov::intel_gpu::allow_new_shape_infer)))
         get_processing_order().calculate_BFS_processing_order();
 }
 

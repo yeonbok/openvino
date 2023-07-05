@@ -45,6 +45,7 @@ void program::nodes_ordering::calc_processing_order(program& p) {
 void program::nodes_ordering::calculate_BFS_processing_order() {
     GPU_DEBUG_DEFINE_MEM_LOGGER("calculate_BFS_processing_order");
     std::map<program_node*, int> distances;
+    std::map<program_node*, int> max_distances;
     for (auto itr : _processing_order) {
         distances[itr] = -1;
     }
@@ -61,12 +62,30 @@ void program::nodes_ordering::calculate_BFS_processing_order() {
         }
     }
 
+    //===========================================================
+    // Relax distances more to check max distance
+    for (auto itr = _processing_order.rbegin(); itr != _processing_order.rend(); ++itr) {
+        const auto& node_ptr = *itr;
+        if (!node_ptr->get_users().size()) {
+            // leaf node
+            max_distances[node_ptr] = max_distance;
+            continue;
+        }
+        int32_t min_of_users = INT32_MAX;
+        for (auto & usr : (*itr)->get_users()) {
+            min_of_users = std::min(min_of_users, max_distances[usr]);
+        }
+        max_distances[node_ptr] = min_of_users - 1;
+    }
+
+
     // bucket sort nodes based on their max distance from input
     std::vector<std::vector<program_node*>> dist_lists;
     dist_lists.resize(max_distance + 1);
     for (auto itr : _processing_order) {
         dist_lists[distances[itr]].push_back(itr);
-        itr->distance = distances[itr];
+        itr->min_distance = distances[itr];
+        itr->max_distance = max_distances[itr];
     }
 
     // replace the old processing order by the new one, still topological.

@@ -34,7 +34,7 @@
 #include "to_string_utils.h"
 #include "kernels_cache.hpp"
 #include "compilation_context.hpp"
-
+#include "reorder_inst.h"
 // TODO: Remove once we have an abstraction for kernels_cache
 #include "kernel_base.h"
 
@@ -305,7 +305,10 @@ static uint32_t get_unique_net_id() {
     static std::atomic<uint32_t> id_gen{0};
     return ++id_gen;
 }
-
+//const std::string yellow("\033[0;33m");
+//const std::string reset_color("\033[0m");
+const std::string yellow("");
+const std::string reset_color("");
 /*
 Network will always have net_id = 0 when it will be cldnn internal micronetwork (created i.e by propagate_constants
 opt pass).
@@ -1301,9 +1304,10 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 void network::execute_impl_async(const std::vector<event::ptr>& events) {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, "NetworkImpl::Execute");
     // Wait for previous execution completion
+    int64_t curr_iter = -1;
     reset_execution(false);
     GPU_DEBUG_TRACE << "----------------------------------------------" << std::endl;
-    GPU_DEBUG_TRACE << "Start network execution" << std::endl;
+    GPU_DEBUG_TRACE << "Start network execution " << curr_iter << std::endl;
 
     std::vector<memory::ptr> in_out_mem;
     auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
@@ -1353,7 +1357,6 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
         }
         if (!is_internal()) exit(0);
     }
-    //int64_t curr_iter = -1;
 #ifdef GPU_DEBUG_CONFIG
     GPU_DEBUG_IF(!debug_config->dump_iteration.empty()) {
         curr_iter = iteration++;
@@ -1378,20 +1381,23 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
         inst->processing_order = order++;
         if (inst->dependencies().size() == 0) { // input nodes
             // update_shape_seed
-            update_shape_Q.push(std::make_pair(inst->id(), inst->get_node().distance));
+            update_shape_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
             inst->set_status(UPDATE_SHAPE_WAIT);
         }
-        execute_Q.push(std::make_pair(inst->id(), inst->get_node().distance));
+        execute_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
     }
     // ======================== Async update shape end
-    //std::cout << "Total num of primitves to run : " << execute_Q_2.size() << std::endl;
-    
+//    std::cout << "iter " << curr_iter << "Total num of primitves to run : " << execute_Q.size() << std::endl;
     push_shape_infer();
+
     while (!execute_Q.empty()) {
         auto inst = get_primitive(execute_Q.top().first);
         execute_Q.pop();
+        if (inst->get_node().is_type<reorder>()) {
+ //           std::cout << yellow << "ExecQ popped " << inst->id() << " (status" << inst->dyn_status << reset_color << std::endl;
+        }
         if (inst->get_status() < UPDATE_SHAPE_DONE) {
-            execute_Q.push(std::make_pair(inst->id(), inst->get_node().distance));
+            execute_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
             continue;
         } else if (inst->get_status() == FINISHED) {
             continue;
@@ -1402,14 +1408,15 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
                 continue;
             if (dep.first->dyn_status < DYNAMIC_STATUS::FINISHED) {
                 all_parents_resolved = false;
+//                std::cout << yellow << inst->id() << "'s parent " << dep.first->id() << " is not ready (status" << inst->get_status() << reset_color<< std::endl;
                 break;
             }
         }
         if (!all_parents_resolved) {
-            execute_Q.push(std::make_pair(inst->id(), inst->get_node().distance));
+            execute_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
             continue;
         }
-//        std::cout << "Execute " << inst->id() << " (status" << inst->get_status() << std::endl;
+        //std::cout << yellow << "Execute " << inst->id() << " (status" << inst->get_status() << reset_color<< std::endl;
         execute_primitive(inst, events);
         inst->set_status(FINISHED);
 //        std::cout << "Done" << inst->id() << " (status is now " << inst->get_status() << std::endl;
@@ -1835,11 +1842,13 @@ void network::push_shape_infer() {
                 inst = this->get_primitive(cur_inst.first);
                 update_shape_Q.pop();
             }
+//            std::cout << "popped  " << inst->id() << " " << inst->get_status() << std::endl;
             if (inst->get_status() > UPDATE_SHAPE_WAIT) {
-//                std::cout << "popped  " << inst->id() << " " << inst->get_status()
-//                          << " (update shape already done, nothing todo )" << std::endl;
+            //    std::cout << "popped  " << inst->id() << " " << inst->get_status()
+            //              << " (update shape already done, nothing todo )" << std::endl;
                 continue;
             }
+ 
             // update shape for inst
             bool all_parents_resolved = true;
             for (auto dep : inst->dependencies()) {
@@ -1847,12 +1856,12 @@ void network::push_shape_infer() {
                     continue;
                 if (dep.first->dyn_status <= DYNAMIC_STATUS::UPDATE_SHAPE_WAIT) {
 //                    std::cout << "!! parent " << dep.first->id() << " is not ready ( status : " << dep.first->dyn_status
- //                             << ") " << std::endl;
+//                              << ") " << std::endl;
                     all_parents_resolved = false;
                     break;
                 }
                 if (inst->has_mem_dep_for_shape_infer() && dep.first->dyn_status < DYNAMIC_STATUS::FINISHED) {
-//                    std::cout << "!! parent " << dep.first->id()
+//                    std::cout << "!! mem dep parent " << dep.first->id() << " is not finished (status :" << dep.first->dyn_status << std::endl;
 //                              << " is not executed yet ( status : " << dep.first->dyn_status << ") " << std::endl;
                     all_parents_resolved = false;
                     break;
@@ -1863,22 +1872,22 @@ void network::push_shape_infer() {
                 inst->dynamic_shape_update_shape();
                 {
                     inst->set_status(UPDATE_SHAPE_DONE);
-//                    std::cout << "... Finished update shape for " << inst->id() << std::endl;
+//                    std::cout << "... Finished update shape for " << inst->id() << " now status " << inst->dyn_status << std::endl;
                     for (auto user : inst->get_user_insts()) {
 //                        std::cout << "push  user " << user->id() << std::endl;
                         {
                             std::lock_guard<std::mutex> lock(_mutex);
                             if (user->dyn_status >= UPDATE_SHAPE_WAIT)
                                 continue;
-                            update_shape_Q.push(std::make_pair(user->id(), user->get_node().distance));
+                            update_shape_Q.push(std::make_pair(user->id(), user->get_node().min_distance));
                             user->set_status(UPDATE_SHAPE_WAIT);
                         }
                     }
                 }
             } else {
 //                std::lock_guard<std::mutex> lock(_mutex);
-//                std::cout << "inst " << inst->id() << " Not ready. pushed  again" << std::endl;
-                update_shape_Q.push(std::make_pair(inst->id(), inst->get_node().distance));
+ //               std::cout << "inst " << inst->id() << " Not ready. pushed  again" << std::endl;
+                update_shape_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
             }
         }
 //        std::cout << "update shape queue is empty!" << std::endl;
