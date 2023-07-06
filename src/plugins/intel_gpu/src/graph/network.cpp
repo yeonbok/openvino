@@ -1419,7 +1419,7 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
             continue;
         }
         //std::cout << yellow << "Execute " << inst->id() << " (status" << inst->get_status() << reset_color<< std::endl;
-
+        inst->dynamic_shape_update_impl(events);
         execute_primitive(inst, events);
         inst->set_status(FINISHED);
 //        std::cout << "Done" << inst->id() << " (status is now " << inst->get_status() << std::endl;
@@ -1651,7 +1651,6 @@ void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive
     } 
     #endif
     #if 1
-    primitive->dynamic_shape_update_impl(events);
     event::ptr ev = primitive->execute(events);
     #endif
  
