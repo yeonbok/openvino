@@ -1419,7 +1419,7 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
         if (inst->get_node().is_type<reorder>()) {
  //           std::cout << yellow << "ExecQ popped " << inst->id() << " (status" << inst->dyn_status << reset_color << std::endl;
         }
-        if (inst->get_status() < UPDATE_SHAPE_DONE) {
+        if (inst->get_status() < UPDATE_IMPL_WAIT) {
             execute_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
             continue;
         } else if (inst->get_status() == FINISHED) {
@@ -1886,7 +1886,7 @@ void network::push_update_impl() {
             if (all_parents_resolved) {
                 inst->dynamic_shape_update_shape();
                 {
-                    inst->set_status(UPDATE_SHAPE_DONE);
+                    inst->set_status(UPDATE_IMPL_WAIT);
                     for (auto user : inst->get_user_insts()) {
                         {
                             std::lock_guard<std::mutex> lock(_mutex);
@@ -1961,7 +1961,7 @@ void network::push_shape_infer() {
 //                std::cout << "Start update shape for " << inst->id() << std::endl;
                 inst->dynamic_shape_update_shape();
                 {
-                    inst->set_status(UPDATE_SHAPE_DONE);
+                    inst->set_status(UPDATE_IMPL_WAIT);
 //                    update_impl_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
 //                    std::cout << "... Finished update shape for " << inst->id() << " now status " << inst->dyn_status << std::endl;
                     for (auto user : inst->get_user_insts()) {

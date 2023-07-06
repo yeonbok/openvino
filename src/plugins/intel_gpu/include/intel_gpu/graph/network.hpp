@@ -58,7 +58,7 @@ private:
 class primitive_inst;
 class ICompilationContext;
 
-enum DYNAMIC_STATUS { INIT = 0, UPDATE_SHAPE_WAIT = 1, UPDATE_SHAPE_DONE = 2, ENQUEUED_PHASE_2 = 3, FINISHED = 4 };
+enum DYNAMIC_STATUS { INIT = 0, UPDATE_SHAPE_WAIT = 1, UPDATE_IMPL_WAIT = 2, EXECUTE_WAIT = 3, FINISHED = 4 };
 struct network {
 public:
     using ptr = std::shared_ptr<network>;
