@@ -1672,14 +1672,8 @@ void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive
     } 
     #endif
     #if 1
-    event::ptr ev = nullptr;
-    event::ptr res_ev = nullptr;
-    primitive->dynamic_shape_update_impl(events, res_ev);
-    if (res_ev == nullptr) {
-        ev = primitive->execute(events);
-    } else {
-        ev = res_ev;
-    }
+    primitive->dynamic_shape_update_impl(events);
+    event::ptr ev = primitive->execute(events);
     #endif
  
     // 
