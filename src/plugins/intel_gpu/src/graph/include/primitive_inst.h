@@ -201,7 +201,7 @@ public:
 
     bool dynamic_shape_update_shape();
     event::ptr dynamic_shape_unfusion(const std::vector<event::ptr>& events);
-    void dynamic_shape_update_impl(const std::vector<event::ptr>& events, event::ptr& res_ev);
+    void dynamic_shape_update_impl(const std::vector<event::ptr>& events);
     event::ptr execute(const std::vector<event::ptr>& events);
     void init_kernels(const kernels_cache& kernels_cache) {
         _impl->init_kernels(kernels_cache, *_impl_params);
@@ -450,6 +450,7 @@ protected:
     std::unordered_map<size_t, instrumentation::perf_counter_key> _profiling_info;
 
     std::vector<event::ptr> runtime_dep;
+    event::ptr runtime_res_ev = nullptr;
 };
 
 /*

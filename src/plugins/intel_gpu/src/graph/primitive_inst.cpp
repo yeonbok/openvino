@@ -664,17 +664,18 @@ event::ptr primitive_inst::dynamic_shape_unfusion(const std::vector<event::ptr>&
     }
 }
 
-void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& dep_events, event::ptr& res_ev) {
+void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& dep_events) {
     // Try update impl if current impl is dynamic because opt kernel may be added to impl cache through async
     // compilation. Only try update weight and realloc when impl is updated.
 
     runtime_dep.clear();
+    runtime_res_ev = nullptr;
     bool need_args_update = false;
     if (shape_changed() || !_impl || _impl->is_dynamic()) {
         bool is_empty = (_impl_params->get_output_layout().count() == 0); // TODO fix
         if (is_empty) {
             GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
-            res_ev = get_network().get_stream().create_user_event(true);
+            runtime_res_ev = get_network().get_stream().create_user_event(true);
             //       update_shape_done_by_other = false;  // reset
             return;
         }
@@ -682,7 +683,7 @@ void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& de
         need_args_update = true;
         event::ptr unfusion_ev = dynamic_shape_unfusion(dep_events);
         if (unfusion_ev != nullptr) {
-            res_ev = unfusion_ev;
+            runtime_res_ev = unfusion_ev;
             return;
         }
 
@@ -709,6 +710,7 @@ void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& de
 }
 
 event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
+    if (runtime_res_ev != nullptr) return runtime_res_ev;
     const auto primitive_id = id();
     OPENVINO_ASSERT(_has_valid_input, primitive_id, " has invalid/unset input");
     GPU_DEBUG_GET_INSTANCE(debug_config);
