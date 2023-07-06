@@ -201,7 +201,7 @@ public:
 
     bool dynamic_shape_update_shape();
     event::ptr dynamic_shape_unfusion(const std::vector<event::ptr>& events);
-    std::vector<event::ptr> dynamic_shape_update_impl(void);
+    std::vector<event::ptr> dynamic_shape_update_impl(const std::vector<event::ptr>& events, event::ptr& res_ev);
     event::ptr execute(const std::vector<event::ptr>& events);
     void init_kernels(const kernels_cache& kernels_cache) {
         _impl->init_kernels(kernels_cache, *_impl_params);

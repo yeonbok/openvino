@@ -246,8 +246,10 @@ public:
     };
  
     std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> update_shape_Q;
+    std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> update_impl_Q;
     std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> execute_Q;
     void push_shape_infer();
+    void push_update_impl();
 
 private:
     using output_chains_map = std::map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>>;
@@ -264,6 +266,7 @@ private:
     bool _enable_profiling = false;
     bool _reset_arguments;
     std::shared_ptr<cldnn::ICompilationContext> async_preproc_context1;
+    std::shared_ptr<cldnn::ICompilationContext> async_preproc_context2;
     std::unordered_map<primitive_id, std::shared_ptr<primitive_inst>> _primitives;
     std::vector<shared_mem_type> _in_out_shared_mem_types;
     std::vector<std::shared_ptr<primitive_inst>> _inputs;

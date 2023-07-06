@@ -260,7 +260,8 @@ public:
     ImplementationsCache& get_implementations_cache() const { return *_impls_cache; }
     ICompilationContext& get_compilation_context() const { return *_compilation_context; }
     std::shared_ptr<ICompilationContext> get_preproc_context1() const { return _async_preproc_context_1; }
-    ICompilationContext& get_preproc_context2() const { return *_async_preproc_context_2; }
+    std::shared_ptr<ICompilationContext> get_preproc_context2() const { return _async_preproc_context_2; }
+//    ICompilationContext& get_preproc_context2() const { return *_async_preproc_context_2; }
     void cancel_compilation_context();
 
     static std::shared_ptr<InferenceEngine::CPUStreamsExecutor> make_task_executor(const ExecutionConfig& config);
