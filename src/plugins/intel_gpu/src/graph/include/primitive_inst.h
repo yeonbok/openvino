@@ -201,7 +201,7 @@ public:
 
     bool dynamic_shape_update_shape();
     event::ptr dynamic_shape_unfusion(const std::vector<event::ptr>& events);
-    std::vector<event::ptr> dynamic_shape_update_impl(const std::vector<event::ptr>& events, event::ptr& res_ev);
+    void dynamic_shape_update_impl(const std::vector<event::ptr>& events, event::ptr& res_ev);
     event::ptr execute(const std::vector<event::ptr>& events);
     void init_kernels(const kernels_cache& kernels_cache) {
         _impl->init_kernels(kernels_cache, *_impl_params);
@@ -297,6 +297,7 @@ public:
     void set_inner_networks(const std::vector<network::ptr> inner_nets) {
         _impl_params->inner_nets = inner_nets;
     }
+
 #ifdef ENABLE_ONEDNN_FOR_GPU
     std::vector<cldnn::fused_primitive_desc_onednn>& get_fused_primitives_onednn() const { return _impl_params->fused_desc_onednn; }
 #endif // ENABLE_ONEDNN_FOR_GPU
@@ -447,6 +448,8 @@ protected:
     // and store mapping onto original perf_clounter_key for further data analysis and dumps
     std::unordered_map<size_t, std::tuple<int64_t, size_t>> _profiling_data;
     std::unordered_map<size_t, instrumentation::perf_counter_key> _profiling_info;
+
+    std::vector<event::ptr> runtime_dep;
 };
 
 /*

@@ -1136,9 +1136,9 @@ std::map<primitive_id, network_output> network::execute(const std::vector<event:
 //    std::cout << "################################ Execute network ######################" << std::endl;
     if (_internal)
         execute_impl(dependencies);
-    else
+    else {
         execute_impl_async(dependencies);
-
+    }
     auto output_ids = get_output_ids();
     std::map<primitive_id, network_output> result;
     for (auto& id : output_ids) {
@@ -1653,12 +1653,9 @@ void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive
     #if 1
     event::ptr ev = nullptr;
     event::ptr res_ev = nullptr;
-    std::vector<event::ptr> dep_events = primitive->dynamic_shape_update_impl(events, res_ev);
+    primitive->dynamic_shape_update_impl(events, res_ev);
     if (res_ev == nullptr) {
-        for (auto e : events) {
-            dep_events.push_back(e);
-        }
-        ev = primitive->execute(dep_events);
+        ev = primitive->execute(events);
     } else {
         ev = res_ev;
     }
