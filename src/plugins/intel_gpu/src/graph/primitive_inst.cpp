@@ -687,21 +687,35 @@ event::ptr primitive_inst::dynamic_shape_unfusion(const std::vector<event::ptr>&
     }
 }
 
-std::vector<event::ptr> primitive_inst::dynamic_shape_update_impl(void) {
+std::vector<event::ptr> primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& dep_events, event::ptr& res_ev) {
     // Try update impl if current impl is dynamic because opt kernel may be added to impl cache through async
     // compilation. Only try update weight and realloc when impl is updated.
+
+    bool is_empty = (_impl_params->get_output_layout().count() == 0); // TODO fix
+    if (is_empty) {
+        GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
+        res_ev = get_network().get_stream().create_user_event(true);
+        //       update_shape_done_by_other = false;  // reset
+        return {};
+    }
+    event::ptr unfusion_ev = dynamic_shape_unfusion(dep_events);
+    if (unfusion_ev != nullptr) {
+        res_ev = unfusion_ev;
+        return {};
+    }
+
     bool need_args_update = false;
-    std::vector<event::ptr> dependencies;
+    std::vector<event::ptr> new_deps;
     if (shape_changed() || !_impl || _impl->is_dynamic()) {
         need_args_update = true;
 
         if (update_impl()) {
             auto ev = update_weights();
             if (ev)
-                dependencies.push_back(ev);
+                new_deps.push_back(ev);
             auto ev_reset = realloc_if_needed();
             if (ev_reset)
-                dependencies.push_back(ev_reset);
+                new_deps.push_back(ev_reset);
         }
     }
 
@@ -715,7 +729,7 @@ std::vector<event::ptr> primitive_inst::dynamic_shape_update_impl(void) {
     if ((is_dynamic() && need_args_update)) {
         set_arguments();
     }
-    return dependencies;
+    return new_deps;
 }
 
 event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {

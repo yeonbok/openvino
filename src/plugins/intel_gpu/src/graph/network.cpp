@@ -327,6 +327,7 @@ network::network(program::ptr program, const ExecutionConfig& config, stream::pt
     if (!_internal) {
         net_id = get_unique_net_id();
         async_preproc_context1 = get_program()->get_preproc_context1();
+        async_preproc_context2 = get_program()->get_preproc_context2();
     }
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -1410,6 +1411,7 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
     // ======================== Async update shape end
 //    std::cout << "iter " << curr_iter << "Total num of primitves to run : " << execute_Q.size() << std::endl;
     push_shape_infer();
+//    push_update_impl();
 
     while (!execute_Q.empty()) {
         auto inst = get_primitive(execute_Q.top().first);
@@ -1438,6 +1440,7 @@ void network::execute_impl_async(const std::vector<event::ptr>& events) {
             continue;
         }
         //std::cout << yellow << "Execute " << inst->id() << " (status" << inst->get_status() << reset_color<< std::endl;
+
         execute_primitive(inst, events);
         inst->set_status(FINISHED);
 //        std::cout << "Done" << inst->id() << " (status is now " << inst->get_status() << std::endl;
@@ -1648,6 +1651,7 @@ std::vector<std::pair<std::shared_ptr<primitive_inst>, int>> network::get_primit
 
 void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive,
                                 const std::vector<event::ptr>& events) {
+    #if 0
     event::ptr ev = nullptr;
     bool is_empty = (primitive->get_impl_params()->get_output_layout().count() == 0); // TODO fix
     if (is_empty) {
@@ -1666,6 +1670,25 @@ void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive
             ev = primitive->execute(dep_events);
         }
     } 
+    #endif
+    #if 1
+    event::ptr ev = nullptr;
+    event::ptr res_ev = nullptr;
+    std::vector<event::ptr> dep_events = primitive->dynamic_shape_update_impl(events, res_ev);
+    if (res_ev == nullptr) {
+        for (auto e : events) {
+            dep_events.push_back(e);
+        }
+        ev = primitive->execute(dep_events);
+    } else {
+        ev = res_ev;
+    }
+    #endif
+ 
+    // 
+    // dep_evs = primitive->dynamic_shape_update_impl(res_ev /*empty_ev or unfusion_ev*/) 
+    // execute_primitive for std::tuple<primitive_id, dep_events, res_event, distance>
+    
     // Collect events under any of the following conditions:
     // 1) OOO queue execution
     // 2) Profiling mode is enabled
@@ -1834,6 +1857,52 @@ void network::set_variables_state_info(const std::string& variable_id, const cld
         _variables_state_info.insert({variable_id, layout});
     }
 }
+void network::push_update_impl() {
+    auto& update_impl_Q = this->update_impl_Q;
+    async_preproc_context1->push_task_no_check_key([&update_impl_Q, this] {
+        while (!update_impl_Q.empty()) {
+            std::shared_ptr<primitive_inst> inst = nullptr;
+            {
+                auto cur_inst = update_impl_Q.top();
+                inst = this->get_primitive(cur_inst.first);
+                update_impl_Q.pop();
+            }
+            if (inst->get_status() > UPDATE_SHAPE_WAIT) {
+                continue;
+            }
+            bool all_parents_resolved = true;
+            for (auto dep : inst->dependencies()) {
+                if (dep.first->get_node().is_type<data>() || dep.first->get_node().is_constant())
+                    continue;
+                if (dep.first->dyn_status <= DYNAMIC_STATUS::UPDATE_SHAPE_WAIT) {
+                    all_parents_resolved = false;
+                    break;
+                }
+                if (inst->has_mem_dep_for_shape_infer() && dep.first->dyn_status < DYNAMIC_STATUS::FINISHED) {
+                    all_parents_resolved = false;
+                    break;
+                }
+            }
+            if (all_parents_resolved) {
+                inst->dynamic_shape_update_shape();
+                {
+                    inst->set_status(UPDATE_SHAPE_DONE);
+                    for (auto user : inst->get_user_insts()) {
+                        {
+                            std::lock_guard<std::mutex> lock(_mutex);
+                            if (user->dyn_status >= UPDATE_SHAPE_WAIT)
+                                continue;
+                            update_impl_Q.push(std::make_pair(user->id(), user->get_node().min_distance));
+                            user->set_status(UPDATE_SHAPE_WAIT);
+                        }
+                    }
+                }
+            } else {
+                update_impl_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
+            }
+        }
+    });
+}
 
 void network::push_shape_infer() {
     auto& update_shape_Q = this->update_shape_Q;
@@ -1893,6 +1962,7 @@ void network::push_shape_infer() {
                 inst->dynamic_shape_update_shape();
                 {
                     inst->set_status(UPDATE_SHAPE_DONE);
+//                    update_impl_Q.push(std::make_pair(inst->id(), inst->get_node().min_distance));
 //                    std::cout << "... Finished update shape for " << inst->id() << " now status " << inst->dyn_status << std::endl;
                     for (auto user : inst->get_user_insts()) {
 //                        std::cout << "push  user " << user->id() << std::endl;
