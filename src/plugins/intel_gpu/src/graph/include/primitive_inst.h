@@ -529,8 +529,8 @@ public:
     template<typename T>
     static std::vector<layout> calc_output_layouts(const typed_node& node, const kernel_impl_params& impl_param) { return {}; }
 
-    static kernel_impl_params get_fake_aligned_params(kernel_impl_params const& orig_impl_param) {
-        return std::move(orig_impl_param);
+    static std::pair<kernel_impl_params, bool> get_fake_aligned_params(kernel_impl_params const& orig_impl_param) {
+        return std::make_pair(kernel_impl_params(), false);
     }
 
     typed_primitive_inst_base(network& network, typed_node const& node)

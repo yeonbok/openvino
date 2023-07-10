@@ -87,6 +87,7 @@ struct typed_primitive_impl_ocl : public typed_primitive_impl<PType> {
 
     template<typename ImplType>
     static std::unique_ptr<primitive_impl> create(const typed_program_node<PType>& arg, const kernel_impl_params& impl_param) {
+        std::cout << __FILE__ << ":" << __LINE__ << " Create " << impl_param.desc->id << std::endl;
         // concat buffer fusing for dynamic shape is adaptively applied at runtime. So we need to build dynamic impl at build time.
         if (impl_param.can_be_optimized() && !(impl_param.is_type<concatenation>() && impl_param.is_dynamic())) {
             return make_unique<ImplType>(kernel_selector::kernel_data{});
@@ -105,6 +106,7 @@ private:
 
 protected:
     virtual kernel_arguments_data get_arguments(const typed_primitive_inst<PType>& instance) const {
+        std::cout << __FILE__ << ":" << __LINE__ << " Get arguments for " << instance.id() << std::endl;
         kernel_arguments_data args;
 
         for (size_t i = 0; i < instance.inputs_memory_count(); i++) {
@@ -252,6 +254,7 @@ protected:
         if (instance.can_be_optimized()) {
             return aggregate_events(events, stream, false, instance.is_output());
         }
+        std::cout << __FILE__ << ":" << __LINE__ << " execute_impl of " << instance.id() << std::endl;
         std::vector<event::ptr> tmp_events(events);
         std::vector<event::ptr> all_events;
         OPENVINO_ASSERT(_kernels.size() == _kernel_data.kernels.size(), "[GPU] Mismatch between compiled kernels count and expected kernels data\n",
@@ -268,6 +271,7 @@ protected:
 
             auto& params = _kernel_data.kernels[kd_idx].params;
             auto args = get_arguments(instance);
+            std::cout << __FILE__ << ":" << __LINE__ << " Get arguments done!  " << instance.id() << std::endl;
             args.scalars = &params.scalars;
 
             for (const auto& m : instance.get_intermediates_memories()) {
@@ -280,18 +284,23 @@ protected:
             GPU_DEBUG_TRACE_DETAIL << "Enqueue kernel " << kd_idx << ": gws=[" << gws[0] << ", " << gws[1] << ", " << gws[2] << "] "
                                    << "lws=[" << lws[0] << ", " << lws[1] << ", " << lws[2] << "]"
                                    << (needs_completion_event ? " has_completion_event=true" : "") << std::endl;
-
+            std::cout << __FILE__ << ":" << __LINE__ << " Enqueue kernel  " << instance.id() << std::endl;
             auto ev = stream.enqueue_kernel(*_kernels[kd_idx], params, args, tmp_events, needs_completion_event);
+            std::cout << __FILE__ << ":" << __LINE__ << " Enqueue kernel  done" << instance.id() << std::endl;
             new_events.push_back(ev);
             all_events.push_back(ev);
 
             tmp_events = new_events;
+            std::cout << __FILE__ << ":" << __LINE__ << " Enqueue kernel done  " << instance.id() << std::endl;
         }
 
-        if ((all_events.size() == 0) && (tmp_events.size() > 0))
+        if ((all_events.size() == 0) && (tmp_events.size() > 0)) {
+            std::cout << __FILE__ << ":" << __LINE__ << " execute_impl done  " << instance.id() << " tmp_events: " << tmp_events.size() << std::endl;
             return aggregate_events(tmp_events, stream);
+        }
 
         bool group_events = (all_events.size() > 1);
+        std::cout << __FILE__ << ":" << __LINE__ << " execute_impl done  " << instance.id() << " all_events : " << all_events.size() << std::endl;
         return aggregate_events(all_events, stream, group_events);
     }
 

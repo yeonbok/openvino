@@ -38,6 +38,14 @@ struct shape_of_impl : public typed_primitive_impl<shape_of> {
 
     event::ptr execute_impl(const std::vector<event::ptr>& events, shape_of_inst& instance) override {
         OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, "shape_of::execute_impl");
+        std::cout << "Execute shapeof cpu impl" << std::endl;
+        // TODO : remove below
+        for (auto e : events) {
+            std::cout << "wait for event " << e.get() << std::endl;
+            e->wait();
+        }
+        std::cout << "Shapeof wait event done" << std::endl;
+
         auto& stream = instance.get_network().get_stream();
 
         auto output_mem_ptr = instance.output_memory_ptr();
@@ -57,14 +65,17 @@ struct shape_of_impl : public typed_primitive_impl<shape_of> {
         } else {
             OPENVINO_THROW("[GPU] Couldn't execute shape_of operation: unsupported output data type (", output_dt , ")");
         }
-
-        if (events.size() > 1) {
-            return stream.group_events(events);
-        } else if (events.size() == 1) {
-            return events[0];
-        } else {
-            return stream.create_user_event(true);
-        }
+//
+//        if (events.size() > 1) {
+//            return stream.group_events(events);
+//        } else if (events.size() == 1) {
+//            std::vector<event::ptr> new_events(events);
+//            new_events.push_back(stream.create_user_event(true));
+//            return stream.group_events(new_events);
+//        } else {
+//            return stream.create_user_event(true);
+//        }
+        return stream.create_user_event(true);
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}
@@ -80,25 +91,25 @@ public:
 
 namespace detail {
 
-attach_shape_of_impl::attach_shape_of_impl() {
-    auto formats = {
-        format::bfyx,
-        format::bfzyx,
-        format::bfwzyx,
-    };
-
-    auto types = {
-        data_types::f32,
-        data_types::f16,
-        data_types::u8,
-        data_types::i8,
-        data_types::i32,
-        data_types::i64,
-    };
-
-    implementation_map<shape_of>::add(impl_types::cpu, shape_types::static_shape, shape_of_impl::create, types, formats);
-    implementation_map<shape_of>::add(impl_types::cpu, shape_types::dynamic_shape, shape_of_impl::create, types, formats);
-}
+//attach_shape_of_impl::attach_shape_of_impl() {
+//    auto formats = {
+//        format::bfyx,
+//        format::bfzyx,
+//        format::bfwzyx,
+//    };
+//
+//    auto types = {
+//        data_types::f32,
+//        data_types::f16,
+//        data_types::u8,
+//        data_types::i8,
+//        data_types::i32,
+//        data_types::i64,
+//    };
+//
+//    implementation_map<shape_of>::add(impl_types::cpu, shape_types::static_shape, shape_of_impl::create, types, formats);
+//    implementation_map<shape_of>::add(impl_types::cpu, shape_types::dynamic_shape, shape_of_impl::create, types, formats);
+//}
 
 }  // namespace detail
 }  // namespace cpu

@@ -14,7 +14,7 @@ namespace cldnn {
 class CompilationContext : public ICompilationContext {
 public:
     CompilationContext(InferenceEngine::CPUStreamsExecutor::Config task_executor_config) : _task_executor_config(task_executor_config) {
-        _task_executor_config._streams = 4;
+        _task_executor_config._streams = task_executor_config._streams;
         _task_executor = std::make_shared<InferenceEngine::CPUStreamsExecutor>(_task_executor_config);
     }
 

@@ -400,7 +400,9 @@ void ocl_stream::wait_for_events(const std::vector<event::ptr>& events) {
     }
 
     try {
+        std::cout << "Try wait for events " << std::endl;
         cl::WaitForEvents(clevents);
+        std::cout << "Wait for events finished" << std::endl;
     } catch (cl::Error const& err) {
         throw ocl_error(err);
     }

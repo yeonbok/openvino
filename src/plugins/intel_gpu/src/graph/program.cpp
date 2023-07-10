@@ -517,7 +517,7 @@ void program::init_graph() {
     apply_opt_pass<mark_nodes>();
 
     // Perform initial shape_of subgraphs markup
-    apply_opt_pass<mark_shape_of_subgraphs>();
+//    apply_opt_pass<mark_shape_of_subgraphs>();
 }
 
 void program::run_graph_compilation() { apply_opt_pass<compile_graph>(); }
@@ -569,7 +569,7 @@ void program::pre_optimize_graph(bool is_internal) {
 
     apply_opt_pass<prepare_padding>(output_size_handling_enabled);
 
-    apply_opt_pass<remove_redundant_reorders>(lo, optimize_data);
+//    apply_opt_pass<remove_redundant_reorders>(lo, optimize_data);
 
     if (!is_internal) {
         // ToDo remove hidden dependencies from propagate_constants pass
@@ -589,7 +589,7 @@ void program::pre_optimize_graph(bool is_internal) {
 
     // Call shape_of subgraphs markup second time to update newely added nodes after graph
     // optimization passes
-    apply_opt_pass<mark_shape_of_subgraphs>(true);
+//    apply_opt_pass<mark_shape_of_subgraphs>(true);
 }
 
 void program::post_optimize_graph(bool is_internal) {
@@ -602,7 +602,7 @@ void program::post_optimize_graph(bool is_internal) {
     set_layout_optimizer_attributes(lo);
     apply_opt_pass<post_optimize_weights>(rf);
 
-    apply_opt_pass<remove_redundant_reorders>(lo, false, true);  // TODO: do we need it at this place also?
+//    apply_opt_pass<remove_redundant_reorders>(lo, false, true);  // TODO: do we need it at this place also?
 
     auto partial_build = _config.get_property(ov::intel_gpu::partial_build_program);
 #ifdef GPU_DEBUG_CONFIG

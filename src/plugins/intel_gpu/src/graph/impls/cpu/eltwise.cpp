@@ -188,6 +188,7 @@ struct eltwise_impl : public typed_primitive_impl<eltwise> {
 
         ev->set();
 
+//        std::cout << instance.id() << ": Finished exec (output mem " << output_mem_ptr->buffer_ptr() << std::endl;
         return ev;
     }
 

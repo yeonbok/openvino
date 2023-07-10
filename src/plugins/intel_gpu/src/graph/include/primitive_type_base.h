@@ -119,7 +119,7 @@ struct primitive_type_base : primitive_type {
         return res;
     }
 
-    kernel_impl_params get_fake_aligned_params(kernel_impl_params const& orig_impl_param) const override {
+    std::pair<kernel_impl_params, bool> get_fake_aligned_params(kernel_impl_params const& orig_impl_param) const override {
         return typed_primitive_inst<PType>::get_fake_aligned_params(orig_impl_param);
     }
 

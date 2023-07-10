@@ -70,7 +70,7 @@ struct concatenation_impl : public typed_primitive_impl<concatenation> {
 
         auto output_mem_ptr = instance.output_memory_ptr();
 
-        cldnn::mem_lock<uint8_t, mem_lock_type::read> output_lock(output_mem_ptr, stream);
+        cldnn::mem_lock<uint8_t, mem_lock_type::write> output_lock(output_mem_ptr, stream);
 
         for (size_t i = 0; i < input_mem_ptrs.size(); i++)
             input_host_tensors.push_back(make_tensor(input_mem_ptrs[i]->get_layout(), input_mem_ptrs[i]->lock(stream, mem_lock_type::read)));
@@ -81,13 +81,13 @@ struct concatenation_impl : public typed_primitive_impl<concatenation> {
             op = std::make_shared<ov::op::v0::Concat>();
             op->set_axis(instance.get_typed_desc<concatenation>()->axis);
         }
-
         OPENVINO_ASSERT(op->evaluate(output_host_tensors, input_host_tensors),
                         "[GPU] Couldn't execute concat primitive with id ", instance.id());
 
         for (size_t i = 0; i < input_mem_ptrs.size(); i++)
             input_mem_ptrs[i]->unlock(stream);
 
+//        std::cout << instance.id() << ": Finished exec (output mem " << output_mem_ptr->buffer_ptr() << std::endl;
         ev->set();
 
         return ev;

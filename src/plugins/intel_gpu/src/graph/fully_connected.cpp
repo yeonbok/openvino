@@ -166,7 +166,7 @@ std::vector<layout> fully_connected_inst::calc_output_layouts(fully_connected_no
 }
 
 
-kernel_impl_params fully_connected_inst::get_fake_aligned_params(kernel_impl_params const& orig_impl_param) {
+std::pair<kernel_impl_params,bool> fully_connected_inst::get_fake_aligned_params(kernel_impl_params const& orig_impl_param) {
     // fc_tiled_opt kernel is optimized for row shape aligned by 8.
     // Thus, use fake aligned shape at kernel execution for better performance.
     auto orig_input_layout = orig_impl_param.get_input_layout();
@@ -175,14 +175,14 @@ kernel_impl_params fully_connected_inst::get_fake_aligned_params(kernel_impl_par
                     "in/out layouts should be static for fake alignment!");
     if (orig_input_layout.format == format::bfyx && orig_output_layout.format == format::bfyx) {
         auto updated_param = orig_impl_param;
-        auto input_shape = orig_input_layout.get_partial_shape().to_shape();
+        auto input_shape = updated_param.get_input_layout().get_partial_shape().to_shape();
         auto input_row_idx = input_shape.size() - 2;
-        auto output_shape = orig_output_layout.get_partial_shape().to_shape();
+        auto output_shape = updated_param.get_output_layout().get_partial_shape().to_shape();
         auto output_row_idx = output_shape.size() - 2;
 
         // Vector by matrix multiplication sometimes works slower if we align it
         if (input_shape[input_row_idx] == 1 && output_shape[output_row_idx] == 1 && input_shape[input_shape.size() - 1] >= 1024) {
-            return std::move(orig_impl_param);
+            return std::make_pair(kernel_impl_params(), false);
         }
 
         input_shape[input_row_idx] = align_to(input_shape[input_row_idx], 8);
@@ -196,9 +196,9 @@ kernel_impl_params fully_connected_inst::get_fake_aligned_params(kernel_impl_par
                                              orig_output_layout.data_type,
                                              orig_output_layout.format,
                                              orig_output_layout.data_padding);
-        return updated_param;
+        return std::make_pair(updated_param, true);
     }
-    return std::move(orig_impl_param);
+    return std::make_pair(kernel_impl_params(), false);
 }
 
 template std::vector<layout> fully_connected_inst::calc_output_layouts<ov::PartialShape>(fully_connected_node const& node,

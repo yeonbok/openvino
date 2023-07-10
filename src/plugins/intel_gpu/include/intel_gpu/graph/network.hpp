@@ -248,8 +248,8 @@ public:
     std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> update_shape_Q;
     std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> update_impl_Q;
     std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> execute_Q;
-    void push_shape_infer();
-    void push_update_impl();
+    void push_shape_infer(const std::vector<event::ptr>& events);
+    void push_update_impl(primitive_id id, const std::vector<event::ptr>& events);
 
 private:
     using output_chains_map = std::map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>>;

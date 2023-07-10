@@ -194,6 +194,7 @@ void primitive_inst::set_output_memory(memory::ptr mem_new, bool check, size_t i
 }
 
 void primitive_inst::update_shape() {
+    std::cout << "Update shape for " << id() << std::endl;
     GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::shape_inference);
     if (update_shape_done_by_other) {
         update_shape_done_by_other = false; // reset
@@ -224,20 +225,20 @@ void primitive_inst::update_shape() {
     }
 
     // Do not update shapes in shape_of subraph if shape_of's input shape is not changed
-    if (_node->is_in_shape_of_subgraph()) {
-        bool subgraph_input_changed = false;
-        for (size_t i = 0; i < dependant_shape_of_insts.size(); i++) {
-            if (dependant_shape_of_insts[i]->shape_changed()) {
-                subgraph_input_changed = true;
-                break;
-            }
-        }
-        if (!subgraph_input_changed) {
-            GPU_DEBUG_TRACE_DETAIL << id() << ": skip shape_update, because it is in shape_of_subgrap and input shape is not changed\n";
-            reset_shape_change();
-            return;
-        }
-    }
+//    if (_node->is_in_shape_of_subgraph()) {
+//        bool subgraph_input_changed = false;
+//        for (size_t i = 0; i < dependant_shape_of_insts.size(); i++) {
+//            if (dependant_shape_of_insts[i]->shape_changed()) {
+//                subgraph_input_changed = true;
+//                break;
+//            }
+//        }
+//        if (!subgraph_input_changed) {
+//            GPU_DEBUG_TRACE_DETAIL << id() << ": skip shape_update, because it is in shape_of_subgrap and input shape is not changed\n";
+//            reset_shape_change();
+//            return;
+//        }
+//    }
 
 
     if (has_mem_dep_for_shape_infer())
@@ -264,13 +265,16 @@ void primitive_inst::update_shape() {
         }
         // Events may be not created for in-order queue, so take them for OOO queue only
         if (_network.has_event(dep.id()) && queue_type == QueueTypes::out_of_order) {
-            dependencies_events.push_back(_network.get_primitive_event(dep_id));
-            GPU_DEBUG_TRACE_DETAIL << id() << ": shape infer waits for " << i << " dependency\n";
+            const auto& dep_event = _network.get_primitive_event(dep_id);
+            dependencies_events.push_back(dep_event);
+            //GPU_DEBUG_TRACE_DETAIL << id() << ": shape infer waits for " << i << " dependency\n";
+            std::cout << id() << ": shape infer waits for " << i << " dependency (" << dep_id << " : " << dep_event.get() << std::endl;
         }
         auto dep_mem = _network.get_output_memory(dep_id);
         memory_deps.insert({i, dep_mem});
-        if (!dep.is_in_shape_of_subgraph())
-            has_runtime_deps = true;
+//        if (!dep.is_in_shape_of_subgraph())
+//            has_runtime_deps = true;
+        has_runtime_deps = true;
     }
 
     if (has_runtime_deps) {
@@ -284,6 +288,7 @@ void primitive_inst::update_shape() {
     _impl_params->memory_deps = memory_deps;
 
     auto update_output_layout = [&](layout& layout, size_t idx) {
+        std::cout << "update_output_layout for " << _node->id() << std::endl;
         layout.data_padding = padding::max(_node->get_primitive()->output_paddings[idx], layout.data_padding);
         if (_impl_params->get_output_layout(idx) != layout) {
             GPU_DEBUG_TRACE_DETAIL << id() << ": update shape: was: " << _impl_params->get_output_layout(idx).to_short_string()
@@ -309,6 +314,7 @@ void primitive_inst::update_shape() {
     for (auto& fused_prim : _impl_params->fused_desc) {
         fused_prim.output_layout.set_partial_shape(_impl_params->get_output_layout().get_partial_shape());
     }
+    std::cout << "Update shape done for " << id() << std::endl;
 }
 
 event::ptr primitive_inst::realloc_if_needed() {
@@ -326,8 +332,9 @@ event::ptr primitive_inst::realloc_if_needed() {
         }
     }
     // Update param if fake_alignment is available
-    auto updated_params = _node->type()->get_fake_aligned_params(*_impl_params);
-    auto actual_layout = updated_params.get_output_layout();
+    auto fake_aligned_params = _node->type()->get_fake_aligned_params(*_impl_params);
+    kernel_impl_params* updated_params = fake_aligned_params.second ? &fake_aligned_params.first : _impl_params.get();
+    auto actual_layout = updated_params->get_output_layout();
     OPENVINO_ASSERT(actual_layout.is_static(), "[GPU] Can't realloc mem for dynamic layout");
 
     // input_layout node is supposed to always use external memory in dynamic case
@@ -359,9 +366,9 @@ event::ptr primitive_inst::realloc_if_needed() {
         GPU_DEBUG_TRACE_DETAIL << id() << ": realloc output memory. "
                                <<  " Current buffer_size=" << max_output_layout_size
                                <<  " Requested buffer_size=" << actual_layout.count() << std::endl;
-        _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
+        _outputs = allocate_outputs(updated_params, need_reset_output_memory(), true);
         // TODO : need to handle multiple outputs
-        max_output_layout_size = updated_params.output_layouts[0].count();
+        max_output_layout_size = updated_params->output_layouts[0].count();
     }
     // intermediate memory allocation is required for primitives consisting of multiple kernels in dynamic case
     {
@@ -470,7 +477,9 @@ bool primitive_inst::update_impl() {
 
     if (!_node->is_type<data>() && !(_node->is_type<mutable_data>() && _node->get_dependencies().empty())) {
         // Update param if fake_alignment is available
-        auto updated_params = _node->type()->get_fake_aligned_params(*_impl_params);
+       // auto updated_params = _node->type()->get_fake_aligned_params(*_impl_params);
+        auto fake_aligned_params = _node->type()->get_fake_aligned_params(*_impl_params);
+        kernel_impl_params updated_params = fake_aligned_params.second ? fake_aligned_params.first : *_impl_params.get();
         // Change weights layout of `updated_params` to original one to have valid information
         // in _impl->_weights_reorder_params about required weights format after impl selection
         if (_node->is_type<fully_connected>() || _node->is_type<convolution>() || _node->is_type<deconvolution>()) {
@@ -662,6 +671,7 @@ event::ptr primitive_inst::dynamic_shape_unfusion(const std::vector<event::ptr>&
     } else {
         return nullptr;
     }
+    return nullptr;
 }
 
 void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& dep_events) {
@@ -680,7 +690,6 @@ void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& de
             return;
         }
 
-        need_args_update = true;
         event::ptr unfusion_ev = dynamic_shape_unfusion(dep_events);
         if (unfusion_ev != nullptr) {
             runtime_res_ev = unfusion_ev;
@@ -688,15 +697,24 @@ void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& de
         }
 
         if (update_impl()) {
+            std::cout << "Updated impl done or shape is changed  => do update weight && realloc_mem" << id() << std::endl;
+            need_args_update = true;
+            std::cout << "Start update_weight for " << id() << std::endl;
             auto ev = update_weights();
             if (ev)
                 runtime_dep.push_back(ev);
+            std::cout << "Start realloc mem for " << id() << std::endl;
             auto ev_reset = realloc_if_needed();
             if (ev_reset)
                 runtime_dep.push_back(ev_reset);
+        } else {
+            std::cout << id() << " : Update_impl returned false " << std::endl;
+            std::cout << id() << " input0 layout : " << _impl_params->input_layouts[0].to_string() << std::endl;
+            std::cout << id() << " output layout : " << _impl_params->output_layouts[0].to_string() << std::endl;
         }
     }
 
+    std::cout << "Runtime dep  for " << id() << " : " << runtime_dep.size() << std::endl;
     OPENVINO_ASSERT(_impl_params->get_output_layout().is_static(),
                     "[GPU] Can't execute ",
                     id(),
@@ -704,8 +722,23 @@ void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& de
 
     OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", id(), " primitive");
     update_shape_done_by_other = false;  // reset
-    if ((is_dynamic() && need_args_update)) {
+    if ((is_dynamic() && need_args_update) || has_mutable_input() || is_output()) {
+        // set arg need to wait until all parent's update_impl is finished
+   //     bool all_parents_done = false;
+   //     std::cout << "Start set argument for " << id() << std::endl;
+   //     while (!all_parents_done) {
+   //         all_parents_done = true;
+   //         for (auto dep : _deps) {
+   //             if (dep.first->dyn_status < EXECUTE_WAIT) {
+   //                 //input memory is not allocated yet
+   //                 all_parents_done = false;
+   //                 break;
+   //             }
+   //         }
+   //     }
+        std::cout << "Ready set argument for " << id() << std::endl;
         set_arguments();
+        std::cout << "Done set argument for " << id() << std::endl;
     }
 }
 
@@ -717,9 +750,9 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
 
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
-    if (has_mutable_input() || is_output()) {
-        set_arguments();
-    }
+//    if (has_mutable_input() || is_output()) {
+//        set_arguments();
+//    }
     on_execute();
     GPU_DEBUG_TRACE << id() << ": execute " << _impl->get_kernel_name() << std::endl;
 
@@ -1098,7 +1131,7 @@ static bool user_requesting_mem_reuse_false(const program_node& node) {
 
 memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, const program_node& _node, const kernel_impl_params& impl_params,
                                 uint32_t net_id, bool is_internal, size_t idx, bool reset, bool is_output_buffer, memory* curr_memory, bool runtime_alloc) {
-    auto get_memory_from_pool = [&](engine& _engine, const layout& layout, const primitive_id id, std::set<primitive_id> dependencies,
+    auto get_memory_from_pool = [](engine& _engine, uint32_t net_id, memory_pool& pool, const program_node& _node, const layout& layout, const primitive_id id, std::set<primitive_id> dependencies,
             allocation_type type, bool reusable, bool reset = true, memory* curr_memory = nullptr) {
         OPENVINO_ASSERT(!layout.is_dynamic() || layout.has_upper_bound(), "[GPU] Can't allocate output for dynamic layout without upper bound");
         // Use layout with max tensor for dynamic shape with upper bound
@@ -1148,6 +1181,9 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
                 _engine.supports_allocation(allocation_type::usm_device))
                 alloc_type = allocation_type::usm_device;
             return get_memory_from_pool(_engine,
+                                        net_id, 
+                                        pool,
+                                        _node, 
                                         layout,
                                         _node.id(),
                                         _node.get_memory_dependencies(),
@@ -1166,6 +1202,9 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
         return _engine.allocate_memory(layout, alloc_type, reset);
     } else {
         return get_memory_from_pool(_engine,
+                                    net_id,
+                                    pool,
+                                    _node,
                                     layout,
                                     _node.id(),
                                     _node.get_memory_dependencies(),
