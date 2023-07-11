@@ -14,7 +14,7 @@ namespace cldnn {
 class CompilationContext : public ICompilationContext {
 public:
     CompilationContext(InferenceEngine::CPUStreamsExecutor::Config task_executor_config) : _task_executor_config(task_executor_config) {
-        _task_executor_config._streams = 4;
+        _task_executor_config._streams = task_executor_config._streams;
         _task_executor = std::make_shared<InferenceEngine::CPUStreamsExecutor>(_task_executor_config);
     }
 
@@ -38,6 +38,16 @@ public:
         if (_task_executor != nullptr)
             _task_executor->run(task);
     }
+
+    void push_task_no_check_key_and_wait(std::vector<Task> tasks) override {
+        if (_stop_compilation)
+            return;
+
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (_task_executor != nullptr)
+            _task_executor->runAndWait(tasks);
+    }
+
 
     void remove_keys(std::vector<size_t>&& keys) override {
         std::lock_guard<std::mutex> lock(_mutex);

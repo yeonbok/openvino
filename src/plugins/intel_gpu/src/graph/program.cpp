@@ -217,9 +217,8 @@ void program::init_program() {
     _compilation_context = ICompilationContext::create(compilation_context_config);
 
     auto preproc_context_config = make_task_executor_config(_config, "Task executor config for CompilationContext in GPU plugin");
-    preproc_context_config._streams = 1;
-    _async_preproc_context_1 = ICompilationContext::create(preproc_context_config);
-    _async_preproc_context_2 = ICompilationContext::create(preproc_context_config);
+    preproc_context_config._streams = 3;
+    _async_preproc_context = ICompilationContext::create(preproc_context_config);
 
     _impls_cache = cldnn::make_unique<ImplementationsCache>(_impls_cache_capacity);
     // Remove items of compilation context's internal queue when some impl is popped in kernels_cache

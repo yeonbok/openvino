@@ -192,7 +192,7 @@ public:
     const program::graph_optimizer_info& get_optimizer_passes_info() const;
     std::map<primitive_id, primitive_id> get_ext_id_mapping() const;
     void execute_impl(const std::vector<event::ptr>& events);
-    void execute_impl_async(const std::vector<event::ptr>& events);
+    void execute_impl_async2(const std::vector<event::ptr>& events);
 
     /// @brief Executes network and returns the list of @ref network_output.
     /// @param dependencies List of @ref event objects to be waited before network execution.
@@ -247,12 +247,6 @@ public:
     struct compare_pq_2 {
         bool operator() (std::pair<primitive_id, int32_t>& a, std::pair<primitive_id, int32_t>& b);
     };
- 
-    std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> update_shape_Q;
-    std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> update_impl_Q;
-    std::priority_queue<std::pair<const primitive_id, int32_t>, std::vector<std::pair<primitive_id, int32_t>>, compare_pq_2> execute_Q;
-    void push_shape_infer();
-    void push_update_impl();
 
     ShapePredictor& get_shape_predictor() { return *_shape_predictor; }
 
@@ -273,8 +267,7 @@ private:
     uint32_t _local_net_id = 0;     // This is for thread-safe deserialization. 'net_id' is globally unique,
                                     // but '_local_net_id' is unique only in each intel_gpu::Graph.
 
-    std::shared_ptr<cldnn::ICompilationContext> async_preproc_context1;
-    std::shared_ptr<cldnn::ICompilationContext> async_preproc_context2;
+    std::shared_ptr<cldnn::ICompilationContext> async_preproc_context;
     std::unordered_map<primitive_id, std::shared_ptr<primitive_inst>> _primitives;
     std::vector<shared_mem_type> _in_out_shared_mem_types;
     std::vector<std::shared_ptr<primitive_inst>> _inputs;

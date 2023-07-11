@@ -138,6 +138,46 @@ kernel_impl_params primitive_impl::static_canonicalize_shapes(const kernel_impl_
     return updated_impl_params;
 }
 
+std::vector<std::shared_ptr<const primitive_inst>> primitive_inst::get_unresolved_deps() const {
+    std::vector<std::shared_ptr<const primitive_inst>> res;
+    size_t idx = 0;
+    for (auto dep : dependencies()) {
+        if (dep.first->is_constant() || dep.first->get_node().is_type<data>()) {
+            idx++;
+            continue;
+        }
+        if (actual_shape_infer_mem_deps & (1 << idx)) {
+            if (dep.first->dyn_status < FINISHED) {
+                res.push_back(dep.first);
+            }
+        } else if (dep.first->dyn_status <= UPDATE_SHAPE_WAIT) {
+            res.push_back(dep.first);
+        }
+        idx++;
+    }
+    return res;
+
+}
+size_t primitive_inst::get_total_unresolved_shape_infer_dep() const {
+    size_t total_unresolved_shape_infer_dep = 0;
+    size_t idx = 0;
+    for (auto dep : dependencies()) {
+        if (dep.first->is_constant() || dep.first->get_node().is_type<data>()) {
+            idx++;
+            continue;
+        }
+        if (actual_shape_infer_mem_deps & (1 << idx)) {
+            if (dep.first->dyn_status < FINISHED) {
+                total_unresolved_shape_infer_dep++;
+            }
+        } else if (dep.first->dyn_status <= UPDATE_SHAPE_WAIT) {
+            total_unresolved_shape_infer_dep++;
+        }
+        idx++;
+    }
+    return total_unresolved_shape_infer_dep;
+}
+
 uint32_t primitive_inst::get_network_id() const { return _network.get_id(); }
 
 void primitive_inst::check_memory_to_set(const memory& mem, const layout& layout) const {
@@ -275,6 +315,7 @@ void primitive_inst::update_shape() {
 
     if (has_runtime_deps) {
         if (!dependencies_events.empty() && queue_type == QueueTypes::out_of_order) {
+//            std::cout << "[" << id() << "] Wait for event " << std::endl;
             _network.get_stream().wait_for_events(dependencies_events);
         } else if (queue_type == QueueTypes::in_order) {
             _network.get_stream().finish();
@@ -878,6 +919,18 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
     , _can_share_buffer(node.can_share_buffer())
     , _is_constant(node.is_constant())
     , _needs_completion_event(is_any_user_cpu(node.get_users()) || node.is_output()) {
+    auto const_mem_deps = _node->get_const_memory_deps();
+    for (auto& i : _node->get_shape_infer_dependencies()) {
+        // Some primitives may have flexible count of deps (e.g. reshape), thus allow skipping some deps
+        if (const_mem_deps.count(i) > 0 || i >= _node->get_dependencies().size()) {
+            continue;
+        }
+        // exclude fused node from memory_deps
+        if (_node->is_fused_dep(i))
+            break;
+        actual_shape_infer_mem_deps |= (1 << i);
+        unresolved_mem_deps = actual_shape_infer_mem_deps;
+    }
     if (allocate_memory) {
         // In case when output is mutable_data primitive, and other users dependencies are only used for
         // suychronization, The output memory of such primitive will be fused with mutable_data

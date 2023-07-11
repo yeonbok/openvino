@@ -297,7 +297,20 @@ public:
     void set_inner_networks(const std::vector<network::ptr> inner_nets) {
         _impl_params->inner_nets = inner_nets;
     }
+    size_t get_total_unresolved_shape_infer_dep() const;
 
+    std::vector<std::shared_ptr<const primitive_inst>> get_unresolved_deps() const;
+
+    size_t get_num_unresolved_mem_dep() const {
+        int unresolved_mem_dep_count = 0;
+        auto unresolved_mem_dep_copy = unresolved_mem_deps;
+        while (unresolved_mem_dep_copy) {
+            unresolved_mem_dep_count++;
+            unresolved_mem_dep_copy >>= 1;
+        }
+        return unresolved_mem_dep_count;
+    }
+    int32_t unresolved_mem_deps = 0; // bitvector
 #ifdef ENABLE_ONEDNN_FOR_GPU
     std::vector<cldnn::fused_primitive_desc_onednn>& get_fused_primitives_onednn() const { return _impl_params->fused_desc_onednn; }
 #endif // ENABLE_ONEDNN_FOR_GPU
@@ -317,6 +330,8 @@ protected:
 
     bool update_shape_done_by_other = false;
     bool allocation_done_by_other = false;
+
+    int32_t actual_shape_infer_mem_deps = 0; //bitvector
     std::unique_ptr<kernel_impl_params> _impl_params;
     std::unique_ptr<primitive_impl> _impl;
     std::unique_ptr<primitive_impl> _dynamic_impl = nullptr;

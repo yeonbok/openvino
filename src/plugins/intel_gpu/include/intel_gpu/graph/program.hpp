@@ -259,9 +259,7 @@ public:
 
     ImplementationsCache& get_implementations_cache() const { return *_impls_cache; }
     ICompilationContext& get_compilation_context() const { return *_compilation_context; }
-    std::shared_ptr<ICompilationContext> get_preproc_context1() const { return _async_preproc_context_1; }
-    std::shared_ptr<ICompilationContext> get_preproc_context2() const { return _async_preproc_context_2; }
-//    ICompilationContext& get_preproc_context2() const { return *_async_preproc_context_2; }
+    std::shared_ptr<ICompilationContext> get_preproc_context() const { return _async_preproc_context; }
     void cancel_compilation_context();
 
     static std::shared_ptr<InferenceEngine::CPUStreamsExecutor> make_task_executor(const ExecutionConfig& config);
@@ -282,8 +280,7 @@ private:
     std::unique_ptr<ImplementationsCache> _impls_cache;
     const size_t _impls_cache_capacity = 10000;
     std::shared_ptr<ICompilationContext> _compilation_context;
-    std::shared_ptr<ICompilationContext> _async_preproc_context_1;
-    std::shared_ptr<ICompilationContext> _async_preproc_context_2;
+    std::shared_ptr<ICompilationContext> _async_preproc_context;
 
     std::map<primitive_id, std::shared_ptr<program_node>> nodes_map;
     std::list<primitive_id> optimized_out;
