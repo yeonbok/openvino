@@ -141,6 +141,7 @@ public:
     engine& get_engine() const { return _engine; }
     const ExecutionConfig& get_config() const { return _config; }
     InferenceEngine::CPUStreamsExecutor::Ptr get_task_executor() const { return _task_executor; }
+    InferenceEngine::CPUStreamsExecutor::Ptr get_dyn_shape_preproc_executor() const { return _dynamic_shape_executor; }
     std::list<program_node*>& get_inputs() {
         return inputs;
     }  // ToDo: redesign trim to ouptut pass to make it const as_well as get_engine and get options
@@ -259,10 +260,10 @@ public:
 
     ImplementationsCache& get_implementations_cache() const { return *_impls_cache; }
     ICompilationContext& get_compilation_context() const { return *_compilation_context; }
-    std::shared_ptr<ICompilationContext> get_preproc_context() const { return _async_preproc_context; }
     void cancel_compilation_context();
 
     static std::shared_ptr<InferenceEngine::CPUStreamsExecutor> make_task_executor(const ExecutionConfig& config);
+    std::shared_ptr<InferenceEngine::CPUStreamsExecutor> make_task_executor(const InferenceEngine::CPUStreamsExecutor::Config& config);
 
 private:
     uint32_t prog_id = 0;
@@ -272,6 +273,7 @@ private:
     std::unique_ptr<kernels_cache> _kernels_cache;
     ExecutionConfig _config;
     std::shared_ptr<InferenceEngine::CPUStreamsExecutor> _task_executor = nullptr;
+    std::shared_ptr<InferenceEngine::CPUStreamsExecutor> _dynamic_shape_executor = nullptr;
     std::list<program_node*> inputs;
     std::vector<program_node*> outputs;
     nodes_ordering processing_order;
@@ -279,8 +281,7 @@ private:
     bool is_body_program;
     std::unique_ptr<ImplementationsCache> _impls_cache;
     const size_t _impls_cache_capacity = 10000;
-    std::shared_ptr<ICompilationContext> _compilation_context;
-    std::shared_ptr<ICompilationContext> _async_preproc_context;
+    std::unique_ptr<ICompilationContext> _compilation_context;
 
     std::map<primitive_id, std::shared_ptr<program_node>> nodes_map;
     std::list<primitive_id> optimized_out;

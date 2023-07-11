@@ -1,7 +1,6 @@
 // Copyright (C) 2018-2023 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
-#define DUMP_LOGS 0
 #include "intel_gpu/primitives/data.hpp"
 #include "intel_gpu/primitives/mutable_data.hpp"
 #include "intel_gpu/primitives/input_layout.hpp"
@@ -326,7 +325,6 @@ network::network(program::ptr program, const ExecutionConfig& config, stream::pt
     , _shape_predictor(new ShapePredictor(&program->get_engine(), config.get_property(ov::intel_gpu::buffers_preallocation_ratio))) {
     if (!_internal) {
         net_id = get_unique_net_id();
-        async_preproc_context = get_program()->get_preproc_context();
     }
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -351,6 +349,8 @@ network::network(program::ptr program, const ExecutionConfig& config, stream::pt
     build_exec_order();
     validate_primitives();
     add_default_output_chains();
+    if (std::getenv("DUMP_LOG") != nullptr)
+        dump_logs = 1;
 }
 
 network::network(engine& engine,
@@ -549,9 +549,6 @@ network::~network() {
     }
 }
 
-bool network::compare_pq_2::operator() (std::pair<primitive_id, int32_t>& a, std::pair<primitive_id, int32_t>& b) {
-    return (a.second > b.second);
-}
 
 // Cache blob format:
 //     [ cldnn::kernels_cache ]
@@ -1366,11 +1363,12 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
     // Wait for previous execution completion
     int64_t curr_iter = -1;
     reset_execution(false);
+    auto dynamic_executor = _program->get_dyn_shape_preproc_executor();
     GPU_DEBUG_TRACE << "----------------------------------------------" << std::endl;
     GPU_DEBUG_TRACE << "Start network execution " << curr_iter << std::endl;
-    #if DUMP_LOGS
-    std::cout << "Start network execution with execute_impl_async2 " << curr_iter << std::endl;
-    #endif
+    if (dump_logs) {
+        std::cout << "Start network execution with execute_impl_async2 " << curr_iter << std::endl;
+    }
     std::vector<memory::ptr> in_out_mem;
     auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
         return shared_mem_type == shared_mem_type::shared_mem_vasurface ||
@@ -1476,6 +1474,7 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         }
     }
 
+    // TODO: actually no need to store these to container
     std::set<std::shared_ptr<primitive_inst>, shape_infer_priority> update_impl_Q;
     std::set<std::shared_ptr<primitive_inst>, shape_infer_priority> exec_Q;
     while (!shape_infer_pq.empty() || !update_impl_Q.empty() || !exec_Q.empty()) {
@@ -1487,9 +1486,11 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         if (!shape_infer_pq.empty()) {
             auto shape_infer_i = shape_infer_pq.top();
 
-    #if DUMP_LOGS
-            std::cout << shape_infer_i->id() <<  "Unresolved deps : " << shape_infer_i->get_total_unresolved_shape_infer_dep() << std::endl;
-    #endif
+            if (dump_logs) {
+                std::cout << shape_infer_i->id()
+                          << "Unresolved deps : " << shape_infer_i->get_total_unresolved_shape_infer_dep() << std::endl;
+            }
+            // TODO: refactor this
             if (shape_infer_pq.top()->get_total_unresolved_shape_infer_dep() == 0) {
                 inst_shape_infer = shape_infer_pq.top();
                 tasks.push_back([&inst_shape_infer, &shape_infer_pq] {
@@ -1510,96 +1511,93 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         if (!exec_Q.empty()) {
             inst_exec = *exec_Q.begin();
             tasks.push_back([&inst_exec, &events, this, &shape_infer_pq] {
+                // no need to check dependency becuase it is already resolved by shape infer..
                 this->execute_primitive(inst_exec, events);
                 inst_exec->set_status(FINISHED);
-                // TODO : refactor this
-                if (inst_exec->get_node().is_shape_infer_dep()) {
-                    for (auto user : inst_exec->get_user_insts()) {
-                        for (auto dep_idx : user->get_node().get_shape_infer_dependencies()) {
-                            if (user->get_node().get_dependencies().size() <= dep_idx) {
-                                continue;
-                            }
-                            if (user->get_node().is_fused_dep(dep_idx)) {
-                                continue;
-                            }
-                            if (user->get_node().get_dependencies().at(dep_idx).first->id() == inst_exec->id()) {
-                                // reduce mem_dep
-                                user->unresolved_mem_deps &= (~(1 << dep_idx));
-                                // reenqueue
-    #if DUMP_LOGS
-                                std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
-    #endif
-                                shape_infer_pq.erase(user);
-                                shape_infer_pq.push(user);
-                            }
-                        }     
+                auto users_with_shape_infer_dep = inst_exec->get_users_with_shape_infer_dep();
+                for (auto d : users_with_shape_infer_dep) {
+                    auto user = d.first;
+                    auto dep_idx = d.second;
+                    user->unresolved_mem_deps &= (~(1 << dep_idx));
+                    if (this->dump_logs) {
+                        std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
                     }
+                    shape_infer_pq.erase(user);
+                    shape_infer_pq.push(user);
                 }
             });
             exec_Q.erase(exec_Q.begin());
-        } 
-    #if DUMP_LOGS
-        std::cout << "##################### Run stages #############" << std::endl;
-        if (inst_shape_infer)
-            std::cout << "Shape infer for " << inst_shape_infer->id() << std::endl;
-        if (inst_update_impl)
-            std::cout << "Update impl for " << inst_update_impl->id() << std::endl;
-        if (inst_exec)
-            std::cout << "Execute for " << inst_exec->id() << std::endl;
-        std::cout << "##################################" << std::endl;
-    #endif
-        async_preproc_context->push_task_no_check_key_and_wait(tasks);
-    #if DUMP_LOGS
-        std::cout << "##################################" << std::endl;
-        if (inst_shape_infer) {
-            std::cout << "After shape infer, " << inst_shape_infer->id() << " output : " << inst_shape_infer->get_impl_params()->get_output_layout().to_string() << std::endl;
         }
-    #endif
-        // add update impl task 
+        if (dump_logs) {
+            std::cout << "##################### Run stages #############" << std::endl;
+            if (inst_shape_infer)
+                std::cout << "Shape infer for " << inst_shape_infer->id() << std::endl;
+            if (inst_update_impl)
+                std::cout << "Update impl for " << inst_update_impl->id() << std::endl;
+            if (inst_exec)
+                std::cout << "Execute for " << inst_exec->id() << std::endl;
+            std::cout << "##################################" << std::endl;
+        }
+        // TODO : no need to use this wrapper class. Just use task executor directly
+        dynamic_executor->runAndWait(tasks);
+        tasks.clear();
+        if (dump_logs) {
+            std::cout << "##################################" << std::endl;
+            if (inst_shape_infer) {
+                std::cout << "After shape infer, " << inst_shape_infer->id()
+                          << " output : " << inst_shape_infer->get_impl_params()->get_output_layout().to_string()
+                          << std::endl;
+            }
+        }
+        // add update impl task
         // add exec task
         if (inst_shape_infer != nullptr) {
-    #if DUMP_LOGS
-            std::cout << "Add users of " << inst_shape_infer->id() << std::endl;
-    #endif
+            if (dump_logs) {
+                std::cout << "-- Add users of " << inst_shape_infer->id() << " to shape_infer_Q" << std::endl;
+            }
             for (auto user : inst_shape_infer->get_user_insts()) {
-    #if DUMP_LOGS
-                std::cout << "User " << user->id() << " status : " << user->dyn_status << std::endl;
-    #endif
+                if (dump_logs) {
+                    std::cout << "--- User " << user->id() << " : status : " << user->dyn_status << std::endl;
+                }
                 if (user->dyn_status < UPDATE_SHAPE_WAIT) {
                     user->set_status(UPDATE_SHAPE_WAIT);
-    #if DUMP_LOGS
-                    std::cout << "User " << user->id() << " inserted to the Q" << std::endl;
-//                    shape_infer_Q.insert(user);
-    #endif
+                    if (dump_logs) {
+                        std::cout << "=> User " << user->id() << " inserted to the Q" << std::endl;
+                    }
                     shape_infer_pq.push(user);
                 } else if (user->dyn_status == UPDATE_SHAPE_WAIT) {
                     // already enqueued => reenqueue
+                    if (dump_logs) {
+                        std::cout << "=> User " << user->id() << " already enqueued! reenqueue to the Q" << std::endl;
+                    }
                     shape_infer_pq.erase(user);
                     shape_infer_pq.push(user);
                 }
             }
-            update_impl_Q.insert(inst_shape_infer);            
+            update_impl_Q.insert(inst_shape_infer);
         }
         if (inst_update_impl != nullptr) {
             exec_Q.insert(inst_update_impl);
         }
-        if (inst_exec != nullptr) {
-        }
-    #if DUMP_LOGS
-        std::cout << "==========dump shape infer Q" << std::endl;
-//        for (auto i : shape_infer_Q) {
-        shape_infer_PQ<std::shared_ptr<primitive_inst>, std::vector<std::shared_ptr<primitive_inst>>, shape_infer_priority> dummy_Q = shape_infer_pq;
-        while (!dummy_Q.empty()) {
-            auto i = dummy_Q.top();
-            dummy_Q.pop();
-            std::cout << i->id() << ", proc_order " << i->processing_order << ", total_unresolved_dep " << i->get_total_unresolved_shape_infer_dep()
-                      << ", unresolved_memdep: " << i->unresolved_mem_deps << ", min_dist : " << i->get_node().min_distance << ", max_dist: "
-                      << i->get_node().max_distance << std::endl;
-            for (auto dep : i->get_unresolved_deps()) {
-                std::cout << "--- unresolved dep for " << dep->id() << " (status: " << dep->dyn_status << std::endl;
+        if (dump_logs) {
+            std::cout << "==========dump shape infer Q" << std::endl;
+            shape_infer_PQ<std::shared_ptr<primitive_inst>,
+                           std::vector<std::shared_ptr<primitive_inst>>,
+                           shape_infer_priority>
+                dummy_Q = shape_infer_pq;
+            while (!dummy_Q.empty()) {
+                auto i = dummy_Q.top();
+                dummy_Q.pop();
+                std::cout << i->id() << ", proc_order " << i->processing_order << ", total_unresolved_dep "
+                          << i->get_total_unresolved_shape_infer_dep()
+                          << ", unresolved_memdep: " << i->unresolved_mem_deps
+                          << ", min_dist : " << i->get_node().min_distance
+                          << ", max_dist: " << i->get_node().max_distance << std::endl;
+                for (auto dep : i->get_unresolved_deps()) {
+                    std::cout << "--- unresolved dep for " << dep->id() << " (status: " << dep->dyn_status << std::endl;
+                }
             }
-        } 
-    #endif
+        }
     }
 
    // Store events only in case of OOO queue or enabled Profiling
@@ -1638,10 +1636,11 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         }
     }
 
-    for (auto& prim : _primitives) {
-        if (!prim.second->get_node().is_type<data>() || !prim.second->get_node().is_constant())
-            prim.second->set_status(INIT);
-        prim.second->reset_output_change();
+    for (auto& prim : _exec_order) {
+        // reset status
+        if (!prim->get_node().is_type<data>() || !prim->get_node().is_constant())
+            prim->set_status(INIT);
+        prim->reset_output_change();
     }
 
     // Using output of previous network as input to another one may cause hazard (in OOOQ mode) if user would not

@@ -919,6 +919,7 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
     , _can_share_buffer(node.can_share_buffer())
     , _is_constant(node.is_constant())
     , _needs_completion_event(is_any_user_cpu(node.get_users()) || node.is_output()) {
+    // TODO refactor
     auto const_mem_deps = _node->get_const_memory_deps();
     for (auto& i : _node->get_shape_infer_dependencies()) {
         // Some primitives may have flexible count of deps (e.g. reshape), thus allow skipping some deps
@@ -930,6 +931,12 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
             break;
         actual_shape_infer_mem_deps |= (1 << i);
         unresolved_mem_deps = actual_shape_infer_mem_deps;
+    }
+    for (auto& u : get_users()) {
+        int32_t dep_idx = get_node().get_shape_infer_dep_idx(*u);
+        if (dep_idx >= 0) {
+            users_with_shape_infer_dep.insert(std::make_pair(_network.get_primitive(u->id()), dep_idx)); 
+        }
     }
     if (allocate_memory) {
         // In case when output is mutable_data primitive, and other users dependencies are only used for

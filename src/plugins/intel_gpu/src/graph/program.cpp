@@ -145,6 +145,10 @@ std::shared_ptr<InferenceEngine::CPUStreamsExecutor> program::make_task_executor
     return std::make_shared<InferenceEngine::CPUStreamsExecutor>(task_executor_config);
 }
 
+std::shared_ptr<InferenceEngine::CPUStreamsExecutor> program::make_task_executor(const InferenceEngine::CPUStreamsExecutor::Config& config) {
+    return std::make_shared<InferenceEngine::CPUStreamsExecutor>(config);
+}
+
 program::program(engine& engine_ref,
                  topology const& topology,
                  const ExecutionConfig& config,
@@ -218,8 +222,8 @@ void program::init_program() {
 
     auto preproc_context_config = make_task_executor_config(_config, "Task executor config for CompilationContext in GPU plugin");
     preproc_context_config._streams = 3;
-    _async_preproc_context = ICompilationContext::create(preproc_context_config);
 
+    _dynamic_shape_executor = program::make_task_executor(preproc_context_config);
     _impls_cache = cldnn::make_unique<ImplementationsCache>(_impls_cache_capacity);
     // Remove items of compilation context's internal queue when some impl is popped in kernels_cache
     // compilation context's queue check duplication of inserted task

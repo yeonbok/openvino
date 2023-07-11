@@ -128,12 +128,12 @@ public:
     }
     std::mutex _mutex;
     DYNAMIC_STATUS get_status() {
-        std::lock_guard<std::mutex> lock(_mutex);
+//        std::lock_guard<std::mutex> lock(_mutex);
         return dyn_status;
     }
 
     void set_status(DYNAMIC_STATUS new_stat) {
-        std::lock_guard<std::mutex> lock(_mutex);
+//        std::lock_guard<std::mutex> lock(_mutex);
         dyn_status = new_stat;
     }
     memory& dep_memory(size_t index) const {
@@ -310,7 +310,13 @@ public:
         }
         return unresolved_mem_dep_count;
     }
+    // TODO : refactor
     int32_t unresolved_mem_deps = 0; // bitvector
+
+    const std::unordered_map<std::shared_ptr<primitive_inst>/*user*/, int32_t/*dep_idx*/>& get_users_with_shape_infer_dep() const {
+        return users_with_shape_infer_dep;
+    }
+
 #ifdef ENABLE_ONEDNN_FOR_GPU
     std::vector<cldnn::fused_primitive_desc_onednn>& get_fused_primitives_onednn() const { return _impl_params->fused_desc_onednn; }
 #endif // ENABLE_ONEDNN_FOR_GPU
@@ -330,6 +336,8 @@ protected:
 
     bool update_shape_done_by_other = false;
     bool allocation_done_by_other = false;
+
+    std::unordered_map<std::shared_ptr<primitive_inst>, int32_t> users_with_shape_infer_dep;
 
     int32_t actual_shape_infer_mem_deps = 0; //bitvector
     std::unique_ptr<kernel_impl_params> _impl_params;

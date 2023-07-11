@@ -86,19 +86,24 @@ public:
         if (!myprog.get_config().get_property(ov::intel_gpu::allow_new_shape_infer))
             return false;
         for (auto u : users) {
-            for (auto dep_idx : u->get_shape_infer_dependencies()) {
-                if (u->get_dependencies().size() <= dep_idx) {
-                    continue;
-                }
-                if (u->is_fused_dep(dep_idx)) {
-                    continue;
-                }
-                if (u->get_dependencies().at(dep_idx).first == this) {
-                    return true;
-                }
+            if (get_shape_infer_dep_idx(*u) >= 0) {
+                return true;
             }
         }
         return false;
+    }
+
+    int32_t get_shape_infer_dep_idx(const program_node& user) const {
+        for (auto dep_idx : user.get_shape_infer_dependencies()) {
+            if (user.get_dependencies().size() <= dep_idx)
+                return -1;
+            if (user.is_fused_dep(dep_idx))
+                return -1;
+            if (user.get_dependencies().at(dep_idx).first == this) {
+                return dep_idx;
+            }
+        }
+        return -1;
     }
 
     bool is_fused_dep(size_t dep_idx) const;

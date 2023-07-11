@@ -244,16 +244,13 @@ public:
     void set_variables_state_info(const std::string& variable_id, const cldnn::layout& layout);
 
     const ExecutionConfig& get_config() const { return _config; }
-    struct compare_pq_2 {
-        bool operator() (std::pair<primitive_id, int32_t>& a, std::pair<primitive_id, int32_t>& b);
-    };
 
     ShapePredictor& get_shape_predictor() { return *_shape_predictor; }
 
 private:
     using output_chains_map = std::map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>>;
     uint32_t net_id = 0;
-    std::mutex _mutex;
+    int32_t dump_logs = false;
     program::ptr _program;
     ExecutionConfig _config;
     engine& _engine;
@@ -266,8 +263,6 @@ private:
     bool _reset_arguments;
     uint32_t _local_net_id = 0;     // This is for thread-safe deserialization. 'net_id' is globally unique,
                                     // but '_local_net_id' is unique only in each intel_gpu::Graph.
-
-    std::shared_ptr<cldnn::ICompilationContext> async_preproc_context;
     std::unordered_map<primitive_id, std::shared_ptr<primitive_inst>> _primitives;
     std::vector<shared_mem_type> _in_out_shared_mem_types;
     std::vector<std::shared_ptr<primitive_inst>> _inputs;
