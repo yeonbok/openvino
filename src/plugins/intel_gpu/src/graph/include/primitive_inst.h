@@ -245,6 +245,9 @@ public:
     bool needs_completion_event() const { return _needs_completion_event; }
     bool has_unfused_subgraph() const { return (_unfused_subgraph != nullptr); }
     bool has_inner_networks() const;
+    void reset_mem_dep() {
+        unresolved_mem_deps = actual_shape_infer_mem_deps;
+    }
     bool has_mem_dep_for_shape_infer() const {
         // Even though the predecessors' shapes are not changed, the output shape might be udpated by the mem_dep
         auto memory_deps = _node->get_const_memory_deps();
