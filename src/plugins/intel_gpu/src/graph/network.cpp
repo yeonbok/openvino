@@ -63,6 +63,7 @@ namespace cldnn {
 
 namespace {
 //#define PACKAGED_TASK 1
+//#define SEQIENTIAL
 //#define THREAD 1
 #ifdef GPU_DEBUG_CONFIG
 void dump_perf_data_raw(std::string dump_path, const std::list<std::shared_ptr<primitive_inst>>& exec_order) {
@@ -1347,42 +1348,75 @@ std::vector<primitive_id> network::get_output_ids() const {
     for (auto const& output : _outputs) ret.push_back(output->id());
     return ret;
 }
+
+#define KEEP return false;
+#define SWAP return true;
 bool network::shape_infer_priority::operator()(const std::shared_ptr<primitive_inst>& a,
                                                const std::shared_ptr<primitive_inst>& b) {
-    auto a_total_unresolved_deps = a->get_total_unresolved_shape_infer_dep() + a->get_num_unresolved_mem_dep();
-    auto b_total_unresolved_deps = b->get_total_unresolved_shape_infer_dep() + b->get_num_unresolved_mem_dep();
+    auto a_max_dist = a->get_node().max_distance;
+    auto b_max_dist = b->get_node().max_distance;
+    auto a_min_dist = a->get_node().min_distance;
+    auto b_min_dist = b->get_node().min_distance;
+
+    auto a_num_users_with_shape_infer_dep_to_this = a->get_users_with_shape_infer_dep().size();
+    auto b_num_users_with_shape_infer_dep_to_this = b->get_users_with_shape_infer_dep().size();
+    auto a_num_deps = a->dependencies().size();
+    auto b_num_deps = b->dependencies().size();
+    auto a_has_optimizable_concat_user = a->get_node().is_dynamic() && (a->get_users().size() == 1) &&  (*a->get_users().front()).is_type<concatenation>() && (*a->get_users().front()).can_be_optimized();
+    auto b_has_optimizable_concat_user = b->get_node().is_dynamic() && (b->get_users().size() == 1) &&  (*b->get_users().front()).is_type<concatenation>() && (*b->get_users().front()).can_be_optimized();
+    // Now all shape infer dep is resolved && memdep is resolved 
     // For buffer fusing, need to do ALAP schedule
     // To check unresolved normal shape inference dep
-    // =======================================================
-    if (a_total_unresolved_deps < b_total_unresolved_deps) {
-        return false;
-    } else if (a_total_unresolved_deps == b_total_unresolved_deps) {
-        if (a->get_num_unresolved_mem_dep() < b->get_num_unresolved_mem_dep()) {
-            return false;
-        } else if (a->get_num_unresolved_mem_dep() == b->get_num_unresolved_mem_dep()) {
-            if (a->get_users_with_shape_infer_dep().size() < b->get_users_with_shape_infer_dep().size()) {
-            return true;
-            } else {
-            return (a->get_node().max_distance > b->get_node().max_distance);
+    if (a_has_optimizable_concat_user && !b_has_optimizable_concat_user)
+        SWAP;
+    if (!a_has_optimizable_concat_user && b_has_optimizable_concat_user)
+        KEEP
+    if (a_max_dist < b_max_dist) {
+        KEEP
+    } else if (a_max_dist == b_max_dist) {
+        if (a_min_dist < b_min_dist) {
+            KEEP
+        } else if (a_min_dist == b_min_dist) {
+            if (a_num_deps > b_num_deps) {
+                KEEP
+            } else if (a_num_deps == b_num_deps) {
+                if (a_num_users_with_shape_infer_dep_to_this > b_num_users_with_shape_infer_dep_to_this) {
+                    KEEP
+                } else {
+                    SWAP
+                }
+            } else if (a_num_deps < b_num_deps) {
+                SWAP 
             }
-        } else {
-            if (a->get_users_with_shape_infer_dep().size() < b->get_users_with_shape_infer_dep().size()) {
-            return true;
+        } else if (a_min_dist > b_min_dist) {
+            if (a_num_deps > b_num_deps) {
+                KEEP
             } else {
-            return (a->get_node().max_distance > b->get_node().max_distance);
+                if (a_num_users_with_shape_infer_dep_to_this > b_num_users_with_shape_infer_dep_to_this) {
+                    KEEP
+                } else {
+                    SWAP
+                }
             }
         }
-    } else {
-        if (a->get_num_unresolved_mem_dep() < b->get_num_unresolved_mem_dep()) {
-            return false;
-        } else {
-            if (a->get_users_with_shape_infer_dep().size() < b->get_users_with_shape_infer_dep().size()) {
-            return true;
-            } else {
-            return (a->get_node().max_distance > b->get_node().max_distance);
+    } else if (a_max_dist > b_max_dist) {
+        if (a_min_dist >= b_min_dist) {
+            SWAP;
+        } else if (a_min_dist < b_min_dist) {
+            if (a_num_deps > b_num_deps) {
+                KEEP
+            } else if (a_num_deps == b_num_deps) {
+                if (a_num_users_with_shape_infer_dep_to_this > b_num_users_with_shape_infer_dep_to_this) {
+                    KEEP
+                } else {
+                    SWAP
+                }
+            } else if (a_num_deps < b_num_deps) {
+                SWAP 
             }
         }
     }
+    KEEP;
 }
 
 void network::execute_impl_async2(const std::vector<event::ptr>& events) {
@@ -1484,7 +1518,7 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
     std::queue<std::shared_ptr<primitive_inst>> update_impl_Q;
     std::queue<std::shared_ptr<primitive_inst>> exec_Q;
     while (!shape_infer_pq.empty() || !update_impl_Q.empty() || !exec_Q.empty()) {
-        #if 1
+        #ifndef  SEQUENTIAL
         std::vector<InferenceEngine::Task> tasks;
         // add shape infer task
         std::shared_ptr<primitive_inst> inst_shape_infer = nullptr;
