@@ -283,6 +283,12 @@ private:
 
     std::unique_ptr<ShapePredictor> _shape_predictor;
 
+    struct shape_infer_priority {
+        bool operator() (const std::shared_ptr<primitive_inst>& a, const std::shared_ptr<primitive_inst>& b);
+    };
+    std::priority_queue<std::shared_ptr<primitive_inst>, std::vector<std::shared_ptr<primitive_inst>>, shape_infer_priority> shape_infer_pq;
+    std::unordered_set<std::shared_ptr<primitive_inst>> shape_infer_waiting_q; 
+
     void build_exec_order();
     void allocate_primitive_instance(program_node const& node);
     void transfer_memory_to_device(std::shared_ptr<primitive_inst> instance, program_node const& node);

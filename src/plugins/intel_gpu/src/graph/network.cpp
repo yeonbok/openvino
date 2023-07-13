@@ -1343,23 +1343,43 @@ std::vector<primitive_id> network::get_output_ids() const {
     for (auto const& output : _outputs) ret.push_back(output->id());
     return ret;
 }
-
-template<typename T, class Container=std::vector<T>, class Compare=std::less<typename Container::value_type>>
-class shape_infer_PQ : public std::priority_queue<T, Container, Compare> {
-    public:
-        bool erase(const T& data) {
-            auto it = std::find(this->c.begin(), this->c.end(), data);
-            if (it == this->c.end()) {
-                return false;
-            } else if (it == this->c.begin()) {
-                this->pop();
-            } else {
-                this->c.erase(it);
-                std::make_heap(this->c.begin(), this->c.end(), this->comp); 
-            }
+bool network::shape_infer_priority::operator()(const std::shared_ptr<primitive_inst>& a,
+                                               const std::shared_ptr<primitive_inst>& b) {
+    auto a_total_unresolved_deps = a->get_total_unresolved_shape_infer_dep() + a->get_num_unresolved_mem_dep();
+    auto b_total_unresolved_deps = b->get_total_unresolved_shape_infer_dep() + b->get_num_unresolved_mem_dep();
+    // For buffer fusing, need to do ALAP schedule
+    // To check unresolved normal shape inference dep
+    // =======================================================
+    if (a_total_unresolved_deps < b_total_unresolved_deps) {
+        return false;
+    } else if (a_total_unresolved_deps == b_total_unresolved_deps) {
+        if (a->get_num_unresolved_mem_dep() < b->get_num_unresolved_mem_dep()) {
+            return false;
+        } else if (a->get_num_unresolved_mem_dep() == b->get_num_unresolved_mem_dep()) {
+            if (a->get_users_with_shape_infer_dep().size() < b->get_users_with_shape_infer_dep().size()) {
             return true;
+            } else {
+            return (a->get_node().max_distance > b->get_node().max_distance);
+            }
+        } else {
+            if (a->get_users_with_shape_infer_dep().size() < b->get_users_with_shape_infer_dep().size()) {
+            return true;
+            } else {
+            return (a->get_node().max_distance > b->get_node().max_distance);
+            }
         }
-};
+    } else {
+        if (a->get_num_unresolved_mem_dep() < b->get_num_unresolved_mem_dep()) {
+            return false;
+        } else {
+            if (a->get_users_with_shape_infer_dep().size() < b->get_users_with_shape_infer_dep().size()) {
+            return true;
+            } else {
+            return (a->get_node().max_distance > b->get_node().max_distance);
+            }
+        }
+    }
+}
 
 void network::execute_impl_async2(const std::vector<event::ptr>& events) {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, "NetworkImpl::Execute");
@@ -1449,46 +1469,8 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
     //    
 
     // push shape infer seed
-    struct shape_infer_priority {
-        bool operator() (const std::shared_ptr<primitive_inst>& a, const std::shared_ptr<primitive_inst>& b) {
-            auto a_total_unresolved_deps = a->get_total_unresolved_shape_infer_dep() + a->get_num_unresolved_mem_dep();
-            auto b_total_unresolved_deps = b->get_total_unresolved_shape_infer_dep() + b->get_num_unresolved_mem_dep();
-            // For buffer fusing, need to do ALAP schedule
-            // To check unresolved normal shape inference dep
-            // =======================================================
-            if (a_total_unresolved_deps < b_total_unresolved_deps) {
-                return false;
-            } else if (a_total_unresolved_deps == b_total_unresolved_deps) {
-                if (a->get_num_unresolved_mem_dep() < b->get_num_unresolved_mem_dep()) {
-                    return false;
-                } else if (a->get_num_unresolved_mem_dep() == b->get_num_unresolved_mem_dep()) {
-                    if (a->get_users_with_shape_infer_dep().size() < b->get_users_with_shape_infer_dep().size()) {
-                        return true;
-                    } else {
-                        return (a->get_node().max_distance > b->get_node().max_distance);
-                    }
-                } else {
-                    if (a->get_users_with_shape_infer_dep().size() < b->get_users_with_shape_infer_dep().size()) {
-                        return true;
-                    } else {
-                        return (a->get_node().max_distance > b->get_node().max_distance);
-                    }
-                }
-            } else {
-                if (a->get_num_unresolved_mem_dep() < b->get_num_unresolved_mem_dep()) {
-                    return false;
-                } else {
-                    if (a->get_users_with_shape_infer_dep().size() < b->get_users_with_shape_infer_dep().size()) {
-                        return true;
-                    } else {
-                        return (a->get_node().max_distance > b->get_node().max_distance);
-                    }
-                }
-            }
-        }
 
-    };
-    shape_infer_PQ<std::shared_ptr<primitive_inst>, std::vector<std::shared_ptr<primitive_inst>>, shape_infer_priority> shape_infer_pq;
+
     // add shape infer seed
     for (auto input : _inputs) {
         shape_infer_pq.push(input);
@@ -1518,11 +1500,11 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
             // TODO: refactor this
             if (shape_infer_i->get_total_unresolved_shape_infer_dep() == 0 && shape_infer_i->get_num_unresolved_mem_dep() == 0) {
                 inst_shape_infer = shape_infer_pq.top();
-                tasks.push_back([&inst_shape_infer, &shape_infer_pq, this] {
+                tasks.push_back([&inst_shape_infer, this] {
                     inst_shape_infer->dynamic_shape_update_shape();
                     inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
                 });
-                shape_infer_pq.pop();
+                this->shape_infer_pq.pop();
             } else {
                 if (dump_logs) {
                     std::cout << "=> Not resolved all dep, skip shape infer" << std::endl;
@@ -1541,7 +1523,7 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         if (!exec_Q.empty()) {
             // Execute job
             inst_exec = exec_Q.front();
-            tasks.push_back([&inst_exec, &events, this, &shape_infer_pq] {
+            tasks.push_back([&inst_exec, &events, this] {
                 // no need to check dependency becuase it is already resolved by shape infer..
                 this->execute_primitive(inst_exec, events);
                 inst_exec->dynamic_shape_proc_count = this->dynamic_shape_proc_count++;
@@ -1558,18 +1540,11 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                     user->unresolved_mem_deps &= (~(1 << (int32_t)dep_idx));
                     if (this->dump_logs) {
                         std::cout << "New user " << user->id() << "'s memdep " << user->unresolved_mem_deps << std::endl;
+                        std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
                     }
-                    if (user->dyn_status == UPDATE_SHAPE_WAIT) {
-                        if (this->dump_logs) {
-                            std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
-                        }
-//                        auto start = Time::now();
-                        shape_infer_pq.erase(user);
-                        shape_infer_pq.push(user);
-//                        auto stop = Time::now();
-//                        std::chrono::duration<float> fs = stop - start;
-//                        auto reenqueue_time = std::chrono::duration_cast<ms>(fs);
-//                        std::cout << "Reenqueue time: " << reenqueue_time.count() << " ms " << std::endl;
+                    if (user->unresolved_mem_deps == 0 && shape_infer_waiting_q.find(user) != shape_infer_waiting_q.end()) {
+                        this->shape_infer_pq.push(user);
+                        this->shape_infer_waiting_q.erase(user);
                     }
                 }
             });
@@ -1658,13 +1633,13 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                 if (this->dump_logs) {
                     std::cout << "New user " << user->id() << "'s memdep " << user->unresolved_mem_deps << std::endl;
                 }
-                if (user->dyn_status == UPDATE_SHAPE_WAIT) {
+                if (user->unresolved_mem_deps == 0 && shape_infer_waiting_q.find(user) != shape_infer_waiting_q.end()) {
                     if (this->dump_logs) {
                     std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
                     }
                     //                        auto start = Time::now();
-                    shape_infer_pq.erase(user);
                     shape_infer_pq.push(user);
+                    this->shape_infer_waiting_q.erase(user);
                     //                        auto stop = Time::now();
                     //                        std::chrono::duration<float> fs = stop - start;
                     //                        auto reenqueue_time = std::chrono::duration_cast<ms>(fs);
@@ -1718,8 +1693,12 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                     // Or we can use two queues, 1) shape_infer_q, 2) shape_infer_mem_dep_waiting_q
                     // Or we can "not enqueue until all shape_infer + memdep is resolved" => enqueue at exec phase when the user is not yet added
                     if (user->get_total_unresolved_shape_infer_dep() == 0) {
-                        user->set_status(UPDATE_SHAPE_WAIT);
-                        shape_infer_pq.push(user);
+                        if (user->get_num_unresolved_mem_dep() == 0) {
+                            user->set_status(UPDATE_SHAPE_WAIT);
+                            shape_infer_pq.push(user);
+                        } else {
+                            shape_infer_waiting_q.insert(user);
+                        }
                         if (dump_logs) {
                             std::cout << "=> User " << user->id() << " inserted to the Q" << std::endl;
                         }
@@ -1746,7 +1725,7 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         }
         if (dump_logs) {
             std::cout << "==========dump shape infer Q" << std::endl;
-            shape_infer_PQ<std::shared_ptr<primitive_inst>,
+            std::priority_queue<std::shared_ptr<primitive_inst>,
                            std::vector<std::shared_ptr<primitive_inst>>,
                            shape_infer_priority>
                 dummy_Q = shape_infer_pq;
