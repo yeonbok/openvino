@@ -161,7 +161,6 @@ std::vector<std::shared_ptr<const primitive_inst>> primitive_inst::get_unresolve
 
     }
     return res;
-
 }
 size_t primitive_inst::get_total_unresolved_shape_infer_dep() const {
     size_t total_unresolved_shape_infer_dep = 0;
@@ -950,6 +949,7 @@ primitive_inst::primitive_inst(network& network, program_node const& node, bool 
             break;
         actual_shape_infer_mem_deps |= (1 << i);
         unresolved_mem_deps = actual_shape_infer_mem_deps;
+        mem_dep_insts[i] = _node->get_dependency(i).id();
     }
     for (auto& u : get_users()) {
         int32_t dep_idx = get_node().get_shape_infer_dep_idx(*u);

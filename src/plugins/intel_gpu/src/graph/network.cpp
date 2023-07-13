@@ -1857,10 +1857,19 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
             while (!dummy_Q.empty()) {
                 auto i = dummy_Q.top();
                 dummy_Q.pop();
-                std::cout << i->id() << ", proc_order " << i->processing_order << ", total_unresolved_shape_infer_dep "
-                          << i->get_total_unresolved_shape_infer_dep()
-                          << ", unresolved_memdep: " << i->unresolved_mem_deps
-                          << ", min_dist : " << i->get_node().min_distance
+                std::string unresolved_memdep_ids = "";
+                for (auto u: i->get_unresolved_mem_dep_ids()) {
+                    unresolved_memdep_ids += (u + " ");
+                }
+                std::string users_with_memdep = "";
+                for (auto u: i->get_users_with_shape_infer_dep()) {
+                    users_with_memdep += (u.first->id() + "_");
+                }
+                std::cout << i->id()
+                          << ", total_unresolved_shape_infer_dep " << i->get_total_unresolved_shape_infer_dep()
+                          << ", unresolved_memdep: " << i->unresolved_mem_deps << " (" << unresolved_memdep_ids << ")"
+                          << ", memdep users: " << i->get_users_with_shape_infer_dep().size() << " (" << users_with_memdep << ")"
+                          << ", min_dist: " << i->get_node().min_distance
                           << ", max_dist: " << i->get_node().max_distance << std::endl;
                 for (auto dep : i->get_unresolved_deps()) {
                     std::cout << "--- unresolved dep for " << dep->id() << " (status: " << dep->dyn_status << std::endl;

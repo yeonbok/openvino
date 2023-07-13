@@ -313,12 +313,27 @@ public:
         }
         return unresolved_mem_dep_count;
     }
+
     // TODO : refactor
+    std::unordered_map<size_t/*input idx*/, primitive_id> mem_dep_insts;
     int32_t unresolved_mem_deps = 0; // bitvector
     int64_t dynamic_shape_proc_count = -1;
 
     const std::unordered_map<std::shared_ptr<primitive_inst>/*user*/, int32_t/*dep_idx*/>& get_users_with_shape_infer_dep() const {
         return users_with_shape_infer_dep;
+    }
+    const std::vector<primitive_id> get_unresolved_mem_dep_ids() {
+        int32_t input_idx = 0;
+        auto d = unresolved_mem_deps;
+        std::vector<primitive_id> res;
+        while(d) {
+            if ((1<<input_idx) & d) {
+               res.push_back(get_node().get_dependency(input_idx).id()); 
+            }
+            input_idx++; 
+            d >>= 1;
+        }
+        return res;
     }
 
 #ifdef ENABLE_ONEDNN_FOR_GPU
