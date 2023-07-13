@@ -56,6 +56,9 @@
 #include <thread>
 #endif
 
+#include <future>
+#include <thread>
+#include <functional>
 namespace cldnn {
 
 namespace {
@@ -1487,6 +1490,9 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         std::shared_ptr<primitive_inst> inst_update_impl = nullptr;
         std::shared_ptr<primitive_inst> inst_exec = nullptr;
 //        auto start_push = Time::now();
+#ifdef  PACKAGED_TASK
+        std::future<void> result_shape_infer;
+#endif
         if (!shape_infer_pq.empty()) {
             // Update shape job
             auto shape_infer_i = shape_infer_pq.top();
@@ -1500,10 +1506,18 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
             // TODO: refactor this
             if (shape_infer_i->get_total_unresolved_shape_infer_dep() == 0 && shape_infer_i->get_num_unresolved_mem_dep() == 0) {
                 inst_shape_infer = shape_infer_pq.top();
+#ifdef  PACKAGED_TASK
+                std::packaged_task<void(void)> shape_infer_task([&inst_shape_infer, this](void) {
+#else // ORIGINAL
                 tasks.push_back([&inst_shape_infer, this] {
+#endif
                     inst_shape_infer->dynamic_shape_update_shape();
                     inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
                 });
+#ifdef  PACKAGED_TASK
+                result_shape_infer = shape_infer_task.get_future();
+                shape_infer_task();
+#endif
                 this->shape_infer_pq.pop();
             } else {
                 if (dump_logs) {
@@ -1511,19 +1525,35 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                 }
             }
         }
+#ifdef  PACKAGED_TASK
+        std::future<void> result_update_impl;
+#endif
         if (!update_impl_Q.empty()) {
             // Update impl job
             inst_update_impl = update_impl_Q.front();
+#ifdef  PACKAGED_TASK
+            std::packaged_task<void(void)> update_impl_task([&inst_update_impl, &events, this](void) {
+#else
             tasks.push_back([&inst_update_impl, &events] {
+#endif
                 inst_update_impl->dynamic_shape_update_impl(events);
                 inst_update_impl->set_status(EXECUTE_WAIT);
             });
+#ifdef  PACKAGED_TASK
+            result_update_impl = update_impl_task.get_future();
+            update_impl_task();
+#endif
             update_impl_Q.pop();
         }
+        std::future<void> result_exec;
         if (!exec_Q.empty()) {
             // Execute job
             inst_exec = exec_Q.front();
+#ifdef  PACKAGED_TASK
+            std::packaged_task<void(void)> exec_task([&inst_exec, &events, this](void) {
+#else
             tasks.push_back([&inst_exec, &events, this] {
+#endif
                 // no need to check dependency becuase it is already resolved by shape infer..
                 this->execute_primitive(inst_exec, events);
                 inst_exec->dynamic_shape_proc_count = this->dynamic_shape_proc_count++;
@@ -1548,6 +1578,10 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                     }
                 }
             });
+#ifdef  PACKAGED_TASK
+            result_exec = exec_task.get_future();
+            exec_task();
+#endif
             exec_Q.pop();
         }
 //        auto end_push = Time::now();
@@ -1567,16 +1601,27 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         }
         // TODO : no need to use this wrapper class. Just use task executor directly
         auto start_run = Time::now();
+
+#ifdef  PACKAGED_TASK
+        if (result_exec.valid())
+            result_exec.get();
+        if (result_update_impl.valid())
+            result_update_impl.get();
+        if (result_shape_infer.valid())
+            result_shape_infer.get();
+#else
         dynamic_executor->runAndWait(tasks);
+#endif
         if (dump_logs) {
             auto end_run = Time::now();
             std::chrono::duration<float> fs = end_run - start_run;
             auto run_task_time = std::chrono::duration_cast<ms>(fs);
             std::cout << "Run task time: " << run_task_time.count() << " ms " << std::endl;
         }
-
+#ifndef PACKAGED_TASK
         tasks.clear();
-        #else
+#endif
+        #else // Sequential
         std::vector<InferenceEngine::Task> tasks;
         // add shape infer task
         std::shared_ptr<primitive_inst> inst_shape_infer = nullptr;
