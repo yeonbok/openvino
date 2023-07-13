@@ -62,7 +62,8 @@
 namespace cldnn {
 
 namespace {
-
+//#define PACKAGED_TASK 1
+//#define THREAD 1
 #ifdef GPU_DEBUG_CONFIG
 void dump_perf_data_raw(std::string dump_path, const std::list<std::shared_ptr<primitive_inst>>& exec_order) {
     auto layouts_to_str = [](const std::vector<layout>& layouts) -> std::string {
@@ -1508,12 +1509,17 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                 inst_shape_infer = shape_infer_pq.top();
 #ifdef  PACKAGED_TASK
                 std::packaged_task<void(void)> shape_infer_task([&inst_shape_infer, this](void) {
-#else // ORIGINAL
-                tasks.push_back([&inst_shape_infer, this] {
-#endif
                     inst_shape_infer->dynamic_shape_update_shape();
                     inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
                 });
+#elif defined (THREAD)
+#else // ORIGINAL
+                tasks.push_back([&inst_shape_infer, this] {
+                    inst_shape_infer->dynamic_shape_update_shape();
+                    inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
+                });
+#endif
+
 #ifdef  PACKAGED_TASK
                 result_shape_infer = shape_infer_task.get_future();
                 shape_infer_task();
@@ -1533,27 +1539,28 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
             inst_update_impl = update_impl_Q.front();
 #ifdef  PACKAGED_TASK
             std::packaged_task<void(void)> update_impl_task([&inst_update_impl, &events, this](void) {
-#else
-            tasks.push_back([&inst_update_impl, &events] {
-#endif
                 inst_update_impl->dynamic_shape_update_impl(events);
                 inst_update_impl->set_status(EXECUTE_WAIT);
             });
-#ifdef  PACKAGED_TASK
             result_update_impl = update_impl_task.get_future();
             update_impl_task();
+#elif defined (THREAD)
+#else
+            tasks.push_back([&inst_update_impl, &events] {
+                inst_update_impl->dynamic_shape_update_impl(events);
+                inst_update_impl->set_status(EXECUTE_WAIT);
+            });
 #endif
             update_impl_Q.pop();
         }
+#ifdef PACKAGED_TASK
         std::future<void> result_exec;
+#endif
         if (!exec_Q.empty()) {
             // Execute job
             inst_exec = exec_Q.front();
 #ifdef  PACKAGED_TASK
             std::packaged_task<void(void)> exec_task([&inst_exec, &events, this](void) {
-#else
-            tasks.push_back([&inst_exec, &events, this] {
-#endif
                 // no need to check dependency becuase it is already resolved by shape infer..
                 this->execute_primitive(inst_exec, events);
                 inst_exec->dynamic_shape_proc_count = this->dynamic_shape_proc_count++;
@@ -1578,9 +1585,35 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                     }
                 }
             });
-#ifdef  PACKAGED_TASK
             result_exec = exec_task.get_future();
             exec_task();
+#elif defined (THREAD)
+#else
+            tasks.push_back([&inst_exec, &events, this] {
+                // no need to check dependency becuase it is already resolved by shape infer..
+                this->execute_primitive(inst_exec, events);
+                inst_exec->dynamic_shape_proc_count = this->dynamic_shape_proc_count++;
+                inst_exec->set_status(FINISHED);
+                // reset memdep
+                inst_exec->reset_mem_dep();
+                auto users_with_shape_infer_dep = inst_exec->get_users_with_shape_infer_dep();
+                for (auto d : users_with_shape_infer_dep) {
+                    auto user = d.first;
+                    auto dep_idx = d.second;
+                    if (this->dump_logs) {
+                        std::cout << "Original user " << user->id() << "'s memdep " << user->unresolved_mem_deps << std::endl;
+                    }
+                    user->unresolved_mem_deps &= (~(1 << (int32_t)dep_idx));
+                    if (this->dump_logs) {
+                        std::cout << "New user " << user->id() << "'s memdep " << user->unresolved_mem_deps << std::endl;
+                        std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
+                    }
+                    if (user->unresolved_mem_deps == 0 && shape_infer_waiting_q.find(user) != shape_infer_waiting_q.end()) {
+                        this->shape_infer_pq.push(user);
+                        this->shape_infer_waiting_q.erase(user);
+                    }
+                }
+            });
 #endif
             exec_Q.pop();
         }
@@ -1609,6 +1642,53 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
             result_update_impl.get();
         if (result_shape_infer.valid())
             result_shape_infer.get();
+#elif defined (THREAD)
+        std::vector<std::thread> threads;
+        if (inst_shape_infer) {
+            threads.push_back(std::thread([&inst_shape_infer, this]() {
+                    inst_shape_infer->dynamic_shape_update_shape();
+                    inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
+                }));
+        }
+        if (inst_update_impl) {
+            threads.push_back(std::thread([&inst_update_impl, &events] {
+                inst_update_impl->dynamic_shape_update_impl(events);
+                inst_update_impl->set_status(EXECUTE_WAIT);
+            }));
+        }
+        if (inst_exec) {
+            threads.push_back(std::thread([&inst_exec, &events, this](void) {
+                // no need to check dependency becuase it is already resolved by shape infer..
+                this->execute_primitive(inst_exec, events);
+                inst_exec->dynamic_shape_proc_count = this->dynamic_shape_proc_count++;
+                inst_exec->set_status(FINISHED);
+                // reset memdep
+                inst_exec->reset_mem_dep();
+                auto users_with_shape_infer_dep = inst_exec->get_users_with_shape_infer_dep();
+                for (auto d : users_with_shape_infer_dep) {
+                    auto user = d.first;
+                    auto dep_idx = d.second;
+                    if (this->dump_logs) {
+                        std::cout << "Original user " << user->id() << "'s memdep " << user->unresolved_mem_deps
+                                  << std::endl;
+                    }
+                    user->unresolved_mem_deps &= (~(1 << (int32_t)dep_idx));
+                    if (this->dump_logs) {
+                        std::cout << "New user " << user->id() << "'s memdep " << user->unresolved_mem_deps
+                                  << std::endl;
+                        std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
+                    }
+                    if (user->unresolved_mem_deps == 0 &&
+                        shape_infer_waiting_q.find(user) != shape_infer_waiting_q.end()) {
+                        this->shape_infer_pq.push(user);
+                        this->shape_infer_waiting_q.erase(user);
+                    }
+                }
+            }));
+        }
+        for (size_t i = 0; i < threads.size(); ++i) {
+            threads[i].join();
+        }
 #else
         dynamic_executor->runAndWait(tasks);
 #endif
