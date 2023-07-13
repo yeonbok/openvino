@@ -216,7 +216,7 @@ void program::init_program() {
                                                                       kernel_selector::KernelBase::get_db().get_batch_header_str()));
 
     auto compilation_context_config = make_task_executor_config(_config, "Task executor config for CompilationContext in GPU plugin");
-    constexpr auto async_compilation_streams = 2;
+    constexpr auto async_compilation_streams = 4;
     compilation_context_config._streams = async_compilation_streams;
     _compilation_context = ICompilationContext::create(compilation_context_config);
 
