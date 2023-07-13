@@ -246,6 +246,8 @@ public:
     const ExecutionConfig& get_config() const { return _config; }
 
     ShapePredictor& get_shape_predictor() { return *_shape_predictor; }
+    int64_t last_barrier = 0; // can't we use barrier from ocl stream?
+    int64_t dynamic_shape_proc_count = 0; // can't we use barrier from ocl stream?
 
 private:
     using output_chains_map = std::map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>>;

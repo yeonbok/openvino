@@ -243,12 +243,12 @@ void primitive_inst::set_output_memory(memory::ptr mem_new, bool check, size_t i
 
 void primitive_inst::update_shape() {
     GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::shape_inference);
-//    if (update_shape_done_by_other) {
-//        update_shape_done_by_other = false; // reset
-//        GPU_DEBUG_TRACE_DETAIL << id() << ": update shape is done by other: "
-//                               << _impl_params->output_layouts[0].to_short_string() << std::endl;
-//        return;
-//    }
+    if (update_shape_done_by_other) {
+        update_shape_done_by_other = false; // reset
+        GPU_DEBUG_TRACE_DETAIL << id() << ": update shape is done by other: "
+                               << _impl_params->output_layouts[0].to_short_string() << std::endl;
+        return;
+    }
     bool input_shape_changed = false;
     for (size_t i = 0; i < _deps.size(); i++) {
         auto idx = _deps[i].second;
@@ -299,6 +299,7 @@ void primitive_inst::update_shape() {
     bool has_runtime_deps = false;
 
     auto memory_deps = _node->get_const_memory_deps();
+    int64_t max_dep_proc_count = 0;
     for (auto& i : _node->get_shape_infer_dependencies()) {
         // Some primitives may have flexible count of deps (e.g. reshape), thus allow skipping some deps
         if (memory_deps.count(i) > 0 || i >= _node->get_dependencies().size()) {
@@ -317,6 +318,8 @@ void primitive_inst::update_shape() {
         }
         auto dep_mem = _network.get_output_memory(dep_id);
         memory_deps.insert({i, dep_mem});
+        max_dep_proc_count = std::max(max_dep_proc_count, _network.get_primitive(dep_id)->dynamic_shape_proc_count);
+//        std::cout << "dep " << dep_id << " proc count : " << _network.get_primitive(dep_id)->dynamic_shape_proc_count << std::endl;
         if (!dep.is_in_shape_of_subgraph())
             has_runtime_deps = true;
     }
@@ -327,7 +330,14 @@ void primitive_inst::update_shape() {
             _network.get_stream().wait_for_events(dependencies_events);
         } else if (queue_type == QueueTypes::in_order) {
 //            std::cout << "[" << id() << "] clFinish " << std::endl;
-            _network.get_stream().finish();
+//            std::cout << id() << " last barrier : " << _network.last_barrier << " max_dep_proc_count = " << max_dep_proc_count << std::endl;
+            if (max_dep_proc_count < _network.last_barrier) {
+     //           std::cout << id() << " => skip clfinish " << std::endl;
+            } else {
+//                std::cout << id() << " => add clfinish " << std::endl;
+                _network.get_stream().finish();
+                _network.last_barrier = _network.dynamic_shape_proc_count++;
+            }
         }
     }
 
@@ -622,8 +632,7 @@ bool primitive_inst::update_impl() {
 }
 
 void primitive_inst::do_runtime_in_place_concat() {
-//    if (update_shape_done_by_other)
-    if (dyn_status >= UPDATE_IMPL_WAIT)
+    if (update_shape_done_by_other)
         return;
     if (get_users().size() != 1) return;
 
@@ -639,20 +648,15 @@ void primitive_inst::do_runtime_in_place_concat() {
     GPU_DEBUG_TRACE_DETAIL << "[In place concat] Preparing for runtime buffer fusing" << std::endl;
     // Do shape_infer for all concat's preds and concat
     for (auto pred : concat_preds) {
-//        if (!pred->update_shape_done_by_other) {
-        if (pred->dyn_status < UPDATE_IMPL_WAIT) {
+        if (!pred->update_shape_done_by_other) {
             GPU_DEBUG_TRACE_DETAIL << "[In place concat] update shape for " << pred->id() << std::endl;
             pred->update_shape();
-//            pred->update_shape_done_by_other = true;
-            pred->set_status(UPDATE_IMPL_WAIT);
-            std::cout << "update shape for concat pred " << id() << std::endl;
+            pred->update_shape_done_by_other = true;
         }
     }
     GPU_DEBUG_TRACE_DETAIL << "[In place concat] update shape for " << concat_inst->id() << std::endl;
     concat_inst->update_shape();
-//    concat_inst->update_shape_done_by_other = true;
-    std::cout << "update shape for concat " << concat_inst->id() << std::endl;
-    concat_inst->set_status(UPDATE_IMPL_WAIT);
+    concat_inst->update_shape_done_by_other = true;
     layout concat_layout = concat_inst->_impl_params->get_output_layout();
 
     std::vector<kernel_impl_params> pred_params;
@@ -692,14 +696,14 @@ bool primitive_inst::has_inner_networks() const {
 bool primitive_inst::dynamic_shape_update_shape() {
     std::vector<event::ptr> dependencies;
     if (is_dynamic() && !has_inner_networks()) {
-        //do_runtime_in_place_concat();
+        do_runtime_in_place_concat();
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
         update_shape();
-//        if (_impl_params->output_layouts[0].count() == 0) {
-//            GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
-//            update_shape_done_by_other = false; // reset
-//            return true;
-//        }
+        if (_impl_params->output_layouts[0].count() == 0) {
+            GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
+            update_shape_done_by_other = false; // reset
+            return true;
+        }
     } else {
 //        std::cout << "Skipped update shape for " << id() << std::endl;
 //        std::cout << "After update shape for " << id() << " : " << _impl_params->output_layouts[0].to_string() << std::endl;
@@ -755,7 +759,7 @@ void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& de
         if (is_empty) {
             GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
             runtime_res_ev = get_network().get_stream().create_user_event(true);
-            //       update_shape_done_by_other = false;  // reset
+            update_shape_done_by_other = false;  // reset
             return;
         }
 
@@ -782,7 +786,7 @@ void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& de
                     " primitive as output layout is dynamic in runtime");
 
     OPENVINO_ASSERT(_impl != nullptr, "[GPU] Implementation is nullptr for ", id(), " primitive");
-//    update_shape_done_by_other = false;  // reset
+    update_shape_done_by_other = false;  // reset
     if ((is_dynamic() && need_args_update)) {
         set_arguments();
     }

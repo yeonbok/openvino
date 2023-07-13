@@ -315,6 +315,7 @@ public:
     }
     // TODO : refactor
     int32_t unresolved_mem_deps = 0; // bitvector
+    int64_t dynamic_shape_proc_count = -1;
 
     const std::unordered_map<std::shared_ptr<primitive_inst>/*user*/, int32_t/*dep_idx*/>& get_users_with_shape_infer_dep() const {
         return users_with_shape_infer_dep;
