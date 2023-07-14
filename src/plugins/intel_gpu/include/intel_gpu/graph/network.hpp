@@ -248,11 +248,11 @@ public:
     ShapePredictor& get_shape_predictor() { return *_shape_predictor; }
     int64_t last_barrier = 0; // can't we use barrier from ocl stream?
     int64_t dynamic_shape_proc_count = 0; // can't we use barrier from ocl stream?
+    bool dump_logs = false;
 
 private:
     using output_chains_map = std::map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>>;
     uint32_t net_id = 0;
-    int32_t dump_logs = false;
     program::ptr _program;
     ExecutionConfig _config;
     engine& _engine;
@@ -286,8 +286,17 @@ private:
     struct shape_infer_priority {
         bool operator() (const std::shared_ptr<primitive_inst>& a, const std::shared_ptr<primitive_inst>& b);
     };
+    struct shape_infer_priority2 {
+        bool operator() (const std::shared_ptr<primitive_inst>& a, const std::shared_ptr<primitive_inst>& b);
+    };
+
     std::priority_queue<std::shared_ptr<primitive_inst>, std::vector<std::shared_ptr<primitive_inst>>, shape_infer_priority> shape_infer_pq;
-    std::unordered_set<std::shared_ptr<primitive_inst>> shape_infer_waiting_q; 
+//    std::unordered_set<std::shared_ptr<primitive_inst>> shape_infer_pending_q_in_place_concat; 
+    std::priority_queue<std::shared_ptr<primitive_inst>, std::vector<std::shared_ptr<primitive_inst>>, shape_infer_priority2> shape_infer_pending_q_in_place_concat;
+    std::unordered_set<std::shared_ptr<primitive_inst>> shape_infer_pending_q_memdep; 
+//    std::queue<std::shared_ptr<primitive_inst>> update_impl_Q;
+    std::priority_queue<std::shared_ptr<primitive_inst>, std::vector<std::shared_ptr<primitive_inst>>, shape_infer_priority> update_impl_Q;
+    std::queue<std::shared_ptr<primitive_inst>> exec_Q;
 
     void build_exec_order();
     void allocate_primitive_instance(program_node const& node);

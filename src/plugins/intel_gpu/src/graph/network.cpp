@@ -358,7 +358,7 @@ network::network(program::ptr program, const ExecutionConfig& config, stream::pt
     validate_primitives();
     add_default_output_chains();
     if (std::getenv("DUMP_LOG") != nullptr)
-        dump_logs = 1;
+        dump_logs = true;
 }
 
 network::network(engine& engine,
@@ -1351,6 +1351,26 @@ std::vector<primitive_id> network::get_output_ids() const {
 
 #define KEEP return false;
 #define SWAP return true;
+// these are concat preds
+bool network::shape_infer_priority2::operator()(const std::shared_ptr<primitive_inst>& a,
+                                               const std::shared_ptr<primitive_inst>& b) {
+    auto a_max_dist = a->get_node().max_distance;
+    auto b_max_dist = b->get_node().max_distance;
+    auto a_min_dist = a->get_node().min_distance;
+    auto b_min_dist = b->get_node().min_distance;
+
+    if (a_max_dist < b_max_dist) {
+        KEEP
+    } else if (a_max_dist == b_max_dist) {
+        if (a_min_dist <= b_min_dist) {
+            KEEP
+        } else {
+            SWAP
+        }
+    } else {
+        SWAP
+    }
+};
 bool network::shape_infer_priority::operator()(const std::shared_ptr<primitive_inst>& a,
                                                const std::shared_ptr<primitive_inst>& b) {
     auto a_max_dist = a->get_node().max_distance;
@@ -1362,21 +1382,21 @@ bool network::shape_infer_priority::operator()(const std::shared_ptr<primitive_i
     auto b_num_users_with_shape_infer_dep_to_this = b->get_users_with_shape_infer_dep().size();
     auto a_num_deps = a->dependencies().size();
     auto b_num_deps = b->dependencies().size();
-    auto a_has_optimizable_concat_user = a->get_node().is_dynamic() && (a->get_users().size() == 1) &&  (*a->get_users().front()).is_type<concatenation>() && (*a->get_users().front()).can_be_optimized();
-    auto b_has_optimizable_concat_user = b->get_node().is_dynamic() && (b->get_users().size() == 1) &&  (*b->get_users().front()).is_type<concatenation>() && (*b->get_users().front()).can_be_optimized();
+//    auto a_has_optimizable_concat_user = a->get_node().is_dynamic() && (a->get_users().size() == 1) &&  (*a->get_users().front()).is_type<concatenation>() && (*a->get_users().front()).can_be_optimized();
+//    auto b_has_optimizable_concat_user = b->get_node().is_dynamic() && (b->get_users().size() == 1) &&  (*b->get_users().front()).is_type<concatenation>() && (*b->get_users().front()).can_be_optimized();
     // Now all shape infer dep is resolved && memdep is resolved 
     // For buffer fusing, need to do ALAP schedule
     // To check unresolved normal shape inference dep
-    if (a_has_optimizable_concat_user && !b_has_optimizable_concat_user)
-        SWAP;
-    if (!a_has_optimizable_concat_user && b_has_optimizable_concat_user)
+//    if (a_has_optimizable_concat_user && !b_has_optimizable_concat_user)
+//        SWAP;
+//    if (!a_has_optimizable_concat_user && b_has_optimizable_concat_user)
+//        KEEP
+    if (a_min_dist < b_min_dist) {
         KEEP
-    if (a_max_dist < b_max_dist) {
-        KEEP
-    } else if (a_max_dist == b_max_dist) {
-        if (a_min_dist < b_min_dist) {
+    } else if (a_min_dist == b_min_dist) {
+        if (a_max_dist < b_max_dist) {
             KEEP
-        } else if (a_min_dist == b_min_dist) {
+        } else if (a_max_dist == b_max_dist) {
             if (a_num_deps > b_num_deps) {
                 KEEP
             } else if (a_num_deps == b_num_deps) {
@@ -1388,7 +1408,7 @@ bool network::shape_infer_priority::operator()(const std::shared_ptr<primitive_i
             } else if (a_num_deps < b_num_deps) {
                 SWAP 
             }
-        } else if (a_min_dist > b_min_dist) {
+        } else if (a_max_dist > b_max_dist) {
             if (a_num_deps > b_num_deps) {
                 KEEP
             } else {
@@ -1399,10 +1419,10 @@ bool network::shape_infer_priority::operator()(const std::shared_ptr<primitive_i
                 }
             }
         }
-    } else if (a_max_dist > b_max_dist) {
-        if (a_min_dist >= b_min_dist) {
+    } else if (a_min_dist > b_min_dist) {
+        if (a_max_dist >= b_max_dist) {
             SWAP;
-        } else if (a_min_dist < b_min_dist) {
+        } else if (a_max_dist < b_max_dist) {
             if (a_num_deps > b_num_deps) {
                 KEEP
             } else if (a_num_deps == b_num_deps) {
@@ -1416,7 +1436,7 @@ bool network::shape_infer_priority::operator()(const std::shared_ptr<primitive_i
             }
         }
     }
-    KEEP;
+    KEEP
 }
 
 void network::execute_impl_async2(const std::vector<event::ptr>& events) {
@@ -1432,6 +1452,7 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
     if (dump_logs) {
         std::cout << "Start network execution with execute_impl_async2 " << curr_iter << std::endl;
     }
+//    std::cout << "Start network execution with execute_impl_async2 " << curr_iter << std::endl;
     std::vector<memory::ptr> in_out_mem;
     auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
         return shared_mem_type == shared_mem_type::shared_mem_vasurface ||
@@ -1515,19 +1536,109 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
     }
 
     // TODO: actually no need to store these to container
-    std::queue<std::shared_ptr<primitive_inst>> update_impl_Q;
-    std::queue<std::shared_ptr<primitive_inst>> exec_Q;
-    while (!shape_infer_pq.empty() || !update_impl_Q.empty() || !exec_Q.empty()) {
-        #ifndef  SEQUENTIAL
+    while (!shape_infer_pq.empty() || !shape_infer_pending_q_in_place_concat.empty() || !shape_infer_pending_q_memdep.empty() || !update_impl_Q.empty() || !exec_Q.empty()) {
         std::vector<InferenceEngine::Task> tasks;
         // add shape infer task
         std::shared_ptr<primitive_inst> inst_shape_infer = nullptr;
         std::shared_ptr<primitive_inst> inst_update_impl = nullptr;
         std::shared_ptr<primitive_inst> inst_exec = nullptr;
-//        auto start_push = Time::now();
-#ifdef  PACKAGED_TASK
-        std::future<void> result_shape_infer;
+        if ((shape_infer_pq.empty() && shape_infer_pending_q_memdep.empty() && !shape_infer_pending_q_in_place_concat.empty())) {
+            #if 0
+                // TODO: if nodes in concat queue is ready, push it to ready queue
+            // all preds of concat preds shapes are updated at this time
+//            inst_shape_infer = *shape_infer_pending_q_in_place_concat.begin();
+//            shape_infer_pending_q_in_place_concat.erase(inst_shape_infer);
+            auto tmp_inst = shape_infer_pending_q_in_place_concat.top();
+            if (dump_logs) {
+                std::cout << "--------- Try to pick from shape_infer_pending_q_in_place_concat: " << std::endl;
+                std::cout << tmp_inst->id()
+                          << " ( Unresolved deps : " << tmp_inst->get_total_unresolved_shape_infer_dep() << ", "
+                          << " Unresolved mem_deps : " << tmp_inst->get_num_unresolved_mem_dep() << ")" << std::endl;
+            }
+
+            if (tmp_inst->update_shape_done_by_other) {
+                if (dump_logs) {
+                    std::cout << "However shape infer for this is done by other!" << std::endl;
+                }
+                // add to update impl q and skip
+                // also these operation has only one concat user => already put to update_impl_Q by first pred
+                tmp_inst->set_status(UPDATE_IMPL_WAIT);
+                update_impl_Q.push(tmp_inst);
+                shape_infer_pending_q_in_place_concat.pop();
+            } else {
+                auto concat_user = *tmp_inst->get_user_insts().begin();
+                bool all_concat_preds_are_resolved = true;
+                for (auto dep : concat_user->dependencies()) {
+                    if (dep.first->get_total_unresolved_shape_infer_dep() > 0) {
+                        std::cout << dep.first->id() << " : unresolved shape infer dep " << dep.first->get_total_unresolved_shape_infer_dep() << std::endl;
+                        all_concat_preds_are_resolved = false;
+                        break;
+                    }
+                }
+
+                if (all_concat_preds_are_resolved) {
+                    if (dump_logs) {
+                        std::cout << "current pred: " << tmp_inst->id() << std::endl;
+                        std::cout << "--- all concat user " << concat_user->id() << "'s preds are resolved " << std::endl;
+                    }
+                    inst_shape_infer = tmp_inst;
+                    inst_shape_infer->set_status(UPDATE_SHAPE_WAIT);
+                    shape_infer_pending_q_in_place_concat.pop();
+                } else {
+                    if (dump_logs) {
+                        std::cout << "current pred: " << tmp_inst->id() << std::endl;
+                        std::cout << "--- all concat user " << concat_user->id() << "'s preds are NOT resolved "
+                              << std::endl;
+                        for (auto dep : concat_user->dependencies()) {
+                            std::cout << dep.first->id() << " : status " << dep.first->dyn_status << std::endl;
+                        }
+                    }
+                }
+            }
+            #else
+            auto tmp_inst = shape_infer_pending_q_in_place_concat.top();
+
+            while (tmp_inst) {
+                if (dump_logs) {
+                    std::cout << "--------- Try to pick from shape_infer_pending_q_in_place_concat: " << std::endl;
+                    std::cout << tmp_inst->id()
+                          << " ( Unresolved deps : " << tmp_inst->get_total_unresolved_shape_infer_dep() << ", "
+                          << " Unresolved mem_deps : " << tmp_inst->get_num_unresolved_mem_dep() << ")" << std::endl;
+                }
+                auto concat_user = *tmp_inst->get_user_insts().begin();
+                bool all_concat_preds_are_resolved = true;
+                for (auto dep : concat_user->dependencies()) {
+                    if (dep.first->get_total_unresolved_shape_infer_dep() > 0) {
+                        if (dump_logs) {
+                            std::cout << " concat user dep : " << dep.first->id() << " : unresolved shape infer dep " << dep.first->get_total_unresolved_shape_infer_dep() << std::endl;
+                        }
+                        all_concat_preds_are_resolved = false;
+                        break;
+                    }
+                }
+                if (all_concat_preds_are_resolved) {
+                    if (dump_logs) {
+                        std::cout << "current pred: " << tmp_inst->id() << std::endl;
+                        std::cout << "--- all concat user concat " << concat_user->id() << "'s preds are resolved :)!!! => add to shape infer q" << std::endl;
+                    }
+                    tmp_inst->set_status(UPDATE_SHAPE_WAIT);
+                    shape_infer_pq.push(tmp_inst);
+                    shape_infer_pending_q_in_place_concat.pop();
+                    if (!shape_infer_pending_q_in_place_concat.empty()) {
+                        tmp_inst = shape_infer_pending_q_in_place_concat.top();
+                    } else {
+                        tmp_inst = nullptr;
+                    }
+                } else {
+                    if (dump_logs) {
+                        std::cout << "current pred: " << tmp_inst->id() << std::endl;
+                        std::cout << "--- all concat user concat " << concat_user->id() << "'s preds are NOT resolved => pending" << std::endl;
+                    }
+                    tmp_inst = nullptr;
+                }
+            }
 #endif
+        }
         if (!shape_infer_pq.empty()) {
             // Update shape job
             auto shape_infer_i = shape_infer_pq.top();
@@ -1538,91 +1649,88 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                           << " ( Unresolved deps : " << shape_infer_i->get_total_unresolved_shape_infer_dep() << ", "
                           << " Unresolved mem_deps : " << shape_infer_i->get_num_unresolved_mem_dep() << ")" << std::endl;
             }
-            // TODO: refactor this
+            if (shape_infer_i->update_shape_done_by_other) {
+                if (dump_logs) {
+                    std::cout << "However shape infer for this is done by other!" << std::endl;
+                }
+                // add to update impl q and skip
+                // also these operation has only one concat user => already put to update_impl_Q by first pred
+                shape_infer_i->set_status(UPDATE_IMPL_WAIT);
+                update_impl_Q.push(shape_infer_i);
+                shape_infer_pq.pop();
+            }
+            // check one more => TODO check more done_by_other
             if (shape_infer_i->get_total_unresolved_shape_infer_dep() == 0 && shape_infer_i->get_num_unresolved_mem_dep() == 0) {
                 inst_shape_infer = shape_infer_pq.top();
-#ifdef  PACKAGED_TASK
-                std::packaged_task<void(void)> shape_infer_task([&inst_shape_infer, this](void) {
-                    inst_shape_infer->dynamic_shape_update_shape();
-                    inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
-                });
-#elif defined (THREAD)
-#else // ORIGINAL
-                tasks.push_back([&inst_shape_infer, this] {
-                    inst_shape_infer->dynamic_shape_update_shape();
-                    inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
-                });
-#endif
-
-#ifdef  PACKAGED_TASK
-                result_shape_infer = shape_infer_task.get_future();
-                shape_infer_task();
-#endif
-                this->shape_infer_pq.pop();
-            } else {
-                if (dump_logs) {
-                    std::cout << "=> Not resolved all dep, skip shape infer" << std::endl;
-                }
+                shape_infer_pq.pop();
             }
         }
-#ifdef  PACKAGED_TASK
-        std::future<void> result_update_impl;
-#endif
+        if (inst_shape_infer != nullptr) {
+            tasks.push_back([&inst_shape_infer, &events, this] {
+                inst_shape_infer->dynamic_shape_update_shape();
+                // is_empty
+                auto is_empty = inst_shape_infer->get_impl_params()->get_output_layout().count() == 0;
+                if (is_empty) {
+                    // is empty do not push to update impl
+                    if (dump_logs) {
+                        std::cout << "!! " << inst_shape_infer->id() << " is empty! " << std::endl;
+                    }
+                    if (get_stream().get_queue_type() == QueueTypes::out_of_order || _enable_profiling ||
+                        inst_shape_infer->needs_completion_event()) {
+                        auto id = inst_shape_infer->id();
+                        _events.insert({id, inst_shape_infer->runtime_res_ev});
+                        if (dump_logs) {
+                            std::cout << " ... stored event of "  << inst_shape_infer->id() << std::endl;
+                        }
+                    }
+                    inst_shape_infer->update_shape_done_by_other = false;
+                    inst_shape_infer->set_status(FINISHED);
+                    if (dump_logs) {
+                        std::cout << " ... set status of "  << inst_shape_infer->id() << " as FINISHED" << std::endl;
+                    }
+                    // reenqueue memdep users
+                    auto users_with_shape_infer_dep = inst_shape_infer->get_users_with_shape_infer_dep();
+                    for (auto d : users_with_shape_infer_dep) {
+                        auto user = d.first;
+                        auto dep_idx = d.second;
+                        if (this->dump_logs) {
+                            std::cout << "Original user " << user->id() << "'s memdep " << user->unresolved_mem_deps
+                                      << std::endl;
+                        }
+                        user->unresolved_mem_deps &= (~(1 << (int32_t)dep_idx));
+                        if (this->dump_logs) {
+                            std::cout << "New user " << user->id() << "'s memdep " << user->unresolved_mem_deps
+                                      << std::endl;
+                            std::cout << "Reenqueue " << inst_shape_infer->id() << "'s user " << user->id()
+                                      << std::endl;
+                        }
+                        if (user->unresolved_mem_deps == 0 &&
+                            this->shape_infer_pending_q_memdep.find(user) != this->shape_infer_pending_q_memdep.end()) {
+                            // now ready
+                            this->shape_infer_pq.push(user);
+                            this->shape_infer_pending_q_memdep.erase(user);
+                        }
+                    }
+                } else {
+                    inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
+                }
+            });
+        }
+
         if (!update_impl_Q.empty()) {
             // Update impl job
-            inst_update_impl = update_impl_Q.front();
-#ifdef  PACKAGED_TASK
-            std::packaged_task<void(void)> update_impl_task([&inst_update_impl, &events, this](void) {
-                inst_update_impl->dynamic_shape_update_impl(events);
-                inst_update_impl->set_status(EXECUTE_WAIT);
-            });
-            result_update_impl = update_impl_task.get_future();
-            update_impl_task();
-#elif defined (THREAD)
-#else
+            inst_update_impl = update_impl_Q.top();
+
             tasks.push_back([&inst_update_impl, &events] {
                 inst_update_impl->dynamic_shape_update_impl(events);
                 inst_update_impl->set_status(EXECUTE_WAIT);
             });
-#endif
             update_impl_Q.pop();
         }
-#ifdef PACKAGED_TASK
-        std::future<void> result_exec;
-#endif
         if (!exec_Q.empty()) {
             // Execute job
             inst_exec = exec_Q.front();
-#ifdef  PACKAGED_TASK
-            std::packaged_task<void(void)> exec_task([&inst_exec, &events, this](void) {
-                // no need to check dependency becuase it is already resolved by shape infer..
-                this->execute_primitive(inst_exec, events);
-                inst_exec->dynamic_shape_proc_count = this->dynamic_shape_proc_count++;
-                inst_exec->set_status(FINISHED);
-                // reset memdep
-                inst_exec->reset_mem_dep();
-                auto users_with_shape_infer_dep = inst_exec->get_users_with_shape_infer_dep();
-                for (auto d : users_with_shape_infer_dep) {
-                    auto user = d.first;
-                    auto dep_idx = d.second;
-                    if (this->dump_logs) {
-                        std::cout << "Original user " << user->id() << "'s memdep " << user->unresolved_mem_deps << std::endl;
-                    }
-                    user->unresolved_mem_deps &= (~(1 << (int32_t)dep_idx));
-                    if (this->dump_logs) {
-                        std::cout << "New user " << user->id() << "'s memdep " << user->unresolved_mem_deps << std::endl;
-                        std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
-                    }
-                    if (user->unresolved_mem_deps == 0 && shape_infer_waiting_q.find(user) != shape_infer_waiting_q.end()) {
-                        this->shape_infer_pq.push(user);
-                        this->shape_infer_waiting_q.erase(user);
-                    }
-                }
-            });
-            result_exec = exec_task.get_future();
-            exec_task();
-#elif defined (THREAD)
-#else
+
             tasks.push_back([&inst_exec, &events, this] {
                 // no need to check dependency becuase it is already resolved by shape infer..
                 this->execute_primitive(inst_exec, events);
@@ -1631,6 +1739,9 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                 // reset memdep
                 inst_exec->reset_mem_dep();
                 auto users_with_shape_infer_dep = inst_exec->get_users_with_shape_infer_dep();
+                if (this->dump_logs) {
+                    std::cout << "Update memdep of users after execute " << inst_exec->id() << std::endl;
+                }
                 for (auto d : users_with_shape_infer_dep) {
                     auto user = d.first;
                     auto dep_idx = d.second;
@@ -1642,13 +1753,13 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                         std::cout << "New user " << user->id() << "'s memdep " << user->unresolved_mem_deps << std::endl;
                         std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
                     }
-                    if (user->unresolved_mem_deps == 0 && shape_infer_waiting_q.find(user) != shape_infer_waiting_q.end()) {
+                    if (user->unresolved_mem_deps == 0 && this->shape_infer_pending_q_memdep.find(user) != this->shape_infer_pending_q_memdep.end()) {
+                        // now ready
                         this->shape_infer_pq.push(user);
-                        this->shape_infer_waiting_q.erase(user);
+                        this->shape_infer_pending_q_memdep.erase(user);
                     }
                 }
             });
-#endif
             exec_Q.pop();
         }
 //        auto end_push = Time::now();
@@ -1669,163 +1780,14 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         // TODO : no need to use this wrapper class. Just use task executor directly
         auto start_run = Time::now();
 
-#ifdef  PACKAGED_TASK
-        if (result_exec.valid())
-            result_exec.get();
-        if (result_update_impl.valid())
-            result_update_impl.get();
-        if (result_shape_infer.valid())
-            result_shape_infer.get();
-#elif defined (THREAD)
-        std::vector<std::thread> threads;
-        if (inst_shape_infer) {
-            threads.push_back(std::thread([&inst_shape_infer, this]() {
-                    inst_shape_infer->dynamic_shape_update_shape();
-                    inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
-                }));
-        }
-        if (inst_update_impl) {
-            threads.push_back(std::thread([&inst_update_impl, &events] {
-                inst_update_impl->dynamic_shape_update_impl(events);
-                inst_update_impl->set_status(EXECUTE_WAIT);
-            }));
-        }
-        if (inst_exec) {
-            threads.push_back(std::thread([&inst_exec, &events, this](void) {
-                // no need to check dependency becuase it is already resolved by shape infer..
-                this->execute_primitive(inst_exec, events);
-                inst_exec->dynamic_shape_proc_count = this->dynamic_shape_proc_count++;
-                inst_exec->set_status(FINISHED);
-                // reset memdep
-                inst_exec->reset_mem_dep();
-                auto users_with_shape_infer_dep = inst_exec->get_users_with_shape_infer_dep();
-                for (auto d : users_with_shape_infer_dep) {
-                    auto user = d.first;
-                    auto dep_idx = d.second;
-                    if (this->dump_logs) {
-                        std::cout << "Original user " << user->id() << "'s memdep " << user->unresolved_mem_deps
-                                  << std::endl;
-                    }
-                    user->unresolved_mem_deps &= (~(1 << (int32_t)dep_idx));
-                    if (this->dump_logs) {
-                        std::cout << "New user " << user->id() << "'s memdep " << user->unresolved_mem_deps
-                                  << std::endl;
-                        std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
-                    }
-                    if (user->unresolved_mem_deps == 0 &&
-                        shape_infer_waiting_q.find(user) != shape_infer_waiting_q.end()) {
-                        this->shape_infer_pq.push(user);
-                        this->shape_infer_waiting_q.erase(user);
-                    }
-                }
-            }));
-        }
-        for (size_t i = 0; i < threads.size(); ++i) {
-            threads[i].join();
-        }
-#else
         dynamic_executor->runAndWait(tasks);
-#endif
         if (dump_logs) {
             auto end_run = Time::now();
             std::chrono::duration<float> fs = end_run - start_run;
             auto run_task_time = std::chrono::duration_cast<ms>(fs);
             std::cout << "Run task time: " << run_task_time.count() << " ms " << std::endl;
         }
-#ifndef PACKAGED_TASK
-        tasks.clear();
-#endif
-        #else // Sequential
-        std::vector<InferenceEngine::Task> tasks;
-        // add shape infer task
-        std::shared_ptr<primitive_inst> inst_shape_infer = nullptr;
-        std::shared_ptr<primitive_inst> inst_update_impl = nullptr;
-        std::shared_ptr<primitive_inst> inst_exec = nullptr;
-//        auto start_run = Time::now();
-        if (!shape_infer_pq.empty()) {
-            // Update shape job
-            auto shape_infer_i = shape_infer_pq.top();
-            inst_shape_infer = shape_infer_pq.top();
 
-            if (dump_logs) {
-                std::cout << "--------- top of shape_infer_pq: " << std::endl;
-                std::cout << shape_infer_i->id()
-                          << " ( Unresolved deps : " << shape_infer_i->get_total_unresolved_shape_infer_dep() << ", "
-                          << " Unresolved mem_deps : " << shape_infer_i->get_num_unresolved_mem_dep() << ")" << std::endl;
-            }
-            // TODO: refactor this
-            if (shape_infer_i->get_total_unresolved_shape_infer_dep() == 0 && shape_infer_i->get_num_unresolved_mem_dep() == 0) {
-                inst_shape_infer->dynamic_shape_update_shape();
-                inst_shape_infer->set_status(UPDATE_IMPL_WAIT);
-                shape_infer_pq.pop();
-            } else {
-                if (dump_logs) {
-                    std::cout << "=> Not resolved all dep, skip shape infer" << std::endl;
-                }
-            }
-        }
-        if (!update_impl_Q.empty()) {
-            // Update impl job
-            inst_update_impl = update_impl_Q.front();
-            inst_update_impl->dynamic_shape_update_impl(events);
-            inst_update_impl->set_status(EXECUTE_WAIT);
-            update_impl_Q.pop();
-        }
-        if (!exec_Q.empty()) {
-            // Execute job
-            inst_exec = exec_Q.front();
-            // no need to check dependency becuase it is already resolved by shape infer..
-            this->execute_primitive(inst_exec, events);
-            inst_exec->dynamic_shape_proc_count = this->dynamic_shape_proc_count++;
-            inst_exec->set_status(FINISHED);
-            // reset memdep
-            inst_exec->reset_mem_dep();
-            auto users_with_shape_infer_dep = inst_exec->get_users_with_shape_infer_dep();
-            for (auto d : users_with_shape_infer_dep) {
-                auto user = d.first;
-                auto dep_idx = d.second;
-                if (this->dump_logs) {
-                    std::cout << "Original user " << user->id() << "'s memdep " << user->unresolved_mem_deps
-                              << std::endl;
-                }
-                user->unresolved_mem_deps &= (~(1 << (int32_t)dep_idx));
-                if (this->dump_logs) {
-                    std::cout << "New user " << user->id() << "'s memdep " << user->unresolved_mem_deps << std::endl;
-                }
-                if (user->unresolved_mem_deps == 0 && shape_infer_waiting_q.find(user) != shape_infer_waiting_q.end()) {
-                    if (this->dump_logs) {
-                    std::cout << "Reenqueue " << inst_exec->id() << "'s user " << user->id() << std::endl;
-                    }
-                    //                        auto start = Time::now();
-                    shape_infer_pq.push(user);
-                    this->shape_infer_waiting_q.erase(user);
-                    //                        auto stop = Time::now();
-                    //                        std::chrono::duration<float> fs = stop - start;
-                    //                        auto reenqueue_time = std::chrono::duration_cast<ms>(fs);
-                    //                        std::cout << "Reenqueue time: " << reenqueue_time.count() << " ms " <<
-                    //                        std::endl;
-                }
-            }
-            exec_Q.pop();
-        }
-        if (dump_logs) {
-            std::cout << "##################### Run stages #############" << std::endl;
-            if (inst_shape_infer)
-                std::cout << "Shape infer for " << inst_shape_infer->id() << std::endl;
-            if (inst_update_impl)
-                std::cout << "Update impl for " << inst_update_impl->id() << std::endl;
-            if (inst_exec)
-                std::cout << "Execute for " << inst_exec->id() << std::endl;
-            std::cout << "##################################" << std::endl;
-        }
-        // TODO : no need to use this wrapper class. Just use task executor directly
-//        auto end_run = Time::now();
-//        std::chrono::duration<float> fs = end_run - start_run;
-//        auto run_task_time = std::chrono::duration_cast<ms>(fs);
-//        std::cout << "Run task time: " << run_task_time.count() << " ms " << std::endl;
-
-
-        #endif
         if (dump_logs) {
             std::cout << "##################################" << std::endl;
             if (inst_shape_infer) {
@@ -1834,50 +1796,71 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                           << std::endl;
             }
         }
+        auto is_in_place_concat_pred = [] (const std::shared_ptr<primitive_inst>& prim) {
+            if (prim->get_node().get_users().size() == 1) {
+                auto user_node = prim->get_node().get_users().front();
+                if (user_node->is_dynamic() && user_node->can_be_optimized() && user_node->is_type<concatenation>())
+                    return true;
+            }
+            return false;  
+        };
         if (inst_shape_infer != nullptr) {
             if (dump_logs) {
-                std::cout << "-- Add users of " << inst_shape_infer->id() << " to shape_infer_Q" << std::endl;
+                std::cout << "-- Add users of " << inst_shape_infer->id() << " to shape_infer_Q  (num users: " << inst_shape_infer->get_user_insts().size() << std::endl;
             }
-            for (auto user : inst_shape_infer->get_user_insts()) {
+            std::function<void(std::shared_ptr<primitive_inst>)> add_users_to_q = [&] (std::shared_ptr<primitive_inst> prim) {
                 if (dump_logs) {
-                    std::cout << "--- User " << user->id() << " : status : " << user->dyn_status << std::endl;
+                    std::cout << "## Check users of " << prim->id() << std::endl;
                 }
-                if (user->dyn_status < UPDATE_SHAPE_WAIT) {
-                    // enqueue ready user
-                    // Need to enqueue user whose mem dep is not cleared
-                    // for example if we do not enqueue B (A<= memdep <= B)
-                    // when A finished shape infer but not executed,
-                    // Then B will not be entered forever.
-                    // However, once B is enqueued at this point, it is needed to be reenqueued once A is executed
-                    // Or we can use two queues, 1) shape_infer_q, 2) shape_infer_mem_dep_waiting_q
-                    // Or we can "not enqueue until all shape_infer + memdep is resolved" => enqueue at exec phase when the user is not yet added
-                    if (user->get_total_unresolved_shape_infer_dep() == 0) {
-                        if (user->get_num_unresolved_mem_dep() == 0) {
-                            user->set_status(UPDATE_SHAPE_WAIT);
-                            shape_infer_pq.push(user);
+                for (auto user : prim->get_user_insts()) {
+                    if (user->dyn_status < UPDATE_SHAPE_WAIT) {
+                        if (user->update_shape_done_by_other) {
+                            if (dump_logs) {
+                                std::cout << "      * " << user->id() << " is already processed by other => check its user " << std::endl;
+                            }
+                            user->set_status(UPDATE_IMPL_WAIT);
+                            this->update_impl_Q.push(user);
+                            add_users_to_q(user);
+                        } else if (user->get_total_unresolved_shape_infer_dep() == 0){
+                            if (is_in_place_concat_pred(user)) {
+                                if (dump_logs) {
+                                    std::cout << "      * " << user->id() << " is pred of optimized concat -> added to shape_infer_pending_queue_concat" << std::endl;
+                                    std::cout << "        (the other preds: ";
+                                    auto concat_user = *user->get_user_insts().begin();
+                                    for (auto dep : concat_user->dependencies()) {
+                                        if (dep.first == user) continue;
+                                        std::cout << " " << dep.first->id() << " , ";
+                                    }
+                                    std::cout << std::endl;
+                                }
+                                shape_infer_pending_q_in_place_concat.push(user);
+                            } else if (user->get_num_unresolved_mem_dep() == 0) {
+                                user->set_status(UPDATE_SHAPE_WAIT);
+                                if (dump_logs) {
+                                    std::cout << "      * " << user->id() << " is added to shape_infer_pq " << std::endl;
+                                }
+                                this->shape_infer_pq.push(user);
+                            } else {
+                                if (dump_logs) {
+                                    std::cout << "      * " << user->id() << " is added to shape_infer_pending_q_memdep " << std::endl;
+                                } 
+                                shape_infer_pending_q_memdep.insert(user);
+                            }
                         } else {
-                            shape_infer_waiting_q.insert(user);
+                            if (dump_logs) {
+                                std::cout << "      * " << user->id() << "'s dependency is not resolved yet :( pending " << std::endl;
+                                // shape infer is not resolved yet => not enqueue
+                                for (auto dep : user->get_unresolved_deps()) {
+                                    std::cout << "--- unresolved dep for " << dep->id() << " (status: " << dep->dyn_status << std::endl;
+                                }
+                            }
                         }
-                        if (dump_logs) {
-                            std::cout << "=> User " << user->id() << " inserted to the Q" << std::endl;
-                        }
-                    } else {
-                        if (dump_logs) {
-                            for (auto dep : user->get_unresolved_deps()) {
-                                std::cout << "=> User " << user->id() << " has unresolved shape infer dep " << std::endl;
-                                std::cout << "                - " << dep->id() << std::endl;
-                            } 
-                        }
-                    }
-                } else if (user->dyn_status >= UPDATE_SHAPE_WAIT) {
-                    // if it is update_impl_wait && concat pred
-                    // need to add to update_impl queue
-                    if (dump_logs) {
-                        std::cout << "=> User " << user->id() << " already processed skip" << std::endl;
                     }
                 }
-            }
-            update_impl_Q.push(inst_shape_infer);
+            };
+            if (inst_shape_infer->get_impl_params()->get_output_layout().count() != 0) // empty layer directly goes to execQ
+                update_impl_Q.push(inst_shape_infer);
+            add_users_to_q(inst_shape_infer);
         }
         if (inst_update_impl != nullptr) {
             exec_Q.push(inst_update_impl);
@@ -1900,6 +1883,62 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                     users_with_memdep += (u.first->id() + "_");
                 }
                 std::cout << i->id()
+                          << ", total_unresolved_shape_infer_dep " << i->get_total_unresolved_shape_infer_dep()
+                          << ", unresolved_memdep: " << i->unresolved_mem_deps << " (" << unresolved_memdep_ids << ")"
+                          << ", memdep users: " << i->get_users_with_shape_infer_dep().size() << " (" << users_with_memdep << ")"
+                          << ", min_dist: " << i->get_node().min_distance
+                          << ", max_dist: " << i->get_node().max_distance << std::endl;
+                for (auto dep : i->get_unresolved_deps()) {
+                    std::cout << "--- unresolved dep for " << dep->id() << " (status: " << dep->dyn_status << std::endl;
+                }
+            }
+            std::cout << "==========dump shape infer pending Q for memdep" << std::endl;
+            for (auto i : shape_infer_pending_q_memdep) {
+                std::string unresolved_memdep_ids = "";
+                for (auto u: i->get_unresolved_mem_dep_ids()) {
+                    unresolved_memdep_ids += (u + " ");
+                }
+                std::string users_with_memdep = "";
+                for (auto u: i->get_users_with_shape_infer_dep()) {
+                    users_with_memdep += (u.first->id() + "_");
+                }
+                std::cout << i->id()
+                          << ", total_unresolved_shape_infer_dep " << i->get_total_unresolved_shape_infer_dep()
+                          << ", unresolved_memdep: " << i->unresolved_mem_deps << " (" << unresolved_memdep_ids << ")"
+                          << ", memdep users: " << i->get_users_with_shape_infer_dep().size() << " (" << users_with_memdep << ")"
+                          << ", min_dist: " << i->get_node().min_distance
+                          << ", max_dist: " << i->get_node().max_distance << std::endl;
+                for (auto dep : i->get_unresolved_deps()) {
+                    std::cout << "--- unresolved dep for " << dep->id() << " (status: " << dep->dyn_status << std::endl;
+                }
+            }
+            std::cout << "==========dump shape infer pending Q for conat_preds" << std::endl;
+            std::priority_queue<std::shared_ptr<primitive_inst>,
+                           std::vector<std::shared_ptr<primitive_inst>>,
+                           shape_infer_priority2>
+                dummy_Q2 = shape_infer_pending_q_in_place_concat;
+            while (!dummy_Q2.empty()) {
+                auto i = dummy_Q2.top();
+                dummy_Q2.pop();
+                std::string unresolved_memdep_ids = "";
+                for (auto u: i->get_unresolved_mem_dep_ids()) {
+                    unresolved_memdep_ids += (u + " ");
+                }
+                std::string users_with_memdep = "";
+                for (auto u: i->get_users_with_shape_infer_dep()) {
+                    users_with_memdep += (u.first->id() + "_");
+                }
+                auto concat_user = *(i->get_user_insts().begin());
+                bool all_concat_preds_are_resolved = true;
+                for (auto dep : concat_user->dependencies()) {
+                    if (dep.first->get_total_unresolved_shape_infer_dep() > 0) {
+                        all_concat_preds_are_resolved = false;
+                        break;
+                    }
+                }
+
+                std::cout << i->id()
+                          << ", all concat users resolved? " << all_concat_preds_are_resolved
                           << ", total_unresolved_shape_infer_dep " << i->get_total_unresolved_shape_infer_dep()
                           << ", unresolved_memdep: " << i->unresolved_mem_deps << " (" << unresolved_memdep_ids << ")"
                           << ", memdep users: " << i->get_users_with_shape_infer_dep().size() << " (" << users_with_memdep << ")"

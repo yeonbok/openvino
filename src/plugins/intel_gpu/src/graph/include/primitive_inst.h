@@ -353,7 +353,6 @@ protected:
     program_node const* _node;
     layout _node_output_layout;
 
-    bool update_shape_done_by_other = false;
     bool allocation_done_by_other = false;
 
     std::unordered_map<std::shared_ptr<primitive_inst>, int32_t> users_with_shape_infer_dep;
@@ -492,8 +491,11 @@ protected:
     std::unordered_map<size_t, std::tuple<int64_t, size_t>> _profiling_data;
     std::unordered_map<size_t, instrumentation::perf_counter_key> _profiling_info;
 
+public:
+//TODO add getter
     std::vector<event::ptr> runtime_dep;
     event::ptr runtime_res_ev = nullptr;
+    bool update_shape_done_by_other = false;
 };
 
 /*
