@@ -775,14 +775,6 @@ void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& de
 
     bool need_args_update = false;
     if (shape_changed() || !_impl || _impl->is_dynamic()) {
-//        bool is_empty = (_impl_params->get_output_layout().count() == 0); // TODO fix
-//        if (is_empty) {
-//            GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
-//            runtime_res_ev = get_network().get_stream().create_user_event(true);
-//            update_shape_done_by_other = false;  // reset
-//            return;
-//        }
-
         need_args_update = true;
         event::ptr unfusion_ev = dynamic_shape_unfusion(dep_events);
         if (unfusion_ev != nullptr) {
@@ -847,7 +839,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                     auto ev = get_network().get_primitive_event(id);
                     dependencies.emplace_back(ev);
                 } catch (const std::out_of_range& oor) {
-                    OPENVINO_ASSERT(false, "[GPU] execution order corrupted: ", oor.what());
+                    OPENVINO_ASSERT(false, "[GPU] on execute ", id, "execution order corrupted: ", oor.what());
                 }
             }
         }
