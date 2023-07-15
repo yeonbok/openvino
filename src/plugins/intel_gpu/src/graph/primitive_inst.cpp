@@ -714,11 +714,6 @@ bool primitive_inst::dynamic_shape_update_shape() {
         do_runtime_in_place_concat();
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
         update_shape();
-//        if (_impl_params->output_layouts[0].count() == 0) {
-//            GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
-//            update_shape_done_by_other = false; // reset
-//            return true;
-//        }
         bool is_empty = (_impl_params->get_output_layout().count() == 0); // TODO fix
         if (is_empty) {
             GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping becuase output data is empty " << std::endl;
@@ -726,10 +721,6 @@ bool primitive_inst::dynamic_shape_update_shape() {
             update_shape_done_by_other = false;  // reset
             return true;
         }
-    } else {
-//        std::cout << "Skipped update shape for " << id() << std::endl;
-//        std::cout << "After update shape for " << id() << " : " << _impl_params->output_layouts[0].to_string() << std::endl;
-
     }
     return false;
 }
@@ -807,7 +798,6 @@ void primitive_inst::dynamic_shape_update_impl(const std::vector<event::ptr>& de
 event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     if (runtime_res_ev != nullptr) return runtime_res_ev;
     if (_impl_params->can_be_optimized()) {
-//        std::cout << id() << " Reset allocation_done_by_other" << std::endl;
         allocation_done_by_other = false; // reset
     }
     const auto primitive_id = id();
@@ -839,7 +829,8 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                     auto ev = get_network().get_primitive_event(id);
                     dependencies.emplace_back(ev);
                 } catch (const std::out_of_range& oor) {
-                    OPENVINO_ASSERT(false, "[GPU] on execute ", id, "execution order corrupted: ", oor.what());
+                    OPENVINO_ASSERT(false, "[GPU] on execute ", primitive_id, ": Could not find primitive event of ", id );
+                    OPENVINO_ASSERT(false, "execution orde corrupted: ", oor.what());
                 }
             }
         }

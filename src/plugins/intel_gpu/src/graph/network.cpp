@@ -2066,7 +2066,10 @@ void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive
     // 3) Primitive has CPU user or primitive is output
     if (get_stream().get_queue_type() == QueueTypes::out_of_order || _enable_profiling || primitive->needs_completion_event()) {
         auto id = primitive->id();
-        _events.insert({id, ev});
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            _events.insert({id, ev});
+        }
     }
 }
 
