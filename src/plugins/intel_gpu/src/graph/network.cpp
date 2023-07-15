@@ -1382,15 +1382,6 @@ bool network::shape_infer_priority::operator()(const std::shared_ptr<primitive_i
     auto b_num_users_with_shape_infer_dep_to_this = b->get_users_with_shape_infer_dep().size();
     auto a_num_deps = a->dependencies().size();
     auto b_num_deps = b->dependencies().size();
-//    auto a_has_optimizable_concat_user = a->get_node().is_dynamic() && (a->get_users().size() == 1) &&  (*a->get_users().front()).is_type<concatenation>() && (*a->get_users().front()).can_be_optimized();
-//    auto b_has_optimizable_concat_user = b->get_node().is_dynamic() && (b->get_users().size() == 1) &&  (*b->get_users().front()).is_type<concatenation>() && (*b->get_users().front()).can_be_optimized();
-    // Now all shape infer dep is resolved && memdep is resolved 
-    // For buffer fusing, need to do ALAP schedule
-    // To check unresolved normal shape inference dep
-//    if (a_has_optimizable_concat_user && !b_has_optimizable_concat_user)
-//        SWAP;
-//    if (!a_has_optimizable_concat_user && b_has_optimizable_concat_user)
-//        KEEP
     if (a_min_dist < b_min_dist) {
         KEEP
     } else if (a_min_dist == b_min_dist) {
@@ -1512,24 +1503,6 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
     //    return std::to_string(iter) + "_";
     //};
 
-    // shape_infer_Q priority 
-    // 1. less min_dist
-    // 2. less unresolved_mem_dep 
-    // 3. less unresolved_shape_infer_dep // deterministic shape infer dep
-    // 4. less max_dist
-    // 5. less processing_order
-    // after shape_infer done 
-    //    push it to update_impl_Q
-    //
-    // after one process update shape_infer_Q
-    // - add user 
-    //   with updated unresolved_mem_dep_count
-    //   with updated unresolved_shape_infer_dep
-    //    
-
-    // push shape infer seed
-
-
     // add shape infer seed
     for (auto input : _inputs) {
         shape_infer_pq.push(input);
@@ -1543,59 +1516,6 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
         std::shared_ptr<primitive_inst> inst_update_impl = nullptr;
         std::shared_ptr<primitive_inst> inst_exec = nullptr;
         if ((shape_infer_pq.empty() && shape_infer_pending_q_memdep.empty() && !shape_infer_pending_q_in_place_concat.empty())) {
-            #if 0
-                // TODO: if nodes in concat queue is ready, push it to ready queue
-            // all preds of concat preds shapes are updated at this time
-//            inst_shape_infer = *shape_infer_pending_q_in_place_concat.begin();
-//            shape_infer_pending_q_in_place_concat.erase(inst_shape_infer);
-            auto tmp_inst = shape_infer_pending_q_in_place_concat.top();
-            if (dump_logs) {
-                std::cout << "--------- Try to pick from shape_infer_pending_q_in_place_concat: " << std::endl;
-                std::cout << tmp_inst->id()
-                          << " ( Unresolved deps : " << tmp_inst->get_total_unresolved_shape_infer_dep() << ", "
-                          << " Unresolved mem_deps : " << tmp_inst->get_num_unresolved_mem_dep() << ")" << std::endl;
-            }
-
-            if (tmp_inst->update_shape_done_by_other) {
-                if (dump_logs) {
-                    std::cout << "However shape infer for this is done by other!" << std::endl;
-                }
-                // add to update impl q and skip
-                // also these operation has only one concat user => already put to update_impl_Q by first pred
-                tmp_inst->set_status(UPDATE_IMPL_WAIT);
-                update_impl_Q.push(tmp_inst);
-                shape_infer_pending_q_in_place_concat.pop();
-            } else {
-                auto concat_user = *tmp_inst->get_user_insts().begin();
-                bool all_concat_preds_are_resolved = true;
-                for (auto dep : concat_user->dependencies()) {
-                    if (dep.first->get_total_unresolved_shape_infer_dep() > 0) {
-                        std::cout << dep.first->id() << " : unresolved shape infer dep " << dep.first->get_total_unresolved_shape_infer_dep() << std::endl;
-                        all_concat_preds_are_resolved = false;
-                        break;
-                    }
-                }
-
-                if (all_concat_preds_are_resolved) {
-                    if (dump_logs) {
-                        std::cout << "current pred: " << tmp_inst->id() << std::endl;
-                        std::cout << "--- all concat user " << concat_user->id() << "'s preds are resolved " << std::endl;
-                    }
-                    inst_shape_infer = tmp_inst;
-                    inst_shape_infer->set_status(UPDATE_SHAPE_WAIT);
-                    shape_infer_pending_q_in_place_concat.pop();
-                } else {
-                    if (dump_logs) {
-                        std::cout << "current pred: " << tmp_inst->id() << std::endl;
-                        std::cout << "--- all concat user " << concat_user->id() << "'s preds are NOT resolved "
-                              << std::endl;
-                        for (auto dep : concat_user->dependencies()) {
-                            std::cout << dep.first->id() << " : status " << dep.first->dyn_status << std::endl;
-                        }
-                    }
-                }
-            }
-            #else
             auto tmp_inst = shape_infer_pending_q_in_place_concat.top();
 
             while (tmp_inst) {
@@ -1637,7 +1557,6 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
                     tmp_inst = nullptr;
                 }
             }
-#endif
         }
         if (!shape_infer_pq.empty()) {
             // Update shape job
@@ -1762,10 +1681,6 @@ void network::execute_impl_async2(const std::vector<event::ptr>& events) {
             });
             exec_Q.pop();
         }
-//        auto end_push = Time::now();
-//        std::chrono::duration<float> fs = end_push - start_push;
-//        auto push_task_time = std::chrono::duration_cast<ms>(fs);
-//        std::cout << "Push_task time: " << push_task_time.count() << " ms " << std::endl;
 
         if (dump_logs) {
             std::cout << "##################### Run stages #############" << std::endl;
