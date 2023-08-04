@@ -480,10 +480,9 @@ event::ptr primitive_inst::realloc_if_needed() {
 }
 
 bool primitive_inst::use_async_compilation() {
-    GPU_DEBUG_GET_INSTANCE(debug_config);
-    GPU_DEBUG_IF(debug_config->disable_async_compilation) {
+    if (get_network().get_program()->get_num_async_compilation_threads() < 1)
         return false;
-    }
+
     return (_node->is_type<convolution>() ||
             _node->is_type<fully_connected>() ||
             _node->is_type<softmax>());

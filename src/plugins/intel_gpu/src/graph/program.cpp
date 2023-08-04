@@ -158,7 +158,8 @@ program::program(engine& engine_ref,
       _task_executor(task_executor),
       processing_order(),
       is_internal(is_internal),
-      is_body_program(is_body_program) {
+      is_body_program(is_body_program),
+      _num_async_build_threads(config.get_property(ov::intel_gpu::num_async_compilation_threads)) {
     _config.apply_user_properties(_engine.get_device_info());
     init_primitives();
     GPU_DEBUG_INFO << "Program config\n" << config.to_string();
@@ -183,7 +184,8 @@ program::program(engine& engine_ref,
       _config(config),
       _task_executor(task_executor),
       processing_order(),
-      is_internal(is_internal) {
+      is_internal(is_internal),
+      _num_async_build_threads(config.get_property(ov::intel_gpu::num_async_compilation_threads)) {
     _config.apply_user_properties(_engine.get_device_info());
     init_primitives();
     init_program();
@@ -213,9 +215,11 @@ void program::init_program() {
     _kernels_cache = std::unique_ptr<kernels_cache>(new kernels_cache(_engine, _config, prog_id, _task_executor,
                                                                       kernel_selector::KernelBase::get_db().get_batch_header_str()));
 
-    _compilation_context = ICompilationContext::create(make_task_executor_config(_config,
+    if (_num_async_build_threads > 0) {
+        GPU_DEBUG_COUT << "[prog " << get_id() << "] Create " << _num_async_build_threads << " async compilation threads" << std::endl;
+        _compilation_context = ICompilationContext::create(make_task_executor_config(_config,
                                                        "Task executor config for CompilationContext in GPU plugin", _num_async_build_threads));
-
+    }
     _impls_cache = cldnn::make_unique<ImplementationsCache>(_impls_cache_capacity);
     // Remove items of compilation context's internal queue when some impl is popped in kernels_cache
     // compilation context's queue check duplication of inserted task

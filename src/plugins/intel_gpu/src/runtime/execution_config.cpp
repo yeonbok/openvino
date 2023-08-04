@@ -54,6 +54,7 @@ void ExecutionConfig::set_default() {
         std::make_tuple(ov::intel_gpu::hint::queue_priority, ov::hint::Priority::MEDIUM),
         std::make_tuple(ov::intel_gpu::enable_loop_unrolling, true),
         std::make_tuple(ov::internal::exclusive_async_requests, false),
+        std::make_tuple(ov::intel_gpu::experimental_hints, ""),
 
         // Legacy API properties
         std::make_tuple(ov::intel_gpu::nv12_two_inputs, false),
@@ -72,6 +73,7 @@ void ExecutionConfig::set_default() {
         std::make_tuple(ov::intel_gpu::partial_build_program, false),
         std::make_tuple(ov::intel_gpu::allow_new_shape_infer, false),
         std::make_tuple(ov::intel_gpu::use_only_static_kernels_for_dynamic_shape, false),
+        std::make_tuple(ov::intel_gpu::num_async_compilation_threads, 1),
         std::make_tuple(ov::intel_gpu::buffers_preallocation_ratio, 1.1f));
 }
 
@@ -159,6 +161,36 @@ void ExecutionConfig::apply_performance_hints(const cldnn::device_info& info) {
     if (get_property(ov::internal::exclusive_async_requests)) {
         set_property(ov::num_streams(1));
     }
+
+    auto get_experimental_hints = [] (std::string s) {
+        size_t start = 0;
+        size_t end = s.find(",");
+        std::vector<std::string> hints;
+        while ((end = s.find(",", start)) != std::string::npos) {
+            hints.push_back(s.substr(start, end - start));
+            start = end + 1;
+        }
+        if (start < s.length()) {
+            hints.push_back(s.substr(start));
+        }
+        return hints;
+    };
+    auto experimental_hints = get_experimental_hints(get_property(ov::intel_gpu::experimental_hints));
+    for (auto h : experimental_hints) {
+        if (h.find("NUM_ASYNC_COMPILATION_THREADS") != std::string::npos) {
+            OPENVINO_ASSERT(h.find("=") != std::string::npos, "Hint ", h, " is incomplete!");
+            OPENVINO_ASSERT(h.find("=") + 1 < h.length(), "Hint ", h, " is incomplete!");
+            auto val = std::stoi(h.substr(h.find("=") + 1));
+            if (static_cast<int>(val) < 0 ||
+                static_cast<int>(val) > static_cast<int>(std::thread::hardware_concurrency())) {
+                std::cout << "Specified num async compilation threads is out of range (" << val
+                          << ")! Should be [0, " << std::thread::hardware_concurrency() << ")." << std::endl;
+                std::cout << "=> Default value 1 will be used. " << std::endl;
+            } else {
+                set_property(ov::intel_gpu::num_async_compilation_threads(val));
+            }
+        }
+    }
 }
 
 void ExecutionConfig::apply_priority_hints(const cldnn::device_info& info) {
@@ -187,6 +219,10 @@ void ExecutionConfig::apply_debug_options(const cldnn::device_info& info) {
 
     GPU_DEBUG_IF(debug_config->disable_dynamic_impl == 1) {
         set_property(ov::intel_gpu::use_only_static_kernels_for_dynamic_shape(true));
+    }
+
+    GPU_DEBUG_IF(debug_config->disable_async_compilation) {
+        set_property(ov::intel_gpu::num_async_compilation_threads(0));
     }
 }
 

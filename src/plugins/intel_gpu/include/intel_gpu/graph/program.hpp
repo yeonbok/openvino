@@ -267,6 +267,10 @@ public:
 
     static std::shared_ptr<ov::threading::IStreamsExecutor> make_task_executor(const ExecutionConfig& config);
 
+    int32_t get_num_async_compilation_threads() {
+        return _num_async_build_threads;
+    }
+
 private:
     uint32_t prog_id = 0;
     engine& _engine;
@@ -283,7 +287,7 @@ private:
     bool is_body_program;
     std::unique_ptr<ImplementationsCache> _impls_cache;
     const size_t _impls_cache_capacity = 10000;
-    const int _num_async_build_threads = 1;
+    int32_t _num_async_build_threads = 1;
     std::unique_ptr<ICompilationContext> _compilation_context;
 
     std::map<primitive_id, std::shared_ptr<program_node>> nodes_map;

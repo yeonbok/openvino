@@ -55,6 +55,8 @@ static constexpr Property<bool, PropertyMutability::RW> enable_lp_transformation
 static constexpr Property<size_t, PropertyMutability::RW> max_dynamic_batch{"DYN_BATCH_LIMIT"};
 static constexpr Property<bool, PropertyMutability::RW> nv12_two_inputs{"GPU_NV12_TWO_INPUTS"};
 static constexpr Property<float, PropertyMutability::RW> buffers_preallocation_ratio{"GPU_BUFFERS_PREALLOCATION_RATIO"};
+static constexpr Property<std::string, PropertyMutability::RW> experimental_hints{"EXPERIMENTAL_HINTS"};
+static constexpr Property<int32_t, PropertyMutability::RW> num_async_compilation_threads{"NUM_ASYNC_COMPILATION_THREADS"};
 
 }  // namespace intel_gpu
 }  // namespace ov
