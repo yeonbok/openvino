@@ -187,8 +187,8 @@ kernel_impl_params fully_connected_inst::get_fake_aligned_params(kernel_impl_par
             return std::move(orig_impl_param);
         }
 
-        input_shape[input_row_idx] = align_to(input_shape[input_row_idx], 8);
-        output_shape[output_row_idx] = align_to(output_shape[output_row_idx], 8);
+        input_shape[input_row_idx] = align_to(input_shape[input_row_idx], 16);
+        output_shape[output_row_idx] = align_to(output_shape[output_row_idx], 16);
 
         updated_param.input_layouts[0] = layout(ov::PartialShape(input_shape),
                                                 orig_input_layout.data_type,

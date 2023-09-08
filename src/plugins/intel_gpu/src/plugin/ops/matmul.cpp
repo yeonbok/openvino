@@ -46,8 +46,9 @@ static void CreateMatMulOp(ProgramBuilder& p, const std::shared_ptr<ov::op::v0::
             return false;
 
         // dynamic shapes and 1D tensors are not transposed
-        if (shapes[0].is_dynamic() || shapes[1].is_dynamic() ||
-            shapes[0].size() < 2 || shapes[1].size() < 2)
+        if (shapes[0].is_dynamic() || shapes[1].is_dynamic())
+            return true;
+        if (shapes[0].size() < 2 || shapes[1].size() < 2)
             return false;
 
         // don't transpose inputs if they're aligned to 16
