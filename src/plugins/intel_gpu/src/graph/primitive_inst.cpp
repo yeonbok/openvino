@@ -1256,8 +1256,14 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
     layout = cldnn::layout(layout.get_partial_shape().get_max_shape(), layout.data_type, layout.format, layout.data_padding);
     bool usm_device_allocatable = true;
     const auto& total_device_input_mem_size = std::accumulate(impl_params.input_layouts.begin(), impl_params.input_layouts.end(), (uint64_t)0, device_mem_acc);
-    if (total_device_input_mem_size > _engine.get_device_info().max_global_mem_size)
+    if (total_device_input_mem_size > _engine.get_device_info().max_global_mem_size) {
         usm_device_allocatable = false;
+        std::cout << _node.id() << " : Could not allocate to device mem!" << std::endl;
+        std::cout << " - max_global_mem_size : " << _engine.get_device_info().max_global_mem_size << std::endl;
+        std::cout << " - input layout : " << impl_params.input_layouts[0].to_short_string() << std::endl;
+        std::cout << " - output layout : " << layout.to_short_string() << std::endl;
+        std::cout << " - total_device_input_mem_size : " << total_device_input_mem_size << std::endl;
+    }
 
     bool reusable_across_network = (runtime_alloc && _node.is_dynamic_output_layout()) ? !reset : !user_requesting_mem_reuse_false(_node);
 
@@ -1273,8 +1279,8 @@ memory::ptr primitive_inst::allocate_output(engine& _engine, memory_pool& pool, 
     auto use_lockable_memory =
         is_output_buffer || is_cpu ||
         has_any_cpu_user_not_shape_of(_node.get_users()) ||
-        !_engine.supports_allocation(allocation_type::usm_device) ||
-        (_node.is_shape_infer_dep() && _engine.get_device_info().dev_type == device_type::integrated_gpu);
+        !_engine.supports_allocation(allocation_type::usm_device);
+//        (_node.is_shape_infer_dep() && _engine.get_device_info().dev_type == device_type::integrated_gpu);
     const auto& lockable_mem_type = _engine.get_lockable_preferred_memory_allocation_type(layout.format.is_image_2d());
 
     auto alloc_type = use_lockable_memory ? lockable_mem_type
