@@ -79,11 +79,9 @@ void post_optimize_weights::optimize_weights(T& node, program& p) {
 
         if (weights_reorder_params != nullptr) {
             bool can_be_fused = prev_node.is_type<reorder>() &&
+                                prev_node.as<reorder>().is_simple_reorder() &&
                                 prev_node.get_users().size() == 1 &&
-                                prev_node.get_dependencies().size() == 1 &&
-                                !prev_node.has_fused_primitives() &&
-                                !prev_node.as<reorder>().has_mean() &&
-                                prev_node.as<reorder>().get_primitive()->subtract_per_feature.empty();
+                                prev_node.get_dependencies().size() == 1;
             if (impl->is_dynamic()) {
                 if (weights_reorder_params->get_output_layout().compatible(prev_node.get_output_layout())) {
                     // if compatible, it can be reinterpreted, thus no need to reorder at build time
