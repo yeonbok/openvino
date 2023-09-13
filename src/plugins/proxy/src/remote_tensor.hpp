@@ -36,7 +36,7 @@ public:
 
     const ov::Strides& get_strides() const override;
 
-    static ov::SoPtr<ov::ITensor> get_hardware_tensor(const ov::SoPtr<ov::ITensor>& tensor, bool unwrap);
+    static const ov::SoPtr<ov::ITensor>& get_hardware_tensor(const ov::SoPtr<ov::ITensor>& tensor);
 
 private:
     mutable std::string m_name;

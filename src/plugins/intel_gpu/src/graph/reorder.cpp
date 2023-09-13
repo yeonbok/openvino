@@ -28,16 +28,10 @@ layout reorder_inst::calc_output_layout(reorder_node const& node, kernel_impl_pa
     }
 
     if (ifmt.is_nv12() && !desc->has_surface_input()) {
-        const size_t h_dim = 1;
-        const size_t c_dim = 3;
-
-        auto out_shape = input_layout.get_partial_shape();
-        out_shape[c_dim] = 3;
-        if (desc->input_size() == 1)
-            out_shape[h_dim] = out_shape[h_dim] * 2 / 3;
-
+        auto data_size = tensor{ input_layout.batch(), input_layout.feature() * 3,
+                                 input_layout.spatial(0), input_layout.spatial(1) };
         if (ofmt != ifmt)
-            return layout(out_shape, odt, ofmt, op);
+            return layout(odt, ofmt, data_size, op);
 
         CLDNN_ERROR_MESSAGE(desc->id, "No image_nv12 to image_nv12 reorder is supported");
     } else if (ofmt.is_winograd() && ifmt.is_winograd()) {

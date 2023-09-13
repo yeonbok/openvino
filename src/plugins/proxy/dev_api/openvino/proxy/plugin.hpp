@@ -26,7 +26,7 @@ void create_plugin(std::shared_ptr<ov::IPlugin>& plugin);
  *
  * @return Original remote context
  */
-ov::SoPtr<ov::IRemoteContext> get_hardware_context(const ov::SoPtr<ov::IRemoteContext>& context);
+const ov::SoPtr<ov::IRemoteContext>& get_hardware_context(const ov::SoPtr<ov::IRemoteContext>& context);
 
 /**
  * @brief Get wrapped remote tensor
@@ -35,7 +35,7 @@ ov::SoPtr<ov::IRemoteContext> get_hardware_context(const ov::SoPtr<ov::IRemoteCo
  *
  * @return Original remote tensor
  */
-ov::SoPtr<ov::ITensor> get_hardware_tensor(const ov::SoPtr<ov::ITensor>& tensor, bool unwrap = false);
+const ov::SoPtr<ov::ITensor>& get_hardware_tensor(const ov::SoPtr<ov::ITensor>& tensor);
 
 }  // namespace proxy
 }  // namespace ov

@@ -7,10 +7,6 @@
 #include <memory>
 
 #include "openvino/proxy/plugin.hpp"
-#include "openvino/runtime/itensor.hpp"
-#include "openvino/runtime/make_tensor.hpp"
-#include "openvino/runtime/so_ptr.hpp"
-#include "remote_utils.hpp"
 
 namespace {
 std::shared_ptr<ov::IRemoteTensor> cast_tensor(const ov::SoPtr<ov::ITensor>& tensor) {
@@ -63,23 +59,12 @@ const ov::Strides& ov::proxy::RemoteTensor::get_strides() const {
     return m_tensor->get_strides();
 }
 
-ov::SoPtr<ov::ITensor> ov::proxy::RemoteTensor::get_hardware_tensor(const ov::SoPtr<ov::ITensor>& tensor, bool unwrap) {
-    ov::SoPtr<ov::ITensor> hw_tensor = tensor;
+const ov::SoPtr<ov::ITensor>& ov::proxy::RemoteTensor::get_hardware_tensor(const ov::SoPtr<ov::ITensor>& tensor) {
     if (auto remote_tensor = std::dynamic_pointer_cast<ov::proxy::RemoteTensor>(tensor._ptr))
-        hw_tensor = remote_tensor->m_tensor;
-
-    if (unwrap) {
-        if (auto wrapper = std::dynamic_pointer_cast<ov::RemoteBlobTensor>(hw_tensor._ptr)) {
-            auto blob = ov::get_hardware_blob(wrapper->blob.get());
-            if (auto tensor_holder = dynamic_cast<ov::legacy_convert::TensorHolder*>(blob)) {
-                hw_tensor = tensor_holder->get_tensor();
-            }
-        }
-    }
-
-    return hw_tensor;
+        return remote_tensor->m_tensor;
+    return tensor;
 }
 
-ov::SoPtr<ov::ITensor> ov::proxy::get_hardware_tensor(const ov::SoPtr<ov::ITensor>& tensor, bool unwrap) {
-    return ov::proxy::RemoteTensor::get_hardware_tensor(tensor, unwrap);
+const ov::SoPtr<ov::ITensor>& ov::proxy::get_hardware_tensor(const ov::SoPtr<ov::ITensor>& tensor) {
+    return ov::proxy::RemoteTensor::get_hardware_tensor(tensor);
 }
