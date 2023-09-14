@@ -835,6 +835,8 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
     OPENVINO_ASSERT(inputLayoutItr != m_graph->GetInputLayouts().end(), "[GPU] Input name mismatch");
 
     auto input_layout = inputLayoutItr->second;
+    GPU_DEBUG_TRACE_DETAIL << "prepare_input for " << inputName << " (" << input_layout.to_short_string()
+                           << " (bytes : " << input_layout.bytes_count() << ")" << std::endl;
     auto& prec = inputBlob->getTensorDesc().getPrecision();
     auto remote_ptr = inputBlob->as<gpu::ClBlob>();
     auto& stream = m_graph->GetNetwork()->get_stream();
@@ -871,18 +873,23 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
         auto dt_size = cldnn::data_type_traits::size_of(DataTypeFromPrecision(tensor_desc.getPrecision()));
         auto current_shape = ov::Shape(tensor_desc.getDims());
         auto prealloc_info = sp.predict_preallocation_shape(inputName, current_shape, dt_size, !should_allocate_device_blob);
+        GPU_DEBUG_TRACE_DETAIL << "--- current_shape : " << current_shape.to_string() << std::endl;
 
         if (should_allocate_device_blob) {
             auto preallocation_shape = prealloc_info.second;
+            GPU_DEBUG_TRACE_DETAIL << "--- prealloc_shape : " << preallocation_shape.to_string() << std::endl;
             auto can_preallocate_buffer = prealloc_info.first &&
                                           sp.can_preallocate(ov::shape_size(preallocation_shape) * dt_size);
 
             if (can_preallocate_buffer) {
+                GPU_DEBUG_TRACE_DETAIL << " <= Do prealloc! " << std::endl;
                 auto new_tensor_desc = tensor_desc;
                 new_tensor_desc.setDims(preallocation_shape);
+                GPU_DEBUG_TRACE_DETAIL << " !!! create device blob " << std::endl;
                 auto device_blob = create_device_blob(new_tensor_desc);
                 _deviceInputs[inputName] = reinterpret_device_blob(device_blob, inputBlob->getTensorDesc());
             } else {
+                GPU_DEBUG_TRACE_DETAIL << " !!! create device blob " << std::endl;
                 _deviceInputs[inputName] = create_device_blob(tensor_desc);
             }
         } else {
@@ -948,8 +955,10 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
                     auto src_lock = inputBlob->cbuffer();
                     auto src_ptr = src_lock.as<uint8_t*>();
                     if (!same_host_mem(inputMem, src_ptr)) {
+                        GPU_DEBUG_TRACE_DETAIL << "Copy input to usm! " << std::endl;
                         auto ev = inputMem->copy_from(stream, src_ptr, false);
-                        dependencies.push_back(ev);
+                        if (ev != nullptr)
+                            dependencies.push_back(ev);
                     }
                 }
             }
@@ -1001,14 +1010,25 @@ InferenceEngine::Blob::Ptr InferRequest::create_device_blob(const InferenceEngin
     auto dt = DataTypeFromPrecision(desc.getPrecision());
     ov::PartialShape shape(desc.getDims());
 
+    GPU_DEBUG_GET_INSTANCE(debug_config);
     // Currently, clDeviceMemAllocINTEL returns memory address allocated to other input blob if the current blob is empty
     // W/A for this issue:
     // Allocate with non-empty shape and then reinterprete with original shape
-    for (auto &i : shape) {
-        if (i == 0)
-            i = 1;
-    }
 
+    GPU_DEBUG_TRACE_DETAIL << " [create device blob] " << std::endl;
+    GPU_DEBUG_TRACE_DETAIL << " original shape : " << std::endl;
+    GPU_DEBUG_TRACE_DETAIL << shape.to_string() << std::endl;
+    bool reinterp = false;
+    for (auto &i : shape) {
+        if (i == 0) {
+            i = 1;
+            reinterp = true;
+        }
+    }
+    GPU_DEBUG_TRACE_DETAIL << " allocating memory shape : " << std::endl;
+    GPU_DEBUG_TRACE_DETAIL << shape.to_string() << std::endl;
+    if (reinterp)
+        GPU_DEBUG_TRACE_DETAIL << "Input was 0 byte but we allocate 1 byte memory! " << std::endl;
     auto l = cldnn::layout(shape, dt, format);
 
     if (m_graph->get_engine().use_unified_shared_memory()) {
