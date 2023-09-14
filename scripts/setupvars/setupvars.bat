@@ -36,7 +36,7 @@ if exist "%INTEL_OPENVINO_DIR%\extras\opencv\setupvars.bat" (
 set "InferenceEngine_DIR=%INTEL_OPENVINO_DIR%\runtime\cmake"
 set "ngraph_DIR=%INTEL_OPENVINO_DIR%\runtime\cmake"
 set "OpenVINO_DIR=%INTEL_OPENVINO_DIR%\runtime\cmake"
-set "OPENVINO_LIB_PATHS=%INTEL_OPENVINO_DIR%\runtime\bin\intel64\Release;%INTEL_OPENVINO_DIR%\runtime\bin\intel64\Debug;%OPENVINO_LIB_PATHS%"
+set "OPENVINO_LIB_PATHS=%INTEL_OPENVINO_DIR%\runtime\bin\intel64\Release;%INTEL_OPENVINO_DIR%\runtime\bin\intel64\RelWithDebInfo;%INTEL_OPENVINO_DIR%\runtime\bin\intel64\Debug;%OPENVINO_LIB_PATHS%"
 
 :: TBB
 if exist %INTEL_OPENVINO_DIR%\runtime\3rdparty\tbb (
