@@ -835,8 +835,7 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
     OPENVINO_ASSERT(inputLayoutItr != m_graph->GetInputLayouts().end(), "[GPU] Input name mismatch");
 
     auto input_layout = inputLayoutItr->second;
-    GPU_DEBUG_TRACE_DETAIL << "prepare_input for " << inputName << " (" << input_layout.to_short_string()
-                           << " (bytes : " << input_layout.bytes_count() << ")" << std::endl;
+    GPU_DEBUG_TRACE_DETAIL << "===== prepare_input for " << inputName << std::endl;
     auto& prec = inputBlob->getTensorDesc().getPrecision();
     auto remote_ptr = inputBlob->as<gpu::ClBlob>();
     auto& stream = m_graph->GetNetwork()->get_stream();
