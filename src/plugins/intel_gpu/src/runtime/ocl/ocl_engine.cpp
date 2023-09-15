@@ -130,14 +130,18 @@ memory::ptr ocl_engine::allocate_memory(const layout& layout, allocation_type ty
 
     OPENVINO_ASSERT(layout.bytes_count() <= get_device_info().max_alloc_mem_size,
                     "[GPU] Exceeded max size of memory object allocation: ",
-                    "Requested ", layout.bytes_count(), " bytes "
-                    "but max alloc size is ", get_device_info().max_alloc_mem_size, " bytes");
+                    "Requested ", layout.bytes_count(), " bytes ",
+                    "but max alloc size is ", get_device_info().max_alloc_mem_size,
+                    " bytes");
 
     auto used_mem = get_used_device_memory(allocation_type::usm_device) + get_used_device_memory(allocation_type::usm_host);
-    OPENVINO_ASSERT(layout.bytes_count() + used_mem <= get_max_memory_size(),
-                    "[GPU] Exceeded max size of memory allocation: ",
-                    "Required ", (layout.bytes_count() + used_mem), " bytes "
-                    "but memory size is ", get_max_memory_size(), " bytes");
+    // OPENVINO_ASSERT(layout.bytes_count() + used_mem <= get_max_memory_size(),
+    if (layout.bytes_count() + used_mem > get_max_memory_size()) {
+        std::cout << "Warning : [GPU] Exceeded max size of memory allocation: "
+                  << "Required " << (layout.bytes_count() + used_mem) << " bytes "
+                  << "but memory size is " << get_max_memory_size() << " bytes"
+                  << std::endl;
+    }
 
     OPENVINO_ASSERT(supports_allocation(type) || type == allocation_type::cl_mem,
                     "[GPU] Unsupported allocation type: ", type);
