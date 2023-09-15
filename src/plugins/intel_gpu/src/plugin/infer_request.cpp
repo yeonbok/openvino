@@ -836,6 +836,9 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
 
     auto input_layout = inputLayoutItr->second;
     GPU_DEBUG_TRACE_DETAIL << "===== prepare_input for " << inputName << std::endl;
+    if (std::getenv("DEBUG_PRINT") != nullptr) {
+        std::cout << "===== prepare_input for " << inputName << std::endl;
+    }
     auto& prec = inputBlob->getTensorDesc().getPrecision();
     auto remote_ptr = inputBlob->as<gpu::ClBlob>();
     auto& stream = m_graph->GetNetwork()->get_stream();
@@ -873,15 +876,25 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
         auto current_shape = ov::Shape(tensor_desc.getDims());
         auto prealloc_info = sp.predict_preallocation_shape(inputName, current_shape, dt_size, !should_allocate_device_blob);
         GPU_DEBUG_TRACE_DETAIL << "--- current_shape : " << current_shape.to_string() << std::endl;
+        if (std::getenv("DEBUG_PRINT") != nullptr) {
+            std::cout << "--- current_shape : " << current_shape.to_string() << std::endl;
+        }
 
         if (should_allocate_device_blob) {
             auto preallocation_shape = prealloc_info.second;
             GPU_DEBUG_TRACE_DETAIL << "--- prealloc_shape : " << preallocation_shape.to_string() << std::endl;
-            auto can_preallocate_buffer = prealloc_info.first &&
-                                          sp.can_preallocate(ov::shape_size(preallocation_shape) * dt_size);
+            if (std::getenv("DEBUG_PRINT") != nullptr) {
+                std::cout << "--- prealloc_shape : " << preallocation_shape.to_string() << "("
+                          << preallocation_shape.size() << ")" << std::endl;
+            }
+            auto can_preallocate_buffer =
+                prealloc_info.first && sp.can_preallocate(ov::shape_size(preallocation_shape) * dt_size);
 
             if (can_preallocate_buffer) {
                 GPU_DEBUG_TRACE_DETAIL << " <= Do prealloc! " << std::endl;
+                if (std::getenv("DEBUG_PRINT") != nullptr) {
+                    std::cout << " <= Do prealloc! " << std::endl;
+                }
                 auto new_tensor_desc = tensor_desc;
                 new_tensor_desc.setDims(preallocation_shape);
                 GPU_DEBUG_TRACE_DETAIL << " !!! create device blob " << std::endl;
@@ -889,9 +902,15 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
                 _deviceInputs[inputName] = reinterpret_device_blob(device_blob, inputBlob->getTensorDesc());
             } else {
                 GPU_DEBUG_TRACE_DETAIL << " !!! create device blob " << std::endl;
+                if (std::getenv("DEBUG_PRINT") != nullptr) {
+                    std::cout << " !!! create device blob without prealloc" << std::endl;
+                }
                 _deviceInputs[inputName] = create_device_blob(tensor_desc);
             }
         } else {
+            if (std::getenv("DEBUG_PRINT") != nullptr) {
+                std::cout << " !!! reuse memory" << std::endl;
+            }
             _deviceInputs[inputName] = reinterpret_device_blob(_deviceInputs[inputName], inputBlob->getTensorDesc());
         }
     } else if (input_layout.is_static() && !is_dev_input && can_use_usm) {

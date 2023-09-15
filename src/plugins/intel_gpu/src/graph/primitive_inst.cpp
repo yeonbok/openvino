@@ -763,6 +763,7 @@ bool primitive_inst::has_inner_networks() const {
 
 event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     const auto primitive_id = id();
+    std::cout << "Execute " << primitive_id << std::endl;
     OPENVINO_ASSERT(_has_valid_input, primitive_id, " has invalid/unset input");
     GPU_DEBUG_GET_INSTANCE(debug_config);
     bool need_args_update = false;
@@ -771,7 +772,12 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         do_runtime_in_place_concat();
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
         update_shape();
-
+        std::cout << "Input layouts:" << std::endl;
+        for (auto i : _impl_params->input_layouts) {
+            std::cout << i.to_short_string() << std::endl;
+        }
+        std::cout << "Output layout:" << std::endl;
+        std::cout << _impl_params->output_layouts[0].to_short_string() << std::endl;
         // Check successor reorder if layouts are same
         // Need to set can_be_optimized for user reorder at predesescor because
         // if the user is can_be_optimized and output node then current nodes' output should be allocated to host.

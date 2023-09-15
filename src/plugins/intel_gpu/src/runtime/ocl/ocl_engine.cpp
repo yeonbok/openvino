@@ -127,14 +127,18 @@ allocation_type ocl_engine::detect_usm_allocation_type(const void* memory) const
 
 memory::ptr ocl_engine::allocate_memory(const layout& layout, allocation_type type, bool reset) {
     OPENVINO_ASSERT(!layout.is_dynamic() || layout.has_upper_bound(), "[GPU] Can't allocate memory for dynamic layout");
-
-    OPENVINO_ASSERT(layout.bytes_count() <= get_device_info().max_alloc_mem_size,
+    auto used_mem = get_used_device_memory(allocation_type::usm_device) + get_used_device_memory(allocation_type::usm_host);
+    if (std::getenv("DEBUG_PRINT") != nullptr) {
+        std::cout << "[allocate_memory] type : " << type << ", layout: " << layout.to_short_string() << " reset: " << reset << std::endl;
+        std::cout << "Requires " << layout.bytes_count() << std::endl;
+        std::cout << "Occupied so far: " << used_mem << std::endl;
+    }
+    OPENVINO_ASSERT(layout.bytes_count() <= 5*1024*1024*1024ULL,
                     "[GPU] Exceeded max size of memory object allocation: ",
                     "Requested ", layout.bytes_count(), " bytes "
                     "but max alloc size is ", get_device_info().max_alloc_mem_size, " bytes");
 
-    auto used_mem = get_used_device_memory(allocation_type::usm_device) + get_used_device_memory(allocation_type::usm_host);
-    OPENVINO_ASSERT(layout.bytes_count() + used_mem <= get_max_memory_size(),
+    OPENVINO_ASSERT(layout.bytes_count() + used_mem <= 30*1024*1024*1024ULL,
                     "[GPU] Exceeded max size of memory allocation: ",
                     "Required ", (layout.bytes_count() + used_mem), " bytes "
                     "but memory size is ", get_max_memory_size(), " bytes");
@@ -284,6 +288,5 @@ std::shared_ptr<cldnn::engine> ocl_engine::create(const device::ptr device, runt
 std::shared_ptr<cldnn::engine> create_ocl_engine(const device::ptr device, runtime_types runtime_type) {
     return ocl_engine::create(device, runtime_type);
 }
-
 }  // namespace ocl
 }  // namespace cldnn
