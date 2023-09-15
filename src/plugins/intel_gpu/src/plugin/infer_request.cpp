@@ -955,7 +955,7 @@ void InferRequest::prepare_input(const cldnn::primitive_id& inputName, Blob::Ptr
                     auto src_ptr = src_lock.as<uint8_t*>();
                     if (!same_host_mem(inputMem, src_ptr)) {
                         GPU_DEBUG_TRACE_DETAIL << "Copy input to usm! " << std::endl;
-                        auto ev = inputMem->copy_from(stream, src_ptr, false);
+                        auto ev = inputMem->copy_from(stream, src_ptr, true);
                         if (ev != nullptr)
                             dependencies.push_back(ev);
                     }
