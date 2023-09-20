@@ -5,6 +5,7 @@
 #include "intel_gpu/runtime/internal_properties.hpp"
 #include "intel_gpu/runtime/layout.hpp"
 #include "openvino/core/partial_shape.hpp"
+#include "openvino/reference/matmul.hpp"
 #include "test_utils.h"
 #include "float16.h"
 #include "random_generator.hpp"
@@ -2190,6 +2191,61 @@ TEST(fully_connected_gpu, static_6d_input) {
     }
 }
 
+TEST(fully_connected_gpu, vec_mat) {
+    auto& engine = get_test_engine();
+    const int32_t M = 1, K = 4096, N = 8192;
+
+    auto weights_mem = engine.allocate_memory({ ov::PartialShape{ N, K }, data_types::f32,format::bfyx });
+
+    std::vector<float> input_vec(M * K , 1.0f);
+    std::vector<float> weight_vec(K * N, 1.0f);
+
+    auto input_lay_actual = layout{ ov::PartialShape{ M, K }, data_types::f32,format::bfyx };
+    auto input_mem = engine.allocate_memory(input_lay_actual);
+    set_values(input_mem, input_vec);
+    set_values(weights_mem, weight_vec);
+ 
+    auto input_lay_dyn = layout{ ov::PartialShape{ -1, K }, data_types::f32,format::bfyx };
+    topology topology(
+        input_layout("input", input_lay_dyn),
+        data("weights", weights_mem),
+        fully_connected("fc", input_info("input"), "weights")
+    );
+
+    ExecutionConfig config = get_test_default_config(engine);
+    config.set_property(ov::intel_gpu::use_only_static_kernels_for_dynamic_shape(true));
+    config.set_property(ov::intel_gpu::optimize_data(true));
+    config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
+    ov::intel_gpu::ImplementationDesc fc_impl_desc = { format::bfyx, "fully_connected_gpu_bf_tiled", impl_types::ocl };
+    config.set_property(ov::intel_gpu::force_implementations(ov::intel_gpu::ImplForcingMap{ {"fc", fc_impl_desc} }));
+    network network(engine, topology, config);
+
+    network.set_input_data("input", input_mem);
+    auto outputs = network.execute();
+    cldnn::mem_lock<float> outputs_mem(outputs.begin()->second.get_memory(), get_test_stream());
+    std::vector<float> ref_out(M * N);
+    ov::reference::matmul<float>(reinterpret_cast<const float*>(input_vec.data()),
+               reinterpret_cast<const float*>(weight_vec.data()),
+               reinterpret_cast<float*>(ref_out.data()),
+               ov::Shape({M, K}),
+               ov::Shape({K, N}),
+               ov::Shape({M, N}),
+               false,
+               false);
+    float max_diff = 0.00005;
+    int32_t max_diff_idx = -1;
+    for (size_t i = 0; i < ref_out.size(); ++i) {
+        auto ref = float(reinterpret_cast<float*>(ref_out.data())[i]);
+        auto diff = std::abs(ref - float(outputs_mem[i]));
+        if (max_diff < diff) {
+            max_diff = diff;
+            max_diff_idx = static_cast<int32_t>(i);
+        }
+    }
+    std::cout << "max diff = " << max_diff << " (at idx " << max_diff_idx << ")" << std::endl;
+    ASSERT_EQ(max_diff_idx, -1);
+}
+
 TEST(fully_connected_gpu, dynamic_multi_inference_same_shape) {
     auto& engine = get_test_engine();
     const int32_t input_f = 3, input_b = 1, weight_b = 4;
@@ -2458,7 +2514,7 @@ namespace {
         VF<OutputT> result(batch * output_f);
         for (int b = 0; b < batch; b++) {
             for (int ofm = 0; ofm < output_f; ofm++) {
-                AccT acc = static_cast<AccT>(bias[ofm]);
+                AccT acc = (bias.size() > 0) ? static_cast<AccT>(bias[ofm]) : static_cast<AccT>(0);
                 for (int ifm = 0; ifm < input_f; ifm++) {
                     acc += weights[ofm * input_f + ifm] * input[b * input_f + ifm];
                 }
