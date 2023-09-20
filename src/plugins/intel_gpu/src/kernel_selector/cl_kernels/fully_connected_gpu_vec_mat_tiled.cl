@@ -1,0 +1,84 @@
+// Copyright (C) 2018-2023 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+//
+
+#include "include/batch_headers/common.cl"
+
+#define TILE_N_SIZE 16
+#define TILE_K_SIZE 16
+#define VSIZE 8
+#define OUT_VTYPE CAT(OUTPUT_TYPE, VSIZE)
+#define INPUT_VTYPE CAT(INPUT0_TYPE, VSIZE)
+#define FILTER_VTYPE CAT(FILTER_TYPE, VSIZE)
+#define VLOAD CAT(vload,VSIZE)
+#define VSTORE CAT(vstore,VSIZE)
+KERNEL(fully_connected_gpu_vec_mat_tiled) (
+    const __global INPUT0_TYPE* input,
+    __global OUTPUT_TYPE* output,
+    const __global FILTER_TYPE* weights
+#if BIAS_TERM
+    , const __global BIAS_TYPE* biases
+#endif
+#if HAS_FUSED_OPS_DECLS
+    , FUSED_OPS_DECLS
+#endif
+) {
+    // GWS : [NUM_TILE_N, 1, 1]
+    // WI: [1, TILE_N_SIZE]
+    uint gid = (uint)get_global_id(0);
+    uint out_b = 1, out_y = 1, out_x = 1;
+    uint out_f = gid * TILE_N_SIZE;
+    // initialize output : calculate TILE_N outputs
+    OUTPUT_TYPE outputs[TILE_N_SIZE];
+    for (int i = 0; i < TILE_N_SIZE; ++i) {
+        outputs[i] = 0;
+    }
+
+    // read weight (TILE_N_SIZE * TILE_N_SIZE) => store transposed
+    // TODO : check K_leftover
+    // Also lets make the TILE_N_SIZE == TILE_K_SIZE so that we can transpose in place
+    int num_k_tiles = FILTER_IFM_NUM / TILE_K_SIZE;
+    FILTER_TYPE weights_tile[TILE_N_SIZE * TILE_K_SIZE];
+    int weight_offset_n = 0;
+    for (int k_tile = 0; k_tile < num_k_tiles; ++k_tile) {
+        // load weights TILE_K * TILE_N
+        for (int k_ti = 0; k_ti < TILE_K_SIZE; ++k_ti) {
+            for (int n_vi = 0; n_vi < TILE_N_SIZE / VSIZE; ++n_vi) {
+                int org_weight_idx = TILE_N_SIZE * gid + weight_offset_n + n_vi * VSIZE;
+                FILTER_VTYPE weights4 = VLOAD(0, weights + org_weight_idx);
+                // unroll
+                for (int vi = 0; vi < VSIZE; ++vi) {
+                    // store in a transposed order
+                    weights_tile[(n_vi * VSIZE + vi) * TILE_K_SIZE + k_ti] = weights4[vi];
+                } 
+            }
+            weight_offset_n += FILTER_OFM_NUM;
+        }
+        // do mac
+        for (int n = 0; n < TILE_N_SIZE; ++n) {
+            for (int k_v = 0; k_v < (TILE_K_SIZE / VSIZE); ++k_v) {
+                INPUT_VTYPE input4 = VLOAD(0, input + (k_tile * TILE_K_SIZE + k_v * VSIZE));
+                outputs[n] += input4[0] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 0];
+                outputs[n] += input4[1] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 1];
+                outputs[n] += input4[2] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 2];
+                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 3];
+                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 4];
+                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 5];
+                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 6];
+                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 7];
+            }
+        }
+        // TODO : if k_t is the last k tile, do post porocessing (bias, activation, fusion)
+    }
+    for (int i = 0; i < TILE_N_SIZE / VSIZE; ++i) {
+        OUT_VTYPE out_pkg = {outputs[i * VSIZE],
+                          outputs[i * VSIZE + 1],
+                          outputs[i * VSIZE + 2],
+                          outputs[i * VSIZE + 3],
+                          outputs[i * VSIZE + 4],
+                          outputs[i * VSIZE + 5],
+                          outputs[i * VSIZE + 6],
+                          outputs[i * VSIZE + 7]};
+        VSTORE(out_pkg, 0, output + out_f + i * VSIZE);
+    }
+}
