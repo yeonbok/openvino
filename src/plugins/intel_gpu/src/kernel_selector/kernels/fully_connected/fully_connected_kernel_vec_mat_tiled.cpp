@@ -92,8 +92,8 @@ bool FullyConnected_vec_mat_tiled::Validate(const Params& params, const optional
 FullyConnected_vec_mat_tiled::DispatchData
 FullyConnected_vec_mat_tiled::SetDefault(const fully_connected_params& params, int autoTuneIndex) const {
     auto dispatchData = Parent::SetDefault(params);
-    size_t col_per_wi = 16;
-    size_t num_n_tiles = CeilDiv(params.outputs[0].Feature().v, col_per_wi);
+    size_t n_tile_size = 16;
+    size_t num_n_tiles = CeilDiv(params.outputs[0].Feature().v, n_tile_size);
     dispatchData.gws[0] = num_n_tiles;
     dispatchData.gws[1] = 1;
     dispatchData.gws[2] = 1;
@@ -111,6 +111,16 @@ KernelsPriority FullyConnected_vec_mat_tiled::GetKernelsPriority(const Params& p
 
 JitConstants FullyConnected_vec_mat_tiled::GetJitConstants(const fully_connected_params& params, const DispatchData& dispatchData) const {
     JitConstants jit = Parent::GetJitConstants(params, dispatchData);
+    size_t n_tile_size = 16;
+    size_t k_tile_size = 16;
+    jit.AddConstant(MakeJitConstant("TILE_N_SIZE", n_tile_size));
+    jit.AddConstant(MakeJitConstant("TILE_K_SIZE", k_tile_size));
+    jit.AddConstant(MakeJitConstant("VSIZE", 8));
+    jit.AddConstant(MakeJitConstant("INPUT_VTYPE", "CAT(INPUT0_TYPE, VSIZE)"));
+    jit.AddConstant(MakeJitConstant("FILTER_VTYPE", "CAT(FILTER_TYPE, VSIZE)"));
+    jit.AddConstant(MakeJitConstant("OUT_VTYPE", "CAT(OUTPUT_TYPE, VSIZE)"));
+    jit.AddConstant(MakeJitConstant("VLOAD", "CAT(vload, VSIZE)"));
+    jit.AddConstant(MakeJitConstant("VSTORE", "CAT(vstore, VSIZE)"));
     return jit;
 }
 

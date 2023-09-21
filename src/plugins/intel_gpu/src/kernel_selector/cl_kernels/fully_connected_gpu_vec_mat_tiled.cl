@@ -1,17 +1,9 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2023 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #include "include/batch_headers/common.cl"
 
-#define TILE_N_SIZE 16
-#define TILE_K_SIZE 16
-#define VSIZE 8
-#define OUT_VTYPE CAT(OUTPUT_TYPE, VSIZE)
-#define INPUT_VTYPE CAT(INPUT0_TYPE, VSIZE)
-#define FILTER_VTYPE CAT(FILTER_TYPE, VSIZE)
-#define VLOAD CAT(vload,VSIZE)
-#define VSTORE CAT(vstore,VSIZE)
 KERNEL(fully_connected_gpu_vec_mat_tiled) (
     const __global INPUT0_TYPE* input,
     __global OUTPUT_TYPE* output,
@@ -31,7 +23,7 @@ KERNEL(fully_connected_gpu_vec_mat_tiled) (
     // initialize output : calculate TILE_N outputs
     OUTPUT_TYPE outputs[TILE_N_SIZE];
     for (int i = 0; i < TILE_N_SIZE; ++i) {
-        outputs[i] = 0;
+        outputs[i] = OUTPUT_VAL_ZERO;
     }
 
     // read weight (TILE_N_SIZE * TILE_N_SIZE) => store transposed
