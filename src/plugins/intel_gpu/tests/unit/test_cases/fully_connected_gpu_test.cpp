@@ -2281,6 +2281,103 @@ TEST(fully_connected_gpu, vec_mat_half) {
 
     auto weights_mem = engine.allocate_memory({ ov::PartialShape{ N, K }, data_types::f16,format::bfyx });
 
+//    std::vector<FLOAT16> input_vec(M * K , FLOAT16(1.0f));
+    std::vector<float> input_vec_f32(M * K);
+    std::vector<FLOAT16> input_vec_f16(M * K);
+    for (auto i = 0; i < M * K; ++i) {
+        input_vec_f16[i] = FLOAT16(i%3);
+        input_vec_f32[i] = (float)(i%3);
+    }
+
+    std::vector<FLOAT16> weight_vec_f16(K * N);
+    std::vector<float> weight_vec_f32(K * N);
+    for (auto i = 0; i < K*N; ++i) {
+        weight_vec_f16[i] = FLOAT16((i%5)/3);
+        weight_vec_f32[i] = (float)((i%5)/3);
+    }
+
+    auto input_lay_actual = layout{ ov::PartialShape{ M, K }, data_types::f16,format::bfyx };
+    auto input_mem = engine.allocate_memory(input_lay_actual);
+    set_values<FLOAT16>(input_mem, input_vec_f16);
+    set_values<FLOAT16>(weights_mem, weight_vec_f16);
+ 
+    auto input_lay_dyn = layout{ ov::PartialShape{ -1, K }, data_types::f16,format::bfyx };
+    topology topology(
+        input_layout("input", input_lay_dyn),
+        data("weights", weights_mem),
+        fully_connected("fc", input_info("input"), "weights")
+    );
+
+    ExecutionConfig config_orig = get_test_default_config(engine);
+    config_orig.set_property(ov::intel_gpu::use_only_static_kernels_for_dynamic_shape(true));
+    config_orig.set_property(ov::intel_gpu::optimize_data(true));
+    config_orig.set_property(ov::intel_gpu::allow_new_shape_infer(true));
+
+    auto config_new = config_orig;
+
+    ov::intel_gpu::ImplementationDesc fc_impl_desc_orig = { format::bfyx, "fully_connected_gpu_bf_tiled", impl_types::ocl };
+    config_orig.set_property(ov::intel_gpu::force_implementations(ov::intel_gpu::ImplForcingMap{ {"fc", fc_impl_desc_orig} }));
+
+    ov::intel_gpu::ImplementationDesc fc_impl_desc_new = { format::bfyx, "fully_connected_gpu_vec_mat_tiled", impl_types::ocl };
+    config_new.set_property(ov::intel_gpu::force_implementations(ov::intel_gpu::ImplForcingMap{ {"fc", fc_impl_desc_new} }));
+
+    network network_orig(engine, topology, config_orig);
+    network network_new(engine, topology, config_new);
+    {
+        network_orig.set_input_data("input", input_mem);
+        std::cout << "Run fully_connected_gpu_bf_tiled" << std::endl;
+        auto start = std::chrono::high_resolution_clock::now();
+        auto outputs_orig = network_orig.execute();
+        cldnn::mem_lock<FLOAT16> outputs_orig_mem(outputs_orig.begin()->second.get_memory(), get_test_stream());
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        std::cout << "bf_tiled took " << duration << "mcs" << std::endl;
+    }
+
+    {
+        network_new.set_input_data("input", input_mem);
+        std::cout << "Run fully_connected_vec_mat_tiled" << std::endl;
+        auto start = std::chrono::high_resolution_clock::now();
+        auto outputs_new = network_new.execute();
+        cldnn::mem_lock<FLOAT16> outputs_new_mem(outputs_new.begin()->second.get_memory(), get_test_stream());
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        std::cout << "bf_tiled_vec_mat took " << duration << "mcs" << std::endl;
+
+        std::vector<float> ref_out(M * N);
+        ov::reference::matmul<float>(reinterpret_cast<const float*>(input_vec_f32.data()),
+                   reinterpret_cast<const float*>(weight_vec_f32.data()),
+                   reinterpret_cast<float*>(ref_out.data()),
+                   ov::Shape({M, K}),
+                   ov::Shape({K, N}),
+                   ov::Shape({M, N}),
+                   false,
+                   false);
+        float max_diff = 0.0f;
+        int32_t max_diff_idx = -1;
+        for (size_t i = 0; i < ref_out.size(); ++i) {
+            auto ref = float(reinterpret_cast<float*>(ref_out.data())[i]);
+            auto diff = std::abs(ref - (float)(outputs_new_mem[i]));
+            if (max_diff < diff) {
+                max_diff = diff;
+                std::cout << "ref: " << ref << " output : " << (float)outputs_new_mem[i] << std::endl;
+                max_diff_idx = static_cast<int32_t>(i);
+            }
+        }
+        std::cout << "max diff = " << max_diff << " (at idx " << max_diff_idx << ")" << std::endl;
+        ASSERT_EQ(max_diff_idx, -1);
+    }
+}
+#if 0
+TEST(Disabled_fully_connected_gpu, vec_mat_i8) {
+    auto& engine = get_test_engine();
+    const int32_t M = 1, K = 4096, N = 8192;
+
+    auto weights_mem = engine.allocate_memory({ ov::PartialShape{ N, K }, data_types::f16,format::bfyx });
+    auto bias_mem = engine.allocate_memory({ {1, N}, data_types::f32, format::bfyx });
+    auto scale_mem = engine.allocate_memory({ {1, N}, data_types::f32, format::bfyx });
+    auto zp_mem = engine.allocate_memory({ {1, N}, data_types::f32, format::bfyx });
+
     std::vector<FLOAT16> input_vec(M * K , FLOAT16(1.0f));
     std::vector<FLOAT16> weight_vec_f16(K * N);
     std::vector<float> weight_vec_f32(K * N);
@@ -2289,6 +2386,10 @@ TEST(fully_connected_gpu, vec_mat_half) {
         weight_vec_f32[i] = (float)(i/K);
     }
 
+    std::vector<FLOAT16> bias_mem_vec_f16(1 * N);
+    std::vector<FLOAT16> scale_mem_vec_f16(1 * N);
+
+    // Under construction
     auto input_lay_actual = layout{ ov::PartialShape{ M, K }, data_types::f16,format::bfyx };
     auto input_mem = engine.allocate_memory(input_lay_actual);
     set_values<FLOAT16>(input_mem, input_vec);
@@ -2360,8 +2461,9 @@ TEST(fully_connected_gpu, vec_mat_half) {
         std::cout << "max diff = " << max_diff << " (at idx " << max_diff_idx << ")" << std::endl;
         ASSERT_EQ(max_diff_idx, -1);
     }
-}
 
+}
+#endif
 TEST(fully_connected_gpu, dynamic_multi_inference_same_shape) {
     auto& engine = get_test_engine();
     const int32_t input_f = 3, input_b = 1, weight_b = 4;
