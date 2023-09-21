@@ -92,10 +92,14 @@ bool FullyConnected_vec_mat_tiled::Validate(const Params& params, const optional
 FullyConnected_vec_mat_tiled::DispatchData
 FullyConnected_vec_mat_tiled::SetDefault(const fully_connected_params& params, int autoTuneIndex) const {
     auto dispatchData = Parent::SetDefault(params);
+    size_t m_size = params.outputs[0].Batch().v;
+    size_t n_size = params.outputs[0].Feature().v;
     size_t n_tile_size = 16;
-    size_t num_n_tiles = CeilDiv(params.outputs[0].Feature().v, n_tile_size);
+    size_t m_tile_size = 1; //TODO
+    size_t num_n_tiles = CeilDiv(n_size, n_tile_size);
+    size_t num_m_tiles = CeilDiv(m_size, m_tile_size);
     dispatchData.gws[0] = num_n_tiles;
-    dispatchData.gws[1] = 1;
+    dispatchData.gws[1] = num_m_tiles;
     dispatchData.gws[2] = 1;
 
     dispatchData.lws[0] = std::min(params.engineInfo.maxWorkGroupSize, num_n_tiles);
