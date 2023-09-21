@@ -45,11 +45,11 @@ KERNEL(fully_connected_gpu_vec_mat_tiled) (
         for (int k_ti = 0; k_ti < TILE_K_SIZE; ++k_ti) {
             for (int n_vi = 0; n_vi < TILE_N_SIZE / VSIZE; ++n_vi) {
                 int org_weight_idx = TILE_N_SIZE * gid + weight_offset_n + n_vi * VSIZE;
-                FILTER_VTYPE weights4 = VLOAD(0, weights + org_weight_idx);
+                FILTER_VTYPE weights_vdata = VLOAD(0, weights + org_weight_idx);
                 // unroll
-                for (int vi = 0; vi < VSIZE; ++vi) {
+                unroll_for (int k_vi = 0; k_vi < VSIZE; ++k_vi) {
                     // store in a transposed order
-                    weights_tile[(n_vi * VSIZE + vi) * TILE_K_SIZE + k_ti] = weights4[vi];
+                    weights_tile[(n_vi * VSIZE + k_vi) * TILE_K_SIZE + k_ti] = weights_vdata[k_vi];
                 } 
             }
             weight_offset_n += FILTER_OFM_NUM;
@@ -57,28 +57,19 @@ KERNEL(fully_connected_gpu_vec_mat_tiled) (
         // do mac
         for (int n = 0; n < TILE_N_SIZE; ++n) {
             for (int k_v = 0; k_v < (TILE_K_SIZE / VSIZE); ++k_v) {
-                INPUT_VTYPE input4 = VLOAD(0, input + (k_tile * TILE_K_SIZE + k_v * VSIZE));
-                outputs[n] += input4[0] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 0];
-                outputs[n] += input4[1] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 1];
-                outputs[n] += input4[2] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 2];
-                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 3];
-                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 4];
-                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 5];
-                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 6];
-                outputs[n] += input4[3] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + 7];
+                INPUT_VTYPE input_vdata = VLOAD(0, input + (k_tile * TILE_K_SIZE + k_v * VSIZE));
+                unroll_for ( int vi = 0; vi < VSIZE; ++vi) {
+                    outputs[n] += input_vdata[vi] * weights_tile[n * TILE_K_SIZE + k_v * VSIZE + vi];
+                }
             }
         }
         // TODO : if k_t is the last k tile, do post porocessing (bias, activation, fusion)
     }
-    for (int i = 0; i < TILE_N_SIZE / VSIZE; ++i) {
-        OUT_VTYPE out_pkg = {outputs[i * VSIZE],
-                          outputs[i * VSIZE + 1],
-                          outputs[i * VSIZE + 2],
-                          outputs[i * VSIZE + 3],
-                          outputs[i * VSIZE + 4],
-                          outputs[i * VSIZE + 5],
-                          outputs[i * VSIZE + 6],
-                          outputs[i * VSIZE + 7]};
-        VSTORE(out_pkg, 0, output + out_f + i * VSIZE);
+    for (int n_v = 0; n_v < TILE_N_SIZE / VSIZE; ++n_v) {
+        OUT_VTYPE out_vdata;
+        unroll_for (int n_vi = 0; n_vi < VSIZE; ++n_vi) {
+            out_vdata[n_vi] = outputs[n_v * VSIZE + n_vi];
+        }
+        VSTORE(out_vdata, 0, output + out_f + n_v * VSIZE);
     }
 }

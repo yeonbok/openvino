@@ -93,15 +93,15 @@ FullyConnected_vec_mat_tiled::DispatchData
 FullyConnected_vec_mat_tiled::SetDefault(const fully_connected_params& params, int autoTuneIndex) const {
     auto dispatchData = Parent::SetDefault(params);
     size_t col_per_wi = 16;
-    size_t feature_tiles = CeilDiv(params.outputs[0].Feature().v, col_per_wi);
-    dispatchData.gws[0] = feature_tiles;
+    size_t num_n_tiles = CeilDiv(params.outputs[0].Feature().v, col_per_wi);
+    dispatchData.gws[0] = num_n_tiles;
     dispatchData.gws[1] = 1;
     dispatchData.gws[2] = 1;
 
-    dispatchData.lws[0] = 256;
+    dispatchData.lws[0] = std::min(params.engineInfo.maxWorkGroupSize, num_n_tiles);
     dispatchData.lws[1] = 1;
     dispatchData.lws[2] = 1;
-    std::cout << "GWS: [" << feature_tiles << ", " << 1 << ", " << 1 << "]" << std::endl;
+    std::cout << "GWS: [" << num_n_tiles << ", " << 1 << ", " << 1 << "]" << std::endl;
     return dispatchData;
 }
 
