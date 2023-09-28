@@ -99,7 +99,13 @@ KERNEL(fc)(
 ) {
     uint gid = (uint)get_group_id(0);
     uint sglid = (uint)get_sub_group_local_id();
-
+    if (get_global_id(0) == 0) {
+//#ifdef IS_DYNAMIC
+//        printf("(shape_agnostic) in_batch:%d, in_feature: %d, in_y : %d, tile_b:%d \n", shape_info[0], shape_info[1], shape_info[2], TILE_B);
+//#else
+//        printf("(static) in_batch:%d, in_feature: %d, in_y : %d, tile_b:%d \n", INPUT0_BATCH_NUM, INPUT0_FEATURE_NUM, INPUT0_SIZE_Y, TILE_B);
+//#endif
+    }
     // Dispatch as bs_fs_bsv_fsv, where bsv = DISPATCH_BSV and fsv = DISPATCH_FSV.
     // This allows more fine grained control over dispatch order than using work-groups and
     // avoids requirement of threads being available for whole work-group.
@@ -187,7 +193,7 @@ KERNEL(fc)(
         // NOTE: Manually unrolling multiplication loop leads to lower register pressure and allows for bigger block sizes,
         //       but significantly degrades readability and generality of code.
         //       It doesn't also show noticable performance improvement on tested configurations.
-        unroll_for(uint ki = 0; ki < (TILE_IFM * SIMD) / TILE_K; ++ki) {
+        unroll_for(uint ki = 0; ki < /*8*/ (TILE_IFM * SIMD) / TILE_K; ++ki) {
             wei = TO_FILTER_VEC_TYPE(FILTER_BLOCK_READ(weights, weights_offset));
             #if COMPRESSED_WEIGHTS
                 ACCUMULATOR_TYPE* w = (ACCUMULATOR_TYPE*)(&wei);
@@ -199,11 +205,11 @@ KERNEL(fc)(
             #endif
             weights_offset += TILE_K_OFM * SIMD;
 
-            unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
+            unroll_for (uint kii = 0; kii < TILE_K/*2*/; ++kii) {
                 const uint total_k = ki * TILE_K + kii;
-                unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+                unroll_for (uint bi = 0; bi < TILE_B/*1*/; ++bi) {
                     INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
-                    unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
+                    unroll_for (uint fi = 0; fi < TILE_OFM/*2*/; ++fi) {
                         ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
                     }
                 }

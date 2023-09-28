@@ -142,6 +142,8 @@ struct TuneParamsSelector {
 };
 
 bool TuneParamsSelector::VerifyTuneParams(const fully_connected_params& params, const tune_params& tparams) {
+//    if (!params.is_shape_agnostic)
+//        std::cout << "Verify tparams with tile_b : " << tparams.tile_b << std::endl;
     // Check divisibility by dispatch tile sizes.
     size_t output_f = params.outputs[0].Feature().v;
     size_t output_b = params.outputs[0].Batch().v;
@@ -151,17 +153,33 @@ bool TuneParamsSelector::VerifyTuneParams(const fully_connected_params& params, 
     }
 
     auto batch_size = params.is_shape_agnostic ? Align(output_b, tparams.tile_b) : output_b;
-    if (batch_size % (tparams.tile_b * tparams.dispatch_bsv) != 0)
+//    if (!params.is_shape_agnostic)
+//        std::cout << "batch_size : " << batch_size << std::endl;
+
+    if (batch_size % (tparams.tile_b * tparams.dispatch_bsv) != 0) {
+ //       if (!params.is_shape_agnostic)
+ //           std::cout << batch_size << " % " << "(" << tparams.tile_b << "*" <<  tparams.dispatch_bsv << ")" << std::endl;
         return false;
+    }
+//    if (!params.is_shape_agnostic)
+//        std::cout << "    " << __LINE__ << std::endl;
+
     if (CeilDiv(output_f, tparams.tile_ofm * simd) % tparams.dispatch_fsv != 0)
-        return false;
+       return false;
+//    if (!params.is_shape_agnostic)
+//        std::cout << "    " << __LINE__ << std::endl;
 
     // Same result can be achieved with smaller tile_ofm.
     if (output_f <= (tparams.tile_ofm / 2) * simd)
         return false;
+//    if (!params.is_shape_agnostic)
+//        std::cout << "    " << __LINE__ << std::endl;
+
     // No weights layout for such huge tile ofm.
     if (tparams.tile_ofm * simd > 64)
         return false;
+//   if (!params.is_shape_agnostic)
+//       std::cout << "    " << __LINE__ << std::endl;
 
     // Reject tile sizes that are guaranteed to spill out of registers.
     unsigned acc_register_bytes = tparams.tile_b * tparams.tile_ofm * simd * BytesPerElement(params.inputs[0].GetDType());
@@ -173,6 +191,8 @@ bool TuneParamsSelector::VerifyTuneParams(const fully_connected_params& params, 
 
     if (total_register_bytes > max_register_bytes)
         return false;
+//    if (!params.is_shape_agnostic)
+//        std::cout << "    " << __LINE__ << std::endl;
 
     return true;
 }
@@ -212,7 +232,8 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
             if (params.engineInfo.supports_immad)
                 selector.Case(tune_params(8, 1, 1, 4, 1, 1, EXE_MODE_AGE_BASED));
             else
-                selector.Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 1,  1, EXE_MODE_AGE_BASED));
+//                selector.Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 1,  1, EXE_MODE_AGE_BASED));
+                selector.Case(tune_params(8,  max_tile_ofm              , 1, 2, 1,  1, EXE_MODE_AGE_BASED));
         } else if (dtype == Datatype::F32) {
             // tune_params(tile_b, tile_ofm, tile_ifm, tile_k, dispatch_bsv, dispatch_fsv, exec_options)
             if (params.engineInfo.supports_immad)
@@ -223,9 +244,17 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
     } else {
         if (dtype == Datatype::F16) {
             // tune_params(tile_b, tile_ofm, tile_ifm, tile_k, dispatch_bsv, dispatch_fsv, exec_options)
+            //selector.Case(tune_params(1,  max_tile_ofm              , 1, 2, 1,  1, EXE_MODE_AGE_BASED));
+            #if 0 // ok but not best
+            selector.Case(tune_params(8,  max_tile_ofm              , 1, 2, 1,  1, EXE_MODE_AGE_BASED))
+                    .Case(tune_params(1,  max_tile_ofm              , 1, 2, 1,  1, EXE_MODE_AGE_BASED));
+            #endif
             selector.Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 16, 2, EXE_MODE_AGE_BASED))
                     .Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 16, 1, EXE_MODE_AGE_BASED))
-                    .Case(tune_params(16, std::min(max_tile_ofm, 2u), 1, 2, 4,  2, EXE_MODE_AGE_BASED))
+                    .Case(tune_params(16, max_tile_ofm,               1, 2, 4,  2, EXE_MODE_AGE_BASED))
+                    .Case(tune_params(8,  max_tile_ofm,                1, 2, 4,  2, EXE_MODE_AGE_BASED))
+                    .Case(tune_params(8,  max_tile_ofm,                1, 2, 2,  2, EXE_MODE_AGE_BASED))
+                    .Case(tune_params(1,  max_tile_ofm              , 1, 2, 1,  1, EXE_MODE_AGE_BASED))
                     .Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 8,  1, EXE_MODE_AGE_BASED))
                     .Case(tune_params(16, std::min(max_tile_ofm, 2u), 1, 2, 2,  2, EXE_MODE_AGE_BASED))
                     .Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 4,  1, EXE_MODE_AGE_BASED))
@@ -384,12 +413,19 @@ KernelsData FullyConnected_bf_tiled::GetTunedKernelsDataByIndex(const Params &pa
         return {};
 
     tune_params tparams = GetAutoTuneParams(fc_params, autoTuneIndex);
-
+    if (std::getenv("PRINT") != nullptr) {
+        std::cout << " shape agnostic " << params.is_shape_agnostic << ", tile_b:" << tparams.tile_b << ", " << "tile_k:"
+                  << tparams.tile_k << ", " << "tile_ofm:" << tparams.tile_ofm << std::endl;
+    }
     WeightsLayout weights_layout = WeightsLayout::os_iyx_osv16;
-    if (tparams.tile_ofm * simd == 32)
+    if (tparams.tile_ofm * simd == 32) {
         weights_layout = WeightsLayout::os_iyx_osv32;
-    else if (tparams.tile_ofm * simd == 64)
+        std::cout << "changed to osv32!" << std::endl;
+    } else if (tparams.tile_ofm * simd == 64) {
         weights_layout = WeightsLayout::os_iyx_osv64;
+    } else {
+        std::cout << "changed to osv16!" << std::endl;
+    }
 
     return GetCommonKernelsData(params,
                                 options,
