@@ -233,7 +233,11 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
                 selector.Case(tune_params(8, 1, 1, 4, 1, 1, EXE_MODE_AGE_BASED));
             else
 //                selector.Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 1,  1, EXE_MODE_AGE_BASED));
-                selector.Case(tune_params(8,  max_tile_ofm              , 1, 2, 1,  1, EXE_MODE_AGE_BASED));
+                selector.Case(tune_params(32,  max_tile_ofm              , 1, 1, 1,  1, EXE_MODE_AGE_BASED))
+                        .Case(tune_params(16,  max_tile_ofm              , 1, 1, 1,  1, EXE_MODE_AGE_BASED))
+                        .Case(tune_params(8,  max_tile_ofm              , 1, 1, 1,  1, EXE_MODE_AGE_BASED))
+                        .Case(tune_params(4,  max_tile_ofm              , 1, 1, 1,  1, EXE_MODE_AGE_BASED));
+//                selector.Case(tune_params(8,  max_tile_ofm              , 1, 2, 1,  1, EXE_MODE_AGE_BASED));
         } else if (dtype == Datatype::F32) {
             // tune_params(tile_b, tile_ofm, tile_ifm, tile_k, dispatch_bsv, dispatch_fsv, exec_options)
             if (params.engineInfo.supports_immad)
@@ -251,9 +255,10 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
             #endif
             selector.Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 16, 2, EXE_MODE_AGE_BASED))
                     .Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 16, 1, EXE_MODE_AGE_BASED))
-                    .Case(tune_params(16, max_tile_ofm,               1, 2, 4,  2, EXE_MODE_AGE_BASED))
-                    .Case(tune_params(8,  max_tile_ofm,                1, 2, 4,  2, EXE_MODE_AGE_BASED))
-                    .Case(tune_params(8,  max_tile_ofm,                1, 2, 2,  2, EXE_MODE_AGE_BASED))
+//                    .Case(tune_params(16, max_tile_ofm,               1, 2, 4,  2, EXE_MODE_AGE_BASED))
+                    .Case(tune_params(16, max_tile_ofm,               1, 2, 1,  1, EXE_MODE_AGE_BASED))
+//                    .Case(tune_params(8,  max_tile_ofm,                1, 2, 4,  2, EXE_MODE_AGE_BASED))
+                    .Case(tune_params(8,  max_tile_ofm,                1, 2, 1,  1, EXE_MODE_AGE_BASED))
                     .Case(tune_params(1,  max_tile_ofm              , 1, 2, 1,  1, EXE_MODE_AGE_BASED))
                     .Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 8,  1, EXE_MODE_AGE_BASED))
                     .Case(tune_params(16, std::min(max_tile_ofm, 2u), 1, 2, 2,  2, EXE_MODE_AGE_BASED))
