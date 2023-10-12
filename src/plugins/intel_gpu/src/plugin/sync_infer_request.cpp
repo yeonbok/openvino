@@ -670,6 +670,7 @@ std::vector<cldnn::event::ptr> SyncInferRequest::prepare_input(const std::string
                                                                const ov::Output<const ov::Node>& port,
                                                                const TensorWrapper& user_tensor_wrapper) {
     OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "SyncInferRequest::prepare_input");
+    const cldnn::primitive_id internal_name = "parameter:" + name;
     auto pshape = port.get_partial_shape();
     auto is_dynamic = pshape.is_dynamic();
     auto user_tensor = user_tensor_wrapper.ptr;
@@ -683,7 +684,30 @@ std::vector<cldnn::event::ptr> SyncInferRequest::prepare_input(const std::string
     auto network = m_graph->get_network();
     auto& engine = m_graph->get_engine();
     auto& stream = network->get_stream();
-
+    auto in_ptr = user_tensor_wrapper.ptr.get()->data();
+//    std::cout << "cur input " << name << " : " << in_ptr << std::endl;
+    if (is_dynamic && !m_internal_outputs.empty()) {
+        for (auto user_output : m_user_outputs) {
+            auto out_ptr = user_output.second.ptr.get()->data();
+            if (out_ptr == in_ptr) {
+//                std::cout << "Hit for " << name << std::endl;
+                cldnn::primitive_id internal_output_name = m_output_names_map.at(user_output.first);
+//                std::cout << "internal_output_name : " << internal_output_name << std::endl;
+                auto in_layout = cldnn::layout{user_tensor->get_shape(),
+                                               user_tensor->get_element_type(),
+                                               cldnn::format::get_default_format(user_tensor->get_shape().size())};
+                auto prev_output_mem = m_internal_outputs.at(internal_output_name).get_memory();
+                auto prev_output_layout = m_internal_outputs.at(internal_output_name).get_layout();
+                OPENVINO_ASSERT(prev_output_layout == in_layout);
+                if (prev_output_mem->get_layout() != prev_output_layout) {
+                    prev_output_mem = m_graph->get_engine().reinterpret_buffer(*prev_output_mem, prev_output_layout);
+                }
+                network->set_output_buffer_used_for_next_input(internal_output_name, name);
+                return {network->set_input_data(internal_name, prev_output_mem)};
+            }
+        }
+    }
+//    std::cout << "not reuse for " << name << std::endl;
     OPENVINO_ASSERT(pshape.compatible(ov::PartialShape(user_tensor->get_shape())) || is_batched_input(port),
                     "[GPU] The input tensor size is not equal to model port shape, can't handle input tensor with name: ",
                     name,
@@ -760,7 +784,6 @@ std::vector<cldnn::event::ptr> SyncInferRequest::prepare_input(const std::string
         }
     }
 
-    const cldnn::primitive_id internal_name = "parameter:" + name;
     network->set_input_data(internal_name, memory);
 
     if (ret_event && !ret_event->is_set())

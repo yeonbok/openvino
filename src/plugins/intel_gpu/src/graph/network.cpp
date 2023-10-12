@@ -774,10 +774,83 @@ event::ptr network::set_input_data(const primitive_id& id, memory::ptr data) {
     }
 
     auto input = std::static_pointer_cast<input_layout_inst>(primitive_inst);
-
+//    // if input is reusing prev output
+//    // the user node which uses this input data should use new output memory
+//    std::function<void(cldnn::primitive_inst*)> force_users_realloc_mem = [&](cldnn::primitive_inst* user) {
+//        if (user->is_output()) {
+//            user->set_output_buffer_used_for_next_input();
+//            return;
+//        }
+////        if (user->can_be_optimized()) {
+////            auto users_of_user = user->get_user_insts();
+////            for (auto u : users_of_user) {
+////                if (u->is_output())
+////                    u->set_output_buffer_used_for_next_input();
+////                else if (u->can_be_optimized())
+////                    force_users_realloc_mem(u.get());
+////                else
+////                    continue;
+////            }
+////        }
+//        auto users_of_user = user->get_user_insts();
+//        for (auto u : users_of_user) {
+//            if (u->can_be_optimized()) {
+//                GPU_DEBUG_TRACE_DETAIL << user->id() << " has optimized user " << u->id() << " => check whether its user is output" << std::endl;
+//                force_users_realloc_mem(u.get());
+//            }
+//        }
+//        return;
+//    };
+//    if (reuse_prev_output) {
+//        auto users = input->get_user_insts();
+//        for (auto u : users) {
+//            // if inputs user is output, its memory should be reallocated to prevent data corruption
+//            // Also the memory should not be limited to use lockable memory for better performance
+//            force_users_realloc_mem(u.get());
+//        }
+//    }
+//    std::function<void(cldnn::primitive_inst*)> set_output_buffer_used_for_next_input = [&](cldnn::primitive_inst* prim) {
+//        if (prim->is_output()) {
+//            GPU_DEBUG_TRACE_DETAIL << prim->id() << " is output => force realloc mem" << std::endl;
+//            prim->set_output_buffer_used_for_next_input();
+//            return;
+//        }
+//        auto users = prim->get_user_insts();
+//        for (auto u : users) {
+//            if (u->can_be_optimized()) {
+//                GPU_DEBUG_TRACE_DETAIL << prim->id() << " has optimized user " << u->id() << " => check whether its user is output" << std::endl;
+//                set_output_buffer_used_for_next_input(u.get());
+//            }
+//        }
+//        return;
+//    };
+//    if (use_prev_output_buffer) {
+//        auto users = input->get_user_insts();
+//        for (auto u : users) {
+//            // if inputs user is output, its memory should be reallocated to prevent data corruption
+//            // Also the memory should not be limited to use lockable memory for better performance
+//            set_output_buffer_used_for_next_input(u.get());
+//        }
+//    }
     return input->set_data(data);
 }
 
+void network::set_output_buffer_used_for_next_input(const primitive_id& out_prim, const primitive_id& in_prim) {
+    // Note that there is an assumption that if the output buffer of previous iteration is used for the input of current iteration
+    // the output buffer of current iteration is to be reused in the next iteration too.
+    GPU_DEBUG_TRACE_DETAIL << out_prim << "'s output buffer is used for next input" << std::endl;
+    auto inst = get_primitive(out_prim);
+    inst->set_output_buffer_used_for_next_input(in_prim);
+
+    if (inst->can_be_optimized()) {
+        GPU_DEBUG_TRACE_DETAIL << out_prim << " is can_be_optimized " << std::endl;
+        auto deps = inst->dependencies();
+        for (auto dep : deps) {
+            GPU_DEBUG_TRACE_DETAIL << "=> check its dep " << dep.first->id() << std::endl;
+            set_output_buffer_used_for_next_input(dep.first->id(), in_prim);
+        }
+    }
+}
 void network::add_default_output_chains() {
     GPU_DEBUG_DEFINE_MEM_LOGGER("add_default_output_chains");
     for (auto& output : _outputs) {
@@ -1186,6 +1259,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 
     // Wait for previous execution completion
     reset_execution(false);
+//    std::cout << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;
     GPU_DEBUG_IF(debug_config->dump_runtime_memory_pool > 0) {
         GPU_DEBUG_COUT << "----------------------------------------------" << std::endl;
         GPU_DEBUG_COUT << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;

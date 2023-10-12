@@ -216,6 +216,10 @@ public:
     void do_runtime_in_place_concat();
     void configure_shape_of_dependencies();
 
+    void set_output_buffer_used_for_next_input(const primitive_id& input_prim) {
+        _impl_params->output_buffer_used_for_next_input = input_prim;
+    }
+
     memory::ptr fused_memory(size_t dep_id) const {
         return dep_memory_ptr(get_fused_mem_offset() + dep_id);
     }

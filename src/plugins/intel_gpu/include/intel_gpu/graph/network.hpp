@@ -131,6 +131,7 @@ public:
 
     void reset_execution(bool wait = true);
     event::ptr set_input_data(const primitive_id& id, memory::ptr data);
+    void set_output_buffer_used_for_next_input(const primitive_id& out_prim, const primitive_id& in_prim);
     std::vector<event::ptr> set_output_memory(const primitive_id& id, memory::ptr mem);
 
     std::vector<std::shared_ptr<primitive_inst>> const& get_outputs() { return _outputs; }

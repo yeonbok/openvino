@@ -68,6 +68,11 @@ bool is_optimized_output_user(const T user) {
     return false;
 }
 bool is_output_buffer(const primitive_inst* prim, bool runtime_alloc) {
+//    if (runtime_alloc) {
+//        if (prim->is_forced_realloc_mem())
+//            return false;
+//    }
+
     if (prim->is_output())
         return true;
 
@@ -414,9 +419,17 @@ event::ptr primitive_inst::realloc_if_needed() {
         get_network().update_variable_memory(variable_id, actual_layout);
         return ev;
     }
-
-    bool can_reuse_buffer = _outputs[0] && actual_layout.count() <= max_output_layout_size;
-
+//    bool output_used_as_its_input_at_next_iter = false;
+    bool output_used_as_its_input_at_next_iter = (_impl_params->output_buffer_used_for_next_input != "");
+//    if (_impl_params->output_buffer_used_for_next_input != "") {
+//        for (auto dep : _deps) {
+//            if (dep.first->id() == _impl_params->output_buffer_used_for_next_input) {
+//                output_used_as_its_input_at_next_iter = true;
+//            }
+//        }
+//    }
+    bool can_reuse_buffer =
+        _outputs[0] && (actual_layout.count() <= max_output_layout_size) && (!output_used_as_its_input_at_next_iter);
     // Handle runtime dynamic concat optimization
     if (_node->is_type<concatenation>() && can_be_optimized() && allocation_done_by_other) {
         allocation_done_by_other = false;
@@ -682,6 +695,10 @@ void primitive_inst::do_runtime_skip_reorder() {
             }
             if (alloc_type == allocation_type::usm_device && u->is_output())
                 continue;
+
+            if (u->_is_output)
+                _is_output = true;
+
             GPU_DEBUG_TRACE_DETAIL << "[do runtime skip reorder] update shape for user " << u->id() << std::endl;
             u->update_shape();
             u->update_shape_done_by_other = true;
@@ -1286,8 +1303,9 @@ memory::ptr primitive_inst::allocate_output(engine& _engine,
     if (total_device_input_mem_size > _engine.get_device_info().max_global_mem_size)
         usm_device_allocatable = false;
 
-    bool reusable_across_network = (runtime_alloc && _node.is_dynamic_output_layout()) ? !reset : !user_requesting_mem_reuse_false(_node);
-
+    bool reusable_across_network = (runtime_alloc && _node.is_dynamic_output_layout())
+                                       ? (!reset && (impl_params.output_buffer_used_for_next_input == ""))
+                                       : !user_requesting_mem_reuse_false(_node);
     // Do not use memory pool for nodes from shape_of subgraphs, because such nodes mostly use CPU impls and may be executed in parallel with predecessors
     // GPU kernels and cause accuracy problems. This significantly improves performance (because provides an ability not to synchronize shape_of subgraphs
     // execution with other nodes) at the cost of tiny increase in memory consumption.
@@ -1298,7 +1316,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine,
     // Also if the successor of a node is an cpu, then memory needs to be lockable.
     bool is_cpu = _node.get_selected_impl() ? _node.get_selected_impl()->is_cpu() : false;
     auto use_lockable_memory =
-        is_output_buffer || is_cpu ||
+        (is_output_buffer && (impl_params.output_buffer_used_for_next_input == "")) || is_cpu ||
         has_any_cpu_user_not_shape_of(_node.get_users()) ||
         !_engine.supports_allocation(allocation_type::usm_device) ||
         (_node.is_shape_infer_dep() && _engine.get_device_info().dev_type == device_type::integrated_gpu);
