@@ -142,10 +142,6 @@ KERNEL(fc)(
     uint out_f = (feature_mega_block * DISPATCH_FSV + feature_mini_block) * (TILE_OFM * SIMD);
     uint out_b = ((batch_mega_block * DISPATCH_BSV + batch_mini_block) * TILE_B);
 
-    ACCUMULATOR_VEC_TYPE acc[TILE_B] = { };
-    INPUT_VEC_TYPE       in_0[TILE_B] = { };
-
-    FILTER_VEC_TYPE wei = 0;
     uint input_offset = out_b * TILE_IN_B_PITCH + INPUT0_OFFSET;
     uint weights_offset = out_f * INPUT_ELEMENTS_COUNT;
 
@@ -218,6 +214,10 @@ KERNEL(fc)(
     for (uint iter = 0; iter < TOTAL_ROUND; ++iter) {
         uint vector_input_offset = 0;
     #endif
+    ACCUMULATOR_VEC_TYPE acc[TILE_B] = { };
+    INPUT_VEC_TYPE       in_0[TILE_B] = { };
+
+    FILTER_VEC_TYPE wei = 0;
 
     uint iterations = MAIN_LOOP_ELEMENTS_COUNT / (TILE_IFM * SIMD);
     __attribute__((opencl_unroll_hint(1)))
@@ -230,6 +230,7 @@ KERNEL(fc)(
                 in_0[bi] = INPUT_BLOCK_READ(input, input_offset);   \
                 input_offset += TILE_IN_B_PITCH;                    \
             } while (false)
+        CONST_LOOP(TILE_B, LOAD_IN_0);
         #ifdef IS_VEC_MAT
         in_vec[ni * SIMD * TILE_IFM + get_sub_group_local_id()] = in_0[0];
         } else {// iter > 0
@@ -237,8 +238,6 @@ KERNEL(fc)(
         }
         vector_input_offset += SIMD;
         #endif
-
-        CONST_LOOP(TILE_B, LOAD_IN_0);
         #undef LOAD_IN_0
         input_offset += TILE_IFM * SIMD - TILE_IN_B_PITCH * TILE_B;
         // NOTE: Manually unrolling multiplication loop leads to lower register pressure and allows for bigger block sizes,
