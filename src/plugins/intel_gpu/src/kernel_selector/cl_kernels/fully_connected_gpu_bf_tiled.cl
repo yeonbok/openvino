@@ -43,7 +43,8 @@
 //#define TOTAL_ROUND  4 // TILE_OFM(8) / SUB_TILE_OFM(2)
 #define TOTAL_ROUND (TILE_OFM/SUB_TILE_OFM)
 #define SUB_TILE_OFM 2
-#define SUB_TILE_K_OFM 2
+//#define SUB_TILE_K_OFM 2
+#define SUB_TILE_K_OFM 4
 //#if TILE_K_OFM != (TILE_K * TILE_OFM) || TILE_K_OFM > 8
 //#   error "fully_connected_gpu_bf_tiled.cl - TILE_K_OFM must be equal to TILE_K * TILE_OFM and at most 8"
 //#endif
