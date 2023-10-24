@@ -650,15 +650,16 @@ loop_inst::typed_primitive_inst(network & network, loop_node const & node)
                                                 node.get_body_program(),
                                                 false,
                                                 network.is_primary_stream())) {
-    const primitive_id& num_iterations_id = node.get_num_iterations_id();
-    OPENVINO_ASSERT(node.get_program().get_node(num_iterations_id).is_type<mutable_data>(),
-                        node.id(), ": num_iterations is not mutable_data");
-    OPENVINO_ASSERT(check_if_axis_is_set_properly(node), node.id(), ": axis is not set properly");
 
+    if (!node.is_dynamic()) {
+        const primitive_id& num_iterations_id = node.get_num_iterations_id();
+        OPENVINO_ASSERT(node.get_program().get_node(num_iterations_id).is_type<mutable_data>(),
+                            node.id(), ": num_iterations is not mutable_data");
+        OPENVINO_ASSERT(check_if_axis_is_set_properly(node), node.id(), ": axis is not set properly");
+    }
     set_inner_networks({body_network});
     validate_backedges(node);
     validate_mappings(node);
-
     _input_primitive_maps = node.get_input_primitive_maps();
     _output_primitive_maps = node.get_output_primitive_maps();
     _back_edges = node.get_back_edges();
