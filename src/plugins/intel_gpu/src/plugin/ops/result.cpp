@@ -22,11 +22,18 @@ static void CreateResultOp(ProgramBuilder& p, const std::shared_ptr<ov::op::v0::
     OPENVINO_SUPPRESS_DEPRECATED_START
     auto input_id = ov::descriptor::get_ov_tensor_legacy_name(op->get_input_source_output(0).get_tensor());
     OPENVINO_SUPPRESS_DEPRECATED_END
+    if (input_id == "output")
+        std::cout << "x" << std::endl;
     if (input_id.empty()) {
-        input_id = prev->get_friendly_name();
+        input_id = layer_type_name_ID(prev);
+        if (input_id == "output")
+            std::cout << "x" << std::endl;
         if (prev->get_output_size() > 1) {
             input_id += "." + std::to_string(op->get_input_source_output(0).get_index());
         }
+    } else {
+        // TODO: temporal w/a
+        input_id = layer_type_name_ID(prev);
     }
     auto inputs = p.GetInputInfo(op);
 
@@ -37,7 +44,8 @@ static void CreateResultOp(ProgramBuilder& p, const std::shared_ptr<ov::op::v0::
     auto out_data_type = cldnn::element_type_to_data_type(convert_to_supported_device_type(op->get_input_element_type(0)));
 
     auto reorder_primitive = cldnn::reorder(out_primitive_name,
-                                            inputs[0],
+//                                            inputs[0],
+                                            cldnn::input_info(input_id),
                                             out_format,
                                             out_data_type);
     p.add_primitive(*op, reorder_primitive, {input_id, op->get_friendly_name()});

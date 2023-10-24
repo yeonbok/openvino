@@ -731,6 +731,7 @@ std::string Graph::out_name_to_internal(std::string out_port_name) const {
     auto allPrimitiveIds = get_network()->get_all_primitives();
 
     // Find correct output ID. Start with name stored in IR.
+    out_port_name = "convert:" + out_port_name; // temporal WA
     if (primitiveIDs.find(out_port_name) == primitiveIDs.end()) {
         OPENVINO_THROW("output with name ", out_port_name, " was not found in primitiveIDs");
     }
