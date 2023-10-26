@@ -160,11 +160,9 @@ bool TuneParamsSelector::VerifyTuneParams(const fully_connected_params& params, 
     if (output_f <= (tparams.tile_ofm / 2) * simd)
         return false;
     // No weights layout for such huge tile ofm.
-//    if (tparams.tile_ofm * simd > 64)
-//        return false;
-
-    if (output_f / tparams.tile_ofm < 512)
+    if (tparams.tile_ofm * simd > 64)
         return false;
+
     // Reject tile sizes that are guaranteed to spill out of registers.
     unsigned acc_register_bytes = tparams.tile_b * tparams.tile_ofm * simd * BytesPerElement(params.inputs[0].GetDType());
     unsigned in_register_bytes = tparams.tile_b * tparams.tile_ifm * simd * BytesPerElement(params.inputs[0].GetDType());
@@ -173,10 +171,8 @@ bool TuneParamsSelector::VerifyTuneParams(const fully_connected_params& params, 
     unsigned total_register_bytes = acc_register_bytes + in_register_bytes + wei_register_bytes;
     unsigned max_register_bytes = 128 * 32;
 
-    if (total_register_bytes > max_register_bytes) {
-        std::cout << "here!" << std::endl;
+    if (total_register_bytes > max_register_bytes)
         return false;
-    }
 
     return true;
 }
@@ -226,7 +222,7 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
         }
     } else {
         if (dtype == Datatype::F16) {
-           // tune_params(tile_b, tile_ofm, tile_ifm, tile_k, dispatch_bsv, dispatch_fsv, exec_options)
+            // tune_params(tile_b, tile_ofm, tile_ifm, tile_k, dispatch_bsv, dispatch_fsv, exec_options)
             selector.Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 16, 2, EXE_MODE_AGE_BASED))
                     .Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 2, 16, 1, EXE_MODE_AGE_BASED))
                     .Case(tune_params(16, std::min(max_tile_ofm, 2u), 1, 2, 4,  2, EXE_MODE_AGE_BASED))
@@ -245,12 +241,8 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
                     .Case(tune_params(8,  std::min(max_tile_ofm, 2u), 1, 1, 1,  1, EXE_MODE_AGE_BASED));
         }
 
-//        if (params.compressed && batch == 1) {
-        if (batch == 1) {
-            // tune_params(tile_b, tile_ofm, tile_ifm, tile_k, dispatch_bsv, dispatch_fsv, exec_options)
-            selector.Case(tune_params(1,  8,     4,       2,         1,           1,       EXE_MODE_AGE_BASED));
-//            selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 4, 2, 1, 1, EXE_MODE_AGE_BASED));
-        }
+        if (params.compressed && batch == 1)
+            selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 4, 2, 1, 1, EXE_MODE_AGE_BASED));
 
         selector.Case([&](const fully_connected_params&) -> tune_params {
             tune_params result(8, std::min(max_tile_ofm, 2u), 1, 2, 1, 1, EXE_MODE_DEFAULT);
@@ -269,11 +261,7 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
         });
     }
 
-    auto tparams = selector.Default(tune_params(1, 1, 1, 1, 1, 1, EXE_MODE_DEFAULT));
-    if (batch == 1 && !params.is_shape_agnostic) {
-        std::cout << "ofm: " << tparams.tile_ofm << ", tile_k: " << tparams.tile_k << ", d_bsv: " << tparams.dispatch_bsv << ", d_fsv: " << tparams.dispatch_fsv << std::endl;
-    }
-    return tparams;
+    return selector.Default(tune_params(1, 1, 1, 1, 1, 1, EXE_MODE_DEFAULT));
 }
 
 FullyConnected_bf_tiled::DispatchData
@@ -305,13 +293,6 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     dispatchData.tile_ms = tparams.dispatch_bsv;
     dispatchData.tile_ns = tparams.dispatch_fsv;
 
-    if (params.outputs[0].Batch().v * params.outputs[0].Feature().v == 1 && !params.is_shape_agnostic) {
-        std::cout << "outb : " << batch_threads
-                  << " outf : " << params.outputs[0].Y().v
-                  << " feature threads: " << feature_threads
-                  << " gws: " << dispatchData.gws[0] << "x" << dispatchData.gws[1] << "x" << dispatchData.gws[2]
-                  << std::endl;
-    }
     return dispatchData;
 }
 
@@ -406,19 +387,12 @@ KernelsData FullyConnected_bf_tiled::GetTunedKernelsDataByIndex(const Params &pa
         return {};
 
     tune_params tparams = GetAutoTuneParams(fc_params, autoTuneIndex);
+
     WeightsLayout weights_layout = WeightsLayout::os_iyx_osv16;
-    if (tparams.tile_ofm * simd == 32) {
+    if (tparams.tile_ofm * simd == 32)
         weights_layout = WeightsLayout::os_iyx_osv32;
-//        std::cout << "osv_32" << std::endl;
-    } else if (tparams.tile_ofm * simd == 64) {
+    else if (tparams.tile_ofm * simd == 64)
         weights_layout = WeightsLayout::os_iyx_osv64;
-//        std::cout << "osv_64" << std::endl;
-    } else if (tparams.tile_ofm >= 4) {
-        weights_layout = WeightsLayout::os_iyx_osv32; // TODO: need to be same as dynamic kernel's weight
-//        std::cout << "osv_32" << std::endl;
-    } else {
-//        std::cout << "osv_16" << std::endl;
-    }
 
     return GetCommonKernelsData(params,
                                 options,

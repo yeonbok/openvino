@@ -721,9 +721,9 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias_origin_taylor) {
     auto& engine = get_test_engine();
 
     const int M = 1;
-    const int K = 4096; 
+    const int K = 4096;
     const int N = 8092;
-    auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx}; 
+    auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx};
     auto input_mem = engine.allocate_memory({ {1, M, K}, data_types::f16, format::bfyx });
     auto weights_mem = engine.allocate_memory({ {N, K}, data_types::u8, format::bfyx });
     auto bias_mem = engine.allocate_memory({ {1, 1, N}, data_types::f16, format::bfyx });
@@ -749,15 +749,14 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias_origin_taylor) {
         data("bias", bias_mem),
         data("scale", scale_mem),
         data("zp", zp_mem),
-        fully_connected("fc_prim", input_info("input"), "weights", "bias", "scale", "zp", data_types::f32, padding(), 3, 2)
+        fully_connected("fc_prim", input_info("input"), "weights", "bias", "scale", "zp", data_types::f16, padding(), 3, 2)
     );
 
     ov::intel_gpu::ImplementationDesc fc_impl_desc = { format::bfyx, "fully_connected_gpu_bf_tiled", impl_types::ocl };
     auto config = get_test_default_config(engine);
     config.set_property(ov::intel_gpu::force_implementations(ov::intel_gpu::ImplForcingMap{ {"fc_prim", fc_impl_desc} })),
-    config.set_property(ov::intel_gpu::use_only_static_kernels_for_dynamic_shape(true));
+//    config.set_property(ov::intel_gpu::use_only_static_kernels_for_dynamic_shape(true));
     config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
-    config.set_property(ov::intel_gpu::optimize_data(true));
 
     network network(engine, topology, config);
     network.set_input_data("input", input_mem);
@@ -769,17 +768,16 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias_origin_taylor) {
     auto output_mem = outputs.begin()->second.get_memory();
 
     cldnn::mem_lock<float> output_ptr (output_mem, get_test_stream());
-
-    ov::PartialShape expected_shape{1, 2, 8};
     std::cout << output_mem->get_layout().get_partial_shape().to_string() << std::endl;
+    std::cout << output_ptr[0] << std::endl;
 }
 TEST(fully_connected_gpu, compressed_scale_zp_bias_taylor_taylor) {
     auto& engine = get_test_engine();
 
     const int M = 1;
-    const int K = 4096; 
+    const int K = 4096;
     const int N = 8092;
-    auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx}; 
+    auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx};
     auto input_mem = engine.allocate_memory({ {1, M, K}, data_types::f16, format::bfyx });
     auto weights_mem = engine.allocate_memory({ {N, K}, data_types::u8, format::bfyx });
     auto bias_mem = engine.allocate_memory({ {1, 1, N}, data_types::f16, format::bfyx });
@@ -805,15 +803,14 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias_taylor_taylor) {
         data("bias", bias_mem),
         data("scale", scale_mem),
         data("zp", zp_mem),
-        fully_connected("fc_prim", input_info("input"), "weights", "bias", "scale", "zp", data_types::f32, padding(), 3, 2)
+        fully_connected("fc_prim", input_info("input"), "weights", "bias", "scale", "zp", data_types::f16, padding(), 3, 2)
     );
 
     ov::intel_gpu::ImplementationDesc fc_impl_desc = { format::bfyx, "fully_connected_gpu_bf_taylor", impl_types::ocl };
     auto config = get_test_default_config(engine);
     config.set_property(ov::intel_gpu::force_implementations(ov::intel_gpu::ImplForcingMap{ {"fc_prim", fc_impl_desc} })),
     config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
-    config.set_property(ov::intel_gpu::optimize_data(true));
-    config.set_property(ov::intel_gpu::use_only_static_kernels_for_dynamic_shape(true));
+//    config.set_property(ov::intel_gpu::use_only_static_kernels_for_dynamic_shape(true));
     network network(engine, topology, config);
     network.set_input_data("input", input_mem);
 
@@ -824,16 +821,8 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias_taylor_taylor) {
     auto output_mem = outputs.begin()->second.get_memory();
 
     cldnn::mem_lock<float> output_ptr (output_mem, get_test_stream());
-
-    ov::PartialShape expected_shape{1, 2, 8};
-//    ASSERT_EQ(expected_shape, output_mem->get_layout().get_partial_shape());
     std::cout << output_mem->get_layout().get_partial_shape().to_string() << std::endl;
-
-//    std::vector<float> expected_result = {13.f, 58.f, -51.f, -108.f, 18.5f, -18.f, 1.f, -4.f, -11.f, -62.f, 57.f, 100.f, -8.5f, 6.f, 13.f, 8.f, };
-
-//    for (size_t i = 0; i < expected_result.size(); i++) {
-//        ASSERT_EQ(expected_result[i], output_ptr[i]) << "i = " << i;
-//    }
+    std::cout << output_ptr[0] << std::endl;
 }
 
 TEST(fully_connected_gpu, compressed_scale_bias) {
