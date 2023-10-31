@@ -716,14 +716,17 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias) {
         ASSERT_EQ(expected_result[i], output_ptr[i]) << "i = " << i;
     }
 }
-
+//#define N_SIZE (16*8*(32*7))
+#define N_SIZE 16384
+//#define N_SIZE 8092
 TEST(fully_connected_gpu, compressed_scale_zp_bias_origin_taylor) {
     auto& engine = get_test_engine();
 
     const int M = 1;
     const int K = 4096;
-    const int N = 8092;
-    auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx};
+    const int N = N_SIZE;
+    //auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx};
+    auto in_layout = cldnn::layout{{1, M, K}, data_types::f16, format::bfyx};
     auto input_mem = engine.allocate_memory({ {1, M, K}, data_types::f16, format::bfyx });
     auto weights_mem = engine.allocate_memory({ {N, K}, data_types::u8, format::bfyx });
     auto bias_mem = engine.allocate_memory({ {1, 1, N}, data_types::f16, format::bfyx });
@@ -776,8 +779,9 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias_taylor_taylor) {
 
     const int M = 1;
     const int K = 4096;
-    const int N = 8092;
-    auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx};
+    const int N = N_SIZE;
+//    auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx};
+    auto in_layout = cldnn::layout{{1, M, K}, data_types::f16, format::bfyx};
     auto input_mem = engine.allocate_memory({ {1, M, K}, data_types::f16, format::bfyx });
     auto weights_mem = engine.allocate_memory({ {N, K}, data_types::u8, format::bfyx });
     auto bias_mem = engine.allocate_memory({ {1, 1, N}, data_types::f16, format::bfyx });

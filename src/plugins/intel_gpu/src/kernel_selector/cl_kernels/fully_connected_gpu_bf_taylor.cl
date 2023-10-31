@@ -209,9 +209,9 @@ KERNEL(fc_taylor)(
     // =====================================================================================================================================
     // Main computation loop
     #ifdef IS_VEC_MAT
-    __local INPUT_VEC_TYPE in_vec[MAIN_LOOP_ELEMENTS_COUNT/TILE_IFM];
+    //__local INPUT_VEC_TYPE in_vec[MAIN_LOOP_ELEMENTS_COUNT/TILE_IFM];
     for (uint iter = 0; iter < TOTAL_ROUND; ++iter) {
-        uint vector_input_offset = 0;
+//        uint vector_input_offset = 0;
     #endif
     ACCUMULATOR_VEC_TYPE acc[TILE_B] = { };
     INPUT_VEC_TYPE       in_0[TILE_B] = { };
@@ -222,21 +222,21 @@ KERNEL(fc_taylor)(
     __attribute__((opencl_unroll_hint(1)))
     for (uint ni = 0; ni < iterations; ++ni) {
         // Load input.
-        #ifdef IS_VEC_MAT
-        if (iter == 0) {
-        #endif
+        //#ifdef IS_VEC_MAT
+        //if (iter == 0) {
+        //#endif
         #define LOAD_IN_0(bi) do {                                  \
                 in_0[bi] = INPUT_BLOCK_READ(input, input_offset);   \
                 input_offset += TILE_IN_B_PITCH;                    \
             } while (false)
         CONST_LOOP(TILE_B, LOAD_IN_0);
-        #ifdef IS_VEC_MAT
-        in_vec[ni * SIMD * TILE_IFM + get_sub_group_local_id()] = in_0[0];
-        } else {// iter > 0
-            in_0[0] = in_vec[vector_input_offset + get_sub_group_local_id()];
-        }
-        vector_input_offset += SIMD;
-        #endif
+        //#ifdef IS_VEC_MAT
+        //in_vec[ni * SIMD * TILE_IFM + get_sub_group_local_id()] = in_0[0];
+        //} else {// iter > 0
+        //   in_0[0] = in_vec[vector_input_offset + get_sub_group_local_id()];
+        //}
+//        vector_input_offset += SIMD;
+        //#endif
         #undef LOAD_IN_0
         input_offset += TILE_IFM * SIMD - TILE_IN_B_PITCH * TILE_B;
         // NOTE: Manually unrolling multiplication loop leads to lower register pressure and allows for bigger block sizes,
