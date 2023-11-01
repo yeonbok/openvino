@@ -247,7 +247,7 @@ FullyConnected_bf_tiled_taylor::GetAutoTuneParams(const fully_connected_params& 
         }
 
 //        if (params.compressed && batch == 1) {
-        if (batch == 1) {
+        if (batch == 1 && output_f > 4096) {
             // tune_params(tile_b, tile_ofm, tile_ifm, tile_k, dispatch_bsv, dispatch_fsv, exec_options)
             selector.Case(tune_params(1,  8,     4,       2,         1,           1,       EXE_MODE_AGE_BASED));
 //            selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 4, 2, 1, 1, EXE_MODE_AGE_BASED));
@@ -296,7 +296,8 @@ FullyConnected_bf_tiled_taylor::SetDefault(const fully_connected_params& params,
     dispatchData.gws[1] = 1;
     dispatchData.gws[2] = 1;
 
-    dispatchData.lws[0] = simd;
+    //dispatchData.lws[0] = simd * 16;
+    dispatchData.lws[0] = simd * 16;
     dispatchData.lws[1] = 1;
     dispatchData.lws[2] = 1;
 
@@ -320,6 +321,7 @@ FullyConnected_bf_tiled_taylor::SetDefault(const fully_connected_params& params,
 KernelsPriority FullyConnected_bf_tiled_taylor::GetKernelsPriority(const Params& params, const optional_params& /*options*/) const {
     const auto& fc_params = static_cast<const fully_connected_params&>(params);
 
+    return FORCE_PRIORITY_1;
     size_t output_b = fc_params.outputs[0].Batch().v;
     if (fc_params.outputs[0].GetLayout() == DataLayout::bfyx)
         output_b *= fc_params.outputs[0].Feature().v;
