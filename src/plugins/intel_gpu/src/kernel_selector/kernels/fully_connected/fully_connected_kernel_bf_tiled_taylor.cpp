@@ -273,7 +273,7 @@ FullyConnected_bf_tiled_taylor::GetAutoTuneParams(const fully_connected_params& 
     auto tparams = selector.Default(tune_params(1, 1, 1, 1, 1, 1, EXE_MODE_DEFAULT));
 //    if (batch == 1 && !params.is_shape_agnostic) {
     if (batch == 1) {
-        std::cout << "ofm: " << tparams.tile_ofm << ", tile_k: " << tparams.tile_k << ", d_bsv: " << tparams.dispatch_bsv << ", d_fsv: " << tparams.dispatch_fsv << std::endl;
+        std::cout << "ifm: " << tparams.tile_ifm << " ofm: " << tparams.tile_ofm << ", tile_k: " << tparams.tile_k << ", d_bsv: " << tparams.dispatch_bsv << ", d_fsv: " << tparams.dispatch_fsv << std::endl;
     }
     return tparams;
 }

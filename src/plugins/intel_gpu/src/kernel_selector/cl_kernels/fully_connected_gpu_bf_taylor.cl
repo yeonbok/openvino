@@ -39,9 +39,9 @@
 #   error "fully_connected_gpu_bf_tiled.cl - TILE_K must be one of {1, 2, 4, 8}"
 #endif
 
-//#define TOTAL_ROUND  4 //TILE_OFM(8) / SUB_TILE_OFM(2)
-//#define TOTAL_ROUND  4 // TILE_OFM(8) / SUB_TILE_OFM(2)
-#define TOTAL_ROUND (TILE_OFM/SUB_TILE_OFM)
+//#define NUM_SUBTILE_OFM  4 //TILE_OFM(8) / SUB_TILE_OFM(2)
+//#define NUM_SUBTILE_OFM  4 // TILE_OFM(8) / SUB_TILE_OFM(2)
+#define NUM_SUBTILE_OFM (TILE_OFM/SUB_TILE_OFM)
 #define SUB_TILE_OFM 2
 //#define SUB_TILE_K_OFM 2
 #define SUB_TILE_K_OFM 4
@@ -124,7 +124,7 @@ KERNEL(fc_taylor)(
     uint sglid = (uint)get_sub_group_local_id();
 
     #ifdef IS_VEC_MAT
-    const int tile_ofm = SUB_TILE_OFM;
+    const int tile_ofm = (SUB_TILE_OFM > TILE_OFM) ? TILE_OFM : SUB_TILE_OFM;
     #else
     const int tile_ofm = TILE_OFM;
     #endif
@@ -209,8 +209,11 @@ KERNEL(fc_taylor)(
     // =====================================================================================================================================
     // Main computation loop
     #ifdef IS_VEC_MAT
+//        printf("IS_VEC_MAT\n");
     //__local INPUT_VEC_TYPE in_vec[MAIN_LOOP_ELEMENTS_COUNT/TILE_IFM];
-    for (uint iter = 0; iter < TOTAL_ROUND; ++iter) {
+    int n_subtile_ofm = NUM_SUBTILE_OFM > 1 ? NUM_SUBTILE_OFM : 1;
+    for (uint iter = 0; iter < n_subtile_ofm; ++iter) {
+//        printf("%d-th SUB_TILE_OFM \n", iter);
 //        uint vector_input_offset = 0;
     #endif
     ACCUMULATOR_VEC_TYPE acc[TILE_B] = { };
@@ -221,6 +224,7 @@ KERNEL(fc_taylor)(
     uint iterations = MAIN_LOOP_ELEMENTS_COUNT / (TILE_IFM * SIMD);
     __attribute__((opencl_unroll_hint(1)))
     for (uint ni = 0; ni < iterations; ++ni) {
+//        printf("input tile iter %d\n", ni);
         // Load input.
         //#ifdef IS_VEC_MAT
         //if (iter == 0) {
@@ -297,55 +301,55 @@ KERNEL(fc_taylor)(
                 input_offset += TILE_IN_B_PITCH;                    \
             } while (false)
 
-//        CONST_LOOP(TILE_B, LOAD_IN_0);
+        CONST_LOOP(TILE_B, LOAD_IN_0);
         #undef LOAD_IN_0
-//        input_offset += TILE_IFM * SIMD - TILE_IN_B_PITCH * TILE_B;
-//        unroll_for(uint ki = 0; ki < CEIL_DIV(LEFTOVER_IFM, TILE_K); ++ki) {
-//            wei = TO_FILTER_VEC_TYPE(FILTER_BLOCK_READ(weights, weights_offset));
-//            #if COMPRESSED_WEIGHTS
-//                ACCUMULATOR_TYPE* w = (ACCUMULATOR_TYPE*)(&wei);
-//                unroll_for(uint kii = 0; kii < TILE_K; ++kii) {
-//                    unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
-//                        const uint w_idx = kii * TILE_OFM + fi;
-//                        uint offset_ofm = out_f + fi*SIMD + get_sub_group_local_id();
-//                        #if DECOMPRESSION_SCALE_GROUPS_NUM > 1
-//                            const uint scale_offset = (offset_ofm % DECOMPRESSION_SCALE_BATCH_NUM) * DECOMPRESSION_SCALE_BATCH_PITCH +
-//                                                     ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_SCALE_GROUP_SIZE)*DECOMPRESSION_SCALE_FEATURE_PITCH;
-//                            ACCUMULATOR_TYPE ds = decompression_scale[scale_offset];
-//                        #else
-//                            ACCUMULATOR_TYPE ds = d_scales[fi];
-//                        #endif
-//
-//                        #if DECOMPRESSION_ZP_TERM
-//                            #if DECOMPRESSION_ZP_GROUPS_NUM > 1
-//                                const uint zp_offset = (offset_ofm % DECOMPRESSION_ZP_BATCH_NUM) * DECOMPRESSION_ZP_BATCH_PITCH +
-//                                                    ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_ZP_GROUP_SIZE) * DECOMPRESSION_ZP_FEATURE_PITCH;
-//                                ACCUMULATOR_TYPE dzp = decompression_zp[zp_offset];
-//                            #else
-//                                ACCUMULATOR_TYPE dzp = d_zps[fi];
-//                            #endif
-//                        #else
-//                            ACCUMULATOR_TYPE dzp = ACCUMULATOR_VAL_ZERO;
-//                        #endif
-//                        w[w_idx] = (w[w_idx] - dzp) * ds;
-//                    }
-//                }
-//            #endif
-//            weights_offset += TILE_K_OFM * SIMD;
-//
-//            unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
-//                unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
-//                    unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
-//                        const uint total_k = ki * TILE_K + kii;
-//                        if (total_k < LEFTOVER_IFM) {
-//                            INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
-//                            ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
+        input_offset += TILE_IFM * SIMD - TILE_IN_B_PITCH * TILE_B;
+        unroll_for(uint ki = 0; ki < CEIL_DIV(LEFTOVER_IFM, TILE_K); ++ki) {
+            wei = TO_FILTER_VEC_TYPE(FILTER_BLOCK_READ(weights, weights_offset));
+            #if COMPRESSED_WEIGHTS
+                ACCUMULATOR_TYPE* w = (ACCUMULATOR_TYPE*)(&wei);
+                unroll_for(uint kii = 0; kii < TILE_K; ++kii) {
+                    unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
+                        const uint w_idx = kii * TILE_OFM + fi;
+                        uint offset_ofm = out_f + fi*SIMD + get_sub_group_local_id();
+                        #if DECOMPRESSION_SCALE_GROUPS_NUM > 1
+                            const uint scale_offset = (offset_ofm % DECOMPRESSION_SCALE_BATCH_NUM) * DECOMPRESSION_SCALE_BATCH_PITCH +
+                                                     ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_SCALE_GROUP_SIZE)*DECOMPRESSION_SCALE_FEATURE_PITCH;
+                            ACCUMULATOR_TYPE ds = decompression_scale[scale_offset];
+                        #else
+                            ACCUMULATOR_TYPE ds = d_scales[fi];
+                        #endif
+
+                        #if DECOMPRESSION_ZP_TERM
+                            #if DECOMPRESSION_ZP_GROUPS_NUM > 1
+                                const uint zp_offset = (offset_ofm % DECOMPRESSION_ZP_BATCH_NUM) * DECOMPRESSION_ZP_BATCH_PITCH +
+                                                    ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_ZP_GROUP_SIZE) * DECOMPRESSION_ZP_FEATURE_PITCH;
+                                ACCUMULATOR_TYPE dzp = decompression_zp[zp_offset];
+                            #else
+                                ACCUMULATOR_TYPE dzp = d_zps[fi];
+                            #endif
+                        #else
+                            ACCUMULATOR_TYPE dzp = ACCUMULATOR_VAL_ZERO;
+                        #endif
+                        w[w_idx] = (w[w_idx] - dzp) * ds;
+                    }
+                }
+            #endif
+            weights_offset += TILE_K_OFM * SIMD;
+
+            unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
+                unroll_for (uint fi = 0; fi < tile_ofm; ++fi) {
+                    unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+                        const uint total_k = ki * TILE_K + kii;
+                        if (total_k < LEFTOVER_IFM) {
+                            INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
+                            ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+                        }
+                    }
+                }
+            }
+        }
+    }
     #undef LEFTOVER_IFM
 #endif // MAIN_LOOP_ELEMENTS_COUNT % (TILE_IFM * SIMD) != 0
     // =====================================================================================================================================

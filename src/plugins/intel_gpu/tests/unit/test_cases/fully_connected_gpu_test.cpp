@@ -693,8 +693,10 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias) {
         fully_connected("fc_prim", input_info("input"), "weights", "bias", "scale", "zp", data_types::f32, padding(), 3, 2)
     );
 
+    ov::intel_gpu::ImplementationDesc fc_impl_desc = { format::bfyx, "fully_connected_gpu_bf_taylor", impl_types::ocl };
     auto config = get_test_default_config(engine);
     config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
+    config.set_property(ov::intel_gpu::force_implementations(ov::intel_gpu::ImplForcingMap{ {"fc_prim", fc_impl_desc} }));
 
     network network(engine, topology, config);
     network.set_input_data("input", input_mem);
