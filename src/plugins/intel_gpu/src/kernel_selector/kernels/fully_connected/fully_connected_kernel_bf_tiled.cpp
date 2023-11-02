@@ -261,7 +261,11 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
         });
     }
 
-    return selector.Default(tune_params(1, 1, 1, 1, 1, 1, EXE_MODE_DEFAULT));
+    auto tparams = selector.Default(tune_params(1, 1, 1, 1, 1, 1, EXE_MODE_DEFAULT));
+    if (batch == 1 && !params.is_shape_agnostic) {
+        std::cout << "origin fc >> ifm: " << tparams.tile_ifm << " ofm: " << tparams.tile_ofm << ", tile_k: " << tparams.tile_k << ", d_bsv: " << tparams.dispatch_bsv << ", d_fsv: " << tparams.dispatch_fsv << std::endl;
+    }
+    return tparams;
 }
 
 FullyConnected_bf_tiled::DispatchData
@@ -282,6 +286,7 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     dispatchData.gws[1] = 1;
     dispatchData.gws[2] = 1;
 
+    //dispatchData.lws[0] = simd * 16;
     dispatchData.lws[0] = simd;
     dispatchData.lws[1] = 1;
     dispatchData.lws[2] = 1;
@@ -292,6 +297,14 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     dispatchData.tile_nk = tparams.tile_k;
     dispatchData.tile_ms = tparams.dispatch_bsv;
     dispatchData.tile_ns = tparams.dispatch_fsv;
+    if (params.outputs[0].Batch().v * params.outputs[0].Feature().v == 1 && !params.is_shape_agnostic) {
+        std::cout << "origin fc >> in_f : "  << params.inputs[0].Y().v
+                  <<  " outb : " << batch_threads
+                  << " outf : " << params.outputs[0].Y().v
+                  << " feature threads: " << feature_threads
+                  << " gws: " << dispatchData.gws[0] << "x" << dispatchData.gws[1] << "x" << dispatchData.gws[2]
+                  << std::endl;
+    }
 
     return dispatchData;
 }

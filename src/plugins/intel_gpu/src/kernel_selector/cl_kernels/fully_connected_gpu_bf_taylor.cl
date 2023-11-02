@@ -120,9 +120,11 @@ KERNEL(fc_taylor)(
     , FUSED_OPS_DECLS
 #endif
 ) {
-    uint gid = (uint)get_group_id(0);
+    uint gid = ((uint)get_group_id(0) * (uint) get_local_size(0) + (uint) get_local_id(0)) / 16;
+   // uint gid = (uint)get_group_id(0);
     uint sglid = (uint)get_sub_group_local_id();
 
+    printf("gid = %d, sglid=%d \n", gid, sglid);
     #ifdef IS_VEC_MAT
     const int tile_ofm = (SUB_TILE_OFM > TILE_OFM) ? TILE_OFM : SUB_TILE_OFM;
     #else

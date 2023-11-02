@@ -273,7 +273,7 @@ FullyConnected_bf_tiled_taylor::GetAutoTuneParams(const fully_connected_params& 
     auto tparams = selector.Default(tune_params(1, 1, 1, 1, 1, 1, EXE_MODE_DEFAULT));
 //    if (batch == 1 && !params.is_shape_agnostic) {
     if (batch == 1) {
-        std::cout << "ifm: " << tparams.tile_ifm << " ofm: " << tparams.tile_ofm << ", tile_k: " << tparams.tile_k << ", d_bsv: " << tparams.dispatch_bsv << ", d_fsv: " << tparams.dispatch_fsv << std::endl;
+        std::cout << "taylor's fc >> ifm: " << tparams.tile_ifm << " ofm: " << tparams.tile_ofm << ", tile_k: " << tparams.tile_k << ", d_bsv: " << tparams.dispatch_bsv << ", d_fsv: " << tparams.dispatch_fsv << std::endl;
     }
     return tparams;
 }
@@ -296,7 +296,7 @@ FullyConnected_bf_tiled_taylor::SetDefault(const fully_connected_params& params,
     dispatchData.gws[1] = 1;
     dispatchData.gws[2] = 1;
 
-    //dispatchData.lws[0] = simd * 16;
+    //dispatchData.lws[0] = simd;
     dispatchData.lws[0] = simd * 16;
     dispatchData.lws[1] = 1;
     dispatchData.lws[2] = 1;
@@ -309,7 +309,7 @@ FullyConnected_bf_tiled_taylor::SetDefault(const fully_connected_params& params,
     dispatchData.tile_ns = tparams.dispatch_fsv;
 
     if (params.outputs[0].Batch().v * params.outputs[0].Feature().v == 1 && !params.is_shape_agnostic) {
-        std::cout << "outb : " << batch_threads
+        std::cout << "taylor's fc >> outb : " << batch_threads
                   << " outf : " << params.outputs[0].Y().v
                   << " feature threads: " << feature_threads
                   << " gws: " << dispatchData.gws[0] << "x" << dispatchData.gws[1] << "x" << dispatchData.gws[2]
@@ -321,10 +321,14 @@ FullyConnected_bf_tiled_taylor::SetDefault(const fully_connected_params& params,
 KernelsPriority FullyConnected_bf_tiled_taylor::GetKernelsPriority(const Params& params, const optional_params& /*options*/) const {
     const auto& fc_params = static_cast<const fully_connected_params&>(params);
 
-    return FORCE_PRIORITY_1;
+    return NOT_SUPPORTED;
     size_t output_b = fc_params.outputs[0].Batch().v;
     if (fc_params.outputs[0].GetLayout() == DataLayout::bfyx)
         output_b *= fc_params.outputs[0].Feature().v;
+    if (output_b == 1)
+        return FORCE_PRIORITY_1;
+    else
+        return NOT_SUPPORTED;
 
     float estimated_time = FORCE_PRIORITY_9;
     if (output_b > 1 && fc_params.inputs[0].GetDType() == Datatype::F32)
