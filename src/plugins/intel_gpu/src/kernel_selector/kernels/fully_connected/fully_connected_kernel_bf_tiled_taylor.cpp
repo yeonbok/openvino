@@ -247,10 +247,16 @@ FullyConnected_bf_tiled_taylor::GetAutoTuneParams(const fully_connected_params& 
         }
 
 //        if (params.compressed && batch == 1) {
-        if (batch == 1 && output_f > 4096) {
+        if (batch == 1) {
+            if (output_f > 4096) {
+//        if (batch == 1) {
             // tune_params(tile_b, tile_ofm, tile_ifm, tile_k, dispatch_bsv, dispatch_fsv, exec_options)
-            selector.Case(tune_params(1,  8,     4,       2,         1,           1,       EXE_MODE_AGE_BASED));
+            //selector.Case(tune_params(1,  8,     4,       2,         1,           1,       EXE_MODE_AGE_BASED));
+                selector.Case(tune_params(1,  8,     4,       4,         1,           1,       EXE_MODE_AGE_BASED));
 //            selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 4, 2, 1, 1, EXE_MODE_AGE_BASED));
+            } else {
+                selector.Case(tune_params(1,  2,     4,       4,         1,           1,       EXE_MODE_AGE_BASED));
+            }
         }
 
         selector.Case([&](const fully_connected_params&) -> tune_params {
@@ -273,7 +279,7 @@ FullyConnected_bf_tiled_taylor::GetAutoTuneParams(const fully_connected_params& 
     auto tparams = selector.Default(tune_params(1, 1, 1, 1, 1, 1, EXE_MODE_DEFAULT));
 //    if (batch == 1 && !params.is_shape_agnostic) {
     if (batch == 1) {
-        std::cout << "taylor's fc >> ifm: " << tparams.tile_ifm << " ofm: " << tparams.tile_ofm << ", tile_k: " << tparams.tile_k << ", d_bsv: " << tparams.dispatch_bsv << ", d_fsv: " << tparams.dispatch_fsv << std::endl;
+        std::cout << "taylor's fc >> batch : " << batch << ", output_f " << output_f << " ifm: " << tparams.tile_ifm << " ofm: " << tparams.tile_ofm << ", tile_k: " << tparams.tile_k << ", d_bsv: " << tparams.dispatch_bsv << ", d_fsv: " << tparams.dispatch_fsv << std::endl;
     }
     return tparams;
 }
@@ -321,14 +327,16 @@ FullyConnected_bf_tiled_taylor::SetDefault(const fully_connected_params& params,
 KernelsPriority FullyConnected_bf_tiled_taylor::GetKernelsPriority(const Params& params, const optional_params& /*options*/) const {
     const auto& fc_params = static_cast<const fully_connected_params&>(params);
 
-    return NOT_SUPPORTED;
+//    return NOT_SUPPORTED;
     size_t output_b = fc_params.outputs[0].Batch().v;
     if (fc_params.outputs[0].GetLayout() == DataLayout::bfyx)
         output_b *= fc_params.outputs[0].Feature().v;
-    if (output_b == 1)
+    if (output_b == 1) {
+        std::cout << "selected! (out_b = " << output_b << ", out_f = " << fc_params.outputs[0].Y().v << std::endl;
         return FORCE_PRIORITY_1;
-    else
+     }else {
         return NOT_SUPPORTED;
+     }
 
     float estimated_time = FORCE_PRIORITY_9;
     if (output_b > 1 && fc_params.inputs[0].GetDType() == Datatype::F32)

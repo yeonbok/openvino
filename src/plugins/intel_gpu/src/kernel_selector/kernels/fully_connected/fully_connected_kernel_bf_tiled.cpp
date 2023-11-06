@@ -316,11 +316,13 @@ KernelsPriority FullyConnected_bf_tiled::GetKernelsPriority(const Params& params
     if (fc_params.outputs[0].GetLayout() == DataLayout::bfyx)
         output_b *= fc_params.outputs[0].Feature().v;
 
+//    if (output_b == 1 && !fc_params.is_shape_agnostic)
+//        return NOT_SUPPORTED;
     float estimated_time = FORCE_PRIORITY_9;
     if (output_b > 1 && fc_params.inputs[0].GetDType() == Datatype::F32)
-        estimated_time = FORCE_PRIORITY_3;
-    else if (output_b > 1 && fc_params.inputs[0].GetDType() == Datatype::F16)
         estimated_time = FORCE_PRIORITY_4;
+    else if (output_b > 1 && fc_params.inputs[0].GetDType() == Datatype::F16)
+        estimated_time = FORCE_PRIORITY_5;
 
     return estimated_time;
 }
