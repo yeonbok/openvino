@@ -22,7 +22,7 @@
 #   error "fully_connected_gpu_bf_tiled.cl - SIMD must be one of {8, 16}"
 #endif
 
-#if TILE_OFM != 1 && TILE_OFM != 2 && TILE_OFM != 4 && TILE_OFM != 8
+#if TILE_OFM != 1 && TILE_OFM != 2 && TILE_OFM != 4 && TILE_OFM != 8 && TILE_OFM != 16
 #   error "fully_connected_gpu_bf_tiled.cl - TILE_OFM must be one of {1, 2, 4, 8}"
 #endif
 
@@ -34,7 +34,7 @@
 #   error "fully_connected_gpu_bf_tiled.cl - TILE_K must be one of {1, 2, 4, 8}"
 #endif
 
-#if TILE_K_OFM != (TILE_K * TILE_OFM) || TILE_K_OFM > 8
+#if TILE_K_OFM != (TILE_K * TILE_OFM) || TILE_K_OFM > 16
 #   error "fully_connected_gpu_bf_tiled.cl - TILE_K_OFM must be equal to TILE_K * TILE_OFM and at most 8"
 #endif
 
@@ -50,7 +50,8 @@
 #define TO_FILTER_VEC_TYPE(x)      CAT(convert_, FILTER_VEC_TYPE)(x)
 
 #define INPUT_BLOCK_READ(ptr, offset)        BLOCK_READN(INPUT0_TYPE, TILE_IFM, ptr, offset)
-#define FILTER_BLOCK_READ(ptr, offset)       BLOCK_READN(FILTER_TYPE, TILE_K_OFM, ptr, offset)
+//#define FILTER_BLOCK_READ(ptr, offset)       BLOCK_READN(FILTER_TYPE, TILE_K_OFM, ptr, offset)
+#define FILTER_BLOCK_READ(ptr, offset)       BLOCK_READN(FILTER_TYPE, TILE_OFM, ptr, offset)
 #define BIAS_BLOCK_READ(ptr, offset)         BLOCK_READN(BIAS_TYPE, TILE_OFM, ptr, offset)
 #define OUTPUT_BLOCK_WRITE(ptr, offset, val) BLOCK_WRITEN(OUTPUT_TYPE, TILE_OFM, ptr, offset, val)
 
@@ -98,8 +99,10 @@ KERNEL(fc)(
 #endif
 ) {
     uint gid = (uint)get_group_id(0);
+    //uint gid = ((uint)get_group_id(0) * (uint) get_local_size(0) + (uint) get_local_id(0)) / 16;
     uint sglid = (uint)get_sub_group_local_id();
 
+    //printf("gid = %d, sglid=%d \n", gid, sglid);
     // Dispatch as bs_fs_bsv_fsv, where bsv = DISPATCH_BSV and fsv = DISPATCH_FSV.
     // This allows more fine grained control over dispatch order than using work-groups and
     // avoids requirement of threads being available for whole work-group.
@@ -113,6 +116,7 @@ KERNEL(fc)(
     uint out_f = (feature_mega_block * DISPATCH_FSV + feature_mini_block) * (TILE_OFM * SIMD);
     uint out_b = ((batch_mega_block * DISPATCH_BSV + batch_mini_block) * TILE_B);
 
+//    printf("out_f = %d && %d (sglid %d)", out_f, out_f + SIMD + sglid, sglid);
     ACCUMULATOR_VEC_TYPE acc[TILE_B] = { };
     INPUT_VEC_TYPE       in_0[TILE_B] = { };
 
@@ -187,49 +191,74 @@ KERNEL(fc)(
         // NOTE: Manually unrolling multiplication loop leads to lower register pressure and allows for bigger block sizes,
         //       but significantly degrades readability and generality of code.
         //       It doesn't also show noticable performance improvement on tested configurations.
+//        __attribute__((opencl_unroll_hint()))
+//        __attribute__((opencl_unroll_hint(TILE_IFM*SIMD/(TILE_K*2))))
+//        __attribute__((opencl_unroll_hint(1)))
         unroll_for(uint ki = 0; ki < (TILE_IFM * SIMD) / TILE_K; ki++) {
-//            printf("gid = %d, sglid = %d, ki = %d, weights_offset = %d & %d\n", gid, sglid, ki, weights_offset + sglid, weights_offset + 16 + sglid);
-            wei = TO_FILTER_VEC_TYPE(FILTER_BLOCK_READ(weights, weights_offset));
-            #if COMPRESSED_WEIGHTS
-                ACCUMULATOR_TYPE* w = (ACCUMULATOR_TYPE*)(&wei);
-                unroll_for(uint kii = 0; kii < TILE_K; ++kii) {
-                    unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
-                        const uint w_idx = kii * TILE_OFM + fi;
-                        const uint offset_ofm = out_f + fi*SIMD + sglid;
-                        #if DECOMPRESSION_SCALE_GROUPS_NUM > 1
-                            const uint scale_offset = (offset_ofm % DECOMPRESSION_SCALE_BATCH_NUM) * DECOMPRESSION_SCALE_BATCH_PITCH  +
-                                                     ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_SCALE_GROUP_SIZE)*DECOMPRESSION_SCALE_FEATURE_PITCH;
-                            ACCUMULATOR_TYPE ds = decompression_scale[scale_offset];
-                        #else
-                            ACCUMULATOR_TYPE ds = d_scales[fi];
-                        #endif
+//            printf("gid = %d, sglid = %d, ki = %d, weights_offset = %d & %d\n", gid, sglid, ki, weights_offset + sglid, weights_offset + 16 + sglid)i
+//    printf("out_f = %d && %d (sglid %d)", out_f, out_f + SIMD + sglid, sglid);
+            //printf(" gid = %d, sglid = %d, ni = %d, ki = %d out_f = (%d, %d),  weight_offset = (%d, %d)\n", gid, sglid, ni, ki, out_f, out_f + SIMD, weights_offset + sglid, weights_offset + SIMD + sglid);
+//            wei = TO_FILTER_VEC_TYPE(FILTER_BLOCK_READ(weights, weights_offset));
+            uchar2 wei0 = FILTER_BLOCK_READ(weights, weights_offset);
+//            #if COMPRESSED_WEIGHTS
+//                ACCUMULATOR_TYPE* w = (ACCUMULATOR_TYPE*)(&wei);
+//                unroll_for(uint kii = 0; kii < TILE_K; ++kii) {
+//                    unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
+//                        const uint w_idx = kii * TILE_OFM + fi;
+//                        const uint offset_ofm = out_f + fi*SIMD + sglid;
+//                        #if DECOMPRESSION_SCALE_GROUPS_NUM > 1
+//                            const uint scale_offset = (offset_ofm % DECOMPRESSION_SCALE_BATCH_NUM) * DECOMPRESSION_SCALE_BATCH_PITCH  +
+//                                                     ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_SCALE_GROUP_SIZE)*DECOMPRESSION_SCALE_FEATURE_PITCH;
+//                            ACCUMULATOR_TYPE ds = decompression_scale[scale_offset];
+//                        #else
+//                            ACCUMULATOR_TYPE ds = d_scales[fi];
+//                        #endif
+//
+//                        #if DECOMPRESSION_ZP_TERM
+//                            #if DECOMPRESSION_ZP_GROUPS_NUM > 1
+//                                const uint zp_offset = (offset_ofm % DECOMPRESSION_ZP_BATCH_NUM) * DECOMPRESSION_ZP_BATCH_PITCH +
+//                                                    ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_ZP_GROUP_SIZE) * DECOMPRESSION_ZP_FEATURE_PITCH;
+//                                ACCUMULATOR_TYPE dzp = decompression_zp[zp_offset];
+//                            #else
+//                                ACCUMULATOR_TYPE dzp = d_zps[fi];
+//                            #endif
+//                        #else
+//                            ACCUMULATOR_TYPE dzp = ACCUMULATOR_VAL_ZERO;
+//                        #endif
+//                        w[w_idx] = (w[w_idx] - dzp) * ds;
+//                    }
+//                }
+//            #endif
 
-                        #if DECOMPRESSION_ZP_TERM
-                            #if DECOMPRESSION_ZP_GROUPS_NUM > 1
-                                const uint zp_offset = (offset_ofm % DECOMPRESSION_ZP_BATCH_NUM) * DECOMPRESSION_ZP_BATCH_PITCH +
-                                                    ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_ZP_GROUP_SIZE) * DECOMPRESSION_ZP_FEATURE_PITCH;
-                                ACCUMULATOR_TYPE dzp = decompression_zp[zp_offset];
-                            #else
-                                ACCUMULATOR_TYPE dzp = d_zps[fi];
-                            #endif
-                        #else
-                            ACCUMULATOR_TYPE dzp = ACCUMULATOR_VAL_ZERO;
-                        #endif
-                        w[w_idx] = (w[w_idx] - dzp) * ds;
-                    }
-                }
-            #endif
-            weights_offset += TILE_K_OFM * SIMD;
-
-            unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
-                const uint total_k = ki * TILE_K + kii;
+//            unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
+//                const uint total_k = ki * TILE_K + kii;
+                const uint total_k_0 = ki * TILE_K + 0;
+                unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
+                half w_0 = ((convert_half)(wei0[fi]) - d_zps[fi]) * d_scales[fi];
                 unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
-                    INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
+                    INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k_0 / SIMD], total_k_0 % SIMD);
                     unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
-                        ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+//                        ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+                        ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * w_0;
                     }
                 }
-            }
+                }
+
+                uchar2 wei1 = FILTER_BLOCK_READ(weights, weights_offset + SIMD * TILE_OFM);
+                const uint total_k_1 = ki * TILE_K + 1;
+                unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
+                half w_1 = ((convert_half)(wei1[fi]) - d_zps[fi]) * d_scales[fi];
+                unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+                    INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k_1 / SIMD], total_k_1 % SIMD);
+                    unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
+//                        ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+                        ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * w_1;
+                    }
+                }
+                }
+
+            weights_offset += TILE_K_OFM * SIMD;
+//            }
         }
     }
     // =====================================================================================================================================
@@ -247,50 +276,79 @@ KERNEL(fc)(
         #undef LOAD_IN_0
         input_offset += TILE_IFM * SIMD - TILE_IN_B_PITCH * TILE_B;
         unroll_for(uint ki = 0; ki < CEIL_DIV(LEFTOVER_IFM, TILE_K); ++ki) {
-            wei = TO_FILTER_VEC_TYPE(FILTER_BLOCK_READ(weights, weights_offset));
-            #if COMPRESSED_WEIGHTS
-                ACCUMULATOR_TYPE* w = (ACCUMULATOR_TYPE*)(&wei);
-                unroll_for(uint kii = 0; kii < TILE_K; ++kii) {
-                    unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
-                        const uint w_idx = kii * TILE_OFM + fi;
-                        uint offset_ofm = out_f + fi*SIMD + get_sub_group_local_id();
-                        #if DECOMPRESSION_SCALE_GROUPS_NUM > 1
-                            const uint scale_offset = (offset_ofm % DECOMPRESSION_SCALE_BATCH_NUM) * DECOMPRESSION_SCALE_BATCH_PITCH +
-                                                     ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_SCALE_GROUP_SIZE)*DECOMPRESSION_SCALE_FEATURE_PITCH;
-                            ACCUMULATOR_TYPE ds = decompression_scale[scale_offset];
-                        #else
-                            ACCUMULATOR_TYPE ds = d_scales[fi];
-                        #endif
-
-                        #if DECOMPRESSION_ZP_TERM
-                            #if DECOMPRESSION_ZP_GROUPS_NUM > 1
-                                const uint zp_offset = (offset_ofm % DECOMPRESSION_ZP_BATCH_NUM) * DECOMPRESSION_ZP_BATCH_PITCH +
-                                                    ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_ZP_GROUP_SIZE) * DECOMPRESSION_ZP_FEATURE_PITCH;
-                                ACCUMULATOR_TYPE dzp = decompression_zp[zp_offset];
-                            #else
-                                ACCUMULATOR_TYPE dzp = d_zps[fi];
-                            #endif
-                        #else
-                            ACCUMULATOR_TYPE dzp = ACCUMULATOR_VAL_ZERO;
-                        #endif
-                        w[w_idx] = (w[w_idx] - dzp) * ds;
-                    }
-                }
-            #endif
+            //wei = TO_FILTER_VEC_TYPE(FILTER_BLOCK_READ(weights, weights_offset));
+            uchar2 wei0 = FILTER_BLOCK_READ(weights, weights_offset);
+            uchar2 wei1 = FILTER_BLOCK_READ(weights, weights_offset + SIMD * TILE_OFM);
+//            #if COMPRESSED_WEIGHTS
+//                ACCUMULATOR_TYPE* w = (ACCUMULATOR_TYPE*)(&wei);
+//                unroll_for(uint kii = 0; kii < TILE_K; ++kii) {
+//                    unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
+//                        const uint w_idx = kii * TILE_OFM + fi;
+//                        uint offset_ofm = out_f + fi*SIMD + get_sub_group_local_id();
+//                        #if DECOMPRESSION_SCALE_GROUPS_NUM > 1
+//                            const uint scale_offset = (offset_ofm % DECOMPRESSION_SCALE_BATCH_NUM) * DECOMPRESSION_SCALE_BATCH_PITCH +
+//                                                     ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_SCALE_GROUP_SIZE)*DECOMPRESSION_SCALE_FEATURE_PITCH;
+//                            ACCUMULATOR_TYPE ds = decompression_scale[scale_offset];
+//                        #else
+//                            ACCUMULATOR_TYPE ds = d_scales[fi];
+//                        #endif
+//
+//                        #if DECOMPRESSION_ZP_TERM
+//                            #if DECOMPRESSION_ZP_GROUPS_NUM > 1
+//                                const uint zp_offset = (offset_ofm % DECOMPRESSION_ZP_BATCH_NUM) * DECOMPRESSION_ZP_BATCH_PITCH +
+//                                                    ((kii + ki*TILE_K + ni*TILE_IFM*SIMD) / DECOMPRESSION_ZP_GROUP_SIZE) * DECOMPRESSION_ZP_FEATURE_PITCH;
+//                                ACCUMULATOR_TYPE dzp = decompression_zp[zp_offset];
+//                            #else
+//                                ACCUMULATOR_TYPE dzp = d_zps[fi];
+//                            #endif
+//                        #else
+//                            ACCUMULATOR_TYPE dzp = ACCUMULATOR_VAL_ZERO;
+//                        #endif
+//                        w[w_idx] = (w[w_idx] - dzp) * ds;
+//                    }
+//                }
+//            #endif
             weights_offset += TILE_K_OFM * SIMD;
 
-            unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
-                unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
-                    unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
-                        const uint total_k = ki * TILE_K + kii;
-                        if (total_k < LEFTOVER_IFM) {
-                            INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
-                            ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
-                        }
+//            unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
+//                unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
+//                    unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+//                        const uint total_k = ki * TILE_K + kii;
+//                        if (total_k < LEFTOVER_IFM) {
+//                            INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
+//                            ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//            unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
+            // k tile 0 => wei0
+            unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
+                unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+                    const uint total_k = ki * TILE_K + kii;
+                    if (total_k < LEFTOVER_IFM) {
+                        half w = ((convert_half)(wei0[fi]) - d_zps[fi]) * d_scales[fi];
+                        INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
+//                        ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+                        ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * w;
                     }
                 }
             }
+            // k tile 1 => wei1
+            unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
+                unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+                    const uint total_k = ki * TILE_K + kii;
+                    if (total_k < LEFTOVER_IFM) {
+                        half w = ((convert_half)(wei1[fi]) - d_zps[fi]) * d_scales[fi];
+                        INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
+                        ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * w;
+                    }
+                }
+            }
+  //          }
         }
+
     }
     #undef LEFTOVER_IFM
 #endif // MAIN_LOOP_ELEMENTS_COUNT % (TILE_IFM * SIMD) != 0

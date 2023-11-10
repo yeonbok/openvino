@@ -720,12 +720,17 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias) {
 }
 //#define N_SIZE (16*8*(32*7))
 #define N_SIZE 16384
+//#define N_SIZE 8192
+//#define N_SIZE 4096
+#define K_SIZE 4096
+//#define K_SIZE 1024
 //#define N_SIZE 8092
 TEST(fully_connected_gpu, compressed_scale_zp_bias_origin_taylor) {
     auto& engine = get_test_engine();
 
     const int M = 1;
-    const int K = 4096;
+//    const int K = 4096;
+    const int K = K_SIZE;
     const int N = N_SIZE;
     //auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx};
     auto in_layout = cldnn::layout{{1, M, K}, data_types::f16, format::bfyx};
@@ -780,7 +785,7 @@ TEST(fully_connected_gpu, compressed_scale_zp_bias_taylor_taylor) {
     auto& engine = get_test_engine();
 
     const int M = 1;
-    const int K = 4096;
+    const int K = K_SIZE;
     const int N = N_SIZE;
 //    auto in_layout = cldnn::layout{{1, -1, K}, data_types::f16, format::bfyx};
     auto in_layout = cldnn::layout{{1, M, K}, data_types::f16, format::bfyx};

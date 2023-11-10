@@ -242,6 +242,12 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
         }
 
         if (params.compressed && batch == 1)
+//            selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 8, 2, 1, 1, EXE_MODE_AGE_BASED));
+//            selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 4, 2, 1, 1, EXE_MODE_AGE_BASED));
+//            selector.Case(tune_params(1,  4, 8, 2, 1, 1, EXE_MODE_AGE_BASED));
+//            selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 8, 2, 1, 1, EXE_MODE_AGE_BASED));
+//            selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 8, 4, 1, 1, EXE_MODE_AGE_BASED));
+//            selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 8, 8, 1, 1, EXE_MODE_AGE_BASED));
             selector.Case(tune_params(1,  std::min(max_tile_ofm, 2u), 4, 2, 1, 1, EXE_MODE_AGE_BASED));
 
         selector.Case([&](const fully_connected_params&) -> tune_params {
@@ -286,7 +292,7 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     dispatchData.gws[1] = 1;
     dispatchData.gws[2] = 1;
 
-    //dispatchData.lws[0] = simd * 16;
+//    dispatchData.lws[0] = simd * 16;
     dispatchData.lws[0] = simd;
     dispatchData.lws[1] = 1;
     dispatchData.lws[2] = 1;

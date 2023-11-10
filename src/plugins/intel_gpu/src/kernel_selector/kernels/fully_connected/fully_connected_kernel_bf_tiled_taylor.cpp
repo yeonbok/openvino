@@ -327,7 +327,7 @@ FullyConnected_bf_tiled_taylor::SetDefault(const fully_connected_params& params,
 KernelsPriority FullyConnected_bf_tiled_taylor::GetKernelsPriority(const Params& params, const optional_params& /*options*/) const {
     const auto& fc_params = static_cast<const fully_connected_params&>(params);
 
-//    return NOT_SUPPORTED;
+    return NOT_SUPPORTED;
     size_t output_b = fc_params.outputs[0].Batch().v;
     if (fc_params.outputs[0].GetLayout() == DataLayout::bfyx)
         output_b *= fc_params.outputs[0].Feature().v;
