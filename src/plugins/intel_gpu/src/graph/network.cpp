@@ -1149,7 +1149,12 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 #ifdef GPU_DEBUG_CONFIG
     curr_iter = iteration++;
 #endif
-
+    update_shape_time = 0;
+    update_shape_info_time = 0;
+    update_impl_get_from_cache_time = 0;
+    execute_impl_time = 0;
+    mem_alloc_time = 0;
+    cpu_impl_time = 0;
     // Wait for previous execution completion
     reset_execution(false);
     GPU_DEBUG_IF(debug_config->dump_runtime_memory_pool > 0) {
@@ -1160,6 +1165,10 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         GPU_DEBUG_TRACE << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;
     }
 
+    if (std::getenv("PRINT_TOTAL") != nullptr) {
+        std::cout << "=================================================================" << std::endl;
+        std::cout << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;
+    }
     std::vector<memory::ptr> in_out_mem;
     auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
         return shared_mem_type == shared_mem_type::shared_mem_vasurface ||
@@ -1448,7 +1457,15 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 
     // Deallocate events from the previos iteration
     _old_events.clear();
-
+    if (std::getenv("PRINT_TOTAL") != nullptr) {
+        std::cout << "total update_shape time : " << update_shape_time <<  " mcs" << std::endl;
+        std::cout << "total update_impl_get_from_cache time : " << update_impl_get_from_cache_time <<  " mcs" << std::endl;
+        std::cout << "total update_impl_update_shape time : " << update_shape_info_time <<  " mcs" << std::endl;
+        std::cout << "total execute_impl time : " << execute_impl_time <<  " mcs" << std::endl;
+        std::cout << "total mem_alloc time : " << mem_alloc_time <<  " mcs" << std::endl;
+        std::cout << "total cpu_impl time : " << cpu_impl_time <<  " mcs" << std::endl;
+        std::cout << "total host_overheads : " << update_shape_time + update_impl_get_from_cache_time + update_shape_info_time + execute_impl_time + mem_alloc_time <<  " mcs" << std::endl;
+    }
     GPU_DEBUG_IF(debug_config->dump_runtime_memory_pool > 0) {
         get_memory_pool().dump(get_id());
     }

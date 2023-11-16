@@ -487,6 +487,8 @@ void Graph::update_profiling_info() {
         auto pcIter = perfMap.find(profiledID);
 
         if (pcIter == perfMap.end())  continue;
+        if (profiledID.find("If") != std::string::npos)
+            continue;
 
         auto execIter = executedPrimitives.find(profiledID);
         auto& perfCount = pcIter->second.second;
