@@ -65,6 +65,11 @@ class ICompilationContext;
 struct network {
 public:
     using ptr = std::shared_ptr<network>;
+    size_t update_shape_time = 0;
+    size_t update_shape_info_time = 0;
+    size_t update_impl_get_from_cache_time = 0;
+    size_t execute_impl_time = 0;
+    size_t mem_alloc_time = 0;
 
     struct VariableState {
         using Ptr = std::shared_ptr<VariableState>;
@@ -227,7 +232,6 @@ public:
     bool is_primary_stream() const { return _is_primary_stream; }
     bool is_dynamic() const { return _is_dynamic; }
     size_t get_weights_cache_capacity() const { return _weights_cache_capacity; }
-
     memory_pool& get_memory_pool() {
         return *_memory_pool;
     }

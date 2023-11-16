@@ -503,6 +503,7 @@ bool primitive_inst::update_impl() {
     auto update_shape_info = [this, prev_impl_str](const kernel_impl_params& params) {
         mem_lock<int32_t> lock(_shape_info_memory, _network.get_stream());
         size_t offset = 0;
+        auto _start = std::chrono::high_resolution_clock::now();
         for (size_t i = 0; i < _node->get_dependencies().size(); i++) {
             auto node_in_lay = _node->get_dependency(i).get_output_layout();
             if (node_in_lay.is_dynamic()) {
@@ -567,6 +568,13 @@ bool primitive_inst::update_impl() {
         for (size_t i = 0; i < offset; i++)
             s << lock[i] << " ";
         GPU_DEBUG_TRACE_DETAIL << id() << ": update dynamic impl " << prev_impl_str << " to new shape: " << s.str() << std::endl;
+        auto _end = std::chrono::high_resolution_clock::now();
+        using us = std::chrono::microseconds;
+        auto dur = std::chrono::duration_cast<us>(_end - _start).count();
+        if (std::getenv("PRINT_ALL") != nullptr) {
+            std::cout << "update_impl shape_info for " << id() << " : " << dur << std::endl;
+        }
+        get_network().update_shape_info_time += dur;
     };
 
     if (_impl != nullptr && (_impl->is_cpu() || can_be_optimized())) {
@@ -597,6 +605,7 @@ bool primitive_inst::update_impl() {
         auto& cache = prog->get_implementations_cache();
         std::shared_ptr<primitive_impl> cached_impl = nullptr;
         {
+            auto _start = std::chrono::high_resolution_clock::now();
             cached_impl = cache.get(updated_params_no_dyn_pad);
             if (cached_impl) {
                 _impl = cached_impl->clone();
@@ -606,6 +615,13 @@ bool primitive_inst::update_impl() {
             } else if (!shape_changed() && _impl != nullptr && _impl->is_dynamic()) {
                 return false;
             }
+            auto _end = std::chrono::high_resolution_clock::now();
+            using us = std::chrono::microseconds;
+            auto dur = std::chrono::duration_cast<us>(_end - _start).count();
+            if (std::getenv("PRINT_ALL") != nullptr) {
+                std::cout << "update_impl_get_from_cache for " << id() << " : " << dur << std::endl;
+            }
+            get_network().update_impl_get_from_cache_time += dur;
         }
         if (!cached_impl) {
             if (_dynamic_impl) {
@@ -795,7 +811,15 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     if (is_dynamic() && !has_inner_networks()) {
         do_runtime_in_place_concat();
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
+        auto _start_shape = std::chrono::high_resolution_clock::now();
         update_shape();
+        auto _end_shape = std::chrono::high_resolution_clock::now();
+        using us = std::chrono::microseconds;
+        auto dur_shape = std::chrono::duration_cast<us>(_end_shape - _start_shape).count();
+        if (std::getenv("PRINT_ALL") != nullptr) {
+            std::cout << "update_shape for " << id() << " : " << dur_shape << std::endl;
+        }
+        get_network().update_shape_time += dur_shape;
 
         // Check successor reorder if layouts are same
         // Need to set can_be_optimized for user reorder at predecessor because
@@ -846,7 +870,15 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                 auto ev = update_weights();
                 if (ev)
                     dependencies.push_back(ev);
+                auto _startm = std::chrono::high_resolution_clock::now();
                 auto ev_reset = realloc_if_needed();
+                auto _endm = std::chrono::high_resolution_clock::now();
+                using us = std::chrono::microseconds;
+                auto durm = std::chrono::duration_cast<us>(_endm - _startm).count();
+                if (std::getenv("PRINT_ALL") != nullptr) {
+                    std::cout << "reallc_mem for " << id() << " : " << durm << std::endl;
+                }
+                get_network().mem_alloc_time += durm;
                 if (ev_reset)
                     dependencies.push_back(ev_reset);
             }
@@ -900,7 +932,16 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
     {
         GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::inference);
+        auto _start = std::chrono::high_resolution_clock::now();
         auto ev = _impl->execute(dependencies, *this);
+        auto _end = std::chrono::high_resolution_clock::now();
+        using us = std::chrono::microseconds;
+        auto dur = std::chrono::duration_cast<us>(_end - _start).count();
+        if (std::getenv("PRINT_ALL") != nullptr) {
+            std::cout << "execute_impl for " << id() << " : " << dur << std::endl;
+        }
+        get_network().execute_impl_time += dur;
+
 
         GPU_DEBUG_IF(!debug_config->dump_profiling_data.empty()) {
             get_network().get_stream().wait_for_events({ev});
