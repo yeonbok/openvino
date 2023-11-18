@@ -64,7 +64,7 @@ static void validate_result(float* res_ptr, size_t size) {
     std::cout << "accuracy: OK\n";
 }
 
-TEST(mem_perf_test_to_device, DISABLED_fill_input) {
+TEST(mem_perf_test_to_device, _fill_input) {
     auto ocl_instance = std::make_shared<OpenCL>();
     cl::UsmMemory input_buffer(*ocl_instance->_usm_helper);
     input_buffer.allocateHost(sizeof(uint8_t) * img_size * img_size);
@@ -76,7 +76,7 @@ TEST(mem_perf_test_to_device, DISABLED_fill_input) {
     });
 }
 
-TEST(mem_perf_test_to_device, DISABLED_buffer_no_lock) {
+TEST(mem_perf_test_to_device, _buffer_no_lock) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -100,7 +100,7 @@ TEST(mem_perf_test_to_device, DISABLED_buffer_no_lock) {
     });
 }
 
-TEST(mem_perf_test_to_device, DISABLED_buffer_lock_rw) {
+TEST(mem_perf_test_to_device, _buffer_lock_rw) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -133,7 +133,7 @@ TEST(mem_perf_test_to_device, DISABLED_buffer_lock_rw) {
     queue.enqueueUnmapMemObject(output_buffer, _mapped_ptr);
 }
 
-TEST(mem_perf_test_to_device, DISABLED_buffer_lock_w) {
+TEST(mem_perf_test_to_device, _buffer_lock_w) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -166,7 +166,7 @@ TEST(mem_perf_test_to_device, DISABLED_buffer_lock_w) {
     queue.enqueueUnmapMemObject(output_buffer, _mapped_ptr);
 }
 
-TEST(mem_perf_test_to_device, DISABLED_buffer_copy) {
+TEST(mem_perf_test_to_device, _buffer_copy) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -200,7 +200,7 @@ TEST(mem_perf_test_to_device, DISABLED_buffer_copy) {
     queue.enqueueUnmapMemObject(output_buffer, _mapped_ptr);
 }
 
-TEST(mem_perf_test_to_device, DISABLED_buffer_copy_usm_host) {
+TEST(mem_perf_test_to_device, _buffer_copy_usm_host) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -239,7 +239,7 @@ TEST(mem_perf_test_to_device, DISABLED_buffer_copy_usm_host) {
     queue.enqueueUnmapMemObject(output_buffer, _mapped_ptr);
 }
 
-TEST(mem_perf_test_to_device, DISABLED_usm_host) {
+TEST(mem_perf_test_to_device, _usm_host) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -283,7 +283,7 @@ TEST(mem_perf_test_to_device, DISABLED_usm_host) {
     validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
 }
 
-TEST(mem_perf_test_to_device, DISABLED_usm_device) {
+TEST(mem_perf_test_to_device, _usm_device) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -348,7 +348,7 @@ TEST(mem_perf_test_to_device, DISABLED_usm_device) {
     validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
 }
 
-TEST(mem_perf_test_to_device, DISABLED_usm_device_copy) {
+TEST(mem_perf_test_to_device, _usm_device_copy) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -403,7 +403,46 @@ TEST(mem_perf_test_to_device, DISABLED_usm_device_copy) {
     validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
 }
 
-TEST(mem_perf_test_to_device, DISABLED_cl_buffer_to_usm_device) {
+TEST(mem_perf_test_to_device, _cl_buffer_to_usm_host) {
+    auto ocl_instance = std::make_shared<OpenCL>();
+    auto& ctx = ocl_instance->_context;
+    auto& device = ocl_instance->_device;
+    auto& usm_helper = *ocl_instance->_usm_helper;
+
+    if (!ocl_instance->_supports_usm)
+        GTEST_SKIP();
+
+    std::cout << "Time of kernel execution w/o copying the data (input buffer is cl::Buffer located in device memory)" << std::endl;
+
+    cl::Program program(ctx, kernel_code);
+    checkStatus(program.build({device}, ""), "build");
+    cl::Buffer input_buffer(ctx, CL_MEM_READ_WRITE, sizeof(uint8_t) * img_size * img_size);
+    cl::UsmMemory input_buffer_host(usm_helper);
+    input_buffer_host.allocateHost(sizeof(uint8_t) * img_size * img_size);
+    cl::UsmMemory output_buffer_host(usm_helper);
+    output_buffer_host.allocateHost(sizeof(float) * img_size * img_size);
+
+    cl::Kernel kernel1(program, "simple_reorder");
+    cl::KernelIntel kernel(kernel1, usm_helper);
+
+    cl::CommandQueue queue(ctx, device);
+
+    run_test([&](){
+        fill_input(static_cast<uint8_t*>(input_buffer_host.get()), img_size * img_size);
+        queue.enqueueWriteBuffer(input_buffer, CL_TRUE, 0, img_size*img_size, input_buffer_host.get(), nullptr, nullptr);
+    }, [&]() {
+        kernel.setArg(0, input_buffer);
+        kernel.setArgUsm(1, output_buffer_host);
+        cl::Event ev;
+        queue.enqueueNDRangeKernel(kernel, cl::NDRange(), cl::NDRange(img_size*img_size), cl::NDRange(16), nullptr, &ev);
+        cl::WaitForEvents({ev});
+    });
+
+    validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
+}
+
+
+TEST(mem_perf_test_to_device, _cl_buffer_to_usm_device) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -450,7 +489,7 @@ TEST(mem_perf_test_to_device, DISABLED_cl_buffer_to_usm_device) {
     validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
 }
 
-TEST(mem_perf_test_to_host, DISABLED_buffer_lock_rw) {
+TEST(mem_perf_test_to_host, _buffer_lock_rw) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -494,7 +533,7 @@ TEST(mem_perf_test_to_host, DISABLED_buffer_lock_rw) {
     queue.enqueueUnmapMemObject(output_buffer, _mapped_ptr);
 }
 
-TEST(mem_perf_test_to_host, DISABLED_buffer_lock_r) {
+TEST(mem_perf_test_to_host, _buffer_lock_r) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -548,7 +587,7 @@ TEST(mem_perf_test_to_host, DISABLED_buffer_lock_r) {
     queue.enqueueUnmapMemObject(output_buffer, _mapped_ptr);
 }
 
-TEST(mem_perf_test_to_host, DISABLED_buffer_copy_usm_host_ptr_blocking_r) {
+TEST(mem_perf_test_to_host, _buffer_copy_usm_host_ptr_blocking_r) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -589,7 +628,7 @@ TEST(mem_perf_test_to_host, DISABLED_buffer_copy_usm_host_ptr_blocking_r) {
     validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
 }
 
-TEST(mem_perf_test_to_host, DISABLED_buffer_copy_usm_host_ptr_events_r) {
+TEST(mem_perf_test_to_host, _buffer_copy_usm_host_ptr_events_r) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -632,7 +671,7 @@ TEST(mem_perf_test_to_host, DISABLED_buffer_copy_usm_host_ptr_events_r) {
     validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
 }
 
-TEST(mem_perf_test_to_host, DISABLED_buffer_copy_host_ptr_events_r) {
+TEST(mem_perf_test_to_host, _buffer_copy_host_ptr_events_r) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -674,7 +713,7 @@ TEST(mem_perf_test_to_host, DISABLED_buffer_copy_host_ptr_events_r) {
     validate_result(static_cast<float*>(output_buffer_host.data()), img_size * img_size);
 }
 
-TEST(mem_perf_test_to_host_and_back_to_device, DISABLED_buffer_copy_usm_host_ptr_events_rw) {
+TEST(mem_perf_test_to_host_and_back_to_device, _buffer_copy_usm_host_ptr_events_rw) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
@@ -720,7 +759,7 @@ TEST(mem_perf_test_to_host_and_back_to_device, DISABLED_buffer_copy_usm_host_ptr
     validate_result(static_cast<float*>(output_buffer_host.get()), img_size * img_size);
 }
 
-TEST(mem_perf_test_to_host_and_back_to_device, DISABLED_buffer_copy_host_ptr_events_rw) {
+TEST(mem_perf_test_to_host_and_back_to_device, _buffer_copy_host_ptr_events_rw) {
     auto ocl_instance = std::make_shared<OpenCL>();
     auto& ctx = ocl_instance->_context;
     auto& device = ocl_instance->_device;
