@@ -116,7 +116,13 @@ std::pair<bool, ov::Shape> ShapePredictor::predict_preallocation_shape(const std
 
         if (can_use_iterations_preallocation) {
             // Apply preallocation for the next N iterations
-            ov::Shape mul_shape(diffs[0].size(), _next_iters_preallocation_count);
+            auto next_iters_preallocation_count = _next_iters_preallocation_count;
+            if (std::getenv("PREALLOC") != nullptr) {
+                next_iters_preallocation_count = std::atoi(std::getenv("PREALLOC"));
+            } else {
+                next_iters_preallocation_count = _next_iters_preallocation_count;
+            }
+            ov::Shape mul_shape(diffs[0].size(), next_iters_preallocation_count);
             auto preallocation_shape = diffs[0] * mul_shape;
             auto new_shape = current_shape + preallocation_shape;
             return {true, new_shape};
