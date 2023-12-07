@@ -66,7 +66,7 @@ jobs:
       - name: Install build dependencies
         run: brew install coreutils ninja scons
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -211,7 +211,7 @@ jobs:
       - name: Install dependencies
         run: brew install coreutils
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -440,7 +440,7 @@ jobs:
       # Dependencies
       #
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 

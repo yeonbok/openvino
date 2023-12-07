@@ -86,7 +86,7 @@ jobs:
           # libssl1.1 - 'python3 -m pip' in self-hosted runner
           apt install --assume-yes --no-install-recommends default-jdk libssl1.1
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -309,10 +309,10 @@ jobs:
             tar -xzf openvino_tests.tar.gz -C ${INSTALL_DIR}
           popd
 
-      - name: Install 'actions/setup-python@v4' dependencies
+      - name: Install 'actions/setup-python@v5' dependencies
         run: apt-get update && apt-get install -y libssl1.1
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -425,7 +425,7 @@ jobs:
             tar -xzf openvino_tests.tar.gz -C ${INSTALL_DIR}
           popd
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -507,7 +507,7 @@ jobs:
           apt-get update
           apt-get install --assume-yes --no-install-recommends git ca-certificates
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -837,7 +837,7 @@ jobs:
       # Initialize OpenVINO
       #
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1074,10 +1074,10 @@ jobs:
       - name: Install OpenVINO dependencies
         run: bash ${INSTALL_DIR}/install_dependencies/install_openvino_dependencies.sh -c=core -y
 
-      - name: Install 'actions/setup-python@v4' dependencies
+      - name: Install 'actions/setup-python@v5' dependencies
         run: apt-get update && apt-get install -y libssl1.1
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1141,10 +1141,10 @@ jobs:
       - name: Check sudo
         run: if [ "$(id -u)" -eq 0 ]; then apt update && apt --assume-yes install sudo; fi
 
-      - name: Install 'actions/setup-python@v4' dependencies
+      - name: Install 'actions/setup-python@v5' dependencies
         run: sudo apt-get update && sudo apt-get install -y libssl1.1 ca-certificates
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1250,7 +1250,7 @@ jobs:
             tar -xzf openvino_tests.tar.gz -C ${INSTALL_DIR}
           popd
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Setup pip cache dir
