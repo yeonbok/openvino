@@ -36,7 +36,6 @@ struct shape_of_scale_impl : public typed_primitive_impl<shape_of_scale> {
     }
 
     event::ptr execute_impl(const std::vector<event::ptr>& events, shape_of_scale_inst& instance) override {
-        std::cout << "Here!!!!" << std::endl;
         OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, "shape_of::execute_impl");
         auto& stream = instance.get_network().get_stream();
         auto ev = stream.create_user_event(false);
@@ -60,7 +59,7 @@ struct shape_of_scale_impl : public typed_primitive_impl<shape_of_scale> {
         }
 #endif
         auto shape = instance.get_input_layout().get_shape();
-        float result = 1/(float)sqrt(shape[2]);
+        float result = 1/(float)sqrt(shape[3]);
         cldnn::mem_lock<ov::element_type_traits<data_types::f16>::value_type, mem_lock_type::write> output_lock(output_mem_ptr, stream);
         auto ptr = output_lock.data();
         ptr[0] = result;
@@ -85,7 +84,6 @@ namespace detail {
 attach_shape_of_scale_impl::attach_shape_of_scale_impl() {
     auto formats = {
         format::bfyx,
-        format::byxf,
         format::bfzyx,
         format::bfwzyx,
     };
@@ -108,3 +106,4 @@ attach_shape_of_scale_impl::attach_shape_of_scale_impl() {
 }  // namespace cldnn
 
 BIND_BINARY_BUFFER_WITH_TYPE(cldnn::cpu::shape_of_scale_impl)
+BIND_BINARY_BUFFER_WITH_TYPE(cldnn::shape_of_scale)
