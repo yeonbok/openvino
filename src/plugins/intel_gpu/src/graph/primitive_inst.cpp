@@ -20,6 +20,7 @@
 #include "loop_inst.h"
 #include "deconvolution_inst.h"
 #include "shape_of_inst.h"
+#include "shape_of_scale_inst.h"
 #include "softmax_inst.h"
 #include "gemm_inst.h"
 #include "assign_inst.h"
@@ -115,7 +116,7 @@ bool has_cpu_user_not_shape_of(const program_node* user) {
         return false;
     }
     if (auto impl = user->get_selected_impl())
-        return impl->is_cpu() && !user->is_type<shape_of>();
+        return impl->is_cpu() && !user->is_type<shape_of>() && !user->is_type<shape_of_scale>();
     return false;
 }
 
@@ -277,7 +278,7 @@ void primitive_inst::update_shape() {
         set_shape_change();
 
     // We assume that tensor ranks are static, thus shape_of doesn't need to update anything even if input shape is dynamic
-    if (_node->is_type<shape_of>() && !input_shape_changed) {
+    if ((_node->is_type<shape_of>() || _node->is_type<shape_of_scale>()) && !input_shape_changed) {
         reset_shape_change();
         return;
     }
@@ -314,7 +315,7 @@ void primitive_inst::update_shape() {
         if (i >= _deps.size())
             continue;
 
-        if (_deps[i].first->get_node().is_in_shape_of_subgraph()) {
+        if (_deps[i].first->get_node().is_in_shape_of_subgraph() || _deps[i].first->get_node().is_type<shape_of_scale>()) {
             bool can_skip = true;
             const auto& insts = _deps[i].first->dependant_shape_of_insts;
             for (auto& inst : insts) {
@@ -347,7 +348,7 @@ void primitive_inst::update_shape() {
 
         auto dep_mem = _network.get_output_memory(dep_id);
         memory_deps.insert({i, dep_mem});
-        if (!get_node().is_type<shape_of>() && !dep.is_in_shape_of_subgraph()) {
+        if (!get_node().is_type<shape_of>() && !get_node().is_type<shape_of_scale>() && !dep.is_in_shape_of_subgraph()) {
             has_runtime_deps = true;
 
             // Events may be not created for in-order queue, so take them for OOO queue only
@@ -1384,7 +1385,7 @@ memory::ptr primitive_inst::allocate_output(engine& _engine,
     // Do not use memory pool for nodes from shape_of subgraphs, because such nodes mostly use CPU impls and may be executed in parallel with predecessors
     // GPU kernels and cause accuracy problems. This significantly improves performance (because provides an ability not to synchronize shape_of subgraphs
     // execution with other nodes) at the cost of tiny increase in memory consumption.
-    if (_node.is_in_shape_of_subgraph())
+    if (_node.is_in_shape_of_subgraph() || _node.is_type<shape_of_scale>())
         reusable_across_network = false;
 
     // For outputs, cpu prim we want to have lockable alloc type
