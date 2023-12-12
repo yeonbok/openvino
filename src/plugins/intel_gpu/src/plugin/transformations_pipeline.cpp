@@ -118,6 +118,7 @@
 #include "plugin/transformations/move_fc_reshape_to_weights.hpp"
 #include "plugin/transformations/convert_fc_to_compressed.hpp"
 #include "plugin/transformations/rms_fusion.hpp"
+#include "plugin/transformations/shape_of_scale_fusion.hpp"
 #include "plugin/transformations/binary_conv_to_conv.hpp"
 
 #include "transformations/low_precision/mark_dequantization_subgraph.hpp"
@@ -690,6 +691,7 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         manager.register_pass<ov::intel_gpu::MoveFCReshapeToWeights>();
         manager.register_pass<ov::intel_gpu::ConvertFullyConnectedToFullyConnectedCompressed>();
         manager.register_pass<ov::intel_gpu::RMSFusion>();
+        manager.register_pass<ov::intel_gpu::ShapeOfScaleFusion>();
 
         // This is supposed to be the last pass to ensure that we don't have name collisions until
         // GPU plugin stops using friendly names for program creation

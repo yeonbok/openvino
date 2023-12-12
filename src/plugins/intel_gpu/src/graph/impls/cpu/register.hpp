@@ -21,6 +21,7 @@
 #include "intel_gpu/primitives/reorder.hpp"
 #include "intel_gpu/primitives/broadcast.hpp"
 #include "intel_gpu/primitives/tile.hpp"
+#include "intel_gpu/primitives/shape_of_scale.hpp"
 
 namespace cldnn {
 namespace cpu {
@@ -51,6 +52,7 @@ REGISTER_CPU(activation);
 REGISTER_CPU(reorder);
 REGISTER_CPU(broadcast);
 REGISTER_CPU(tile);
+REGISTER_CPU(shape_of_scale);
 
 #undef REGISTER_CPU
 

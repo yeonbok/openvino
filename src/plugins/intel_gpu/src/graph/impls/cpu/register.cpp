@@ -28,6 +28,7 @@ void register_implementations() {
     REGISTER_CPU(reorder);
     REGISTER_CPU(broadcast);
     REGISTER_CPU(tile);
+    REGISTER_CPU(shape_of_scale);
 }
 
 }  // namespace cpu
