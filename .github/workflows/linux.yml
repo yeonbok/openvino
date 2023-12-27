@@ -197,7 +197,7 @@ jobs:
 
       - name: Upload openvino package
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: openvino_package
           path: ${{ env.BUILD_DIR }}/openvino_package.tar.gz
@@ -205,7 +205,7 @@ jobs:
 
       - name: Upload openvino debian packages
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: openvino_debian_packages
           path: ${{ env.BUILD_DIR }}/*.deb
@@ -213,7 +213,7 @@ jobs:
 
       - name: Upload openvino tests package
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: openvino_tests
           path: ${{ env.BUILD_DIR }}/openvino_tests.tar.gz
@@ -365,7 +365,7 @@ jobs:
             --junitxml=${INSTALL_TEST_DIR}/TEST-SamplesSmokeTests.xml
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: test-results-samples
@@ -461,7 +461,7 @@ jobs:
 
       - name: Upload Conformance Artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: conformance_artifacts_${{ matrix.TEST_TYPE }}-${{ env.TEST_DEVICE }}
           path: ${{ env.CONFORMANCE_ARTIFACTS_DIR }}/conformance_artifacts.tar.gz
@@ -798,7 +798,7 @@ jobs:
           ${INSTALL_TEST_DIR}/ov_hetero_func_tests --gtest_print_time=1 --gtest_output=xml:${INSTALL_TEST_DIR}/TEST-OVHeteroFuncTests.xml
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: test-results-cpp
@@ -1025,7 +1025,7 @@ jobs:
         run: python3 -m pytest -s ${OPENVINO_REPO}/tools/ovc/unit_tests --junitxml=${INSTALL_TEST_DIR}/TEST-OpenVinoConversion.xml
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: test-results-python
@@ -1106,7 +1106,7 @@ jobs:
           key: ${{ runner.os }}-tests-functional-cpu-stamp-${{ github.sha }}
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: test-results-functional-cpu
@@ -1192,7 +1192,7 @@ jobs:
           TEST_DEVICE: CPU
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: test-results-tensorflow-hub-models
@@ -1285,7 +1285,7 @@ jobs:
           df -h
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: test-results-torch-models
