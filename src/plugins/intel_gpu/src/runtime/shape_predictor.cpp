@@ -84,6 +84,21 @@ std::pair<bool, ov::Shape> ShapePredictor::predict_preallocation_shape(const std
             diffs.push_back(result);
         }
 
+        // temporal wa => to fix
+        if (id.find("kvcache") != std::string::npos) {
+            int seq_dim = 0;
+            for (size_t i = 0; i < diffs[0].size(); ++i) {
+                if (diffs[0][i] > 0) {
+                    seq_dim = i;
+                    break;
+                }
+            }
+            auto new_shape = current_shape;
+            new_shape[seq_dim] += 64;
+            return {true, new_shape};
+        }
+
+
         bool can_use_iterations_preallocation = diffs.size() == min_shapes_num - 1;
         for (size_t i = 1; i < diffs.size(); ++i) {
             if (diffs[0] != diffs[i]) {
@@ -128,7 +143,6 @@ std::pair<bool, ov::Shape> ShapePredictor::predict_preallocation_shape(const std
             return {true, new_shape_size};
         }
     }
-
     return {false, {}};
 }
 
