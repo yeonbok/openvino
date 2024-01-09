@@ -871,7 +871,7 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
     if (!_node->is_type<kv_cache>())
         return;
 
-    _impl_params->_can_be_optimized = false;
+    set_can_be_optimized(false);
     if (_impl_params->get_input_layout(0).count() == 0) {
         return;
     }
@@ -914,7 +914,7 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
         variable.set_layout(present_layout);
         if (past_layout.data_padding.upper_size().sizes()[sequence_axis_legacy] > 0 && variable.is_set()) {
             update_pad(past_layout, max_pad);
-            _impl_params->_can_be_optimized = true;
+            set_can_be_optimized(true);
         }
         GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] concat_axis_size = " << concat_axis_size << std::endl;
         GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] sequence_element_size = " << sequence_element_size << std::endl;
