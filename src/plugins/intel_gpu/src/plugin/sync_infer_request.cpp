@@ -107,21 +107,36 @@ SyncInferRequest::SyncInferRequest(const std::shared_ptr<const CompiledModel>& c
     , m_shape_predictor(new cldnn::ShapePredictor(&m_graph->get_engine(), m_graph->get_config().get_property(ov::intel_gpu::buffers_preallocation_ratio)))
     , m_enable_profiling(m_graph->get_config().get_property(ov::enable_profiling))
     , m_use_external_queue(m_graph->use_external_queue()) {
-    GPU_DEBUG_GET_INSTANCE(debug_config);
-    GPU_DEBUG_IF(debug_config->mem_preallocation_params.is_initialized) {
-        auto& mem_preallocation_params = debug_config->mem_preallocation_params;
-        m_shape_predictor.reset(
-            new cldnn::ShapePredictor(&m_graph->get_engine(),
-                                      mem_preallocation_params.next_iters_preallocation_count,
-                                      mem_preallocation_params.max_per_iter_size,
-                                      mem_preallocation_params.max_per_dim_diff,
-                                      mem_preallocation_params.buffers_preallocation_ratio));
-    }
+    if (getenv("FIX_DEBUG_CONFIG") != nullptr) {
+        GPU_DEBUG_GET_INSTANCE(debug_config);
+        GPU_DEBUG_IF(debug_config->mem_preallocation_params.is_initialized) {
+            auto& mem_preallocation_params = debug_config->mem_preallocation_params;
+            m_shape_predictor.reset(new cldnn::ShapePredictor(&m_graph->get_engine(),
+                                                              mem_preallocation_params.next_iters_preallocation_count,
+                                                              mem_preallocation_params.max_per_iter_size,
+                                                              mem_preallocation_params.max_per_dim_diff,
+                                                              mem_preallocation_params.buffers_preallocation_ratio));
+        }
+        init_mappings();
+        allocate_inputs();
+        allocate_outputs();
+        allocate_states();
+    } else {
+        init_mappings();
+        allocate_inputs();
+        allocate_outputs();
+        allocate_states();
 
-    init_mappings();
-    allocate_inputs();
-    allocate_outputs();
-    allocate_states();
+        GPU_DEBUG_GET_INSTANCE(debug_config);
+        GPU_DEBUG_IF(debug_config->mem_preallocation_params.is_initialized) {
+            auto& mem_preallocation_params = debug_config->mem_preallocation_params;
+            m_shape_predictor.reset(new cldnn::ShapePredictor(&m_graph->get_engine(),
+                                                              mem_preallocation_params.next_iters_preallocation_count,
+                                                              mem_preallocation_params.max_per_iter_size,
+                                                              mem_preallocation_params.max_per_dim_diff,
+                                                              mem_preallocation_params.buffers_preallocation_ratio));
+        }
+    }
 }
 
 void SyncInferRequest::infer() {

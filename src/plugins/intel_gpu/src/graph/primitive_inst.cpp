@@ -277,6 +277,7 @@ void primitive_inst::update_shape() {
         // If variable is not set and we have an initializer - use it's shape as shape of variable
         if (!variable.is_set() && _impl_params->input_layouts.size() == 1) {
             new_layout = _impl_params->get_input_layout(0);
+
         }
 
         // If we still have a dynamic dimension, which basiclly means that we don't have an initializer, then replace dynamic dims with 0
@@ -484,8 +485,11 @@ event::ptr primitive_inst::realloc_if_needed() {
                                << " (size=" << variable.get_memory()->size() << ")" << std::endl;
         // For nodes that can be optimized, variable memory is used as output memory
         // so there is no need for output memory reallocation
-        if (can_be_optimized())
+        if (can_be_optimized()) {
+            auto elem_size = ov::element::Type(variable.get_layout().data_type).bitwidth() / 8;
+            max_output_layout_size = variable.get_actual_mem_size() / elem_size;
             return ev;
+        }
     }
 
     // Update output layout with respect to FC's fake alignment
@@ -507,25 +511,24 @@ event::ptr primitive_inst::realloc_if_needed() {
         }
     }
 
+    // Clear out memory if if was previously reused, but now primitive can't be optimized
     if (_node->is_type<gather>() || _node->is_type<permute>()) {
-        // For the nodes which can be optimized at runtime, input memory is used as output memory
-        // So there is no need to reallocate output memory
-        if (can_be_optimized())
+        if (can_be_optimized()) {
+            max_output_layout_size = _deps[0].first->max_output_layout_size;
             return ev;
-        // Clear out memory if if was previously reused, but now primitive can't be optimized
-        if (!can_be_optimized() && _outputs[0] && dep_memory_ptr(0)
-            && _network.get_engine().is_the_same_buffer(dep_memory(0), output_memory(0))) {
+        } else if (_outputs[0] && dep_memory_ptr(0) &&
+                   _network.get_engine().is_the_same_buffer(dep_memory(0), output_memory(0))) {
             _outputs[0] = nullptr;
             max_output_layout_size = 0;
         }
     }
 
     // update layout to ensure that it repsects paddings for correct allocation size
-    if (_node->is_type<kv_cache>() && !_impl_params->can_be_optimized()) {
-        const auto current_buf_size = updated_layout.get_buffer_size().sizes();
-        ov::Shape current_shape(current_buf_size.begin(), current_buf_size.end());
-        updated_layout.set_partial_shape(current_shape);
-    }
+//    if (_node->is_type<kv_cache>() && !_impl_params->can_be_optimized()) {
+//        const auto current_buf_size = updated_layout.get_buffer_size().sizes();
+//        ov::Shape current_shape(current_buf_size.begin(), current_buf_size.end());
+//        updated_layout.set_partial_shape(current_shape);
+//    }
 
     bool can_reuse_buffer = _outputs[0] && updated_layout.count() <= max_output_layout_size;
 
@@ -545,7 +548,7 @@ event::ptr primitive_inst::realloc_if_needed() {
         updated_params.output_layouts[0] = new_layout;
     }
 
-    if (updated_params.output_layouts[0].count() < updated_layout.count())
+    if (updated_params.output_layouts[0].get_buffer_size().count() < updated_layout.get_buffer_size().count())
         updated_params.output_layouts[0] = updated_layout;
 
     if (can_reuse_buffer) {
@@ -896,6 +899,8 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
     const int64_t max_sequence_elements = _deps[0].first->max_output_layout_size / sequence_element_size;
     const int64_t max_pad = std::max<int64_t>(max_sequence_elements - concat_axis_size, 0);
 
+    if (std::getenv("PRINT_TRACE") != nullptr && desc->variable_info.variable_id == "past_key_values.0.valuepresent.0.value")
+        std::cout << id() << "input_layout: " << _impl_params->input_layouts[0].to_short_string() <<  " max_pad : " << max_pad << std::endl;
     if (max_pad > 0) {
         auto update_pad = [&](layout& l, int64_t pad) {
             const auto& dyn_pad_dims = l.data_padding.get_dynamic_pad_dims();
@@ -1108,7 +1113,6 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
         update_shape();
 
-        do_runtime_in_place_kv_cache();
 
         bool can_skip_execution = false;
         if (_impl_params->output_layouts[0].count() == 0) {
@@ -1141,8 +1145,9 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         // if the user is can_be_optimized and output node then current nodes' output should be allocated to host.
         do_runtime_skip_reorder();
         do_runtime_skip_gather();
+        do_runtime_in_place_kv_cache();
         do_runtime_skip_permute();
-
+    
         if (!is_valid_fusion()) {
             OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("unfused_subgraph_exec: " + id()));
             auto subgraph = get_unfused_subgraph();
