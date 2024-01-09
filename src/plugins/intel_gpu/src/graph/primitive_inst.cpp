@@ -541,7 +541,11 @@ event::ptr primitive_inst::realloc_if_needed() {
     auto current_shape = actual_layout.get_shape();
     auto& sp = *get_network().get_shape_predictor();
     auto dt_size = ov::element::Type(actual_layout.data_type).bitwidth();
-    auto prealloc_info = sp.predict_preallocation_shape(id(), current_shape, dt_size, can_reuse_buffer);
+    std::pair<bool, ov::Shape> prealloc_info;
+    if (_node->is_type<kv_cache>())
+        prealloc_info = sp.predict_preallocation_shape(id(), current_shape, dt_size, can_reuse_buffer, 2);
+    else
+        prealloc_info = sp.predict_preallocation_shape(id(), current_shape, dt_size, can_reuse_buffer);
     if (prealloc_info.first && sp.can_preallocate(ov::shape_size(prealloc_info.second) * dt_size)) {
         auto new_layout = actual_layout;
         new_layout.set_partial_shape(prealloc_info.second);
@@ -871,7 +875,7 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
     if (!_node->is_type<kv_cache>())
         return;
 
-    set_can_be_optimized(false);
+    _impl_params->_can_be_optimized = false;
     if (_impl_params->get_input_layout(0).count() == 0) {
         return;
     }
@@ -914,7 +918,7 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
         variable.set_layout(present_layout);
         if (past_layout.data_padding.upper_size().sizes()[sequence_axis_legacy] > 0 && variable.is_set()) {
             update_pad(past_layout, max_pad);
-            set_can_be_optimized(true);
+            _impl_params->_can_be_optimized = true;
         }
         GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] concat_axis_size = " << concat_axis_size << std::endl;
         GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] sequence_element_size = " << sequence_element_size << std::endl;
