@@ -48,6 +48,8 @@ void VariableState::set() {
 }
 
 void VariableState::set_layout(const cldnn::layout& new_layout) {
+    if (m_layout == new_layout)
+        return;
     m_layout = new_layout;
     GPU_DEBUG_TRACE_DETAIL << "Update state layout to " << new_layout.to_short_string() << std::endl;
     update_device_buffer();
