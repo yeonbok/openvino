@@ -565,7 +565,7 @@ event::ptr primitive_inst::realloc_if_needed() {
                                <<  " Requested buffer_size=" << actual_layout.count() << std::endl;
         _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
         // TODO : need to handle multiple outputs
-        max_output_layout_size = updated_params.output_layouts[0].count();
+        max_output_layout_size = updated_params.output_layouts[0].get_buffer_size().count();
     }
     _mem_allocated = true;
     // intermediate memory allocation is required for primitives consisting of multiple kernels in dynamic case
