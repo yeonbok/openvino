@@ -899,8 +899,6 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
     const int64_t max_sequence_elements = _deps[0].first->max_output_layout_size / sequence_element_size;
     const int64_t max_pad = std::max<int64_t>(max_sequence_elements - concat_axis_size, 0);
 
-    if (std::getenv("PRINT_TRACE") != nullptr && desc->variable_info.variable_id == "past_key_values.0.valuepresent.0.value")
-        std::cout << id() << "input_layout: " << _impl_params->input_layouts[0].to_short_string() <<  " max_pad : " << max_pad << std::endl;
     if (max_pad > 0) {
         auto update_pad = [&](layout& l, int64_t pad) {
             const auto& dyn_pad_dims = l.data_padding.get_dynamic_pad_dims();
