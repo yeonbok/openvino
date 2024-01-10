@@ -86,8 +86,8 @@ struct kv_cache_impl : typed_primitive_impl_ocl<kv_cache> {
                 std::cout << desc->id << " output_layout: " << instance.get_impl_params()->output_layouts[0].to_short_string() <<  " cannot be optimized " << std::endl;
 
             // Othwerise, we need to copy result from out buffer to state memory
-            auto& stream = instance.get_network().get_stream();
-            stream.enqueue_barrier();
+//            auto& stream = instance.get_network().get_stream();
+//            stream.enqueue_barrier();
 //            auto out = instance.get_network().get_engine().reinterpret_buffer(instance.output_memory(0), variable.get_memory()->get_layout());
 //            auto out = instance.get_network().get_engine().reinterpret_buffer(instance.output_memory(0), variable.get_memory()->get_layout());
 //            return variable.get_memory()->copy_from(stream, *out, false);

@@ -47,11 +47,13 @@ void VariableState::set() {
     m_is_set = true;
 }
 
-void VariableState::set_memory(const cldnn::memory::ptr& new_mem) {
-    GPU_DEBUG_TRACE_DETAIL << m_name << " : Update memory with " << new_mem->buffer_ptr() << std::endl;
+void VariableState::set_memory(const cldnn::memory::ptr& new_mem, const cldnn::layout& actual_layout) {
+    GPU_DEBUG_TRACE_DETAIL << m_name << " : Update memory (Ptr : " << new_mem->buffer_ptr()
+                           << ", layout : " << actual_layout.to_short_string() << ")" << std::endl;
     m_memory = new_mem;
-    m_layout = new_mem->get_layout();
-    actual_size = std::max(actual_size, m_layout.bytes_count());
+    m_layout = actual_layout;
+    actual_size = m_memory->get_layout().bytes_count();
+    update_device_buffer();
 }
 
 void VariableState::set_layout(const cldnn::layout& new_layout) {

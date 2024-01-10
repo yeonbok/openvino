@@ -593,7 +593,6 @@ event::ptr primitive_inst::realloc_if_needed() {
                 std::cout << "=======================================================" << std::endl;
             }
             {
-                variable.set_memory(_outputs[0]);
                 auto present_layout = _impl_params->output_layouts[0];
                 const auto& sequence_axis = desc->concat_axis;
 
@@ -609,7 +608,6 @@ event::ptr primitive_inst::realloc_if_needed() {
                     const size_t total_elements = present_layout.count();
                     const int64_t concat_axis_size = present_layout.get_partial_shape()[sequence_axis].get_length();
                     const int64_t sequence_element_size = total_elements / concat_axis_size;
-//                    const int64_t max_sequence_elements = variable.get_actual_mem_size() / sequence_element_size;
                     const int64_t max_sequence_elements = updated_params.output_layouts[0].get_buffer_size().count() / sequence_element_size;
                     const int64_t max_pad = std::max<int64_t>(max_sequence_elements - concat_axis_size, 0);
                     if (max_pad > 0) {
@@ -621,12 +619,10 @@ event::ptr primitive_inst::realloc_if_needed() {
                             l.data_padding = padding(lower_padd, upper_padd, 0.f, dyn_pad_dims);
                         };
 
-                        update_pad(present_layout, max_pad - 1);
                         GPU_DEBUG_TRACE_DETAIL
                             << "do_runtime_in_place_kv_cache set_layout: " << present_layout.to_string()
                             << " is_set  = " << variable.is_set() << std::endl;
                         update_pad(present_layout, max_pad);
-                        variable.set_layout(present_layout);
                         if (getenv("PRINT_TRACE") != nullptr &&
                             desc->variable_info.variable_id == "past_key_values.0.valuepresent.0.value") {
                             std::cout << "- Set variable memory with output mem" << std::endl;
@@ -635,6 +631,7 @@ event::ptr primitive_inst::realloc_if_needed() {
                         }
                     }
                 }
+                variable.set_memory(_outputs[0], present_layout);
             }
         }
     }
