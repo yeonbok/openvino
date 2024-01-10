@@ -479,10 +479,11 @@ event::ptr primitive_inst::realloc_if_needed() {
                 _outputs[0] = nullptr;
                 max_output_layout_size = 0;
             }
+        } else {
+            variable.set_layout(actual_layout);
+            GPU_DEBUG_TRACE_DETAIL << id() << ": use variable memory " << variable.get_memory()->buffer_ptr()
+                                   << " (size=" << variable.get_memory()->size() << ")" << std::endl;
         }
-        variable.set_layout(actual_layout);
-        GPU_DEBUG_TRACE_DETAIL << id() << ": use variable memory " << variable.get_memory()->buffer_ptr()
-                               << " (size=" << variable.get_memory()->size() << ")" << std::endl;
         // For nodes that can be optimized, variable memory is used as output memory
         // so there is no need for output memory reallocation
         if (can_be_optimized()) {
@@ -543,7 +544,7 @@ event::ptr primitive_inst::realloc_if_needed() {
     auto dt_size = ov::element::Type(actual_layout.data_type).bitwidth();
     std::pair<bool, ov::Shape> prealloc_info;
     if (_node->is_type<kv_cache>())
-        prealloc_info = sp.predict_preallocation_shape(id(), current_shape, dt_size, can_reuse_buffer, 2);
+        prealloc_info = sp.predict_preallocation_shape(id(), current_shape, dt_size, can_reuse_buffer, 128);
     else
         prealloc_info = sp.predict_preallocation_shape(id(), current_shape, dt_size, can_reuse_buffer);
     if (prealloc_info.first && sp.can_preallocate(ov::shape_size(prealloc_info.second) * dt_size)) {
@@ -568,6 +569,18 @@ event::ptr primitive_inst::realloc_if_needed() {
                                <<  " Current buffer_size=" << max_output_layout_size
                                <<  " Requested buffer_size=" << actual_layout.count() << std::endl;
         _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
+        if (_node->is_type<kv_cache>()) {
+            auto desc = _node->as<kv_cache>().get_primitive();
+            auto& variable = get_network().get_variable(desc->variable_info.variable_id);
+            variable.set_memory(_outputs[0]);
+            variable.set_layout(actual_layout);
+            if (getenv("PRINT_TRACE") != nullptr && desc->variable_info.variable_id == "past_key_values.0.valuepresent.0.value") {
+                std::cout << "Set variable memory with output (memory layout : " << std::endl;
+                std::cout << _outputs[0]->get_layout().to_short_string() << std::endl;
+                std::cout << "                 - actual layout : " << std::endl;
+                std::cout << actual_layout.to_string() << std::endl;
+            }
+        }
         // TODO : need to handle multiple outputs
         max_output_layout_size = updated_params.output_layouts[0].get_buffer_size().count();
     }
@@ -902,7 +915,12 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
 
     const int64_t max_sequence_elements = _deps[0].first->max_output_layout_size / sequence_element_size;
     const int64_t max_pad = std::max<int64_t>(max_sequence_elements - concat_axis_size, 0);
-
+    
+    if (std::getenv("PRINT_TRACE") != nullptr && desc->variable_info.variable_id == "past_key_values.0.valuepresent.0.value") {
+        std::cout << id() << " input_layout" << _impl_params->get_input_layout().to_string() << std::endl;
+        std::cout << id() << " output_layout" << _impl_params->get_output_layout().to_string() << std::endl;
+        std::cout << id() << " max_pad " << max_pad << std::endl;
+    }
     if (max_pad > 0) {
         auto update_pad = [&](layout& l, int64_t pad) {
             const auto& dyn_pad_dims = l.data_padding.get_dynamic_pad_dims();
