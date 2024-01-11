@@ -101,23 +101,23 @@ namespace intel_gpu {
 // ----------------------------------------------------------------------------------------------- //
 
 SyncInferRequest::SyncInferRequest(const std::shared_ptr<const CompiledModel>& compiled_model)
-    : ov::ISyncInferRequest(compiled_model),
-      m_graph(compiled_model->get_graph(0)),
-      m_context(std::static_pointer_cast<RemoteContextImpl>(compiled_model->get_context_impl())),
-      m_shape_predictor(
-          new cldnn::ShapePredictor(&m_graph->get_engine(),
-                                    m_graph->get_config().get_property(ov::intel_gpu::buffers_preallocation_ratio))),
-      m_enable_profiling(m_graph->get_config().get_property(ov::enable_profiling)),
-      m_use_external_queue(m_graph->use_external_queue()) {
+    : ov::ISyncInferRequest(compiled_model)
+    , m_graph(compiled_model->get_graph(0))
+    , m_context(std::static_pointer_cast<RemoteContextImpl>(compiled_model->get_context_impl()))
+    , m_shape_predictor(new cldnn::ShapePredictor(&m_graph->get_engine(), m_graph->get_config().get_property(ov::intel_gpu::buffers_preallocation_ratio)))
+    , m_enable_profiling(m_graph->get_config().get_property(ov::enable_profiling))
+    , m_use_external_queue(m_graph->use_external_queue()) {
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_IF(debug_config->mem_preallocation_params.is_initialized) {
         auto& mem_preallocation_params = debug_config->mem_preallocation_params;
-        m_shape_predictor.reset(new cldnn::ShapePredictor(&m_graph->get_engine(),
-                                                          mem_preallocation_params.next_iters_preallocation_count,
-                                                          mem_preallocation_params.max_per_iter_size,
-                                                          mem_preallocation_params.max_per_dim_diff,
-                                                          mem_preallocation_params.buffers_preallocation_ratio));
+        m_shape_predictor.reset(
+            new cldnn::ShapePredictor(&m_graph->get_engine(),
+                                      mem_preallocation_params.next_iters_preallocation_count,
+                                      mem_preallocation_params.max_per_iter_size,
+                                      mem_preallocation_params.max_per_dim_diff,
+                                      mem_preallocation_params.buffers_preallocation_ratio));
     }
+
     init_mappings();
     allocate_inputs();
     allocate_outputs();
