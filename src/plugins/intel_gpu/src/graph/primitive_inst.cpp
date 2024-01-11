@@ -477,6 +477,10 @@ event::ptr primitive_inst::realloc_if_needed() {
             // otherwise clear _outputs for the cases when mem was reused previously
             if (_impl_params->can_be_optimized()) {
                 _outputs[0] = variable.get_memory();
+                // just to record
+                auto dt_size = ov::element::Type(actual_layout.data_type).bitwidth();
+                auto& sp = *get_network().get_shape_predictor();
+                auto prealloc_info = sp.predict_preallocation_shape(id(), _impl_params->output_layouts[0].get_shape(), dt_size, true);
                 return ev;
             } else if (_outputs[0] && variable.get_memory() && get_network().get_engine().is_the_same_buffer(*_outputs[0], *variable.get_memory())) {
                 _outputs[0] = nullptr;
