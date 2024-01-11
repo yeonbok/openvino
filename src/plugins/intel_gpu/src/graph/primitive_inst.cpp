@@ -437,13 +437,11 @@ void primitive_inst::update_shape() {
     }
 }
 
+
 event::ptr primitive_inst::realloc_if_needed() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("realloc_if_needed: " + id()));
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::memory_allocation);
-    if (getenv("PRINT_TRACE") != nullptr && id() == "kvcache:__module.model.transformer.h.0.attn/aten::cat/Concat_5") {
-        std::cout << "x" << std::endl;
-    }
  
     event::ptr ev = nullptr;
     if (_node->get_users().size() == 1 && _node->get_users().front()->is_type<concatenation>()) {
@@ -467,6 +465,8 @@ event::ptr primitive_inst::realloc_if_needed() {
     if (_node->is_type<input_layout>())
         return ev;
 
+    auto& sp = *get_network().get_shape_predictor();
+    auto dt_size = ov::element::Type(actual_layout.data_type).bitwidth();
     // read_value/assign nodes are supposed to always use variable memory
     if (auto stateful_prim = dynamic_cast<memory_state::variable*>(this)) {
         std::string variable_id = stateful_prim->variable_id();
@@ -477,9 +477,7 @@ event::ptr primitive_inst::realloc_if_needed() {
             // otherwise clear _outputs for the cases when mem was reused previously
             if (_impl_params->can_be_optimized()) {
                 _outputs[0] = variable.get_memory();
-                // just to record
-                auto dt_size = ov::element::Type(actual_layout.data_type).bitwidth();
-                auto& sp = *get_network().get_shape_predictor();
+                // To record shape predictor
                 auto prealloc_info = sp.predict_preallocation_shape(id(), _impl_params->output_layouts[0].get_shape(), dt_size, true);
                 return ev;
             } else if (_outputs[0] && variable.get_memory() && get_network().get_engine().is_the_same_buffer(*_outputs[0], *variable.get_memory())) {
@@ -520,33 +518,17 @@ event::ptr primitive_inst::realloc_if_needed() {
     }
 
     // Clear out memory if if was previously reused, but now primitive can't be optimized
-    if (_node->is_type<gather>() || _node->is_type<permute>()) {
+    if (_node->is_type<gather>() || _node->is_type<permute>() || _node->is_type<reshape>() || _node->is_type<reorder>()) {
         if (can_be_optimized()) {
-            auto user = *_node->get_users().begin();
-            if (getenv("PRINT_TRACE") != nullptr && user->id() == "kvcache:__module.model.transformer.h.0.attn/aten::cat/Concat_5") {
-                std::cout << "=======================================================" << std::endl;
-                std::cout << id() <<  ", realloc_if_neeed, max output layout size was : " << max_output_layout_size << " ";
-            }
             max_output_layout_size = _deps[0].first->max_output_layout_size;
-            if (getenv("PRINT_TRACE") != nullptr && user->id() == "kvcache:__module.model.transformer.h.0.attn/aten::cat/Concat_5")
-                std::cout << " now : " << max_output_layout_size << std::endl;
             return ev;
         } else if (_outputs[0] && dep_memory_ptr(0) &&
                    _network.get_engine().is_the_same_buffer(dep_memory(0), output_memory(0))) {
+            // Clear out memory if if was previously reused, but now primitive can't be optimized
             _outputs[0] = nullptr;
             max_output_layout_size = 0;
         }
     }
-    if ((_node->is_type<reorder>() || _node->is_type<reshape>()) && can_be_optimized()) {
-        max_output_layout_size = _deps[0].first->max_output_layout_size;
-        return ev;
-    }
-    // update layout to ensure that it repsects paddings for correct allocation size
-//    if (_node->is_type<kv_cache>() && !_impl_params->can_be_optimized()) {
-//        const auto current_buf_size = updated_layout.get_buffer_size().sizes();
-//        ov::Shape current_shape(current_buf_size.begin(), current_buf_size.end());
-//        updated_layout.set_partial_shape(current_shape);
-//    }
 
     bool can_reuse_buffer = _outputs[0] && updated_layout.count() <= max_output_layout_size;
 
@@ -556,14 +538,12 @@ event::ptr primitive_inst::realloc_if_needed() {
         return ev;
     }
 
-    auto current_shape = actual_layout.get_shape();
-    auto& sp = *get_network().get_shape_predictor();
-    auto dt_size = ov::element::Type(actual_layout.data_type).bitwidth();
     std::pair<bool, ov::Shape> prealloc_info;
     if (_node->is_type<kv_cache>())
-        prealloc_info = sp.predict_preallocation_shape(id(), current_shape, dt_size, can_reuse_buffer, 128);
+        prealloc_info = sp.predict_preallocation_shape(id(), actual_layout.get_shape(), dt_size, can_reuse_buffer, kv_cache_inst::get_prealloc_iter_num());
     else
-        prealloc_info = sp.predict_preallocation_shape(id(), current_shape, dt_size, can_reuse_buffer);
+        prealloc_info = sp.predict_preallocation_shape(id(), actual_layout.get_shape(), dt_size, can_reuse_buffer);
+
     if (prealloc_info.first && sp.can_preallocate(ov::shape_size(prealloc_info.second) * dt_size)) {
         auto new_layout = actual_layout;
         new_layout.set_partial_shape(prealloc_info.second);
@@ -584,64 +564,44 @@ event::ptr primitive_inst::realloc_if_needed() {
     } else {
         GPU_DEBUG_TRACE_DETAIL << id() << ": realloc output memory. "
                                <<  " Current buffer_size=" << max_output_layout_size
-                               <<  " Requested buffer_size=" << actual_layout.count() << std::endl;
+                               <<  " Requested buffer_size=" << updated_layout.count() << std::endl;
         _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
         // TODO : need to handle multiple outputs
         max_output_layout_size = std::max(max_output_layout_size, updated_params.output_layouts[0].get_buffer_size().count());
 
+        // Set variable memory same as output memory
         if (_node->is_type<kv_cache>()) {
             auto desc = _node->as<kv_cache>().get_primitive();
             auto& variable = get_network().get_variable(desc->variable_info.variable_id);
-            if (getenv("PRINT_TRACE") != nullptr &&
-                desc->variable_info.variable_id == "past_key_values.0.valuepresent.0.value") {
-                std::cout << "=======================================================" << std::endl;
-                std::cout << " Allocated output ! mem_layout:  " << std::endl;
-                std::cout << _outputs[0]->get_layout().to_string() << std::endl;
-                std::cout << "=======================================================" << std::endl;
-            }
-            {
-                auto present_layout = _impl_params->output_layouts[0];
-                const auto& sequence_axis = desc->concat_axis;
-
-                auto sequence_axis_legacy = sequence_axis;
-                if (sequence_axis_legacy >= 2) {
-                    auto spatial_axis = sequence_axis_legacy - 2;
-                    // Default and minimum number of dimensions is 4
-                    auto spatial_size = std::max<size_t>(present_layout.get_partial_shape().size(), 4) - 2;
-                    sequence_axis_legacy = spatial_size - spatial_axis - 1 + 2;
+            auto present_layout = _impl_params->output_layouts[0];
+            const auto& sequence_axis = desc->concat_axis;
+            auto sequence_axis_legacy =
+                kv_cache_inst::get_sequence_axis_legacy(sequence_axis, present_layout.get_partial_shape().size());
+            GPU_DEBUG_TRACE_DETAIL << id() << " is kv_cache => set the variable with newly allocated output memory" << std::endl;
+            if (present_layout.data_padding.get_dynamic_pad_dims().sizes()[sequence_axis_legacy] == 1) {
+                // Apply padding of variable to make it be optimized in the next iteration
+                auto max_pad = kv_cache_inst::get_max_pad(present_layout,
+                                                          updated_params.output_layouts[0].get_buffer_size().count(),
+                                                          sequence_axis_legacy,
+                                                          "present_layout");
+                if (max_pad > 0) {
+                    kv_cache_inst::update_pad(present_layout, max_pad, sequence_axis_legacy);
                 }
-
-                if (present_layout.data_padding.get_dynamic_pad_dims().sizes()[sequence_axis_legacy] == 1) {
-                    const size_t total_elements = present_layout.count();
-                    const int64_t concat_axis_size = present_layout.get_partial_shape()[sequence_axis].get_length();
-                    const int64_t sequence_element_size = total_elements / concat_axis_size;
-                    const int64_t max_sequence_elements = updated_params.output_layouts[0].get_buffer_size().count() / sequence_element_size;
-                    const int64_t max_pad = std::max<int64_t>(max_sequence_elements - concat_axis_size, 0);
-                    if (max_pad > 0) {
-                        auto update_pad = [&](layout& l, int64_t pad) {
-                            const auto& dyn_pad_dims = l.data_padding.get_dynamic_pad_dims();
-                            const auto& lower_padd = l.data_padding.lower_size().sizes();
-                            auto upper_padd = l.data_padding.upper_size().sizes();
-                            upper_padd[sequence_axis_legacy] = pad;
-                            l.data_padding = padding(lower_padd, upper_padd, 0.f, dyn_pad_dims);
-                        };
-
-                        GPU_DEBUG_TRACE_DETAIL
-                            << "do_runtime_in_place_kv_cache set_layout: " << present_layout.to_string()
-                            << " is_set  = " << variable.is_set() << std::endl;
-                        update_pad(present_layout, max_pad);
-                        if (getenv("PRINT_TRACE") != nullptr &&
-                            desc->variable_info.variable_id == "past_key_values.0.valuepresent.0.value") {
-                            std::cout << "- Set variable memory with output mem" << std::endl;
-                            std::cout << "- Set variable layout with current layout with padding: " << std::endl;
-                            std::cout << present_layout.to_string() << std::endl;
-                        }
-                    }
-                }
+                GPU_DEBUG_TRACE_DETAIL << id() << ": Update variable " << variable.get_name()
+                                   << "'s memory with allocated kv cache output: " << present_layout.to_string()
+                                   << " is_set  = " << variable.is_set() << std::endl;
                 variable.set_memory(_outputs[0], present_layout);
+                // No need to copy, still it can be optimized
+                _impl_params->_can_be_optimized = true;
+            } else {
+                variable.set_layout(present_layout);
+                GPU_DEBUG_TRACE_DETAIL << id() << ": Update variable " << variable.get_name()
+                                   << "'s layout with allocated kv cache output: " << present_layout.to_string()
+                                   << " is_set  = " << variable.is_set() << std::endl;
             }
         }
     }
+
     _mem_allocated = true;
     // intermediate memory allocation is required for primitives consisting of multiple kernels in dynamic case
     {
@@ -911,6 +871,7 @@ void primitive_inst::do_runtime_skip_reorder() {
     }
 }
 
+
 void primitive_inst::do_runtime_in_place_kv_cache() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("do_runtime_in_place_kv_cache: " + id()));
     auto reset_pad = [](kernel_impl_params& params, const program_node* node) {
@@ -956,56 +917,27 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
     auto& present_layout = _impl_params->output_layouts[0];
     const auto& sequence_axis = desc->concat_axis;
 
-    auto sequence_axis_legacy = sequence_axis;
-    if (sequence_axis_legacy >= 2) {
-        auto spatial_axis = sequence_axis_legacy - 2;
-        // Default and minimum number of dimensions is 4
-        auto spatial_size = std::max<size_t>(past_layout.get_partial_shape().size(), 4) - 2;
-        sequence_axis_legacy = spatial_size - spatial_axis - 1 + 2;
-    }
-
+    auto sequence_axis_legacy = kv_cache_inst::get_sequence_axis_legacy(sequence_axis, past_layout.get_partial_shape().size());
     if (present_layout.data_padding.get_dynamic_pad_dims().sizes()[sequence_axis_legacy] != 1)
         return;
 
-    const size_t total_elements = past_layout.count();
-    const int64_t concat_axis_size = past_layout.get_partial_shape()[sequence_axis].get_length();
-    const int64_t sequence_element_size = total_elements / concat_axis_size;
-
-    const int64_t max_sequence_elements = _deps[0].first->max_output_layout_size / sequence_element_size;
-    const int64_t max_pad = std::max<int64_t>(max_sequence_elements - concat_axis_size, 0);
-    
-    if (std::getenv("PRINT_TRACE") != nullptr && desc->variable_info.variable_id == "past_key_values.0.valuepresent.0.value") {
-        std::cout << "=======================================================" << std::endl;
-        std::cout << "[do_runtime_kv_cache] of " << id() << std::endl;
-        std::cout << " - input_layout" << _impl_params->get_input_layout().to_string() << std::endl;
-        std::cout << " - output_layout" << _impl_params->get_output_layout().to_string() << std::endl;
-        std::cout << " - max_pad " << max_pad << std::endl;
-        std::cout << "=======================================================" << std::endl;
-    }
+    GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << id() << " initial present_layout : " << present_layout.to_string() << std::endl;
+    GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << id() << " initial past_layout : " << past_layout.to_string() << std::endl;
+    auto max_pad = kv_cache_inst::get_max_pad(past_layout, _deps[0].first->max_output_layout_size, sequence_axis_legacy, "past_layout");
     if (max_pad > 0) {
-        auto update_pad = [&](layout& l, int64_t pad) {
-            const auto& dyn_pad_dims = l.data_padding.get_dynamic_pad_dims();
-            const auto& lower_padd = l.data_padding.lower_size().sizes();
-            auto upper_padd = l.data_padding.upper_size().sizes();
-            upper_padd[sequence_axis_legacy] = pad;
-            l.data_padding = padding(lower_padd, upper_padd, 0.f, dyn_pad_dims);
-        };
-
-        update_pad(present_layout, max_pad - 1);
+        kv_cache_inst::update_pad(present_layout, max_pad - 1, sequence_axis_legacy);
+        GPU_DEBUG_TRACE_DETAIL << "[do runtime_in_place_kv_cache] " << id() << " Updated present_layout's pad : " << present_layout.to_string() << std::endl;
         auto& variable = get_network().get_variable(desc->variable_info.variable_id);
-        GPU_DEBUG_TRACE_DETAIL << "do_runtime_in_place_kv_cache set_layout: " << present_layout.to_string() << " is_set  = " << variable.is_set() << std::endl;
         variable.set_layout(present_layout);
+        GPU_DEBUG_TRACE_DETAIL << "[do_runtime_in_place_kv_cache] " << id() << "Updated variable with present_layout"
+                               << variable.get_layout().to_string() << " is_set  = " << variable.is_set() << std::endl;
         if (past_layout.data_padding.upper_size().sizes()[sequence_axis_legacy] > 0 && variable.is_set()) {
-            update_pad(past_layout, max_pad);
+            kv_cache_inst::update_pad(past_layout, max_pad, sequence_axis_legacy);
             _impl_params->_can_be_optimized = true;
+            GPU_DEBUG_TRACE_DETAIL << "[do_runtime_in_place_kv_cache] " << id() << " Updated past layout's pad : " << past_layout.to_string() << std::endl;
         }
-        GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] concat_axis_size = " << concat_axis_size << std::endl;
-        GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] sequence_element_size = " << sequence_element_size << std::endl;
-        GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] max_sequence_elements = " << max_sequence_elements << std::endl;
-        GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] max_pad = " << max_pad << std::endl;
-        GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] can be optimized: " << _impl_params->_can_be_optimized << std::endl;
-        GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << present_layout.to_string() << std::endl;
-    }
+   }
+   GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << id() << " can be optimized: " << _impl_params->_can_be_optimized << std::endl;
 }
 
 void primitive_inst::do_runtime_skip_gather() {

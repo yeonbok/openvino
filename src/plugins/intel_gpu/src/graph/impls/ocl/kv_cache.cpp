@@ -77,22 +77,15 @@ struct kv_cache_impl : typed_primitive_impl_ocl<kv_cache> {
         auto& variable = instance.get_network().get_variable(desc->variable_info.variable_id);
         auto res_event = parent::execute_impl(events, instance);
         variable.set();
-
         if (can_be_optimized) {
             // When primitive is optimized, concat kernel writes directly to variable memory
             return res_event;
         } else {
-            if (std::getenv("PRINT_TRACE") != nullptr && desc->variable_info.variable_id == "past_key_values.0.valuepresent.0.value")
-                std::cout << desc->id << " output_layout: " << instance.get_impl_params()->output_layouts[0].to_short_string() <<  " cannot be optimized " << std::endl;
-
             // Othwerise, we need to copy result from out buffer to state memory
-//            auto& stream = instance.get_network().get_stream();
-//            stream.enqueue_barrier();
-//            auto out = instance.get_network().get_engine().reinterpret_buffer(instance.output_memory(0), variable.get_memory()->get_layout());
-//            auto out = instance.get_network().get_engine().reinterpret_buffer(instance.output_memory(0), variable.get_memory()->get_layout());
-//            return variable.get_memory()->copy_from(stream, *out, false);
-//            variable.set_memory(out);
-            return res_event;
+            auto& stream = instance.get_network().get_stream();
+            stream.enqueue_barrier();
+            auto out = instance.get_network().get_engine().reinterpret_buffer(instance.output_memory(0), variable.get_memory()->get_layout());
+            return variable.get_memory()->copy_from(stream, *out, false);
         }
     }
 
