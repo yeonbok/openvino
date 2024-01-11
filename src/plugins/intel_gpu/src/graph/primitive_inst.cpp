@@ -277,7 +277,6 @@ void primitive_inst::update_shape() {
         // If variable is not set and we have an initializer - use it's shape as shape of variable
         if (!variable.is_set() && _impl_params->input_layouts.size() == 1) {
             new_layout = _impl_params->get_input_layout(0);
-
         }
 
         // If we still have a dynamic dimension, which basiclly means that we don't have an initializer, then replace dynamic dims with 0
@@ -437,12 +436,11 @@ void primitive_inst::update_shape() {
     }
 }
 
-
 event::ptr primitive_inst::realloc_if_needed() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("realloc_if_needed: " + id()));
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::memory_allocation);
- 
+
     event::ptr ev = nullptr;
     if (_node->get_users().size() == 1 && _node->get_users().front()->is_type<concatenation>()) {
         auto concat_inst = _network.get_primitive(get_users().front()->id());
@@ -492,8 +490,7 @@ event::ptr primitive_inst::realloc_if_needed() {
         // For nodes that can be optimized, variable memory is used as output memory
         // so there is no need for output memory reallocation
         if (can_be_optimized()) {
-            auto elem_size = ov::element::Type(variable.get_layout().data_type).bitwidth() / 8;
-            max_output_layout_size = variable.get_actual_mem_size() / elem_size;
+            max_output_layout_size = variable.get_actual_mem_size() / dt_size;
             return ev;
         }
     }
@@ -539,10 +536,12 @@ event::ptr primitive_inst::realloc_if_needed() {
     }
 
     std::pair<bool, ov::Shape> prealloc_info;
-    if (_node->is_type<kv_cache>())
-        prealloc_info = sp.predict_preallocation_shape(id(), actual_layout.get_shape(), dt_size, can_reuse_buffer, kv_cache_inst::get_prealloc_iter_num());
-    else
-        prealloc_info = sp.predict_preallocation_shape(id(), actual_layout.get_shape(), dt_size, can_reuse_buffer);
+    int32_t tmp_prealloc_count = _node->is_type<kv_cache>() ? kv_cache_inst::get_prealloc_iter_num() : -1;
+    GPU_DEBUG_IF(debug_config->mem_preallocation_params.is_initialized) {
+        // If debug config is set, repsect the config most
+        tmp_prealloc_count = -1;
+    }
+    prealloc_info = sp.predict_preallocation_shape(id(), actual_layout.get_shape(), dt_size, can_reuse_buffer, tmp_prealloc_count);
 
     if (prealloc_info.first && sp.can_preallocate(ov::shape_size(prealloc_info.second) * dt_size)) {
         auto new_layout = actual_layout;
@@ -870,7 +869,6 @@ void primitive_inst::do_runtime_skip_reorder() {
         }
     }
 }
-
 
 void primitive_inst::do_runtime_in_place_kv_cache() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("do_runtime_in_place_kv_cache: " + id()));
