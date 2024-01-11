@@ -533,7 +533,10 @@ event::ptr primitive_inst::realloc_if_needed() {
             max_output_layout_size = 0;
         }
     }
-
+    if ((_node->is_type<reorder>() || _node->is_type<reshape>()) && can_be_optimized()) {
+        max_output_layout_size = _deps[0].first->max_output_layout_size;
+        return ev;
+    }
     // update layout to ensure that it repsects paddings for correct allocation size
 //    if (_node->is_type<kv_cache>() && !_impl_params->can_be_optimized()) {
 //        const auto current_buf_size = updated_layout.get_buffer_size().sizes();
