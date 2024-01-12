@@ -61,18 +61,22 @@ public:
         return sequence_axis_legacy;
     };
 
-    static int64_t get_max_pad(const layout& target_layout, size_t buffer_size, int64_t sequence_axis, std::string target_name = "") {
+    static int64_t get_max_pad(const layout& target_layout, size_t buffer_size, int64_t legacy_sequence_axis, std::string target_name = "") {
+        if (buffer_size == 0)
+            return 0;
         const size_t total_elements = target_layout.count();
-        const int64_t concat_axis_size = target_layout.get_partial_shape()[sequence_axis].get_length();
+        const int64_t concat_axis_size = target_layout.get_tensor().sizes()[legacy_sequence_axis];
         const int64_t sequence_element_size = total_elements / concat_axis_size;
         const int64_t max_sequence_elements = buffer_size / sequence_element_size;
         auto max_pad = std::max<int64_t>(max_sequence_elements - concat_axis_size, 0);
         auto target_layout_name = (target_name != "") ? target_name : "target_layout";
         GPU_DEBUG_TRACE_DETAIL << "[get_max_pad] " << target_name  << " : " << target_layout.to_string() << std::endl;
+        GPU_DEBUG_TRACE_DETAIL << "[get_max_pad] buffer size " << buffer_size << std::endl;
+        GPU_DEBUG_TRACE_DETAIL << "[get_max_pad] total_elements " << total_elements << std::endl;
         GPU_DEBUG_TRACE_DETAIL << "[get_max_pad] concat_axis_size = " << concat_axis_size << std::endl;
         GPU_DEBUG_TRACE_DETAIL << "[get_max_pad] sequence_element_size = " << sequence_element_size << std::endl;
         GPU_DEBUG_TRACE_DETAIL << "[get_max_pad] max_sequence_elements = " << max_sequence_elements << std::endl;
-        GPU_DEBUG_TRACE_DETAIL << "[get_max_pad] max_pad = " << max_pad << std::endl;
+        GPU_DEBUG_TRACE_DETAIL << "[get_max_pad] max_pad (max_sequence_elements - concat_axis_size)" << max_pad << std::endl;
         return max_pad;
     }
 

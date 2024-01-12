@@ -490,7 +490,7 @@ event::ptr primitive_inst::realloc_if_needed() {
         // For nodes that can be optimized, variable memory is used as output memory
         // so there is no need for output memory reallocation
         if (can_be_optimized()) {
-            max_output_layout_size = variable.get_actual_mem_size() / dt_size;
+            max_output_layout_size = variable.get_actual_mem_size() / (dt_size / 8);
             return ev;
         }
     }
@@ -812,6 +812,30 @@ bool primitive_inst::update_impl() {
     return true;
 }
 
+void primitive_inst::init_variable() {
+    auto reset_pad = [](kernel_impl_params& params, const program_node* node) {
+        params.output_layouts[0].data_padding = node->get_output_layout(0).data_padding;
+    };
+    if (_node->is_type<read_value>()) {
+        auto& variable = get_network().get_variable(_node->as<read_value>().get_primitive()->variable_id);
+        // Reset paddings for read_value and users with dynamic pad when variable is reset
+        // to avoid wrong pad used for some nodes due to pad propagation logic (which uses previous iter pad values)
+        if (!variable.is_set()) {
+            primitive_inst* inst = this;
+            while (inst) {
+                reset_pad(*inst->_impl_params, inst->_node);
+                auto& users = inst->_node->get_users();
+                if (users.size() == 1 && users.front()->get_output_layout(0).data_padding.get_dynamic_pad_dims() != tensor(0)) {
+                    inst = inst->get_user_insts().front();
+                } else {
+                    inst = nullptr;
+                }
+            }
+        }
+        return;
+    }
+}
+
 void primitive_inst::do_runtime_skip_reorder() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("do_runtime_skip_reorder: " + id()));
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -875,24 +899,6 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
     auto reset_pad = [](kernel_impl_params& params, const program_node* node) {
         params.output_layouts[0].data_padding = node->get_output_layout(0).data_padding;
     };
-    if (_node->is_type<read_value>()) {
-        auto& variable = get_network().get_variable(_node->as<read_value>().get_primitive()->variable_id);
-        // Reset paddings for read_value and users with dynamic pad when variable is reset
-        // to avoid wrong pad used for some nodes due to pad propagation logic (which uses previous iter pad values)
-        if (!variable.is_set()) {
-            primitive_inst* inst = this;
-            while (inst) {
-                reset_pad(*inst->_impl_params, inst->_node);
-                auto& users = inst->_node->get_users();
-                if (users.size() == 1 && users.front()->get_output_layout(0).data_padding.get_dynamic_pad_dims() != tensor(0)) {
-                    inst = inst->get_user_insts().front();
-                } else {
-                    inst = nullptr;
-                }
-            }
-        }
-        return;
-    }
 
     if (_node->is_type<gather>() && _impl_params->output_layouts[0].data_padding.get_dynamic_pad_dims() != tensor(0)) {
         if (can_be_optimized())
@@ -906,9 +912,6 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
         return;
 
     _impl_params->_can_be_optimized = false;
-    if (_impl_params->get_input_layout(0).count() == 0) {
-        return;
-    }
 
     auto desc = _node->as<kv_cache>().get_primitive();
     auto& past_layout = _impl_params->input_layouts[0];
@@ -922,6 +925,7 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
     GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << id() << " initial present_layout : " << present_layout.to_string() << std::endl;
     GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << id() << " initial past_layout : " << past_layout.to_string() << std::endl;
     auto max_pad = kv_cache_inst::get_max_pad(past_layout, _deps[0].first->max_output_layout_size, sequence_axis_legacy, "past_layout");
+
     if (max_pad > 0) {
         kv_cache_inst::update_pad(present_layout, max_pad - 1, sequence_axis_legacy);
         GPU_DEBUG_TRACE_DETAIL << "[do runtime_in_place_kv_cache] " << id() << " Updated present_layout's pad : " << present_layout.to_string() << std::endl;
@@ -934,8 +938,8 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
             _impl_params->_can_be_optimized = true;
             GPU_DEBUG_TRACE_DETAIL << "[do_runtime_in_place_kv_cache] " << id() << " Updated past layout's pad : " << past_layout.to_string() << std::endl;
         }
-   }
-   GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << id() << " can be optimized: " << _impl_params->_can_be_optimized << std::endl;
+    }
+    GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << id() << " can be optimized: " << _impl_params->_can_be_optimized << std::endl;
 }
 
 void primitive_inst::do_runtime_skip_gather() {
@@ -1154,6 +1158,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         // Check successor reorder if layouts are same
         // Need to set can_be_optimized for user reorder at predecessor because
         // if the user is can_be_optimized and output node then current nodes' output should be allocated to host.
+        init_variable();
         do_runtime_skip_reorder();
         do_runtime_skip_gather();
         do_runtime_in_place_kv_cache();
