@@ -56,6 +56,10 @@ public:
 
     bool can_preallocate(size_t desired_buffer_size);
 
+    void reset() {
+        _shapes_info.clear();
+    }
+
 private:
     void add_shape(const std::string& id, const ov::Shape& shape);
 

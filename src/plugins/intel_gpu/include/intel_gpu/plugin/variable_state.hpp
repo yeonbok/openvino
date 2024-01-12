@@ -44,6 +44,7 @@ public:
     size_t get_actual_mem_size() const {
         return actual_size;
     }
+
 private:
     cldnn::layout m_layout;
     ov::element::Type m_user_specified_type;

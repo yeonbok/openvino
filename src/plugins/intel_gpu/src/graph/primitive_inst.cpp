@@ -567,37 +567,47 @@ event::ptr primitive_inst::realloc_if_needed() {
         _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
         // TODO : need to handle multiple outputs
         max_output_layout_size = std::max(max_output_layout_size, updated_params.output_layouts[0].get_buffer_size().count());
-
-        // Set variable memory same as output memory
-        if (_node->is_type<kv_cache>()) {
-            auto desc = _node->as<kv_cache>().get_primitive();
-            auto& variable = get_network().get_variable(desc->variable_info.variable_id);
-            auto present_layout = _impl_params->output_layouts[0];
-            const auto& sequence_axis = desc->concat_axis;
-            auto sequence_axis_legacy =
-                kv_cache_inst::get_sequence_axis_legacy(sequence_axis, present_layout.get_partial_shape().size());
-            GPU_DEBUG_TRACE_DETAIL << id() << " is kv_cache => set the variable with newly allocated output memory" << std::endl;
-            if (present_layout.data_padding.get_dynamic_pad_dims().sizes()[sequence_axis_legacy] == 1) {
-                // Apply padding of variable to make it be optimized in the next iteration
-                auto max_pad = kv_cache_inst::get_max_pad(present_layout,
-                                                          updated_params.output_layouts[0].get_buffer_size().count(),
-                                                          sequence_axis_legacy,
-                                                          "present_layout");
-                if (max_pad > 0) {
-                    kv_cache_inst::update_pad(present_layout, max_pad, sequence_axis_legacy);
-                }
-                GPU_DEBUG_TRACE_DETAIL << id() << ": Update variable " << variable.get_name()
+    }
+    // Set variable memory same as output memory
+    if (_node->is_type<kv_cache>()) {
+        auto desc = _node->as<kv_cache>().get_primitive();
+        auto& variable = get_network().get_variable(desc->variable_info.variable_id);
+        auto present_layout = _impl_params->output_layouts[0];
+        const auto& sequence_axis = desc->concat_axis;
+        auto sequence_axis_legacy =
+            kv_cache_inst::get_sequence_axis_legacy(sequence_axis, present_layout.get_partial_shape().size());
+        GPU_DEBUG_TRACE_DETAIL << id() << " is kv_cache => set the variable with newly allocated output memory"
+                               << std::endl;
+        bool axis_is_outer_most = true;
+        for (int64_t dim = 0; dim < sequence_axis; ++dim) {
+            if (present_layout.get_shape()[dim] > 1) {
+                axis_is_outer_most = false;
+                GPU_DEBUG_TRACE_DETAIL << id() << " concat axis not outermost dimension is not optimized yet" << std::endl;
+                break;
+            }
+        }
+        if (axis_is_outer_most &&
+            present_layout.data_padding.get_dynamic_pad_dims().sizes()[sequence_axis_legacy] == 1) {
+            // Apply padding of variable to make it be optimized in the next iteration
+            auto max_pad = kv_cache_inst::get_max_pad(present_layout,
+                                                      updated_params.output_layouts[0].get_buffer_size().count(),
+                                                      sequence_axis_legacy,
+                                                      "present_layout");
+            if (max_pad > 0) {
+                kv_cache_inst::update_pad(present_layout, max_pad, sequence_axis_legacy);
+            }
+            GPU_DEBUG_TRACE_DETAIL << id() << ": Update variable " << variable.get_name()
                                    << "'s memory with allocated kv cache output: " << present_layout.to_string()
                                    << " is_set  = " << variable.is_set() << std::endl;
-                variable.set_memory(_outputs[0], present_layout);
-                // No need to copy, still it can be optimized
-                _impl_params->_can_be_optimized = true;
-            } else {
-                variable.set_layout(present_layout);
-                GPU_DEBUG_TRACE_DETAIL << id() << ": Update variable " << variable.get_name()
+            variable.set_memory(_outputs[0], present_layout);
+            // No need to copy, still it can be optimized
+            _impl_params->_can_be_optimized = true;
+            GPU_DEBUG_TRACE_DETAIL << id() << ": Set can_be_optimized = true " << std::endl;
+        } else {
+            variable.set_layout(present_layout);
+            GPU_DEBUG_TRACE_DETAIL << id() << ": Update variable " << variable.get_name()
                                    << "'s layout with allocated kv cache output: " << present_layout.to_string()
                                    << " is_set  = " << variable.is_set() << std::endl;
-            }
         }
     }
 
@@ -1166,7 +1176,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         do_runtime_skip_gather();
         do_runtime_in_place_kv_cache();
         do_runtime_skip_permute();
-    
+
         if (!is_valid_fusion()) {
             OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("unfused_subgraph_exec: " + id()));
             auto subgraph = get_unfused_subgraph();

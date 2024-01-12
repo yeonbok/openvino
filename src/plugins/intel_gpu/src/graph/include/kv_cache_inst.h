@@ -38,7 +38,7 @@ public:
 
     static int32_t get_prealloc_iter_num() {
         return 128;
-    };
+    }
 
     static void update_pad(layout& l, int64_t pad, int64_t sequence_axis_legacy) {
         const auto& dyn_pad_dims = l.data_padding.get_dynamic_pad_dims();
@@ -46,7 +46,7 @@ public:
         auto upper_padd = l.data_padding.upper_size().sizes();
         upper_padd[sequence_axis_legacy] = pad;
         l.data_padding = padding(lower_padd, upper_padd, 0.f, dyn_pad_dims);
-    };
+    }
 
     static int64_t get_sequence_axis_legacy(int64_t sequence_axis, size_t past_layout_rank) {
         auto sequence_axis_legacy = sequence_axis;
@@ -59,7 +59,7 @@ public:
             sequence_axis_legacy = spatial_size - spatial_axis - 1 + 2;
         }
         return sequence_axis_legacy;
-    };
+    }
 
     static int64_t get_max_pad(const layout& target_layout, size_t buffer_size, int64_t legacy_sequence_axis, std::string target_name = "") {
         if (buffer_size == 0)

@@ -72,8 +72,12 @@ void VariableState::set_state(const ov::SoPtr<ov::ITensor>& state) {
 }
 
 void VariableState::update_device_buffer() {
-    if (m_layout.is_dynamic() || m_layout.bytes_count() == 0)
+    if (m_layout.is_dynamic() || m_layout.bytes_count() == 0) {
+        m_shape_predictor->reset();
+        m_memory.reset();
+        actual_size = 0;
         return;
+    }
 
     if (actual_size < m_layout.bytes_count()) {
         const auto alloc_type = m_context->get_engine().use_unified_shared_memory() ? cldnn::allocation_type::usm_device : cldnn::allocation_type::cl_mem;
