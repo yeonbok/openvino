@@ -913,6 +913,9 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
 
     _impl_params->_can_be_optimized = false;
 
+    if (_impl_params->get_input_layout(0).count() == 0) {
+        return;
+    }
     auto desc = _node->as<kv_cache>().get_primitive();
     auto& past_layout = _impl_params->input_layouts[0];
     auto& present_layout = _impl_params->output_layouts[0];
