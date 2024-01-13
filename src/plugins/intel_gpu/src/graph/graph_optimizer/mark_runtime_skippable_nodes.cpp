@@ -48,7 +48,7 @@ void mark_runtime_skippable_nodes::run(program& p) {
             // TODO: For now, all permutes with dynamic shape are applied.
             //       A more detailed pattern will need to be applied later
             if (node.is_dynamic()) {
-                if (node.get_dependency(0).is_type<kv_cache>())
+                if (node.get_dependency(0).is_type<kv_cache>() || node.get_dependency(0).is_type<gemm>())
                     return;
                 // If the user is concatenation, priority should be given to in place concat optimization at runtime
                 if (node.have_user_with_type<concatenation>() && node.get_users().size() == 1)
