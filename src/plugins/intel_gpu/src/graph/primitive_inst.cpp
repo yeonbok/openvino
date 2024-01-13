@@ -1285,6 +1285,12 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     }
 
     {
+        // if (_node->is_type<gemm>()) {
+        //     std::cout << "[GEMMEXEC] " << id() << " , " << _impl->get_kernel_name()
+        //               << " , in_0: " << dep_memory(0).get_layout().to_short_string()
+        //               << " , in_1: " << dep_memory(1).get_layout().to_short_string()
+        //               << " , out: " << _outputs[0]->get_layout().to_short_string() << std::endl;
+        // }
         GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::inference);
         auto ev = _impl->execute(dependencies, *this);
 
