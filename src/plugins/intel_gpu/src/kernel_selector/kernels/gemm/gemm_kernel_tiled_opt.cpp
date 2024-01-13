@@ -42,12 +42,35 @@ DeviceFeaturesKey GemmKernelTiledOpt::get_required_device_features_key(const Par
 GemmKernelBase::DispatchData GemmKernelTiledOpt::SetDefault(const gemm_params& params) const {
     const auto& output = params.outputs[0];
 
+    auto get_output_size = [this, params, output](char target_dim) {
+        OPENVINO_ASSERT(target_dim == 'X' || target_dim == 'Y');
+
+        auto output_dims_order = Parent::GetDimsOrder(params.output_order);
+        int dim_idx = (target_dim == 'X') ? 10 : 8;
+        switch (output_dims_order[dim_idx]) {
+            case 'b':
+                return output.Batch().v;
+            case 'f':
+                return output.Feature().v;
+            case 'w':
+                return output.W().v;
+            case 'z':
+                return output.Z().v;
+            case 'y':
+                return output.Y().v;
+            case 'x':
+                return output.X().v;
+            default:
+                OPENVINO_THROW("Unsupported dimension: ", output_dims_order[dim_idx]);
+        }
+    };
+
     DispatchData dispatchData;
     if (!params.has_dynamic_tensors()) {
         GemmTuningData td = SetTuningParams(params);
 
-        auto total_batches = output.LogicalSize() / (output.X().v * output.Y().v);
-        std::vector<size_t> global = { output.X().v, output.Y().v, total_batches };
+        auto total_batches = output.LogicalSize() / (get_output_size('X') * get_output_size('Y'));
+        std::vector<size_t> global = { get_output_size('X'), get_output_size('Y'), total_batches };
 
         dispatchData.gws[0] = Align(global[0], td.tile_n_size) / (td.tile_n_size / td.simd_size);
         dispatchData.gws[1] = Align(global[1], td.tile_m_size) / td.tile_m_size;
@@ -109,6 +132,99 @@ JitConstants GemmKernelTiledOpt::GetJitConstants(const gemm_params& params) cons
     GemmTuningData tuning_data = SetTuningParams(params);
     auto b_vec_size = tuning_data.tile_n_size / tuning_data.simd_size;
 
+    auto conv_to_8dims = [](const std::vector<int64_t>& order_idx) {
+        std::vector<int64_t> dims_order;
+        if (order_idx.size() == 2) {
+            dims_order = {0, 1, 2, 3, 4, 5};
+            dims_order.push_back(order_idx[0] + 6);
+            dims_order.push_back(order_idx[1] + 6);
+        } else if (order_idx.size() == 3) {
+            dims_order.push_back(order_idx[0] == 0 ? 0 : order_idx[0] + 5);
+            dims_order.push_back(1);
+            dims_order.push_back(2);
+            dims_order.push_back(3);
+            dims_order.push_back(4);
+            dims_order.push_back(5);
+            dims_order.push_back(order_idx[1] == 0 ? 0 : order_idx[1] + 5);
+            dims_order.push_back(order_idx[2] == 0 ? 0 : order_idx[2] + 5);
+        } else if (order_idx.size() == 4) {
+            dims_order.push_back(order_idx[0] < 2 ? order_idx[0] : order_idx[0] + 4);
+            dims_order.push_back(order_idx[1] < 2 ? order_idx[1] : order_idx[1] + 4);
+            dims_order.push_back(2);
+            dims_order.push_back(3);
+            dims_order.push_back(4);
+            dims_order.push_back(5);
+            dims_order.push_back(order_idx[2] < 2 ? order_idx[2] : order_idx[2] + 4);
+            dims_order.push_back(order_idx[3] < 2 ? order_idx[3] : order_idx[3] + 4);
+        } else if (order_idx.size() == 5) {
+            dims_order.push_back(order_idx[0] < 2 ? order_idx[0] : order_idx[0] + 3);
+            dims_order.push_back(order_idx[1] < 2 ? order_idx[1] : order_idx[1] + 3);
+            dims_order.push_back(2);
+            dims_order.push_back(3);
+            dims_order.push_back(4);
+            dims_order.push_back(order_idx[2] < 2 ? order_idx[2] : order_idx[2] + 3);
+            dims_order.push_back(order_idx[3] < 2 ? order_idx[3] : order_idx[3] + 3);
+            dims_order.push_back(order_idx[4] < 2 ? order_idx[4] : order_idx[4] + 3);
+        } else if (order_idx.size() == 6) {
+            dims_order.push_back(order_idx[0] < 2 ? order_idx[0] : order_idx[0] + 2);
+            dims_order.push_back(order_idx[1] < 2 ? order_idx[1] : order_idx[1] + 2);
+            dims_order.push_back(2);
+            dims_order.push_back(3);
+            dims_order.push_back(order_idx[2] < 2 ? order_idx[2] : order_idx[2] + 2);
+            dims_order.push_back(order_idx[3] < 2 ? order_idx[3] : order_idx[3] + 2);
+            dims_order.push_back(order_idx[4] < 2 ? order_idx[4] : order_idx[4] + 2);
+            dims_order.push_back(order_idx[5] < 2 ? order_idx[5] : order_idx[5] + 2);
+        } else if (order_idx.size() == 7) {
+            dims_order.push_back(order_idx[0] < 2 ? order_idx[0] : order_idx[0] + 1);
+            dims_order.push_back(order_idx[1] < 2 ? order_idx[1] : order_idx[1] + 1);
+            dims_order.push_back(2);
+            dims_order.push_back(order_idx[2] < 2 ? order_idx[2] : order_idx[2] + 1);
+            dims_order.push_back(order_idx[3] < 2 ? order_idx[3] : order_idx[3] + 1);
+            dims_order.push_back(order_idx[4] < 2 ? order_idx[4] : order_idx[4] + 1);
+            dims_order.push_back(order_idx[5] < 2 ? order_idx[5] : order_idx[5] + 1);
+            dims_order.push_back(order_idx[6] < 2 ? order_idx[6] : order_idx[6] + 1);
+        } else {
+            dims_order = order_idx;
+        }
+        return dims_order;
+    };
+
+    auto get_transposed_dims = [conv_to_8dims](const std::vector<int64_t>& order_idx) {
+        auto converted_dims = conv_to_8dims(order_idx);
+        std::vector<std::string> dim_ids;
+        for (auto dim : converted_dims) {
+            switch (dim) {
+            case 0:
+                dim_ids.push_back("b");
+                break;
+            case 1:
+                dim_ids.push_back("f");
+                break;
+            case 2:
+                dim_ids.push_back("u");
+                break;
+            case 3:
+                dim_ids.push_back("v");
+                break;
+            case 4:
+                dim_ids.push_back("w");
+                break;
+            case 5:
+                dim_ids.push_back("z");
+                break;
+            case 6:
+                dim_ids.push_back("(y+write_id)");
+                break;
+            case 7:
+                dim_ids.push_back("x");
+                break;
+            default:
+                break;
+            }
+        }
+        return dim_ids;
+    };
+
     jit.Merge(MakeTypeJitConstants(params.inputs[0].GetDType(), "ACCUMULATOR"));
     if (params.has_dynamic_tensors()) {
         DimensionAccessHelper dims0(params.inputs[0]);
@@ -117,13 +233,13 @@ JitConstants GemmKernelTiledOpt::GetJitConstants(const gemm_params& params) cons
         DimensionAccessHelper dims1_padded(params.inputs[1], true);
         // Note: Actually currently this kernel is not being selected if it is shape agnostic impl && transposed inputs
         // Because we cannot get the original rank
-        auto m_size = params.transpose_input0 ? dims0.x() : dims0.y();
-        auto n_size = params.transpose_input1 ? dims1.y() : dims1.x();
-        auto n_padded_size = params.transpose_input1 ? "(" + dims1_padded.y() + ")"
-                                                     : "(" + dims1_padded.x() + ")";
-        auto k_size = params.transpose_input0 ? dims0.y() : dims0.x();
-        auto k_padded_size_in0 = params.transpose_input0 ? "(" + dims0_padded.y() + ")"
-                                                         : "(" + dims0_padded.x() + ")";
+        auto input0_dims = conv_to_8dims(params.input0_order);
+        auto input1_dims = conv_to_8dims(params.input1_order);
+        auto m_size = dims0.dims_sizes[input0_dims[6]];
+        auto n_size = dims1.dims_sizes[input1_dims[7]];
+        auto n_padded_size = "(" + dims1_padded.dims_sizes[input1_dims[7]] + ")";
+        auto k_size = dims0.dims_sizes[input0_dims[7]];
+        auto k_padded_size_in0 = "(" + dims0_padded.dims_sizes[input0_dims[7]] + ")";
         const std::string leftover_m = "(" + m_size + "%" + std::to_string(tuning_data.tile_m_size) + ")";
         const std::string leftover_n = "(" + n_size + "%" + std::to_string(tuning_data.tile_n_size) + ")";
         const std::string leftover_k = "(" + k_size + "%" + std::to_string(tuning_data.tile_k_size) + ")";
@@ -131,6 +247,27 @@ JitConstants GemmKernelTiledOpt::GetJitConstants(const gemm_params& params) cons
         const std::string not_divisible_n = "(" + leftover_n + "!=0)";
         const std::string not_divisible_k = "(" + leftover_k + "!=0)";
         const std::string full_iteration_k = "(" + k_size + "/" + std::to_string(tuning_data.tile_k_size) + ")";
+
+        auto get_output_size = [this](const std::vector<int64_t>& output_order_idx, const int target_idx) {
+            auto output_dims_order = Parent::GetDimsOrder(output_order_idx);
+
+            switch (output_dims_order.at(target_idx)) {
+                case 'b':
+                    return "OUTPUT_BATCH_NUM";
+                case 'f':
+                    return "OUTPUT_FEATURE_NUM";
+                case 'w':
+                    return "OUTPUT_SIZE_W";
+                case 'z':
+                    return "OUTPUT_SIZE_Z";
+                case 'y':
+                    return "OUTPUT_SIZE_Y";
+                case 'x':
+                    return "OUTPUT_SIZE_X";
+                default:
+                    return "";
+            }
+        };
 
         jit.AddConstants({
             MakeJitConstant("M", m_size),
@@ -149,6 +286,16 @@ JitConstants GemmKernelTiledOpt::GetJitConstants(const gemm_params& params) cons
             MakeJitConstant("TILE_M_LEFTOVER", leftover_m),
             MakeJitConstant("TILE_K_LEFTOVER", leftover_k),
             MakeJitConstant("TILE_N_LEFTOVER", leftover_n),
+            MakeJitConstant("TR_B", get_transposed_dims(params.output_order).at(0)),
+            MakeJitConstant("TR_F", get_transposed_dims(params.output_order).at(1)),
+            MakeJitConstant("TR_W", get_transposed_dims(params.output_order).at(4)),
+            MakeJitConstant("TR_Z", get_transposed_dims(params.output_order).at(5)),
+            MakeJitConstant("TR_Y", get_transposed_dims(params.output_order).at(6)),
+            MakeJitConstant("TR_X", get_transposed_dims(params.output_order).at(7)),
+            MakeJitConstant("TR_OUTPUT_SIZE_Z", get_output_size(params.output_order, 6)),
+            MakeJitConstant("TR_OUTPUT_SIZE_W", get_output_size(params.output_order, 4)),
+            MakeJitConstant("TR_OUTPUT_FEATURE_NUM", get_output_size(params.output_order, 2)),
+            MakeJitConstant("TR_OUTPUT_BATCH_NUM", get_output_size(params.output_order, 0)),
         });
 
         bool has_dynamic_k_padding = params.transpose_input0 ? params.inputs[0].Y().pad.is_dynamic

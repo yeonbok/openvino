@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include "include/fetch_utils.cl"
 #include "include/batch_headers/fetch_data.cl"
 #include "include/batch_headers/sub_group_block_read.cl"
 #include "include/batch_headers/sub_group_block_write.cl"
@@ -61,6 +62,64 @@ inline uint FUNC(get_output_batch_offset)(OPTIONAL_SHAPE_INFO_ARG uint b, uint f
 #endif // OUTPUT_SIMPLE
 }
 
+inline uint FUNC(get_input0_index_nt)(OPTIONAL_SHAPE_INFO_ARG uint b, uint f, uint w, uint z, uint y, uint x) {
+#if INPUT0_SIMPLE
+    return GET_DATA_INDEX_6D_SAFE(INPUT0, b, f, w, z, y, x);
+#else
+#if INPUT0_DIMS == 4
+    return INPUT0_GET_INDEX_SAFE(b, f, y, x);
+#elif INPUT0_DIMS == 5
+    return INPUT0_GET_INDEX_SAFE(b, f, z, y, x);
+#elif INPUT0_DIMS == 6
+    return INPUT0_GET_INDEX_SAFE(b, f, w, z, y, x);
+#else
+#   error gemm_tiled_opt.cl : Unsupported input 0 format
+#endif
+#endif
+}
+
+inline uint FUNC(get_input0_index)(OPTIONAL_SHAPE_INFO_ARG uint b, uint f, uint w, uint z, uint y, uint x) {
+    return FUNC_CALL(get_input0_index_nt)(OPTIONAL_SHAPE_INFO_TENSOR INPUT0_DIMS_ORDER);
+}
+
+inline uint FUNC(get_input1_index_nt)(OPTIONAL_SHAPE_INFO_ARG uint b, uint f, uint w, uint z, uint y, uint x) {
+#if INPUT1_SIMPLE
+    return GET_DATA_INDEX_6D_SAFE(INPUT1, b, f, w, z, y, x);
+#else
+#if INPUT1_DIMS == 4
+    return INPUT1_GET_INDEX_SAFE(b, f, y, x);
+#elif INPUT1_DIMS == 5
+    return INPUT1_GET_INDEX_SAFE(b, f, z, y, x);
+#elif INPUT1_DIMS == 6
+    return INPUT1_GET_INDEX_SAFE(b, f, w, z, y, x);
+#else
+#   error gemm_tiled_opt.cl : Unsupported input 1 format
+#endif
+#endif
+}
+
+inline uint FUNC(get_input1_index)(OPTIONAL_SHAPE_INFO_ARG uint b, uint f, uint w, uint z, uint y, uint x) {
+    return FUNC_CALL(get_input1_index_nt)(OPTIONAL_SHAPE_INFO_TENSOR INPUT1_DIMS_ORDER);
+}
+
+#ifdef INPUT2_TYPE
+inline uint FUNC(get_input2_index)(OPTIONAL_SHAPE_INFO_ARG uint b, uint f, uint w, uint z, uint y, uint x) {
+#if INPUT2_SIMPLE
+    return GET_DATA_INDEX_6D_SAFE(INPUT2, b, f, w, z, y, x);
+#else
+#if INPUT2_DIMS == 4
+    return INPUT2_GET_INDEX_SAFE(b, f, y, x);
+#elif INPUT2_DIMS == 5
+    return INPUT2_GET_INDEX_SAFE(b, f, z, y, x);
+#elif INPUT2_DIMS == 6
+    return INPUT2_GET_INDEX_SAFE(b, f, w, z, y, x);
+#else
+#   error gemm_tiled_opt.cl : Unsupported input 2 format
+#endif
+#endif
+}
+#endif // INPUT2_TYPE
+
 // Optimized gemm kernel for fp16/fp32 inputs
 REQD_SUB_GROUP_SIZE(SIMD_WIDTH)
 __attribute__((reqd_work_group_size(SIMD_WIDTH, 1, 1)))
@@ -99,48 +158,55 @@ KERNEL(gemm_tiled_opt)(
     uint y = tile_m_offset;
 
     const uint tile_m_iterations = TILE_M_NOT_DIVISIBLE ? (tile_m_num == (tile_m_size - 1) ? TILE_M_LEFTOVER : TILE_M) : TILE_M;
-    const uint z = batch_number % OUTPUT_SIZE_Z;
-    batch_number /= OUTPUT_SIZE_Z;
-    const uint w = batch_number % OUTPUT_SIZE_W;
-    batch_number /= OUTPUT_SIZE_W;
-    const uint f = batch_number % OUTPUT_FEATURE_NUM;
-    batch_number /= OUTPUT_FEATURE_NUM;
-    const uint b = batch_number % OUTPUT_BATCH_NUM;
+    const uint z = batch_number % TR_OUTPUT_SIZE_Z;
+    batch_number /= TR_OUTPUT_SIZE_Z;
+    const uint w = batch_number % TR_OUTPUT_SIZE_W;
+    batch_number /= TR_OUTPUT_SIZE_W;
+    const uint f = batch_number % TR_OUTPUT_FEATURE_NUM;
+    batch_number /= TR_OUTPUT_FEATURE_NUM;
+    const uint b = batch_number % TR_OUTPUT_BATCH_NUM;
 
     // Batch offsets
-    const uint batch_offset_input0 = FUNC_CALL(get_input0_batch_offset)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z);
-    const uint batch_offset_input1 = FUNC_CALL(get_input1_batch_offset)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z);
-#ifdef INPUT2_TYPE
-    const uint batch_offset_input2 = FUNC_CALL(get_input2_batch_offset)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z);
-#endif // INPUT2_TYPE
-    const uint batch_offset_output = FUNC_CALL(get_output_batch_offset)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z);
+    const uint batch_offset_input0 = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, y, 0);
+    const uint batch_offset_input1 = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, 0, tile_n_offset);
+// # ifdef INPUT2_TYPE
+//     const uint batch_offset_input2 = FUNC_CALL(get_input2_batch_offset)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z);
+// # endif // INPUT2_TYPE
+    // const uint batch_offset_output = FUNC_CALL(get_output_batch_offset)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z);
 
     // Start pointers offsets
-#if !TRANSPOSE_INPUT0
-    const __global INPUT0_TYPE* a_ptr = input0 + batch_offset_input0 + tile_m_offset * K_PADDED_IN0;
+#if TRANSPOSE_INPUT0 == 0
+    const __global INPUT0_TYPE* a_ptr = input0 + batch_offset_input0;
+    const uint input0_offset = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR 0, 0, 0, 0, 1, 0);
+    const uint input0_offset1 = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR 0, 0, 0, 0, 0, (TILE_K));
 #else // !TRANSPOSE_INPUT0
     const __global INPUT0_TYPE* a_ptr = input0 + batch_offset_input0 + tile_m_offset;
 #endif // !TRANSPOSE_INPUT0
-#if !TRANSPOSE_INPUT1
-    const __global INPUT1_TYPE* b_ptr = input1 + batch_offset_input1 + tile_n_offset;
-#else // !TRANSPOSE_INPUT1
-    const __global INPUT1_TYPE* b_ptr = input1 + batch_offset_input1 + tile_n_offset * K;
+#if TRANSPOSE_INPUT1 == 0
+    const __global INPUT1_TYPE* b_ptr = input1 + batch_offset_input1;
+    const uint input1_offset = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR 0, 0, 0, 0, 1, 0);
+#elif TRANSPOSE_INPUT1 == 1
+    const __global INPUT1_TYPE* b_ptr = input1 + batch_offset_input1;
+    const uint input1_offset = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR 0, 0, 0, 0, 0, 1);
+    const uint input1_offset1 = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR 0, 0, 0, 0, (TILE_K), 0);
+    const uint input1_fetch_size = ((N - tile_n_offset) < TILE_K) ? (N - tile_n_offset) : TILE_K;
 #endif // !TRANSPOSE_INPUT1
-#ifdef INPUT2_TYPE
-    const __global INPUT2_TYPE* c_ptr = input2 + batch_offset_input2 + tile_m_offset * N + tile_n_offset;
-#endif // INPUT2_TYPE
-    __global OUTPUT_TYPE* d_ptr = output + batch_offset_output + tile_m_offset * N + tile_n_offset;
+// # ifdef INPUT2_TYPE
+//     const __global INPUT2_TYPE* c_ptr = input2 + batch_offset_input2 + tile_m_offset * N + tile_n_offset;
+// # endif // INPUT2_TYPE
+    // __global OUTPUT_TYPE* d_ptr = output + batch_offset_output + tile_m_offset * N + tile_n_offset;
 
     const uint b_raw_global_id = tile_n_offset + sglid;
 
-#if TRANSPOSE_INPUT0
+#if TRANSPOSE_INPUT0 == 1
     MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile;
 #endif // TRANSPOSE_INPUT0
-#if !TRANSPOSE_INPUT1
+#if TRANSPOSE_INPUT1 != 1
     B_FLOATN b_tile[TILE_K];
-#else // !TRANSPOSE_INPUT1
+#else // TRANSPOSE_INPUT1 != 1
     MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile;
-#endif // !TRANSPOSE_INPUT1
+    #define VLOAD CAT(vload, SIMD_WIDTH)
+#endif // TRANSPOSE_INPUT1 != 1
     B_FLOATN c_tile[TILE_M];
 
     unroll_for (uint i = 0; i < TILE_M; i++) {
@@ -152,76 +218,110 @@ KERNEL(gemm_tiled_opt)(
 
         // Loading B tile
         unroll_for (uint b_load_id = 0; b_load_id < TILE_K; b_load_id++) {
-#if IS_DYNAMIC
-#if HAS_DYNAMIC_N_PADDING
-            // In case of dynamic padding we can't guarantee memory access alignment for
-            // block reads (4 bytes), so use scattered read
-            b_tile[b_load_id] = b_raw_global_id > N - 1 ? 0 : b_ptr[sglid];
-#else
+#if TRANSPOSE_INPUT1 == 0
+            // if (b_raw_global_id > N - 1) {
+            //     b_tile[b_load_id] = 0;
+            // } else {
+            //     uint b_idx = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, (b_load_id + k * TILE_K), tile_n_offset);
+            //     b_tile[b_load_id] = BLOCK_READ_B((input1 + b_idx), 0);
+            // }
             b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
+#elif TRANSPOSE_INPUT1 == 1
+            // if (b_raw_global_id > N - 1) {
+            //     b_tile[b_load_id] = 0;
+            // } else {
+            //     uint b_idx = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, (k * TILE_K), (tile_n_offset + b_load_id));
+            //     b_tile[b_load_id] = BLOCK_READ_B((input1 + b_idx), 0);
+            // }
+            // b_tile_buf[((sglid + b_load_id) % TILE_K)] = TILE_N_NOT_DIVISIBLE ? (input1_fetch_size > b_load_id ? b_ptr[sglid] : 0) : BLOCK_READ_B(b_ptr, 0);
+#else
+            if (b_raw_global_id > N - 1) {
+                b_tile[b_load_id] = 0;
+            } else {
+                uint b_idx = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, (b_load_id + k * TILE_K), x);
+                b_tile[b_load_id] = input1[b_idx];
+            }
+// # if IS_DYNAMIC
+// # if HAS_DYNAMIC_N_PADDING
+//             // In case of dynamic padding we can't guarantee memory access alignment for
+//             // block reads (4 bytes), so use scattered read
+//             b_tile[b_load_id] = b_raw_global_id > N - 1 ? 0 : b_ptr[sglid];
+// # else
+//             b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
+// # endif
+// # else // IS_DYNAMIC
+// # if TILE_N_NOT_DIVISIBLE
+//             b_tile[b_load_id] = b_raw_global_id > N - 1 ? 0 : b_ptr[sglid];
+// # else // TILE_N_NOT_DIVISIBLE
+//             b_tile[b_load_id] = BLOCK_READ_B(b_ptr, 0);
+// # endif // TILE_N_NOT_DIVISIBLE
+// # endif // IS_DYNAMIC
 #endif
-#else // IS_DYNAMIC
-#if TILE_N_NOT_DIVISIBLE
-            b_tile[b_load_id] = b_raw_global_id > N - 1 ? 0 : b_ptr[sglid];
-#else // TILE_N_NOT_DIVISIBLE
-            b_tile[b_load_id] = BLOCK_READ_B(b_ptr, 0);
-#endif // TILE_N_NOT_DIVISIBLE
-#endif // IS_DYNAMIC
-#if !TRANSPOSE_INPUT1
-            b_ptr += N_PADDED;
+#if TRANSPOSE_INPUT1 == 0
+            b_ptr += input1_offset;
 #else // !TRANSPOSE_INPUT1
-            b_ptr += K;
+            // b_ptr += input1_offset;
 #endif // !TRANSPOSE_INPUT1
         } // Loading B tile end
-
-#if TRANSPOSE_INPUT1
-        b_ptr -= K * SIMD_WIDTH - SIMD_WIDTH;
+#if TRANSPOSE_INPUT1 == 1
+        b_ptr = b_ptr + (input1_offset * sglid);
+        b_tile = VLOAD(0, b_ptr);  
+        b_ptr = b_ptr + input1_offset1 - (input1_offset * sglid);
 
         // B tile shuffling for NT, TT cases
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col0 = BLOCK_SHUFFLE(b_tile, 0);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col1 = BLOCK_SHUFFLE(b_tile, 1);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col2 = BLOCK_SHUFFLE(b_tile, 2);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col3 = BLOCK_SHUFFLE(b_tile, 3);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col4 = BLOCK_SHUFFLE(b_tile, 4);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col5 = BLOCK_SHUFFLE(b_tile, 5);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col6 = BLOCK_SHUFFLE(b_tile, 6);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col7 = BLOCK_SHUFFLE(b_tile, 7);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col8 = BLOCK_SHUFFLE(b_tile, 8);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col9 = BLOCK_SHUFFLE(b_tile, 9);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col10 = BLOCK_SHUFFLE(b_tile, 10);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col11 = BLOCK_SHUFFLE(b_tile, 11);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col12 = BLOCK_SHUFFLE(b_tile, 12);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col13 = BLOCK_SHUFFLE(b_tile, 13);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col14 = BLOCK_SHUFFLE(b_tile, 14);
-        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col15 = BLOCK_SHUFFLE(b_tile, 15);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col0 = BLOCK_SHUFFLE(b_tile, 0);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col1 = BLOCK_SHUFFLE(b_tile, 1);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col2 = BLOCK_SHUFFLE(b_tile, 2);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col3 = BLOCK_SHUFFLE(b_tile, 3);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col4 = BLOCK_SHUFFLE(b_tile, 4);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col5 = BLOCK_SHUFFLE(b_tile, 5);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col6 = BLOCK_SHUFFLE(b_tile, 6);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col7 = BLOCK_SHUFFLE(b_tile, 7);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col8 = BLOCK_SHUFFLE(b_tile, 8);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col9 = BLOCK_SHUFFLE(b_tile, 9);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col10 = BLOCK_SHUFFLE(b_tile, 10);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col11 = BLOCK_SHUFFLE(b_tile, 11);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col12 = BLOCK_SHUFFLE(b_tile, 12);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col13 = BLOCK_SHUFFLE(b_tile, 13);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col14 = BLOCK_SHUFFLE(b_tile, 14);
+        // MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile_col15 = BLOCK_SHUFFLE(b_tile, 15);
 
-        b_tile.s0 = b_tile_col0[sglid]; b_tile.s1 = b_tile_col1[sglid];
-        b_tile.s2 = b_tile_col2[sglid]; b_tile.s3 = b_tile_col3[sglid];
-        b_tile.s4 = b_tile_col4[sglid]; b_tile.s5 = b_tile_col5[sglid];
-        b_tile.s6 = b_tile_col6[sglid]; b_tile.s7 = b_tile_col7[sglid];
-        b_tile.s8 = b_tile_col8[sglid]; b_tile.s9 = b_tile_col9[sglid];
-        b_tile.sa = b_tile_col10[sglid]; b_tile.sb = b_tile_col11[sglid];
-        b_tile.sc = b_tile_col12[sglid]; b_tile.sd = b_tile_col13[sglid];
-        b_tile.se = b_tile_col14[sglid]; b_tile.sf = b_tile_col15[sglid];
+        // b_tile.s0 = b_tile_col0[sglid]; b_tile.s1 = b_tile_col1[sglid];
+        // b_tile.s2 = b_tile_col2[sglid]; b_tile.s3 = b_tile_col3[sglid];
+        // b_tile.s4 = b_tile_col4[sglid]; b_tile.s5 = b_tile_col5[sglid];
+        // b_tile.s6 = b_tile_col6[sglid]; b_tile.s7 = b_tile_col7[sglid];
+        // b_tile.s8 = b_tile_col8[sglid]; b_tile.s9 = b_tile_col9[sglid];
+        // b_tile.sa = b_tile_col10[sglid]; b_tile.sb = b_tile_col11[sglid];
+        // b_tile.sc = b_tile_col12[sglid]; b_tile.sd = b_tile_col13[sglid];
+        // b_tile.se = b_tile_col14[sglid]; b_tile.sf = b_tile_col15[sglid];
+
+        // unroll_for (uint b_load_id = 0; b_load_id < TILE_K; b_load_id++) {
+        //     b_tile[((TILE_K + b_load_id - sglid) % TILE_K)] = BLOCK_SHUFFLE(b_tile_buf[b_load_id], ((TILE_K + b_load_id - sglid) % TILE_K));
+        // }
 #endif // TRANSPOSE_INPUT1
 
         // Loading A tile and tile C calculation
         unroll_for (uint dot_id = 0; dot_id < tile_m_iterations; dot_id++) {
-#if !TRANSPOSE_INPUT0
+#if TRANSPOSE_INPUT0 == 0
 #if IS_DYNAMIC
 #if HAS_DYNAMIC_K_PADDING
             // In case of dynamic padding we can't guarantee memory access alignment for
             // block reads (4 bytes), so use scattered read
-            A_FLOATN a_read = a_ptr[dot_id * K_PADDED_IN0 + sglid];
+            // A_FLOATN a_read = a_ptr[dot_id * K_PADDED_IN0 + sglid];
+            // uint a_idx = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, (y + dot_id), (k * TILE_K + sglid));
+            // A_FLOATN a_read = input0[a_idx];
 #else
-            A_FLOATN a_read = TILE_K_NOT_DIVISIBLE ? a_ptr[dot_id * K_PADDED_IN0 + sglid] : BLOCK_READ_A(a_ptr, dot_id * K);
+            A_FLOATN a_read = TILE_K_NOT_DIVISIBLE ? a_ptr[sglid] : BLOCK_READ_A(a_ptr, 0);
+            // uint a_idx = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, (y + dot_id), (k * TILE_K));
+            // A_FLOATN a_read = TILE_K_NOT_DIVISIBLE ? input0[a_idx + sglid] : BLOCK_READ_A((input0 + a_idx), 0);
+            a_ptr += input0_offset;
 #endif
 #else // IS_DYNAMIC
-#if TILE_K_NOT_DIVISIBLE
-            A_FLOATN a_read = a_ptr[dot_id * K + sglid];
-#else // TILE_K_NOT_DIVISIBLE
-            A_FLOATN a_read = BLOCK_READ_A(a_ptr, dot_id * K);
-#endif // TILE_K_NOT_DIVISIBLE
+// # if TILE_K_NOT_DIVISIBLE
+//             A_FLOATN a_read = a_ptr[dot_id * K + sglid];
+// # else // TILE_K_NOT_DIVISIBLE
+//             A_FLOATN a_read = BLOCK_READ_A(a_ptr, dot_id * K);
+// # endif // TILE_K_NOT_DIVISIBLE
 #endif // IS_DYNAMIC
 
             unroll_for (uint subtile_k_id = 0; subtile_k_id < TILE_K / SIMD_WIDTH; subtile_k_id++) {
@@ -234,50 +334,51 @@ KERNEL(gemm_tiled_opt)(
 #endif // TILE_K > SIMD_WIDTH
                 }
             }
-#else // !TRANSPOSE_INPUT0
-            a_tile[dot_id] = BLOCK_READ_A(a_ptr, dot_id * M);
+// # else // !TRANSPOSE_INPUT0
+//             a_tile[dot_id] = BLOCK_READ_A(a_ptr, dot_id * M);
 #endif // !TRANSPOSE_INPUT0
         } // Loading A tile and tile C calculation end
+        a_ptr = a_ptr + input0_offset1 - (input0_offset * tile_m_iterations);
 
-#if !TRANSPOSE_INPUT0
-        a_ptr += TILE_K;
-#else // !TRANSPOSE_INPUT0
-        a_ptr += TILE_K * M;
+// # if !TRANSPOSE_INPUT0
+//         a_ptr += TILE_K;
+// # else // !TRANSPOSE_INPUT0
+//         a_ptr += TILE_K * M;
 
-        // A tile shuffling for TN, TT cases
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col0 = BLOCK_SHUFFLE(a_tile, 0);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col1 = BLOCK_SHUFFLE(a_tile, 1);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col2 = BLOCK_SHUFFLE(a_tile, 2);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col3 = BLOCK_SHUFFLE(a_tile, 3);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col4 = BLOCK_SHUFFLE(a_tile, 4);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col5 = BLOCK_SHUFFLE(a_tile, 5);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col6 = BLOCK_SHUFFLE(a_tile, 6);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col7 = BLOCK_SHUFFLE(a_tile, 7);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col8 = BLOCK_SHUFFLE(a_tile, 8);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col9 = BLOCK_SHUFFLE(a_tile, 9);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col10 = BLOCK_SHUFFLE(a_tile, 10);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col11 = BLOCK_SHUFFLE(a_tile, 11);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col12 = BLOCK_SHUFFLE(a_tile, 12);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col13 = BLOCK_SHUFFLE(a_tile, 13);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col14 = BLOCK_SHUFFLE(a_tile, 14);
-        MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col15 = BLOCK_SHUFFLE(a_tile, 15);
+//         // A tile shuffling for TN, TT cases
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col0 = BLOCK_SHUFFLE(a_tile, 0);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col1 = BLOCK_SHUFFLE(a_tile, 1);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col2 = BLOCK_SHUFFLE(a_tile, 2);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col3 = BLOCK_SHUFFLE(a_tile, 3);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col4 = BLOCK_SHUFFLE(a_tile, 4);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col5 = BLOCK_SHUFFLE(a_tile, 5);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col6 = BLOCK_SHUFFLE(a_tile, 6);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col7 = BLOCK_SHUFFLE(a_tile, 7);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col8 = BLOCK_SHUFFLE(a_tile, 8);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col9 = BLOCK_SHUFFLE(a_tile, 9);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col10 = BLOCK_SHUFFLE(a_tile, 10);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col11 = BLOCK_SHUFFLE(a_tile, 11);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col12 = BLOCK_SHUFFLE(a_tile, 12);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col13 = BLOCK_SHUFFLE(a_tile, 13);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col14 = BLOCK_SHUFFLE(a_tile, 14);
+//         MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile_col15 = BLOCK_SHUFFLE(a_tile, 15);
 
-        a_tile.s0 = a_tile_col0[sglid]; a_tile.s1 = a_tile_col1[sglid];
-        a_tile.s2 = a_tile_col2[sglid]; a_tile.s3 = a_tile_col3[sglid];
-        a_tile.s4 = a_tile_col4[sglid]; a_tile.s5 = a_tile_col5[sglid];
-        a_tile.s6 = a_tile_col6[sglid]; a_tile.s7 = a_tile_col7[sglid];
-        a_tile.s8 = a_tile_col8[sglid]; a_tile.s9 = a_tile_col9[sglid];
-        a_tile.sa = a_tile_col10[sglid]; a_tile.sb = a_tile_col11[sglid];
-        a_tile.sc = a_tile_col12[sglid]; a_tile.sd = a_tile_col13[sglid];
-        a_tile.se = a_tile_col14[sglid]; a_tile.sf = a_tile_col15[sglid];
+//         a_tile.s0 = a_tile_col0[sglid]; a_tile.s1 = a_tile_col1[sglid];
+//         a_tile.s2 = a_tile_col2[sglid]; a_tile.s3 = a_tile_col3[sglid];
+//         a_tile.s4 = a_tile_col4[sglid]; a_tile.s5 = a_tile_col5[sglid];
+//         a_tile.s6 = a_tile_col6[sglid]; a_tile.s7 = a_tile_col7[sglid];
+//         a_tile.s8 = a_tile_col8[sglid]; a_tile.s9 = a_tile_col9[sglid];
+//         a_tile.sa = a_tile_col10[sglid]; a_tile.sb = a_tile_col11[sglid];
+//         a_tile.sc = a_tile_col12[sglid]; a_tile.sd = a_tile_col13[sglid];
+//         a_tile.se = a_tile_col14[sglid]; a_tile.sf = a_tile_col15[sglid];
 
-        // Tile C calculation for TN, TT cases
-        unroll_for (uint dot_id = 0; dot_id < tile_m_iterations; dot_id++) {
-            unroll_for (uint simd_local_id = 0; simd_local_id < SIMD_WIDTH; simd_local_id++) {
-                c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_tile[dot_id], simd_local_id)), b_tile[simd_local_id], c_tile[dot_id]);
-            }
-        } // Tile C calculation for TN, TT cases end
-#endif // !TRANSPOSE_INPUT0
+//         // Tile C calculation for TN, TT cases
+//         unroll_for (uint dot_id = 0; dot_id < tile_m_iterations; dot_id++) {
+//             unroll_for (uint simd_local_id = 0; simd_local_id < SIMD_WIDTH; simd_local_id++) {
+//                 c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_tile[dot_id], simd_local_id)), b_tile[simd_local_id], c_tile[dot_id]);
+//             }
+//         } // Tile C calculation for TN, TT cases end
+// # endif // !TRANSPOSE_INPUT0
 
     } // Full tile calculation end
 
@@ -285,17 +386,37 @@ KERNEL(gemm_tiled_opt)(
     if (TILE_K_NOT_DIVISIBLE) {
         // Loading leftovers of the matrix B
         unroll_for (uint b_load_id = 0; b_load_id < TILE_K_LEFTOVER; b_load_id++) {
-#if HAS_DYNAMIC_N_PADDING
-            b_tile[b_load_id] = b_raw_global_id > N - 1 ? 0 : b_ptr[sglid];
+#if TRANSPOSE_INPUT1 == 0
+        //     if (b_raw_global_id > N - 1) {
+        //         b_tile[b_load_id] = 0;
+        //     } else {
+        //         uint b_idx = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, (b_load_id + K_FULL_ITERATIONS * TILE_K), tile_n_offset);
+        //         b_tile[b_load_id] = BLOCK_READ_B((input1 + b_idx), 0);
+        //     }
+        // }
+        b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
 #else
-            b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
+            // if (b_raw_global_id > N - 1) {
+            //     b_tile[b_load_id] = 0;
+            // } else {
+            //     uint b_idx = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, (b_load_id + K_FULL_ITERATIONS * TILE_K), x);
+            //     b_tile[b_load_id] = input1[b_idx];
+            // }
+        b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
+// # if HAS_DYNAMIC_N_PADDING
+//             b_tile[b_load_id] = b_raw_global_id > N - 1 ? 0 : b_ptr[sglid];
+// # else
+//             b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
+// # endif
 #endif
-            b_ptr += N_PADDED;
+            b_ptr += input1_offset;
         } // Loading leftovers of the matrix B end
 
         // Loading leftovers of the matrix A and tile C calculation
         unroll_for (uint dot_id = 0; dot_id < tile_m_iterations; dot_id++) {
-            INPUT0_TYPE a_read = a_ptr[dot_id * K_PADDED_IN0 + sglid];
+            uint a_idx = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, (y + dot_id), (K_FULL_ITERATIONS * TILE_K + sglid));
+            INPUT0_TYPE a_read = input0[a_idx];
+            // INPUT0_TYPE a_read = a_ptr[dot_id * K_PADDED_IN0 + sglid];
 
             unroll_for (uint simd_id = 0; simd_id < TILE_K_LEFTOVER; simd_id++) {
                 c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read, simd_id)), b_tile[simd_id], c_tile[dot_id]);
@@ -347,6 +468,8 @@ KERNEL(gemm_tiled_opt)(
             ACCUMULATOR_TYPE dequantized = TO_ACCUMULATOR_TYPE(ALPHA) * c_tile[write_id];
 #endif // INPUT2_TYPE
 
+            int out_idx = FUNC_CALL(get_output_index)(OPTIONAL_SHAPE_INFO_TENSOR TR_B, TR_F, TR_W, TR_Z, TR_Y, TR_X);
+            // printf("[%u %u %u %u] --> %d\n", b, f, (y + write_id), x, out_idx);
 #if HAS_FUSED_OPS
 #if FUSED_OPS_CAN_USE_PRELOAD
             FUSED_OPS_CALC_SCALAR;
@@ -354,9 +477,9 @@ KERNEL(gemm_tiled_opt)(
             FUSED_OPS_SCALAR;
 #endif // FUSED_OPS_CAN_USE_PRELOAD
             OUTPUT_TYPE res = FUSED_OPS_RESULT_SCALAR;
-            d_ptr[sglid] = res;
+            output[out_idx] = res;
 #else // HAS_FUSED_OPS
-            d_ptr[sglid] = dequantized;
+            output[out_idx] = dequantized;
 #endif // HAS_FUSED_OPS
         }
 #else // IS_DYNAMIC
@@ -404,7 +527,7 @@ KERNEL(gemm_tiled_opt)(
 
 #endif // TILE_N_NOT_DIVISIBLE || B_VEC_SIZE == 1
 #endif // IS_DYNAMIC
-        d_ptr += N;
+        // d_ptr += N;
 #ifdef INPUT2_TYPE
         c_ptr += N;
 #endif // INPUT2_TYPE
