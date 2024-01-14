@@ -580,7 +580,7 @@ event::ptr primitive_inst::realloc_if_needed() {
     if (_node->is_type<kv_cache>()) {
         auto desc = _node->as<kv_cache>().get_primitive();
         auto& variable = get_network().get_variable(desc->variable_info.variable_id);
-        auto& present_layout = _impl_params->output_layouts[0];
+        auto present_layout = _impl_params->output_layouts[0];
         const auto& sequence_axis = desc->concat_axis;
         auto sequence_axis_legacy =
             kv_cache_inst::get_sequence_axis_legacy(sequence_axis, present_layout.get_partial_shape().size());
@@ -605,6 +605,7 @@ event::ptr primitive_inst::realloc_if_needed() {
                 if (!axis_is_outer_most) {
                     GPU_DEBUG_TRACE_DETAIL << id() << ": Update impl with new output padding" << std::endl;
                     set_shape_change();
+                    _impl_params->output_layouts[0] = present_layout;
                     update_impl();
                 }
                 GPU_DEBUG_TRACE_DETAIL << id() << ": Update variable " << variable.get_name()
