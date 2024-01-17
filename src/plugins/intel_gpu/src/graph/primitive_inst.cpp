@@ -1028,6 +1028,8 @@ void primitive_inst::do_runtime_skip_gather() {
         set_can_be_optimized(false);
         return;
     }
+    set_can_be_optimized(true);
+    return;
     if (input_shape[axis] != 1) {
         auto queue_type = get_network().get_stream().get_queue_type();
         if (queue_type == QueueTypes::out_of_order)
@@ -1243,7 +1245,8 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
         // Try update impl if current impl is dynamic because opt kernel may be added to impl cache through async compilation.
         // Only try update weight and realloc when impl is updated.
-        if (shape_changed() || !_impl || (!shape_changed() && _impl->is_dynamic())) {
+//        if (shape_changed() || !_impl || (!shape_changed() && _impl->is_dynamic())) {
+        if (shape_changed() || !_impl) {
             need_args_update = true;
 
             if (update_impl()) {

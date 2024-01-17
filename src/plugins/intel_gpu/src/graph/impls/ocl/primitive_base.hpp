@@ -280,9 +280,9 @@ protected:
                                    << (needs_completion_event ? " has_completion_event=true" : "") << std::endl;
 
             auto ev = stream.enqueue_kernel(*_kernels[kd_idx], params, args, tmp_events, needs_completion_event);
-            new_events.push_back(ev);
+            if (!instance.get_node().is_type<concatenation>())
+                new_events.push_back(ev);
             all_events.push_back(ev);
-
             tmp_events = new_events;
         }
 
