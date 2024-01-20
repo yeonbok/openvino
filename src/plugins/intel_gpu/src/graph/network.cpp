@@ -1034,8 +1034,6 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         }
 
         execute_primitive(inst, events);
-        if (!inst->get_node().get_selected_impl()->is_cpu())
-            executed_prims++;
 
         if (needs_flushing && executed_prims % flush_frequency == 0) {
             get_stream().flush();
