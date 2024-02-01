@@ -36,7 +36,7 @@
 #include "openvino/pass/manager.hpp"
 #include "openvino/pass/constant_folding.hpp"
 #include "openvino/core/deprecated.hpp"
-#include "validation_util.hpp"
+//#include "validation_util.hpp"
 
 #include "openvino/pass/visualize_tree.hpp"
 #include "transformations/einsum_decomposition.hpp"
