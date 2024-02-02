@@ -26,6 +26,8 @@
 #include <list>
 #include <set>
 
+// #define PROFILE_REUSE_BUFFER
+
 namespace cldnn {
 
 /// @brief Represents network output returned by @ref network::get_output().
@@ -228,6 +230,7 @@ public:
 
 #ifdef GPU_DEBUG_CONFIG
     int64_t get_current_iteration_num() { return iteration; }
+    std::string tags;
 #endif
 
 private:

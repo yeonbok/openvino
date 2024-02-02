@@ -266,6 +266,7 @@ public:
                                        const std::set<primitive_id>& memory_dependencies,
                                        uint32_t net_id,
                                        bool is_internal,
+                                       std::string& tags,
                                        size_t idx = 0,
                                        bool reset_mem = true,
                                        bool is_output_buffer = false,
@@ -372,6 +373,7 @@ protected:
     bool _needs_completion_event = false;
 
     size_t _max_output_layout_count = 0;
+    cldnn::layout _max_output_layout;
     std::vector<size_t> max_intermediates_memory_sizes;
 
     std::vector<memory::ptr> allocate_outputs(kernel_impl_params* updated_params = nullptr, bool reset_mem = true, bool runtime_alloc = false);
@@ -455,6 +457,8 @@ protected:
     // and store mapping onto original perf_clounter_key for further data analysis and dumps
     std::unordered_map<size_t, std::tuple<int64_t, size_t>> _profiling_data;
     std::unordered_map<size_t, instrumentation::perf_counter_key> _profiling_info;
+
+    std::string mem_tags = std::string();
 };
 
 /*
