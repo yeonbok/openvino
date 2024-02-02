@@ -563,7 +563,12 @@ event::ptr primitive_inst::realloc_if_needed() {
     bool dump_output_layout = false;
     auto origin_max_output_layout_count = _max_output_layout_count;
     // If we allocated too large memory, reclaim the memory.
+#if 1
+    if ((updated_layout.get_buffer_size().count() * 10 < _max_output_layout_count)
+        && ((_max_output_layout_count - updated_layout.get_buffer_size().count()) < (200 * 1024))) {
+#else
     if (updated_layout.get_buffer_size().count() * 10 < _max_output_layout_count) {
+#endif
         GPU_DEBUG_TRACE_DETAIL << id() << ": Updated output size " << updated_layout.count()
                                << " is much smaller than current memory size! " << _max_output_layout_count
                                << "Reset memory" << std::endl;
