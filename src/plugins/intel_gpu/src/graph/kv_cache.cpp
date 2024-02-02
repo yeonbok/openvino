@@ -96,31 +96,6 @@ void kv_cache_inst::post_realloc_optimization(const layout& allocated_layout) {
             // No need to copy, still it can be optimized
             GPU_DEBUG_TRACE_DETAIL << id() << ": Set can_be_optimized = true " << std::endl;
             {
-                // Garbage collection of kv cache meories :
-                // Once the corresponding kv cache's execution is done, the input mems are no
-                // longer needed and can be released.
-                GPU_DEBUG_TRACE_DETAIL << ": Check releasable kv cache memories" << std::endl;
-                std::vector<primitive_id> mem_deps_eol;
-                for (auto kms : _network.get_kv_cache_mem_deps()) {
-                    const auto kv_cache_id = kms.first;
-                    auto queue_type = get_network().get_stream().get_queue_type();
-                    if (queue_type == QueueTypes::in_order ||
-                        (_network.has_event(kv_cache_id) && _network.get_primitive_event(kv_cache_id)->is_set())) {
-                        for (auto mem_deps : kms.second) {
-                            mem_deps_eol.push_back(mem_deps);
-                        }
-                    }
-                }
-                for (auto mem_dep : mem_deps_eol) {
-                    auto mem_dep_inst = _network.get_primitive(mem_dep);
-                    GPU_DEBUG_TRACE_DETAIL << "Release output memory of " << mem_dep_inst->id() << ": "
-                              << ((mem_dep_inst->_outputs.size() > 0 && mem_dep_inst->_outputs[0]) ? mem_dep_inst->_outputs[0]->buffer_ptr() : " 0x0")
-                              << std::endl;
-
-                    mem_dep_inst->_outputs[0] = nullptr;
-                }
-            }
-            {
                 // Add mem_deps for current kv_cache op for future release
                 GPU_DEBUG_TRACE_DETAIL << "Record kv cache mem deps for future garbage collection " << id() << ": " << std::endl;
                 if (_deps[0].first->get_node().is_type<gather>() && _deps[0].first->can_be_optimized()) {

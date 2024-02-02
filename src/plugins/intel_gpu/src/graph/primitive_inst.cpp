@@ -223,6 +223,13 @@ void primitive_inst::check_memory_to_set(const memory& mem, const layout& layout
     }
 }
 
+void primitive_inst::release_output_memory() {
+    for(auto o : _outputs) {
+        o = nullptr;
+    }
+    _mem_allocated = false;
+}
+
 event::ptr primitive_inst::set_output_memory(memory::ptr mem_new, bool check, size_t idx) {
     auto& eng = _network.get_engine();
     // skip all the buzz if no action actually required

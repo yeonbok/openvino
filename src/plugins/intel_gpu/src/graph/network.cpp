@@ -38,6 +38,7 @@
 #include "to_string_utils.h"
 #include "kernels_cache.hpp"
 #include "program_dump_graph.h"
+#include "kv_cache_inst.h"
 
 // TODO: Remove once we have an abstraction for kernels_cache
 #include "kernel_base.h"
@@ -1032,7 +1033,33 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
                 }
             }
         }
+        if (inst->get_node().is_type<kv_cache>()) {
+            // Garbage collection of kv cache meories :
+            // Once the corresponding kv cache's execution is done, the input mems are no
+            // longer needed and can be released.
+            GPU_DEBUG_TRACE_DETAIL << ": Check releasable kv cache memories" << std::endl;
+            std::vector<primitive_id> mem_deps_eol;
+            for (auto kms : _kv_cache_mem_deps) {
+                const auto kv_cache_id = kms.first;
+                auto queue_type = get_stream().get_queue_type();
+                if (queue_type == QueueTypes::in_order ||
+                    (has_event(kv_cache_id) && get_primitive_event(kv_cache_id)->is_set())) {
+                    for (auto mem_deps : kms.second) {
+                        mem_deps_eol.push_back(mem_deps);
+                    }
+                }
+            }
+            for (auto mem_dep : mem_deps_eol) {
+                auto mem_dep_inst = get_primitive(mem_dep);
+                GPU_DEBUG_TRACE_DETAIL << "Release output memory of " << mem_dep_inst->id() << ": "
+                                       << ((mem_dep_inst->output_memory_ptr())
+                                               ? mem_dep_inst->output_memory_ptr()->buffer_ptr()
+                                               : " 0xffffffff")
+                                       << std::endl;
 
+                mem_dep_inst->release_output_memory();
+            }
+        }
         execute_primitive(inst, events);
         executed_prims++;
         if (needs_flushing && executed_prims % flush_frequency == 0)
