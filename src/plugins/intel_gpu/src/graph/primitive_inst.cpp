@@ -224,7 +224,7 @@ void primitive_inst::check_memory_to_set(const memory& mem, const layout& layout
 }
 
 void primitive_inst::release_output_memory() {
-    for(auto o : _outputs) {
+    for(auto& o : _outputs) {
         o = nullptr;
     }
     _mem_allocated = false;
