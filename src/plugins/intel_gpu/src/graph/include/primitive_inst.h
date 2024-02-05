@@ -29,6 +29,13 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <chrono>
+
+typedef std::chrono::time_point<std::chrono::system_clock> time_point;
+typedef std::chrono::high_resolution_clock Time;
+#define TIMEDIFF(start, end) (static_cast<double>((std::chrono::duration_cast<std::chrono::microseconds>((end) - (start))).count()) / 1000.f);
+
+// #define RECLAIM_MEMORY 1
 
 namespace cldnn {
 
@@ -300,6 +307,10 @@ public:
 
     virtual void update_output_memory() {}
 
+    double time_execute = 0;
+    double time_realloc_if_needed = 0;
+    std::string mem_tags = std::string();
+
 protected:
     primitive_inst(network& network, program_node const& node, bool allocate_memory);
 
@@ -457,8 +468,6 @@ protected:
     // and store mapping onto original perf_clounter_key for further data analysis and dumps
     std::unordered_map<size_t, std::tuple<int64_t, size_t>> _profiling_data;
     std::unordered_map<size_t, instrumentation::perf_counter_key> _profiling_info;
-
-    std::string mem_tags = std::string();
 };
 
 /*

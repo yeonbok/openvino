@@ -463,6 +463,7 @@ event::ptr primitive_inst::realloc_if_needed() {
             }
             this->_outputs[0] = concat_inst->_outputs[0];
             GPU_DEBUG_TRACE_DETAIL << id() << ": use concat user's memory " << this->_outputs[0]->buffer_ptr() << std::endl;
+            mem_tags = "none";
             return ev;
         }
     }
@@ -472,8 +473,10 @@ event::ptr primitive_inst::realloc_if_needed() {
     OPENVINO_ASSERT(actual_layout.is_static(), "[GPU] Can't realloc mem for dynamic layout");
 
     // input_layout node is supposed to always use external memory in dynamic case
-    if (_node->is_type<input_layout>())
+    if (_node->is_type<input_layout>()) {
+        mem_tags = "none";
         return ev;
+    }
 
     auto& sp = *get_network().get_shape_predictor();
     auto dt_size = ov::element::Type(actual_layout.data_type).bitwidth();
@@ -493,6 +496,7 @@ event::ptr primitive_inst::realloc_if_needed() {
                 _outputs[0] = variable.get_memory();
                 // To record shape predictor
                 auto prealloc_info = sp.predict_preallocation_shape(id(), _impl_params->output_layouts[0].get_shape(), dt_size, true);
+                mem_tags = "none";
                 return ev;
             } else if (_outputs[0] && variable.get_memory() && get_network().get_engine().is_the_same_buffer(*_outputs[0], *variable.get_memory())) {
                 GPU_DEBUG_TRACE_DETAIL << id() << " : realloc_if_needed: Reset output mem" << std::endl;
@@ -513,6 +517,7 @@ event::ptr primitive_inst::realloc_if_needed() {
         if (can_be_optimized()) {
             _max_output_layout_count = variable.get_actual_mem_size() / (dt_size / 8);
             _max_output_layout = cldnn::layout();
+            mem_tags="none";
             return ev;
         }
     }
@@ -541,6 +546,7 @@ event::ptr primitive_inst::realloc_if_needed() {
     if (_node->is_type<gather>() || _node->is_type<permute>() || _node->is_type<reshape>() || _node->is_type<reorder>()) {
         if (can_be_optimized()) {
             _max_output_layout_count = _deps[0].first->_max_output_layout_count;
+            mem_tags = "none";
             return ev;
         } else if (_outputs[0] && dep_memory_ptr(0) &&
                    _network.get_engine().is_the_same_buffer(dep_memory(0), output_memory(0))) {
@@ -563,27 +569,19 @@ event::ptr primitive_inst::realloc_if_needed() {
     bool dump_output_layout = false;
     auto origin_max_output_layout_count = _max_output_layout_count;
     // If we allocated too large memory, reclaim the memory.
-#if 1
-    if ((updated_layout.get_buffer_size().count() * 10 < _max_output_layout_count)
-        && ((_max_output_layout_count - updated_layout.get_buffer_size().count()) < (200 * 1024))) {
-#else
+#ifdef  RECLAIM_MEMORY
     if (updated_layout.get_buffer_size().count() * 10 < _max_output_layout_count) {
-#endif
         GPU_DEBUG_TRACE_DETAIL << id() << ": Updated output size " << updated_layout.count()
                                << " is much smaller than current memory size! " << _max_output_layout_count
                                << "Reset memory" << std::endl;
-#ifdef PROFILE_REUSE_BUFFER
-        if (origin_can_reuse_buffer) {
-            dump_output_layout = true;
-        }
-#endif
         _max_output_layout_count = 0;
     }
-
+#endif
     bool can_reuse_buffer = _outputs[0] && updated_layout.count() <= _max_output_layout_count;
     // Handle runtime dynamic concat optimization
     if (_node->is_type<concatenation>() && can_be_optimized() && allocation_done_by_other) {
         allocation_done_by_other = false;
+        mem_tags = "none";
         return ev;
     }
 
@@ -616,41 +614,42 @@ event::ptr primitive_inst::realloc_if_needed() {
             GPU_DEBUG_TRACE_DETAIL << id() << " : Need reset output memory considering user" << std::endl;
             ev = _outputs[0]->fill(_network.get_stream());
         }
+        mem_tags = "reuse_buffer";
     } else {
         GPU_DEBUG_TRACE_DETAIL << id() << ": realloc output memory. "
                                <<  " Current buffer_size=" << _max_output_layout_count
                                <<  " Requested buffer_size=" << updated_layout.count() << std::endl;
         _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
 
-#ifdef PROFILE_REUSE_BUFFER
-        if (dump_output_layout) {
-            std::string dump_file = "C:\\dev\\ahnyoung\\cldnn.00\\dump_reuse_buffer_usage.csv";
-            bool is_empty_file = !is_opened_already;
-            if (!is_opened_already) {
-                is_opened_already = true;
-                std::ifstream r_dump(dump_file.c_str());
-                if (!r_dump) {
-                    is_empty_file = true;
-                } else {
-                    is_empty_file = (r_dump.peek() == std::ifstream::traits_type::eof());
-                }
-            }
-            std::ofstream f_dump(dump_file.c_str(), std::ios_base::out | std::ios::app);
-            if (f_dump.is_open()) {
-                if (is_empty_file) {
-                    f_dump << "net,prim_id,origin_max_layout,origin_max_layout_count,origin_max_layout_count_before_update"
-                                "new_max_layout,new_max_layout_count,updated_layout,updated_layout_count,mem_type" << std::endl;
-                }
-                auto new_max_output_layout_count = updated_params.output_layouts[0].count();
-                auto new_max_output_layout = updated_params.output_layouts[0];
-                f_dump << get_network().tags << ","
-                    << id() << ","
-                    << _max_output_layout.to_short_string() << "," << _max_output_layout_count << "," << origin_max_output_layout_count << ","
-                    << new_max_output_layout.to_short_string() << "," << new_max_output_layout_count << ","
-                    << updated_layout.to_short_string() << "," << updated_layout.count() << "," << mem_tags << std::endl;
-            }
-        }
-#endif
+// #ifdef PROFILE_REUSE_BUFFER
+//         if (dump_output_layout) {
+//             std::string dump_file = "C:\\dev\\ahnyoung\\cldnn.00\\dump_reuse_buffer_usage.csv";
+//             bool is_empty_file = !is_opened_already;
+//             if (!is_opened_already) {
+//                 is_opened_already = true;
+//                 std::ifstream r_dump(dump_file.c_str());
+//                 if (!r_dump) {
+//                     is_empty_file = true;
+//                 } else {
+//                     is_empty_file = (r_dump.peek() == std::ifstream::traits_type::eof());
+//                 }
+//             }
+//             std::ofstream f_dump(dump_file.c_str(), std::ios_base::out | std::ios::app);
+//             if (f_dump.is_open()) {
+//                 if (is_empty_file) {
+//                     f_dump << "net,prim_id,origin_max_layout,origin_max_layout_count,origin_max_layout_count_before_update"
+//                                 "new_max_layout,new_max_layout_count,updated_layout,updated_layout_count,mem_type" << std::endl;
+//                 }
+//                 auto new_max_output_layout_count = updated_params.output_layouts[0].count();
+//                 auto new_max_output_layout = updated_params.output_layouts[0];
+//                 f_dump << get_network().tags << ","
+//                     << id() << ","
+//                     << _max_output_layout.to_short_string() << "," << _max_output_layout_count << "," << origin_max_output_layout_count << ","
+//                     << new_max_output_layout.to_short_string() << "," << new_max_output_layout_count << ","
+//                     << updated_layout.to_short_string() << "," << updated_layout.count() << "," << mem_tags << std::endl;
+//             }
+//         }
+// #endif
         // TODO : need to handle multiple outputs
         _max_output_layout_count = updated_params.output_layouts[0].get_buffer_size().count();
         _max_output_layout = updated_params.output_layouts[0];
@@ -1320,7 +1319,10 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                 auto ev = update_weights();
                 if (ev)
                     dependencies.push_back(ev);
+                auto start = Time::now();
                 auto ev_reset = realloc_if_needed();
+                auto end = Time::now();
+                time_realloc_if_needed = TIMEDIFF(start, end);
                 if (ev_reset)
                     dependencies.push_back(ev_reset);
             }
@@ -1391,7 +1393,10 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
     {
         GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::inference);
+        auto start = Time::now();
         auto ev = _impl->execute(dependencies, *this);
+        auto end = Time::now();
+        time_execute = TIMEDIFF(start, end);
 
         GPU_DEBUG_IF(!debug_config->dump_profiling_data.empty()) {
             get_network().get_stream().wait_for_events({ev});

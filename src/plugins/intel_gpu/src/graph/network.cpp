@@ -847,16 +847,27 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 #ifdef PROFILE_REUSE_BUFFER
     {
         std::stringstream str_net;
-        str_net << "net_info[" << get_id() << ";";
-        str_net << "in_";
+        // str_net << get_id() << ",";
+        str_net << iteration << ",";
+        str_net << _inputs.size() << "_";
+        size_t in_idx = 0;
         for (auto& inst : _inputs) {
             str_net << inst->get_output_layout(0).to_short_string();
-            break;
+            if (in_idx < 4) {
+                if (in_idx < (_inputs.size() - 1))
+                    str_net << "_";
+            } else {
+                str_net << "...";
+                break;
+            }
+            in_idx++;
         }
-        str_net << ";num_iter:" << iteration << "]";
         this->tags = str_net.str();
     }
 #endif
+
+    std::vector<std::string> logs;
+    double total_realloc_time = 0;
 
     int64_t curr_iter = -1;
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -944,7 +955,9 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     const size_t flush_frequency = needs_flushing ? 16 : 0;
     size_t executed_prims = 0;
 
+    size_t exec_idx = 0;
     for (auto& inst : _exec_order) {
+        exec_idx++;
         // Load binary dump for input layers
         GPU_DEBUG_IF(!debug_config->load_layers_raw_dump.empty()) {
             const std::string layer_name = inst->id();
@@ -1049,6 +1062,19 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         }
 
         execute_primitive(inst, events);
+        if (curr_iter > 0) {
+            if (inst->outputs_allocated() && !inst->is_input()
+                    && !inst->can_be_optimized() && inst->mem_tags != "none") {
+                auto& output_memory_layout = inst->output_memory_ptr(0)->get_layout();
+                total_realloc_time += inst->time_realloc_if_needed;                
+                std::stringstream ss_log;
+                ss_log << tags << "," << (exec_idx - 1) << "," << inst->id() 
+                        << "," << output_memory_layout.to_short_string()
+                        << "," << output_memory_layout.get_buffer_size().count()
+                        << "," << inst->time_realloc_if_needed << "," << inst->time_execute << "," << inst->mem_tags << std::endl;
+                logs.push_back(ss_log.str());
+            }
+        }
         executed_prims++;
         if (needs_flushing && executed_prims % flush_frequency == 0)
             get_stream().flush();
@@ -1180,6 +1206,32 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 
     GPU_DEBUG_IF(debug_config->dump_runtime_memory_pool > 0) {
         get_memory_pool().dump(get_id());
+    }
+
+    if (total_realloc_time > 0 && !logs.empty()) {
+#ifdef  RECLAIM_MEMORY
+        std::string dump_file = "C:\\dev\\ahnyoung\\cldnn.00\\dump_profiling_allocation_reclaim.csv";
+#else
+        std::string dump_file = "C:\\dev\\ahnyoung\\cldnn.00\\dump_profiling_allocation_no_reclaim.csv";
+#endif
+        bool is_empty_file = false;
+        if (!is_empty_file) {
+            std::ifstream r_dump(dump_file.c_str());
+            if (!r_dump) {
+                is_empty_file = true;
+            } else {
+                is_empty_file = (r_dump.peek() == std::ifstream::traits_type::eof());
+            }
+        }
+        std::ofstream f_dump(dump_file.c_str(), std::ios_base::out | std::ios::app);
+        if (f_dump.is_open()) {
+            if (is_empty_file) {
+                f_dump << "net_iters,net_inputs,exec_order,prim_id,output_layout,mem_count,realloc_if_needed(ms),execute(ms),tags" << std::endl;
+            }
+            for (auto& l : logs) {
+                f_dump << l;
+            }
+        }
     }
 }
 
