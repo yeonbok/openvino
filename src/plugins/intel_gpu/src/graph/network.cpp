@@ -847,7 +847,6 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 #ifdef PROFILE_REUSE_BUFFER
     {
         std::stringstream str_net;
-        // str_net << get_id() << ",";
         str_net << iteration << ",";
         str_net << _inputs.size() << "_";
         size_t in_idx = 0;
@@ -1208,7 +1207,9 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         get_memory_pool().dump(get_id());
     }
 
+    std::cout << tags << std::endl;
     if (total_realloc_time > 0 && !logs.empty()) {
+        std::cout << "** dump data" << std::endl;
 #ifdef  RECLAIM_MEMORY
         std::string dump_file = "C:\\dev\\ahnyoung\\cldnn.00\\dump_profiling_allocation_reclaim.csv";
 #else
@@ -1228,6 +1229,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
             if (is_empty_file) {
                 f_dump << "net_iters,net_inputs,exec_order,prim_id,output_layout,mem_count,realloc_if_needed(ms),execute(ms),tags" << std::endl;
             }
+            f_dump << tags << ",,,,,,," << std::endl;
             for (auto& l : logs) {
                 f_dump << l;
             }
