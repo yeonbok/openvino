@@ -307,9 +307,9 @@ public:
 
     virtual void update_output_memory() {}
 
-    double time_execute = 0;
-    double time_realloc_if_needed = 0;
-    std::string mem_tags = std::string();
+    double time_execute = -1.0f;
+    double time_realloc_if_needed = -1.0f;
+    std::string mem_tags = "";
 
 protected:
     primitive_inst(network& network, program_node const& node, bool allocate_memory);

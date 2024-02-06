@@ -238,7 +238,7 @@ memory::ptr memory_pool::get_from_non_padded_pool_with_tags(const layout& layout
     }
     GPU_DEBUG_LOG << "[" << id << ": output]" << std::endl;
     // didn't find anything for you? create new resource
-    tag = "alloc";
+    tag = "alloc.pool";
     auto mem = alloc_memory(layout, type, reset);
     {
         _non_padded_pool.emplace(layout.bytes_count(),
@@ -273,14 +273,14 @@ memory::ptr memory_pool::get_from_padded_pool_with_tags(const layout& layout,
                 return ret_mem;
             }
         }
-        tag = "alloc";
+        tag = "alloc.pool";
         auto mem = alloc_memory(layout, type);
         first_level_cache->second.emplace_back(
             memory_record({{id, network_id}}, mem, network_id, type));
         return mem;
     }
     GPU_DEBUG_LOG << "[" << id << ": output]" << std::endl;
-    tag = "alloc";
+    tag = "alloc.pool";
     auto mem = alloc_memory(layout, type);
     std::list<memory_record> list = {memory_record({{id, network_id}}, mem, network_id, type)};
     _padded_pool.emplace(layout, std::move(list));
@@ -310,7 +310,7 @@ memory::ptr memory_pool::get_from_across_networks_pool_with_tags(const layout& l
         }
         ++it;
     }
-    tag = "alloc";
+    tag = "alloc.pool";
     auto mem = alloc_memory(layout, type);
     {
         _no_reusable_pool.emplace(layout.bytes_count(),

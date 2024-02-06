@@ -865,6 +865,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     }
 #endif
 
+    auto net_start = Time::now();
     std::vector<std::string> logs;
     double total_realloc_time = 0;
 
@@ -1065,12 +1066,14 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
             if (inst->outputs_allocated() && !inst->is_input()
                     && !inst->can_be_optimized() && inst->mem_tags != "none") {
                 auto& output_memory_layout = inst->output_memory_ptr(0)->get_layout();
-                total_realloc_time += inst->time_realloc_if_needed;                
+                if (inst->time_realloc_if_needed > 0.f)
+                    total_realloc_time += inst->time_realloc_if_needed;                
                 std::stringstream ss_log;
                 ss_log << tags << "," << (exec_idx - 1) << "," << inst->id() 
                         << "," << output_memory_layout.to_short_string()
                         << "," << output_memory_layout.get_buffer_size().count()
-                        << "," << inst->time_realloc_if_needed << "," << inst->time_execute << "," << inst->mem_tags << std::endl;
+                        << "," << inst->time_realloc_if_needed << "," << inst->time_execute
+                        << "," << ((inst->time_realloc_if_needed > 0.f) ? inst->mem_tags : "") << std::endl;
                 logs.push_back(ss_log.str());
             }
         }
@@ -1207,9 +1210,10 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         get_memory_pool().dump(get_id());
     }
 
-    std::cout << tags << std::endl;
+    auto net_end = Time::now();
+    auto net_duration = TIMEDIFF(net_start, net_end);
+    std::cout << tags << ", execute time: " << net_duration << " ms" << std::endl;
     if (total_realloc_time > 0 && !logs.empty()) {
-        std::cout << "** dump data" << std::endl;
 #ifdef  RECLAIM_MEMORY
         std::string dump_file = "C:\\dev\\ahnyoung\\cldnn.00\\dump_profiling_allocation_reclaim.csv";
 #else
@@ -1234,6 +1238,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
                 f_dump << l;
             }
         }
+        std::cout << "** dump data to the " << dump_file << std::endl;
     }
 }
 
