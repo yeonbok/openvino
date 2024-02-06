@@ -1066,13 +1066,14 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
             if (inst->outputs_allocated() && !inst->is_input()
                     && !inst->can_be_optimized() && inst->mem_tags != "none") {
                 auto& output_memory_layout = inst->output_memory_ptr(0)->get_layout();
-                if (inst->time_realloc_if_needed > 0.f)
-                    total_realloc_time += inst->time_realloc_if_needed;                
+                total_realloc_time += inst->time_realloc_if_needed;        
                 std::stringstream ss_log;
                 ss_log << tags << "," << (exec_idx - 1) << "," << inst->id() 
                         << "," << output_memory_layout.to_short_string()
                         << "," << output_memory_layout.get_buffer_size().count()
-                        << "," << inst->time_realloc_if_needed << "," << inst->time_execute
+                        << "," << inst->time_realloc_if_needed 
+                        << "," << inst->time_allocation
+                        << "," << inst->time_execute
                         << "," << ((inst->time_realloc_if_needed > 0.f) ? inst->mem_tags : "") << std::endl;
                 logs.push_back(ss_log.str());
             }
@@ -1213,7 +1214,8 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     auto net_end = Time::now();
     auto net_duration = TIMEDIFF(net_start, net_end);
     std::cout << tags << ", execute time: " << net_duration << " ms" << std::endl;
-    if (total_realloc_time > 0 && !logs.empty()) {
+    // if (total_realloc_time > 0 && !logs.empty()) {
+    if (curr_iter == 7) {
 #ifdef  RECLAIM_MEMORY
         std::string dump_file = "C:\\dev\\ahnyoung\\cldnn.00\\dump_profiling_allocation_reclaim.csv";
 #else
@@ -1231,9 +1233,10 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         std::ofstream f_dump(dump_file.c_str(), std::ios_base::out | std::ios::app);
         if (f_dump.is_open()) {
             if (is_empty_file) {
-                f_dump << "net_iters,net_inputs,exec_order,prim_id,output_layout,mem_count,realloc_if_needed(ms),execute(ms),tags" << std::endl;
+                f_dump << "net_iters,net_inputs,exec_order,prim_id,output_layout,mem_count,realloc(ms),"
+                            << "realloc_alloc(ms),execute(ms),tags,common" << std::endl;
             }
-            f_dump << tags << ",,,,,,," << std::endl;
+            // f_dump << tags << ",,,,,,,," << std::endl;
             for (auto& l : logs) {
                 f_dump << l;
             }

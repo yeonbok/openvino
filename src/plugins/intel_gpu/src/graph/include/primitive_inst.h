@@ -35,7 +35,7 @@ typedef std::chrono::time_point<std::chrono::system_clock> time_point;
 typedef std::chrono::high_resolution_clock Time;
 #define TIMEDIFF(start, end) (static_cast<double>((std::chrono::duration_cast<std::chrono::microseconds>((end) - (start))).count()) / 1000.f);
 
-// #define RECLAIM_MEMORY 1
+#define RECLAIM_MEMORY 1
 
 namespace cldnn {
 
@@ -307,9 +307,10 @@ public:
 
     virtual void update_output_memory() {}
 
-    double time_execute = -1.0f;
-    double time_realloc_if_needed = -1.0f;
+    double time_execute = 0.f;
+    double time_realloc_if_needed = 0.f;
     std::string mem_tags = "";
+    double time_allocation = 0.f;
 
 protected:
     primitive_inst(network& network, program_node const& node, bool allocate_memory);

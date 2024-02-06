@@ -565,9 +565,6 @@ event::ptr primitive_inst::realloc_if_needed() {
     }
 
 
-    bool origin_can_reuse_buffer = _outputs[0] && updated_layout.count() <= _max_output_layout_count;
-    bool dump_output_layout = false;
-    auto origin_max_output_layout_count = _max_output_layout_count;
     // If we allocated too large memory, reclaim the memory.
 #ifdef  RECLAIM_MEMORY
     if (updated_layout.get_buffer_size().count() * 10 < _max_output_layout_count) {
@@ -592,6 +589,7 @@ event::ptr primitive_inst::realloc_if_needed() {
         // If debug config is set, repsect the config most
         tmp_prealloc_count = -1;
     }
+
     prealloc_info = sp.predict_preallocation_shape(id(), current_shape, dt_size, can_reuse_buffer, tmp_prealloc_count);
 
     if (prealloc_info.first && sp.can_preallocate(ov::shape_size(prealloc_info.second) * dt_size)) {
@@ -603,6 +601,7 @@ event::ptr primitive_inst::realloc_if_needed() {
     if (updated_params.output_layouts[0].get_buffer_size().count() < updated_layout.get_buffer_size().count())
         updated_params.output_layouts[0] = updated_layout;
 
+    auto start_allocation = Time::now();
     if (can_reuse_buffer) {
         GPU_DEBUG_TRACE_DETAIL << id() << ": reuse previously allocated output buffer - "
                                << actual_layout.count() << "/" << _max_output_layout_count
@@ -620,40 +619,13 @@ event::ptr primitive_inst::realloc_if_needed() {
                                <<  " Current buffer_size=" << _max_output_layout_count
                                <<  " Requested buffer_size=" << updated_layout.count() << std::endl;
         _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
-
-// #ifdef PROFILE_REUSE_BUFFER
-//         if (dump_output_layout) {
-//             std::string dump_file = "C:\\dev\\ahnyoung\\cldnn.00\\dump_reuse_buffer_usage.csv";
-//             bool is_empty_file = !is_opened_already;
-//             if (!is_opened_already) {
-//                 is_opened_already = true;
-//                 std::ifstream r_dump(dump_file.c_str());
-//                 if (!r_dump) {
-//                     is_empty_file = true;
-//                 } else {
-//                     is_empty_file = (r_dump.peek() == std::ifstream::traits_type::eof());
-//                 }
-//             }
-//             std::ofstream f_dump(dump_file.c_str(), std::ios_base::out | std::ios::app);
-//             if (f_dump.is_open()) {
-//                 if (is_empty_file) {
-//                     f_dump << "net,prim_id,origin_max_layout,origin_max_layout_count,origin_max_layout_count_before_update"
-//                                 "new_max_layout,new_max_layout_count,updated_layout,updated_layout_count,mem_type" << std::endl;
-//                 }
-//                 auto new_max_output_layout_count = updated_params.output_layouts[0].count();
-//                 auto new_max_output_layout = updated_params.output_layouts[0];
-//                 f_dump << get_network().tags << ","
-//                     << id() << ","
-//                     << _max_output_layout.to_short_string() << "," << _max_output_layout_count << "," << origin_max_output_layout_count << ","
-//                     << new_max_output_layout.to_short_string() << "," << new_max_output_layout_count << ","
-//                     << updated_layout.to_short_string() << "," << updated_layout.count() << "," << mem_tags << std::endl;
-//             }
-//         }
-// #endif
         // TODO : need to handle multiple outputs
         _max_output_layout_count = updated_params.output_layouts[0].get_buffer_size().count();
         _max_output_layout = updated_params.output_layouts[0];
     }
+    auto end_allocation = Time::now();
+    time_allocation = TIMEDIFF(start_allocation, end_allocation);
+
     // Set variable memory same as output memory
     if (_node->is_type<kv_cache>()) {
         auto desc = _node->as<kv_cache>().get_primitive();
