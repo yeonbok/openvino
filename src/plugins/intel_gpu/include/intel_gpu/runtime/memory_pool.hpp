@@ -134,6 +134,25 @@ public:
                                              const primitive_id& id,
                                              uint32_t network_id,
                                              allocation_type type);
+ 
+    memory_ptr get_from_non_padded_pool_with_tags(const layout& layout,
+                                        const primitive_id& id,
+                                        uint32_t network_id,
+                                        const std::set<primitive_id>&,
+                                        allocation_type type,
+                                        std::string& tag,
+                                        bool reset = true);
+    memory_ptr get_from_padded_pool_with_tags(const layout& layout,
+                                    const primitive_id& id,
+                                    uint32_t network_id,
+                                    const std::set<primitive_id>& restrictions,
+                                    allocation_type type,
+                                    std::string& tag);
+    memory_ptr get_from_across_networks_pool_with_tags(const layout& layout,
+                                             const primitive_id& id,
+                                             uint32_t network_id,
+                                             allocation_type type,
+                                             std::string& tag);
     void clear_pool_for_network(uint32_t network_id);
     void release_memory(memory* memory, const primitive_id& id, uint32_t network_id);
 

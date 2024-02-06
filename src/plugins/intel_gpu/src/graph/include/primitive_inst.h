@@ -35,7 +35,7 @@ typedef std::chrono::time_point<std::chrono::system_clock> time_point;
 typedef std::chrono::high_resolution_clock Time;
 #define TIMEDIFF(start, end) (static_cast<double>((std::chrono::duration_cast<std::chrono::microseconds>((end) - (start))).count()) / 1000.f);
 
-#define RECLAIM_MEMORY 1
+// #define RECLAIM_MEMORY 1
 
 namespace cldnn {
 

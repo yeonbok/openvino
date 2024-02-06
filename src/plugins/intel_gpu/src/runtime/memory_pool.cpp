@@ -212,6 +212,113 @@ memory::ptr memory_pool::get_from_across_networks_pool(const layout& layout,
     return mem;
 }
 
+memory::ptr memory_pool::get_from_non_padded_pool_with_tags(const layout& layout,
+                                                  const primitive_id& id,
+                                                  uint32_t network_id,
+                                                  const std::set<primitive_id>& restrictions,
+                                                  allocation_type type,
+                                                  std::string& tag,
+                                                  bool reset) {
+    auto it = _non_padded_pool.lower_bound(layout.bytes_count());
+    while (it != _non_padded_pool.end()) {
+        if (it->second._network_id == network_id &&
+            it->second._type == type &&
+            it->second._memory->get_layout().format != format::fs_b_yx_fsv32 &&
+            layout.format != format::fs_b_yx_fsv32 &&
+            ((layout.format != format::b_fs_yx_fsv32 && layout.format != format::b_fs_zyx_fsv32) ||
+             (layout.feature() % 32 == 0)) &&
+            !has_conflict(it->second._users, restrictions, network_id)) {
+            it->second._users.insert(memory_user(id, network_id));
+            auto ret_mem = _engine->reinterpret_buffer(*it->second._memory, layout);
+            tag = "pool";
+            return ret_mem;
+        } else {
+            ++it;
+        }
+    }
+    GPU_DEBUG_LOG << "[" << id << ": output]" << std::endl;
+    // didn't find anything for you? create new resource
+    tag = "alloc";
+    auto mem = alloc_memory(layout, type, reset);
+    {
+        _non_padded_pool.emplace(layout.bytes_count(),
+                                 memory_record({{id, network_id}}, mem, network_id, type));
+    }
+    return mem;
+}
+
+memory::ptr memory_pool::get_from_padded_pool_with_tags(const layout& layout,
+                                              const primitive_id& id,
+                                              uint32_t network_id,
+                                              const std::set<primitive_id>& restrictions,
+                                              allocation_type type,
+                                              std::string& tag) {
+    auto first_level_cache = _padded_pool.find(layout);
+
+    if (first_level_cache != _padded_pool.end()) {
+        for (auto& rec_list : first_level_cache->second) {
+            if (rec_list._network_id == network_id &&
+                rec_list._type == type &&
+                ((layout.format != format::b_fs_yx_fsv32 && layout.format != format::b_fs_zyx_fsv32) ||
+                 (layout.feature() % 32 == 0)) &&
+                // TODO: check if this condition always correct
+                layout.feature() <= rec_list._memory->get_layout().feature() &&
+                layout.batch() <= rec_list._memory->get_layout().batch() &&
+                rec_list._memory->get_layout().format != format::fs_b_yx_fsv32 &&
+                layout.format != format::fs_b_yx_fsv32 &&
+                !has_conflict(rec_list._users, restrictions, network_id)) {
+                rec_list._users.insert({id, network_id});
+                auto ret_mem = _engine->reinterpret_buffer(*(rec_list._memory), layout);
+                tag = "pool";
+                return ret_mem;
+            }
+        }
+        tag = "alloc";
+        auto mem = alloc_memory(layout, type);
+        first_level_cache->second.emplace_back(
+            memory_record({{id, network_id}}, mem, network_id, type));
+        return mem;
+    }
+    GPU_DEBUG_LOG << "[" << id << ": output]" << std::endl;
+    tag = "alloc";
+    auto mem = alloc_memory(layout, type);
+    std::list<memory_record> list = {memory_record({{id, network_id}}, mem, network_id, type)};
+    _padded_pool.emplace(layout, std::move(list));
+    return mem;
+}
+
+/*
+        This is not reusable within one network or it's internal micronetworks. But we can use this memory records
+   between networks.
+    */
+memory::ptr memory_pool::get_from_across_networks_pool_with_tags(const layout& layout,
+                                                       const primitive_id& id,
+                                                       uint32_t network_id,
+                                                       allocation_type type,
+                                                       std::string& tag) {
+    auto it = _no_reusable_pool.lower_bound(layout.bytes_count());
+
+    while (it != _no_reusable_pool.end()) {
+        if (it->second._network_id != network_id &&
+            it->second._type == type) {  // don't use non reusable resources within the same network
+            if (!has_conflict(it->second._users, {}, network_id)) {
+                it->second._users.insert(memory_user(id, network_id));
+                auto ret_mem = _engine->reinterpret_buffer(*it->second._memory, layout);
+                tag = "pool";
+                return ret_mem;
+            }
+        }
+        ++it;
+    }
+    tag = "alloc";
+    auto mem = alloc_memory(layout, type);
+    {
+        _no_reusable_pool.emplace(layout.bytes_count(),
+                                  memory_record({{id, network_id}}, mem, network_id, type));
+    }
+    return mem;
+}
+
 memory::ptr memory_pool::get_memory(const layout& layout, allocation_type type, bool reset) {
     return alloc_memory(layout, type, reset);
 }
@@ -232,13 +339,11 @@ memory::ptr memory_pool::get_memory_with_tags(const layout& layout,
     if (do_reuse) {
         // reusable within the same network
         if (!layout.format.is_image() && layout.data_padding == padding{{0, 0, 0, 0}, 0}) {
-            tags = "pool";
             // non-padded buffers
-            return get_from_non_padded_pool(layout, id, network_id, restrictions, type, reset);
+            return get_from_non_padded_pool_with_tags(layout, id, network_id, restrictions, type, tags, reset);
         } else if (!layout.format.is_image()) {
             // padded buffers
-            tags = "pool";
-            return get_from_padded_pool(layout, id, network_id, restrictions, type);
+            return get_from_padded_pool_with_tags(layout, id, network_id, restrictions, type, tags);
         } else {
             tags = "alloc";
             // images (reuse not yet implemented)
