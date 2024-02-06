@@ -17,6 +17,12 @@
 #include <set>
 #include <stdexcept>
 
+#include <chrono>
+
+typedef std::chrono::time_point<std::chrono::system_clock> time_point;
+typedef std::chrono::high_resolution_clock Time;
+#define TIMEDIFF(start, end) (static_cast<double>((std::chrono::duration_cast<std::chrono::microseconds>((end) - (start))).count()) / 1000.f);
+
 namespace cldnn {
 memory_record::memory_record(memory_set users,
                              std::shared_ptr<memory>& memory,
@@ -219,8 +225,11 @@ memory::ptr memory_pool::get_from_non_padded_pool_with_tags(const layout& layout
                                                   allocation_type type,
                                                   std::string& tag,
                                                   bool reset) {
+    size_t iter = 0;
+    auto start = Time::now();
     auto it = _non_padded_pool.lower_bound(layout.bytes_count());
     while (it != _non_padded_pool.end()) {
+        iter++;
         if (it->second._network_id == network_id &&
             it->second._type == type &&
             it->second._memory->get_layout().format != format::fs_b_yx_fsv32 &&
@@ -230,7 +239,9 @@ memory::ptr memory_pool::get_from_non_padded_pool_with_tags(const layout& layout
             !has_conflict(it->second._users, restrictions, network_id)) {
             it->second._users.insert(memory_user(id, network_id));
             auto ret_mem = _engine->reinterpret_buffer(*it->second._memory, layout);
-            tag = "pool";
+            auto end = Time::now();
+            auto duration = TIMEDIFF(start, end);
+            tag = "pool," + std::to_string(iter) + "," + std::to_string(duration);
             return ret_mem;
         } else {
             ++it;
@@ -253,10 +264,13 @@ memory::ptr memory_pool::get_from_padded_pool_with_tags(const layout& layout,
                                               const std::set<primitive_id>& restrictions,
                                               allocation_type type,
                                               std::string& tag) {
+    size_t iter = 0;
+    auto start = Time::now();
     auto first_level_cache = _padded_pool.find(layout);
 
     if (first_level_cache != _padded_pool.end()) {
         for (auto& rec_list : first_level_cache->second) {
+            iter++;
             if (rec_list._network_id == network_id &&
                 rec_list._type == type &&
                 ((layout.format != format::b_fs_yx_fsv32 && layout.format != format::b_fs_zyx_fsv32) ||
@@ -269,7 +283,9 @@ memory::ptr memory_pool::get_from_padded_pool_with_tags(const layout& layout,
                 !has_conflict(rec_list._users, restrictions, network_id)) {
                 rec_list._users.insert({id, network_id});
                 auto ret_mem = _engine->reinterpret_buffer(*(rec_list._memory), layout);
-                tag = "pool";
+                auto end = Time::now();
+                auto duration = TIMEDIFF(start, end);
+                tag = "pool," + std::to_string(iter) + "," + std::to_string(duration);
                 return ret_mem;
             }
         }
