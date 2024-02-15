@@ -67,6 +67,16 @@ struct network {
 public:
     using ptr = std::shared_ptr<network>;
 
+    long long time_update_shape_info = 0;
+    long long time_search_cache = 0;
+    long long time_clone = 0;
+    long long time_update_dispatch_data = 0;
+    long long time_set_arg = 0;
+    long long time_realloc_if_needed = 0;
+    long long time_update_shape = 0;
+    long long time_enqueue = 0;
+    long long time_runtime_skip = 0;
+
     explicit network(program::ptr program, const ExecutionConfig& config, stream::ptr stream, bool is_internal = false, bool is_primary_stream = true);
     network(engine& engine,
             const topology& topo,

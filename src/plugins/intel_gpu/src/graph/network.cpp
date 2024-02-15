@@ -859,7 +859,19 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         GPU_DEBUG_TRACE << "============================================================================" << std::endl;
         GPU_DEBUG_TRACE << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;
     }
-
+    time_update_shape = 0;
+    time_runtime_skip = 0;
+    time_update_shape_info = 0;
+    time_search_cache = 0;
+    time_clone = 0;
+    time_update_dispatch_data = 0;
+    time_realloc_if_needed = 0;
+    time_set_arg = 0;
+    time_enqueue = 0;
+//    if (std::getenv("PRINT_TIME") != nullptr) {
+//        std::cout << "============================================================================" << std::endl;
+//        std::cout << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;
+//    }
     std::vector<memory::ptr> in_out_mem;
     auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
         return shared_mem_type == shared_mem_type::shared_mem_vasurface ||
@@ -1166,6 +1178,25 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 
     GPU_DEBUG_IF(debug_config->dump_runtime_memory_pool > 0) {
         get_memory_pool().dump(get_id());
+    }
+    
+    if (std::getenv("PRINT_TIME") != nullptr) {
+//        std::cout << "Total update_shape_info time : " << time_update_shape_info << " mcs" << std::endl;
+//        std::cout << "Total cache search time : " << time_search_cache << " mcs" << std::endl;
+//        std::cout << "Total clone time : " << time_clone << " mcs" << std::endl;
+//        std::cout << "Total update_dispatch time : " << time_update_dispatch_data << " mcs" << std::endl;
+//        std::cout << "Total realloc_if_needed time : " << time_realloc_if_needed << " mcs" << std::endl;
+        //std::cout << "Total, iter, update_shape, runtime_skip, update_shape_info, cache_search, update_dispatch, realloc, set_arg, enqueue" << std::endl;
+        std::cout << "Total, " << curr_iter << ", "
+                  << time_update_shape << ", "
+                  << time_runtime_skip << ", "
+                  << time_update_shape_info << ", "
+                  << time_search_cache << ", "
+                  << time_update_dispatch_data << ", "
+                  << time_realloc_if_needed << ", "
+                  << time_set_arg << ", "
+                  << time_enqueue << ", "
+                  << std::endl;
     }
 }
 

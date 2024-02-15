@@ -54,6 +54,7 @@
 #endif
 
 namespace cldnn {
+
 namespace {
 
 template <typename T>
@@ -782,6 +783,9 @@ bool primitive_inst::update_impl() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("update_impl: " + id()));
     GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::update_implementation);
     auto prev_impl_str =  _impl != nullptr ? _impl->get_kernel_name() : "nullptr";
+    using mcs = std::chrono::microseconds;
+    using Time = std::chrono::high_resolution_clock;
+
 
     if (_impl != nullptr && (_impl->is_cpu() || can_be_optimized())) {
         // Return false if shape not changed, otherwise return true to trigger realloc_if_needed, but do not change impl itself
@@ -812,12 +816,33 @@ bool primitive_inst::update_impl() {
         auto& cache = prog->get_implementations_cache();
         std::shared_ptr<primitive_impl> cached_impl = nullptr;
         {
+            std::chrono::high_resolution_clock::time_point time_search_cache_start = {};
+            if (std::getenv("PRINT_TIME") != nullptr) {
+                time_search_cache_start = std::chrono::high_resolution_clock::now();
+            }
             cached_impl = cache.get(updated_params_no_dyn_pad);
+            if (std::getenv("PRINT_TIME") != nullptr) {
+                auto dur_mcs = std::chrono::duration_cast<mcs>((Time::now() - time_search_cache_start)).count();
+                if (std::getenv("PRINT_TIME_ALL") != nullptr)
+                  std::cout << id() << ", time_search_cache, " << dur_mcs << ", mcs" << std::endl;
+                _network.time_search_cache += dur_mcs;
+            }
             if (cached_impl) {
                 // Keep dynamic impl in memory and replace current impl with static one
                 if (is_current_impl_dynamic)
                     _dynamic_impl = std::move(_impl);
+                std::chrono::high_resolution_clock::time_point time_clone_start = {};
+                if (std::getenv("PRINT_TIME") != nullptr) {
+                    time_clone_start = std::chrono::high_resolution_clock::now();
+                }
                 _impl = cached_impl->clone();
+                if (std::getenv("PRINT_TIME") != nullptr) {
+                    auto dur_mcs = std::chrono::duration_cast<mcs>((Time::now() - time_clone_start)).count();
+                    if (std::getenv("PRINT_TIME_ALL") != nullptr)
+                        std::cout << id() << ", time_clone, " << dur_mcs << ", mcs" << std::endl;
+                    _network.time_clone += dur_mcs;
+                }
+
                 GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
                 GPU_DEBUG_TRACE_DETAIL << id() << ": get impl from cache " << _impl->get_kernel_name() << std::endl;
             // impl is not replaced
@@ -852,12 +877,41 @@ bool primitive_inst::update_impl() {
                         }
                     });
                 }
+
                 if (!can_be_optimized())  {
                     if (!is_current_impl_dynamic)
                         _impl = std::move(_dynamic_impl);
                     auto new_impl_params = _impl->canonicalize_shapes(*_impl_params);
+
+                    std::chrono::high_resolution_clock::time_point time_update_dispatch_data_start = {};
+                    if (std::getenv("PRINT_TIME") != nullptr) {
+                        time_update_dispatch_data_start = std::chrono::high_resolution_clock::now();
+                    }
+
                     _impl->update_dispatch_data(new_impl_params);
+                    if (std::getenv("PRINT_TIME") != nullptr) {
+                        auto dur_mcs =
+                            std::chrono::duration_cast<mcs>((Time::now() - time_update_dispatch_data_start))
+                                .count();
+                        if (std::getenv("PRINT_TIME_ALL") != nullptr)
+                            std::cout << id() << ", update_dispatch_data, " << dur_mcs << ", mcs" << std::endl;
+                        _network.time_update_dispatch_data += dur_mcs;
+                    }
+
+                    std::chrono::high_resolution_clock::time_point time_update_shape_info_start = {};
+                    if (std::getenv("PRINT_TIME") != nullptr) {
+                        time_update_shape_info_start = std::chrono::high_resolution_clock::now();
+                    }
                     update_shape_info_tensor(new_impl_params);
+                    if (std::getenv("PRINT_TIME") != nullptr) {
+                        auto time_update_shape_info_end = Time::now();
+                        auto dur_mcs =
+                            std::chrono::duration_cast<mcs>((time_update_shape_info_end - time_update_shape_info_start))
+                                .count();
+                        if (std::getenv("PRINT_TIME_ALL") != nullptr)
+                            std::cout << id() << ", update_shape_info, " << dur_mcs << ", mcs" << std::endl;
+                        _network.time_update_shape_info += dur_mcs;
+                    }
                 }
             } else {
                 _impl = _node->type()->choose_impl(*_node, updated_params_no_dyn_pad);
@@ -1224,11 +1278,23 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     _mem_changed = false;
     const auto orig_outputs = _outputs;
     std::vector<event::ptr> dependencies;
+    using mcs = std::chrono::microseconds;
+    using Time = std::chrono::high_resolution_clock;
+
     if (is_dynamic() && !has_inner_networks()) {
         do_runtime_in_place_concat();
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
+        std::chrono::high_resolution_clock::time_point time_update_shape_start = {};
+        if (std::getenv("PRINT_TIME") != nullptr) {
+            time_update_shape_start = std::chrono::high_resolution_clock::now();
+        }
         update_shape();
-
+        if (std::getenv("PRINT_TIME") != nullptr) {
+            auto dur_mcs = std::chrono::duration_cast<mcs>((Time::now() - time_update_shape_start)).count();
+            if (std::getenv("PRINT_TIME_ALL") != nullptr)
+                std::cout << id() << ", time_update_shape, " << dur_mcs << ", mcs" << std::endl;
+            _network.time_update_shape += dur_mcs;
+        }
 
         bool can_skip_execution = false;
         if (_impl_params->output_layouts[0].count() == 0) {
@@ -1259,12 +1325,23 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         // Check successor reorder if layouts are same
         // Need to set can_be_optimized for user reorder at predecessor because
         // if the user is can_be_optimized and output node then current nodes' output should be allocated to host.
+        std::chrono::high_resolution_clock::time_point time_runtime_skip_start = {};
+        if (std::getenv("PRINT_TIME") != nullptr) {
+            time_runtime_skip_start = std::chrono::high_resolution_clock::now();
+        }
+
         do_runtime_skip_reorder();
         do_runtime_skip_gather();
         update_paddings();
         do_runtime_in_place_kv_cache();
         do_runtime_skip_permute();
         do_runtime_skip_strided_slice();
+        if (std::getenv("PRINT_TIME") != nullptr) {
+            auto dur_mcs = std::chrono::duration_cast<mcs>((Time::now() - time_runtime_skip_start)).count();
+            if (std::getenv("PRINT_TIME_ALL") != nullptr)
+                std::cout << id() << ", time_runtime_skip, " << dur_mcs << ", mcs" << std::endl;
+            _network.time_runtime_skip += dur_mcs;
+        }
 
         if (!is_valid_fusion()) {
             OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("unfused_subgraph_exec: " + id()));
@@ -1303,7 +1380,17 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                 auto ev = update_weights();
                 if (ev)
                     dependencies.push_back(ev);
+                std::chrono::high_resolution_clock::time_point time_realloc_start = {};
+                if (std::getenv("PRINT_TIME") != nullptr) {
+                    time_realloc_start = std::chrono::high_resolution_clock::now();
+                }
                 auto ev_reset = realloc_if_needed();
+                if (std::getenv("PRINT_TIME") != nullptr) {
+                    auto dur_mcs = std::chrono::duration_cast<mcs>((Time::now() - time_realloc_start)).count();
+                    if (std::getenv("PRINT_TIME_ALL") != nullptr)
+                        std::cout << id() << ", time_realloc_if_needed, " << dur_mcs << ", mcs" << std::endl;
+                    _network.time_realloc_if_needed += dur_mcs;
+                }
                 if (ev_reset)
                     dependencies.push_back(ev_reset);
             }
@@ -1323,7 +1410,17 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
     if ((is_dynamic() && need_args_update) || has_mutable_input() || is_output() || has_dynamic_dependencies_insts) {
+        std::chrono::high_resolution_clock::time_point time_set_arg_start = {};
+        if (std::getenv("PRINT_TIME") != nullptr) {
+            time_set_arg_start = std::chrono::high_resolution_clock::now();
+        }
         set_arguments();
+        if (std::getenv("PRINT_TIME") != nullptr) {
+            auto dur_mcs = std::chrono::duration_cast<mcs>((Time::now() - time_set_arg_start)).count();
+            if (std::getenv("PRINT_TIME_ALL") != nullptr)
+                std::cout << id() << ", set_arg, " << dur_mcs << ", mcs" << std::endl;
+            _network.time_set_arg += dur_mcs;
+        }
     }
     on_execute();
 
@@ -1374,7 +1471,18 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
     {
         GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::inference);
+        std::chrono::high_resolution_clock::time_point time_enqueue_start = {};
+        if (std::getenv("PRINT_TIME") != nullptr) {
+            time_enqueue_start = std::chrono::high_resolution_clock::now();
+        }
+
         auto ev = _impl->execute(dependencies, *this);
+        if (std::getenv("PRINT_TIME") != nullptr && !_impl->is_cpu()) {
+            auto dur_mcs = std::chrono::duration_cast<mcs>((Time::now() - time_enqueue_start)).count();
+            if (std::getenv("PRINT_TIME_ALL") != nullptr)
+                std::cout << id() << ", enqueue, " << dur_mcs << ", mcs" << std::endl;
+            _network.time_enqueue += dur_mcs;
+        }
 
         GPU_DEBUG_IF(!debug_config->dump_profiling_data.empty()) {
             get_network().get_stream().wait_for_events({ev});
