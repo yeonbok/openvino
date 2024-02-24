@@ -855,7 +855,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     int64_t curr_iter = -1;
     GPU_DEBUG_GET_INSTANCE(debug_config);
 #ifdef GPU_DEBUG_CONFIG
-    curr_iter = iteration++;
+    curr_iter = iteration;
 #endif
 
     // Wait for previous execution completion
@@ -1171,7 +1171,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 
     // Deallocate events from the previos iteration
     _old_events.clear();
-
+    iteration++;
     GPU_DEBUG_IF(debug_config->dump_runtime_memory_pool > 0) {
         get_memory_pool().dump(get_id());
     }

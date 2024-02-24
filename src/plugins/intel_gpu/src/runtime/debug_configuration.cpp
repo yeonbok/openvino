@@ -271,7 +271,7 @@ debug_configuration::debug_configuration()
         int start, end;
         bool is_valid_range = false;
         if (iss >> start >> dot >> dot >> end) {
-            if (start < end) {
+            if (start <= end) {
                 try {
                     is_valid_range = true;
                     dump_prof_data_iter_params.start = static_cast<int64_t>(start);
