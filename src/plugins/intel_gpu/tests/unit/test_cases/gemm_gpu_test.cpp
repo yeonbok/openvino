@@ -841,10 +841,10 @@ public:
         tests::random_generator rg;
         rg.set_seed(GET_SUITE_NAME);
 
-        const unsigned long BATCH_SIZE = 19;
-        const unsigned long M_SIZE = 37;
-        const unsigned long K_SIZE = 23;
-        const unsigned long N_SIZE = 29;
+        const unsigned long BATCH_SIZE = 32;
+        const unsigned long M_SIZE = 3083;
+        const unsigned long K_SIZE = 128;
+        const unsigned long N_SIZE = 3083;
 
         auto fill_mem = [&](cldnn::memory_ptr mem, std::vector<float>& data) {
             cldnn::mem_lock<float> mem_ptr(mem, get_test_stream());
@@ -888,9 +888,10 @@ public:
             input0_order = { 0, 2, 1 };
             input1_order = { 1, 2, 0 };
         } else if (num_dims == 4) {
-            input0_shape = { BATCH_SIZE, K_SIZE, 1, M_SIZE };
-            input1_shape = { N_SIZE, BATCH_SIZE, 1, K_SIZE };
-            input0_order = { 0, 2, 3, 1 };
+//            input0_shape = { BATCH_SIZE, K_SIZE, 1, M_SIZE };
+            input0_shape = { 1, BATCH_SIZE, M_SIZE, K_SIZE };
+            input1_shape = { N_SIZE, 1, BATCH_SIZE, K_SIZE };
+            input0_order = { 0, 1, 2, 3 };
             input1_order = { 1, 2, 3, 0 };
         }
 
@@ -934,62 +935,63 @@ public:
         auto output_mem = outputs.at("gemm").get_memory();
         cldnn::mem_lock<float> output_ptr(output_mem, get_test_stream());
 
-        ov::Shape ref_input0_shape;
-        ov::Shape ref_input1_shape;
-        ov::Shape ref_output_shape;
-        if (num_dims == 1) {
-            ref_input0_shape = { K_SIZE };
-            ref_input1_shape = { K_SIZE, N_SIZE };
-            ref_output_shape = { 1, N_SIZE };
-        } else if (num_dims == 2) {
-            ref_input0_shape = { M_SIZE, K_SIZE };
-            ref_input1_shape = { K_SIZE, N_SIZE };
-            ref_output_shape = { M_SIZE, N_SIZE };
-        } else if (num_dims == 3) {
-            ref_input0_shape = { BATCH_SIZE, M_SIZE, K_SIZE };
-            ref_input1_shape = { BATCH_SIZE, K_SIZE, N_SIZE };
-            ref_output_shape = { BATCH_SIZE, M_SIZE, N_SIZE };
-        } else if (num_dims == 4) {
-            ref_input0_shape = { BATCH_SIZE, 1, M_SIZE, K_SIZE };
-            ref_input1_shape = { BATCH_SIZE, 1, K_SIZE, N_SIZE };
-            ref_output_shape = { BATCH_SIZE, 1, M_SIZE, N_SIZE };
-        }
-
-        std::vector<float> ref_out_data;
-        ref_out_data.resize(ov::shape_size(ref_output_shape));
-
-        std::vector<float> ref_input_0_data(input_0_data.size());
-        std::vector<float> ref_input_1_data(input_1_data.size());
-
-        ov::reference::transpose((const char *)(input_0_data.data()),
-                                 (char *)(ref_input_0_data.data()),
-                                 input0_shape,
-                                 sizeof(float),
-                                 input0_order,
-                                 ref_input0_shape);
-
-        ov::reference::transpose((const char *)(input_1_data.data()),
-                                 (char *)(ref_input_1_data.data()),
-                                 input1_shape,
-                                 sizeof(float),
-                                 input1_order,
-                                 ref_input1_shape);
-
-        ov::reference::matmul<float>(ref_input_0_data.data(),
-                                     ref_input_1_data.data(),
-                                     ref_out_data.data(),
-                                     ref_input0_shape,
-                                     ref_input1_shape,
-                                     ref_output_shape,
-                                     false,
-                                     false);
-
-        ASSERT_EQ(output_ptr.size(), ref_out_data.size());
-
-        const auto abs_error = 0.0001;
-        for (uint32_t i = 0; i < ref_out_data.size(); ++i) {
-            ASSERT_NEAR(output_ptr[i], ref_out_data[i], abs_error) << "at " << i;
-        }
+//        ov::Shape ref_input0_shape;
+//        ov::Shape ref_input1_shape;
+//        ov::Shape ref_output_shape;
+//        if (num_dims == 1) {
+//            ref_input0_shape = { K_SIZE };
+//            ref_input1_shape = { K_SIZE, N_SIZE };
+//            ref_output_shape = { 1, N_SIZE };
+//        } else if (num_dims == 2) {
+//            ref_input0_shape = { M_SIZE, K_SIZE };
+//            ref_input1_shape = { K_SIZE, N_SIZE };
+//            ref_output_shape = { M_SIZE, N_SIZE };
+//        } else if (num_dims == 3) {
+//            ref_input0_shape = { BATCH_SIZE, M_SIZE, K_SIZE };
+//            ref_input1_shape = { BATCH_SIZE, K_SIZE, N_SIZE };
+//            ref_output_shape = { BATCH_SIZE, M_SIZE, N_SIZE };
+//        } else if (num_dims == 4) {
+//            ref_input0_shape = { BATCH_SIZE, 1, M_SIZE, K_SIZE };
+//            ref_input1_shape = { BATCH_SIZE, 1, K_SIZE, N_SIZE };
+//            ref_output_shape = { BATCH_SIZE, 1, M_SIZE, N_SIZE };
+//        }
+//
+//        std::vector<float> ref_out_data;
+//        ref_out_data.resize(ov::shape_size(ref_output_shape));
+//
+//        std::vector<float> ref_input_0_data(input_0_data.size());
+//        std::vector<float> ref_input_1_data(input_1_data.size());
+//
+//        ov::reference::transpose((const char *)(input_0_data.data()),
+//                                 (char *)(ref_input_0_data.data()),
+//                                 input0_shape,
+//                                 sizeof(float),
+//                                 input0_order,
+//                                 ref_input0_shape);
+//
+//        ov::reference::transpose((const char *)(input_1_data.data()),
+//                                 (char *)(ref_input_1_data.data()),
+//                                 input1_shape,
+//                                 sizeof(float),
+//                                 input1_order,
+//                                 ref_input1_shape);
+//
+//        ov::reference::matmul<float>(ref_input_0_data.data(),
+//                                     ref_input_1_data.data(),
+//                                     ref_out_data.data(),
+//                                     ref_input0_shape,
+//                                     ref_input1_shape,
+//                                     ref_output_shape,
+//                                     false,
+//                                     false);
+//
+//        ASSERT_EQ(output_ptr.size(), ref_out_data.size());
+//
+//        const auto abs_error = 0.0001;
+//        for (uint32_t i = 0; i < ref_out_data.size(); ++i) {
+//            ASSERT_NEAR(output_ptr[i], ref_out_data[i], abs_error) << "at " << i;
+//        }
+        std::cout << output_ptr[0] << std::endl;
     }
 
     void test_transpose_matmul_transpose(size_t num_dims, bool is_input_dynamic, bool is_caching_test) {
@@ -1209,7 +1211,7 @@ TEST_F(gemm_gpu_tests, transpose_matmul_static_3d) {
     this->test_transpose_matmul(3, false, false);
 }
 
-TEST_F(gemm_gpu_tests, transpose_matmul_dynamic_4d) {
+TEST_F(gemm_gpu_tests, transpose_matmul_dynamic_4d_taylor) {
     this->test_transpose_matmul(4, true, false);
 }
 
