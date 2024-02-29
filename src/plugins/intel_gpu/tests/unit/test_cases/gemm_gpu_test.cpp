@@ -915,25 +915,34 @@ public:
         topology topology;
         topology.add(input_layout("input0", input0_layout),
                      input_layout("input1", input1_layout),
-                     gemm("gemm", { input_info("input0"), input_info("input1") }, data_types::f32, input0_order, input1_order)
+                     reorder("input0_fp16", input_info("input0"), format::bfyx, data_types::f16),
+                     reorder("input1_fp16", input_info("input1"), format::bfyx, data_types::f16),
+//                     gemm("gemm", { input_info("input0"), input_info("input1") }, data_types::f32, input0_order, input1_order)
+                     gemm("gemm", { input_info("input0_fp16"), input_info("input1_fp16") }, data_types::f16, input0_order, input1_order),
+                     reorder("output", input_info("gemm"), input1_layout.format, data_types::f32)
         );
 
         ExecutionConfig config = get_test_default_config(engine);
         config.set_property(ov::intel_gpu::optimize_data(true));
         config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
         network::ptr network = get_network(engine, topology, config, get_test_stream_ptr(), is_caching_test);
-        network->set_input_data("input0", input0_mem);
-        network->set_input_data("input1", input1_mem);
 
-        auto inst = network->get_primitive("gemm");
-        auto impl = inst->get_impl();
-        ASSERT_TRUE(impl != nullptr);
-        ASSERT_TRUE(impl->is_dynamic() == is_input_dynamic);
 
-        auto outputs = network->execute();
+        for (int i = 0; i < 10; ++i) {
+            network->set_input_data("input0", input0_mem);
+            network->set_input_data("input1", input1_mem);
 
-        auto output_mem = outputs.at("gemm").get_memory();
-        cldnn::mem_lock<float> output_ptr(output_mem, get_test_stream());
+            auto inst = network->get_primitive("gemm");
+            auto impl = inst->get_impl();
+            ASSERT_TRUE(impl != nullptr);
+            ASSERT_TRUE(impl->is_dynamic() == is_input_dynamic);
+
+            auto outputs = network->execute();
+
+            auto output_mem = outputs.at("output").get_memory();
+            cldnn::mem_lock<float> output_ptr(output_mem, get_test_stream());
+            std::cout << output_ptr[0] << std::endl;
+        }
 
 //        ov::Shape ref_input0_shape;
 //        ov::Shape ref_input1_shape;
@@ -991,7 +1000,6 @@ public:
 //        for (uint32_t i = 0; i < ref_out_data.size(); ++i) {
 //            ASSERT_NEAR(output_ptr[i], ref_out_data[i], abs_error) << "at " << i;
 //        }
-        std::cout << output_ptr[0] << std::endl;
     }
 
     void test_transpose_matmul_transpose(size_t num_dims, bool is_input_dynamic, bool is_caching_test) {
@@ -1211,10 +1219,13 @@ TEST_F(gemm_gpu_tests, transpose_matmul_static_3d) {
     this->test_transpose_matmul(3, false, false);
 }
 
-TEST_F(gemm_gpu_tests, transpose_matmul_dynamic_4d_taylor) {
+TEST_F(gemm_gpu_tests, transpose_matmul_dynamic_4d_taylor_dynamic) {
     this->test_transpose_matmul(4, true, false);
 }
 
+TEST_F(gemm_gpu_tests, transpose_matmul_dynamic_4d_taylor_static) {
+    this->test_transpose_matmul(4, false, false);
+}
 TEST_F(gemm_gpu_tests, transpose_matmul_static_4d) {
     this->test_transpose_matmul(4, false, false);
 }
