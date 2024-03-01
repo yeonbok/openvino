@@ -837,14 +837,21 @@ public:
         }
     }
 
-    void test_transpose_matmul(size_t num_dims, bool is_input_dynamic, bool is_caching_test) {
+    void test_transpose_matmul(size_t num_dims, bool is_input_dynamic, bool is_caching_test, bool other = false) {
         tests::random_generator rg;
         rg.set_seed(GET_SUITE_NAME);
 
-        const unsigned long BATCH_SIZE = 32;
-        const unsigned long M_SIZE = 3083;
-        const unsigned long K_SIZE = 128;
-        const unsigned long N_SIZE = 3083;
+        unsigned long BATCH_SIZE = 32;
+        unsigned long M_SIZE = 3083;
+        unsigned long K_SIZE = 128;
+        unsigned long N_SIZE = 3083;
+
+        if (other) {
+            BATCH_SIZE = 32;
+            M_SIZE = 3083;
+            K_SIZE = 3083;
+            N_SIZE = 128;
+        }
 
         auto fill_mem = [&](cldnn::memory_ptr mem, std::vector<float>& data) {
             cldnn::mem_lock<float> mem_ptr(mem, get_test_stream());
@@ -868,6 +875,7 @@ public:
         ov::Shape input1_shape;
         std::vector<int64_t> input0_order;
         std::vector<int64_t> input1_order;
+        std::vector<int64_t> output_order;
         ov::Shape beam_table_shape;
         cldnn::layout input0_layout;
         cldnn::layout input1_layout;
@@ -887,12 +895,18 @@ public:
             input1_shape = { N_SIZE, BATCH_SIZE, K_SIZE };
             input0_order = { 0, 2, 1 };
             input1_order = { 1, 2, 0 };
-        } else if (num_dims == 4) {
+        } else if (num_dims == 4 && !other) {
 //            input0_shape = { BATCH_SIZE, K_SIZE, 1, M_SIZE };
             input0_shape = { 1, BATCH_SIZE, M_SIZE, K_SIZE };
             input1_shape = { N_SIZE, 1, BATCH_SIZE, K_SIZE };
             input0_order = { 0, 1, 2, 3 };
             input1_order = { 1, 2, 3, 0 };
+        } else if (num_dims == 4 && other) {
+            input0_shape = { 1, BATCH_SIZE, M_SIZE, K_SIZE };
+            input1_shape = { K_SIZE, 1, BATCH_SIZE, N_SIZE };
+            input0_order = { 0, 1, 2, 3 };
+            input1_order = { 1, 2, 0, 3 };
+            output_order = { 2, 0, 1, 3 };
         }
 
         if (is_input_dynamic) {
@@ -908,9 +922,10 @@ public:
 
         auto input_0_data = rg.generate_random_1d<float>(ov::shape_size(input0_shape), -2, 2);
         auto input_1_data = rg.generate_random_1d<float>(ov::shape_size(input1_shape), -2, 2);
-
-        fill_mem(input0_mem, input_0_data);
-        fill_mem(input1_mem, input_1_data);
+ //       std::cout << "fill_mem0" << std::endl;
+//        fill_mem(input0_mem, input_0_data);
+//        std::cout << "fill_mem1" << std::endl;
+//        fill_mem(input1_mem, input_1_data);
 
         topology topology;
         topology.add(input_layout("input0", input0_layout),
@@ -918,7 +933,7 @@ public:
                      reorder("input0_fp16", input_info("input0"), format::bfyx, data_types::f16),
                      reorder("input1_fp16", input_info("input1"), format::bfyx, data_types::f16),
 //                     gemm("gemm", { input_info("input0"), input_info("input1") }, data_types::f32, input0_order, input1_order)
-                     gemm("gemm", { input_info("input0_fp16"), input_info("input1_fp16") }, data_types::f16, input0_order, input1_order),
+                     gemm("gemm", { input_info("input0_fp16"), input_info("input1_fp16") }, data_types::f16, input0_order, input1_order, output_order),
                      reorder("output", input_info("gemm"), input1_layout.format, data_types::f32)
         );
 
@@ -1219,10 +1234,13 @@ TEST_F(gemm_gpu_tests, transpose_matmul_static_3d) {
     this->test_transpose_matmul(3, false, false);
 }
 
-TEST_F(gemm_gpu_tests, transpose_matmul_dynamic_4d_taylor_dynamic) {
+TEST_F(gemm_gpu_tests, transpose_matmul_dynamic_4d_taylor_dynamic_1) {
     this->test_transpose_matmul(4, true, false);
 }
 
+TEST_F(gemm_gpu_tests, transpose_matmul_dynamic_4d_taylor_dynamic_2) {
+    this->test_transpose_matmul(4, true, false, true);
+}
 TEST_F(gemm_gpu_tests, transpose_matmul_dynamic_4d_taylor_static) {
     this->test_transpose_matmul(4, false, false);
 }
