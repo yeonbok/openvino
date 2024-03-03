@@ -126,6 +126,10 @@ JitConstants GemmKernelTiledOpt::GetJitConstants(const gemm_params& params) cons
         auto n_size = dims1.dims_sizes[input1_dims[7]];
         auto n_padded_size = "(" + dims1_padded.dims_sizes[input1_dims[7]] + ")";
         auto k_size = dims0.dims_sizes[input0_dims[7]];
+        bool k_const = false;
+        if (k_size.find("shape_info") == std::string::npos)
+            k_const = true;
+
         auto k_padded_size_in0 = "(" + dims0_padded.dims_sizes[input0_dims[7]] + ")";
         const std::string leftover_m = "(" + m_size + "%" + std::to_string(tuning_data.tile_m_size) + ")";
         const std::string leftover_n = "(" + n_size + "%" + std::to_string(tuning_data.tile_n_size) + ")";
@@ -144,6 +148,7 @@ JitConstants GemmKernelTiledOpt::GetJitConstants(const gemm_params& params) cons
             MakeJitConstant("SIMD_WIDTH", tuning_data.simd_size),
             MakeJitConstant("TILE_M", tuning_data.tile_m_size),
             MakeJitConstant("TILE_K", tuning_data.tile_k_size),
+            MakeJitConstant("K_CONST", k_const ? "1" : "0"),
             MakeJitConstant("TILE_N", tuning_data.tile_n_size),
             MakeJitConstant("K_FULL_ITERATIONS", full_iteration_k),
             MakeJitConstant("TILE_M_NOT_DIVISIBLE", not_divisible_m),
