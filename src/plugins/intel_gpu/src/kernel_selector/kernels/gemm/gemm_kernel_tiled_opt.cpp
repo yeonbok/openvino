@@ -52,7 +52,6 @@ GemmKernelBase::DispatchData GemmKernelTiledOpt::SetDefault(const gemm_params& p
                             (GetOuputSize(params.output_order, output, 'X') * GetOuputSize(params.output_order, output, 'Y'));
         std::vector<size_t> global = { GetOuputSize(params.output_order, output, 'X'), GetOuputSize(params.output_order, output, 'Y'),
                                        total_batches };
-
         dispatchData.gws[0] = Align(global[0], td.tile_n_size) / (td.tile_n_size / td.simd_size);
         dispatchData.gws[1] = Align(global[1], td.tile_m_size) / td.tile_m_size;
         dispatchData.gws[2] = global[2];
@@ -101,6 +100,9 @@ GemmKernelTiledOpt::GemmTuningData GemmKernelTiledOpt::SetTuningParams(const gem
         tuning_data.tile_n_size = tuning_data.simd_size;
         tuning_data.tile_k_size = tuning_data.simd_size;
         tuning_data.tile_m_size = tuning_data.simd_size;
+        auto k_size = params.transpose_input0 ? params.inputs[0].Y().v : params.inputs[0].X().v;
+        if (k_size == 128)
+            tuning_data.tile_m_size = 32;
     }
 
     return tuning_data;
@@ -127,8 +129,9 @@ JitConstants GemmKernelTiledOpt::GetJitConstants(const gemm_params& params) cons
         auto n_padded_size = "(" + dims1_padded.dims_sizes[input1_dims[7]] + ")";
         auto k_size = dims0.dims_sizes[input0_dims[7]];
         bool k_const = false;
-        if (k_size.find("shape_info") == std::string::npos)
+        if (k_size.find("shape_info") == std::string::npos) {
             k_const = true;
+        }
 
         auto k_padded_size_in0 = "(" + dims0_padded.dims_sizes[input0_dims[7]] + ")";
         const std::string leftover_m = "(" + m_size + "%" + std::to_string(tuning_data.tile_m_size) + ")";
