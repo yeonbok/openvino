@@ -89,7 +89,7 @@ size_t kernels_cache::get_max_kernels_per_batch() const {
     GPU_DEBUG_IF(debug_config->max_kernels_per_batch >= 1) {
         return static_cast<size_t>(debug_config->max_kernels_per_batch);
     }
-    return 8;
+    return 1;
 }
 
 

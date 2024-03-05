@@ -100,9 +100,51 @@ GemmKernelTiledOpt::GemmTuningData GemmKernelTiledOpt::SetTuningParams(const gem
         tuning_data.tile_n_size = tuning_data.simd_size;
         tuning_data.tile_k_size = tuning_data.simd_size;
         tuning_data.tile_m_size = tuning_data.simd_size;
+        auto get_transposed_dim_size = [](const kernel_selector::DataTensor &data_tensor,
+                                          const std::vector<int64_t>& dims_order, const std::string dim) {
+            int64_t target_dim_idx;
+            const size_t rank = data_tensor.GetDims().size();
+            if (dims_order.size() > 1 && dim.compare("Y") == 0) {
+                target_dim_idx = dims_order.at(dims_order.size() - 2);
+            } else if (dims_order.size() > 0 && dim.compare("X") == 0) {
+                target_dim_idx = dims_order.back();
+            } else if (dims_order.size() == 0 && dim.compare("Y") == 0) {
+                target_dim_idx = rank - 2;
+            } else if (dims_order.size() == 0 && dim.compare("X") == 0) {
+                target_dim_idx = rank - 1;
+            } else {
+                OPENVINO_THROW("Unsupported dimension: ", dim);
+            }
+
+            size_t loc = static_cast<size_t>(target_dim_idx);
+            if (dims_order.size() > 0) {
+                loc += (dims_order.size() < rank) ? (rank - dims_order.size()) : 0;
+            }
+
+            if (loc == 0) {
+                return data_tensor.Batch().v;
+            } else if (loc == 1) {
+                return data_tensor.Feature().v;
+            } else if (loc == (rank - 1) && rank >= 3) {
+                return data_tensor.X().v;
+            } else if (loc == (rank - 2) && rank >= 4) {
+                return data_tensor.Y().v;
+            } else if (loc == (rank - 3) && rank >= 5) {
+                return data_tensor.Z().v;
+            } else if (loc == (rank - 4) && rank >= 6) {
+                return data_tensor.W().v;
+            }
+            OPENVINO_THROW("Target dimension is not found.");
+        };
+
         auto k_size = params.transpose_input0 ? params.inputs[0].Y().v : params.inputs[0].X().v;
-        if (k_size == 128)
+        auto n_size = get_transposed_dim_size(params.inputs[1], params.input1_order, "X");
+        if (k_size == 128 && getenv("TUNING") != nullptr) {
             tuning_data.tile_m_size = 32;
+        }
+        if (n_size == 128 && getenv("TUNING") != nullptr) {
+            tuning_data.tile_m_size = 16;
+        }
     }
 
     return tuning_data;
