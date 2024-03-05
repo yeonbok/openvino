@@ -220,7 +220,8 @@ KERNEL(gemm_tiled_opt)(
         c_tile[i] = (B_FLOATN)(ACCUMULATOR_VAL_ZERO);
     }
 
-#if K_CONST == 1
+//#if K_CONST == 1
+#if 0
     // INDIRECT_INPUT0 : 0
     // INDIRECT_INPUT1 : 0
     // TRANSPOSE_INPUT0 == TRANSPOSE_X_LAST
