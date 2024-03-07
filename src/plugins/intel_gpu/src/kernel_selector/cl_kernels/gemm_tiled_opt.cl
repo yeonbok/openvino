@@ -220,6 +220,8 @@ KERNEL(gemm_tiled_opt)(
         c_tile[i] = (B_FLOATN)(ACCUMULATOR_VAL_ZERO);
     }
 
+//###################################################################################################
+// type A
 //#if K_CONST == 1
 #if 0
     // INDIRECT_INPUT0 : 0
@@ -295,8 +297,90 @@ KERNEL(gemm_tiled_opt)(
     return;
 #endif
 
+//###################################################################################################
+// type B
+#if K_CONST == 0
+// k == seq_len
+//INDIRECT_INPUT0 0
+//INDIRECT_INPUT1 0
+// TRANSPOSE_INPUT0 == TRANSPOSE_X_LAST
+// TRANSPOSE_INPUT1 == TRANSPOSE_X_LAST
+    for (uint k = 0; k < K_FULL_ITERATIONS /*128/16*/; k++) {
+        // Loading B tile
+        unroll_for (uint b_load_id = 0; b_load_id < TILE_K; b_load_id++) {
+            {
+                b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
+                b_ptr += input1_offset;
+            }
+        }
+        // Loading A tile and tile C calculation
+        unroll_for (uint dot_id = 0; dot_id < tile_m_iterations; dot_id++) {
+            A_FLOATN a_read = TILE_K_NOT_DIVISIBLE ? a_ptr[sglid] : BLOCK_READ_A(a_ptr, 0);
+            a_ptr += input0_offset;
+            unroll_for (uint subtile_k_id = 0; subtile_k_id < TILE_K / SIMD_WIDTH; subtile_k_id++) {
+                unroll_for (uint simd_local_id = 0; simd_local_id < SIMD_WIDTH; simd_local_id++) {
+        #if TILE_K > SIMD_WIDTH
+                    c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read[subtile_k_id], simd_local_id)),
+                                         b_tile[subtile_k_id * SIMD_WIDTH + simd_local_id], c_tile[dot_id]);
+        #else // TILE_K > SIMD_WIDTH
+                    c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read, simd_local_id)), b_tile[simd_local_id], c_tile[dot_id]);
+        #endif // TILE_K > SIMD_WIDTH
+                }
+            }
+        } // Loading A tile and tile C calculation end
+        a_ptr = a_ptr + input0_offset1 - (input0_offset * tile_m_iterations);
+    } // Full tile calculation end
+    if (TILE_K_NOT_DIVISIBLE) {
+        // Loading leftovers of the matrix B
+        unroll_for (uint b_load_id = 0; b_load_id < TILE_K_LEFTOVER; b_load_id++) {
+                {
+                    b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
+                    b_ptr += input1_offset;
+                }
+        } // Loading leftovers of the matrix B end
+        // Loading leftovers of the matrix A and tile C calculation
+        unroll_for (uint dot_id = 0; dot_id < tile_m_iterations; dot_id++) {
+            uint a_idx = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, (y + dot_id), (K_FULL_ITERATIONS * TILE_K + sglid));
+            INPUT0_TYPE a_read = input0[a_idx];
 
+            unroll_for (uint simd_id = 0; simd_id < TILE_K_LEFTOVER; simd_id++) {
+                c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read, simd_id)), b_tile[simd_id], c_tile[dot_id]);
+            }
+        } // Loading leftovers of the matrix A and tile C calculation end
+    }
+#if HAS_FUSED_OPS && FUSED_OPS_CAN_USE_PRELOAD
+    FUSED_OPS_PRELOAD_SCALAR;
+#endif // HAS_FUSED_OPS && FUSED_OPS_CAN_USE_PRELOAD
 
+    // Writing result in the global memory
+    unroll_for (uint write_id = 0; write_id < tile_m_iterations; write_id++) {
+        if (b_raw_global_id < N) {
+#ifdef BIAS_TERM
+            ACCUMULATOR_TYPE dequantized = TO_ACCUMULATOR_TYPE(ALPHA) * c_tile[write_id] + TO_ACCUMULATOR_TYPE(BETA) * c_ptr[sglid];
+#else // BIAS_TERM
+            ACCUMULATOR_TYPE dequantized = TO_ACCUMULATOR_TYPE(ALPHA) * c_tile[write_id];
+#endif // BIAS_TERM
+
+#if HAS_FUSED_OPS
+#if FUSED_OPS_CAN_USE_PRELOAD
+            FUSED_OPS_CALC_SCALAR;
+#else // FUSED_OPS_CAN_USE_PRELOAD
+            FUSED_OPS_SCALAR;
+#endif // FUSED_OPS_CAN_USE_PRELOAD
+            OUTPUT_TYPE res = FUSED_OPS_RESULT_SCALAR;
+            *d_ptr = res;
+#else // HAS_FUSED_OPS
+            *d_ptr = dequantized;
+#endif // HAS_FUSED_OPS
+        }
+        d_ptr += batch_offset_output_diff;
+#ifdef BIAS_TERM
+        c_ptr += N;
+#endif // BIAS_TERM
+    } // Writing result in the global memory end
+    return;
+#endif
+//###################################################################################################
     // Full tile calculation
     for (uint k = 0; k < K_FULL_ITERATIONS; k++) {
 
