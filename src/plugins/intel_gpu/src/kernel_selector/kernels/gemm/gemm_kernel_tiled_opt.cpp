@@ -144,6 +144,7 @@ GemmKernelTiledOpt::GemmTuningData GemmKernelTiledOpt::SetTuningParams(const gem
         }
         if (n_size == 128 && getenv("TUNING") != nullptr) {
             tuning_data.tile_m_size = 16;
+            tuning_data.tile_n_size = 32;
         }
     }
 
@@ -209,6 +210,15 @@ JitConstants GemmKernelTiledOpt::GetJitConstants(const gemm_params& params) cons
             MakeJitConstant("TR_Y", GetTransposedDims(params.output_order, true).at(6)),
             MakeJitConstant("TR_X", GetTransposedDims(params.output_order, true).at(7)),
         });
+        // taylor
+//        if (tuning_data.tile_n_size > tuning_data.simd_size) {
+//            jit.AddConstants({
+//                MakeJitConstant("B_VEC_SIZE", b_vec_size),
+//                MakeJitConstant("B_FLOATN", std::string("CAT(INPUT1_TYPE, ") + toCodeString(b_vec_size) + ")"),
+//                MakeJitConstant("OUTPUT_TYPE_VEC", std::string("CAT(OUTPUT_TYPE, ") + toCodeString(b_vec_size) + ")"),
+//                MakeJitConstant("ACCUMULATOR_TYPE_VEC", std::string("CAT(ACCUMULATOR_TYPE, ") + toCodeString(b_vec_size) + ")"),
+//            });
+//        }
 
         bool has_dynamic_k_padding = params.transpose_input0 ? params.inputs[0].Y().pad.is_dynamic
                                                              : params.inputs[0].X().pad.is_dynamic;
