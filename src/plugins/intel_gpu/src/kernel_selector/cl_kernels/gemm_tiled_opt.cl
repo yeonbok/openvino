@@ -127,7 +127,11 @@ KERNEL(gemm_tiled_opt)(
     // Setting x and y for fusings indexing
     // TODO: investigate how we can use only TILE_N_NOT_DIVISIBLE here for getting stable results in fusings
 #if IS_DYNAMIC
+#if B_VEC_SIZE == 1
     const uint x = (uint)get_global_id(0);
+#else
+    const uint x = tile_n_num * SIMD_WIDTH * B_VEC_SIZE;
+#endif
 #else // IS_DYNAMIC
 #if TILE_N_NOT_DIVISIBLE || B_VEC_SIZE == 1
     const uint x = (uint)get_global_id(0);
@@ -146,6 +150,9 @@ KERNEL(gemm_tiled_opt)(
     batch_number /= TR_OUTPUT_FEATURE_NUM;
     const uint b = batch_number % TR_OUTPUT_BATCH_NUM;
 
+    //if (get_global_id(1) == 0 && get_global_id(2) == 0) {
+    //    printf("b:%d, f:%d, y:%d, x:%d\n", b, f, y, x);
+    //} 
     // Batch offsets
     const uint batch_offset_input0 = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, y, 0);
     const uint batch_offset_input1 = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, 0, tile_n_offset);
@@ -294,7 +301,9 @@ KERNEL(gemm_tiled_opt)(
                     c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read[subtile_k_id], simd_local_id)),
                                          b_tile[subtile_k_id * SIMD_WIDTH + simd_local_id], c_tile[dot_id]);
         #else // TILE_K > SIMD_WIDTH
-                    c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read, simd_local_id)), b_tile[simd_local_id], c_tile[dot_id]);
+                    half a_read_ = sub_group_broadcast(a_read, simd_local_id);
+//                    c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read, simd_local_id)), b_tile[simd_local_id], c_tile[dot_id]);
+                    c_tile[dot_id] = mad((half2)(a_read_, a_read_), b_tile[simd_local_id], c_tile[dot_id]);
         #endif // TILE_K > SIMD_WIDTH
                 }
             }
