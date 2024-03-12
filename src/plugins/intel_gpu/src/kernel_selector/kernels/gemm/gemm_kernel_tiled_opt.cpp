@@ -141,6 +141,7 @@ GemmKernelTiledOpt::GemmTuningData GemmKernelTiledOpt::SetTuningParams(const gem
         auto n_size = get_transposed_dim_size(params.inputs[1], params.input1_order, "X");
         if (k_size == 128 && getenv("TUNING") != nullptr) {
             tuning_data.tile_m_size = 32;
+            tuning_data.tile_n_size = 32;
         }
         if (n_size == 128 && getenv("TUNING") != nullptr) {
             tuning_data.tile_m_size = 16;

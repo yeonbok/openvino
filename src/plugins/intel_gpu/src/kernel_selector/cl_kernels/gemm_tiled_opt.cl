@@ -230,12 +230,13 @@ KERNEL(gemm_tiled_opt)(
 //###################################################################################################
 // type A
 #if K_CONST == 1
+    // M : 3K, K : 128, N : 3K
     // INDIRECT_INPUT0 : 0
     // INDIRECT_INPUT1 : 0
     // TRANSPOSE_INPUT0 == TRANSPOSE_X_LAST
     // TRANSPOSE_INPUT1 == TRANSPOSE_Y_LAST
-    // TILE_N_NOT_DIVISIBLE 0
-    // TILE_K_NOT_DIVISIBLE 1
+    // TILE_N_NOT_DIVISIBLE 1
+    // TILE_K_NOT_DIVISIBLE 0
     MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile;
     for (uint k = 0; k < K_FULL_ITERATIONS /*128/16*/; k++) {
 
@@ -261,10 +262,13 @@ KERNEL(gemm_tiled_opt)(
     // Writing result in the global memory
     unroll_for (uint write_id = 0; write_id < tile_m_iterations; write_id++) {
         if (b_raw_global_id < N) {
-            ACCUMULATOR_TYPE dequantized = TO_ACCUMULATOR_TYPE(ALPHA) * c_tile[write_id];
-            FUSED_OPS_SCALAR;
-            OUTPUT_TYPE res = FUSED_OPS_RESULT_SCALAR;
-            *d_ptr = res;
+//            ACCUMULATOR_TYPE dequantized = TO_ACCUMULATOR_TYPE(ALPHA) * c_tile[write_id];
+            half2 dequantized = (half2)(ALPHA) * c_tile[write_id];
+            //FUSED_OPS_SCALAR;
+            //OUTPUT_TYPE res = FUSED_OPS_RESULT_SCALAR;
+            //*d_ptr = res;
+            FUSED_OPS_VEC;
+            BLOCK_WRITE_C(d_ptr, 0, dequantized);
         }
         d_ptr += batch_offset_output_diff;
     } // Writing result in the global memory end
