@@ -206,14 +206,14 @@ KERNEL(gemm_tiled_opt)(
     const char do_indirect_load = BEAM_TABLE_BATCH_NUM > 1;
 #endif
 
-#if TRANSPOSE_INPUT0 != TRANSPOSE_X_LAST
-    MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile;
-#endif // TRANSPOSE_INPUT0 != TRANSPOSE_X_LAST
-#if TRANSPOSE_INPUT1 != TRANSPOSE_Y_LAST
-    B_FLOATN b_tile[TILE_K];
-#else // TRANSPOSE_INPUT1 != TRANSPOSE_Y_LAST
-    MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile;
-#endif // TRANSPOSE_INPUT1 != TRANSPOSE_Y_LAST
+//#if TRANSPOSE_INPUT0 != TRANSPOSE_X_LAST
+//    MAKE_VECTOR_TYPE(INPUT0_TYPE, SIMD_WIDTH) a_tile;
+//#endif // TRANSPOSE_INPUT0 != TRANSPOSE_X_LAST
+//#if TRANSPOSE_INPUT1 != TRANSPOSE_Y_LAST
+//    B_FLOATN b_tile[TILE_K];
+//#else // TRANSPOSE_INPUT1 != TRANSPOSE_Y_LAST
+//    MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile;
+//#endif // TRANSPOSE_INPUT1 != TRANSPOSE_Y_LAST
     B_FLOATN c_tile[TILE_M];
 
     unroll_for (uint i = 0; i < TILE_M; i++) {
@@ -229,6 +229,7 @@ KERNEL(gemm_tiled_opt)(
     // TRANSPOSE_INPUT1 == TRANSPOSE_Y_LAST
     // TILE_N_NOT_DIVISIBLE 0
     // TILE_K_NOT_DIVISIBLE 1
+    MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile;
     for (uint k = 0; k < K_FULL_ITERATIONS /*128/16*/; k++) {
 
         // Loading B tile
@@ -275,6 +276,7 @@ KERNEL(gemm_tiled_opt)(
 // TILE_K_NOT_DIVISIBLE 1
     for (uint k = 0; k < K_FULL_ITERATIONS /*128/16*/; k++) {
         // Loading B tile
+        B_FLOATN b_tile[TILE_K];
         unroll_for (uint b_load_id = 0; b_load_id < TILE_K; b_load_id++) {
             {
 //                b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
@@ -301,6 +303,7 @@ KERNEL(gemm_tiled_opt)(
     } // Full tile calculation end
     if (TILE_K_NOT_DIVISIBLE) {
         // Loading leftovers of the matrix B
+        B_FLOATN b_tile[TILE_K];
         unroll_for (uint b_load_id = 0; b_load_id < TILE_K_LEFTOVER; b_load_id++) {
                 {
 //                    b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
