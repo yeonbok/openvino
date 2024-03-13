@@ -237,28 +237,39 @@ KERNEL(gemm_tiled_opt)(
     // TRANSPOSE_INPUT1 == TRANSPOSE_Y_LAST
     // TILE_N_NOT_DIVISIBLE 1
     // TILE_K_NOT_DIVISIBLE 0
-    MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile;
     for (uint k = 0; k < K_FULL_ITERATIONS /*128/16*/; k++) {
-
+        MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile[B_VEC_SIZE];
         // Loading B tile
         {
             b_ptr = b_ptr + (input1_offset * sglid);
-            b_tile = (N > b_raw_global_id) ? VLOAD(0, b_ptr) : 0;
-            b_ptr = b_ptr + input1_offset1 - (input1_offset * sglid);
+            b_tile[0] = (N > b_raw_global_id) ? VLOAD(0, b_ptr) : 0;
+            INPUT1_TYPE* b_ptr1 = b_ptr + (input1_offset * SIMD_WIDTH);
+            b_tile[1] = (N > b_raw_global_id) ? VLOAD(0, b_ptr1) : 0;
+//            if (get_global_id(1) == 0 && get_global_id(2) == 0)
+//                printf("get_global_id(0) : %d, b:%d f:%d y:%d x:%d k: %d sglid:%d input1_offset*sglid : %d input1_offset1 : %d b_ptr[0]: %f b_tile[0][0] : %f b_tile[1][0]: %f\n",
+//                           get_global_id(0), b, f, y, x, k, sglid, input1_offset * sglid, input1_offset1, (float)b_ptr[0], (float)b_tile[0][0], (float)b_tile[1][0]); // 3K
+            b_ptr = b_ptr + input1_offset1 /*k_stride*/ - (input1_offset * sglid);
         }
+
         // Loading A tile and tile C calculation
         unroll_for (uint dot_id = 0; dot_id < tile_m_iterations; dot_id++) {
             A_FLOATN a_read = TILE_K_NOT_DIVISIBLE ? a_ptr[sglid] : BLOCK_READ_A(a_ptr, 0);
             a_ptr += input0_offset;
-
             unroll_for (uint subtile_k_id = 0; subtile_k_id < TILE_K / SIMD_WIDTH; subtile_k_id++) {
                 unroll_for (uint simd_local_id = 0; simd_local_id < SIMD_WIDTH; simd_local_id++) {
-                    c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read, simd_local_id)), b_tile[simd_local_id], c_tile[dot_id]);
+                    half a_read_ = sub_group_broadcast(a_read, simd_local_id);
+//                    c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read, simd_local_id)), b_tile[simd_local_id], c_tile[dot_id]);
+//                    half2 b_tile_ = {b_tile[simd_local_id][0], b_tile[simd_local_id][1]};
+                    half2 b_tile_ = {b_tile[0][simd_local_id], b_tile[1][simd_local_id]};
+                    c_tile[dot_id] = mad((half2)(a_read_), b_tile_, c_tile[dot_id]);
                 }
             }
         }
         a_ptr = a_ptr + input0_offset1 - (input0_offset * tile_m_iterations);
     }
+//    if (get_global_id(1) == 0 && get_global_id(2) == 0)
+//        printf("get_global_id(0) : %d, b:%d f:%d y:%d x:%d input1_offset %d input1_offset1 %d\n", get_global_id(0), b, f, y, x, input1_offset, input1_offset1); // 3K
+//        printf("batch_offset_output_diff = %d\n", batch_offset_output_diff); // 3K
     // Writing result in the global memory
     unroll_for (uint write_id = 0; write_id < tile_m_iterations; write_id++) {
         if (b_raw_global_id < N) {
@@ -268,7 +279,14 @@ KERNEL(gemm_tiled_opt)(
             //OUTPUT_TYPE res = FUSED_OPS_RESULT_SCALAR;
             //*d_ptr = res;
             FUSED_OPS_VEC;
-            BLOCK_WRITE_C(d_ptr, 0, dequantized);
+            //BLOCK_WRITE_C(d_ptr, 0, dequantized);
+            OUTPUT_TYPE* d_ptr_tmp = d_ptr + sglid;
+            *d_ptr_tmp = dequantized[0];
+            if (b_raw_global_id + 16 < N)
+                *(d_ptr_tmp + 16) = dequantized[1];
+//            if (get_global_id(1) == 0 && get_global_id(2) == 0) {
+//                printf("get_global_id(0) : %d, b:%d f:%d y:%d x:%d sglid : %d => write to idx %d \n", get_global_id(0), b, f, y, x, sglid, batch_offset_output + sglid); // 3K
+//            }
         }
         d_ptr += batch_offset_output_diff;
     } // Writing result in the global memory end
@@ -278,6 +296,7 @@ KERNEL(gemm_tiled_opt)(
 //###################################################################################################
 // type B
 #if K_CONST == 0
+// M : 3K, K : 3K, N : 128
 // k == seq_len
 //INDIRECT_INPUT0 0
 //INDIRECT_INPUT1 0
