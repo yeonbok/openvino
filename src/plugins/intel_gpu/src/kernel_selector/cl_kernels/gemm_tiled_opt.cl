@@ -150,9 +150,6 @@ KERNEL(gemm_tiled_opt)(
     batch_number /= TR_OUTPUT_FEATURE_NUM;
     const uint b = batch_number % TR_OUTPUT_BATCH_NUM;
 
-    //if (get_global_id(1) == 0 && get_global_id(2) == 0) {
-    //    printf("b:%d, f:%d, y:%d, x:%d\n", b, f, y, x);
-    //} 
     // Batch offsets
     const uint batch_offset_input0 = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, y, 0);
     const uint batch_offset_input1 = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b, f, w, z, 0, tile_n_offset);
@@ -237,6 +234,7 @@ KERNEL(gemm_tiled_opt)(
     // TRANSPOSE_INPUT1 == TRANSPOSE_Y_LAST
     // TILE_N_NOT_DIVISIBLE 1
     // TILE_K_NOT_DIVISIBLE 0
+    __attribute__((opencl_unroll_hint(1))) 
     for (uint k = 0; k < K_FULL_ITERATIONS /*128/16*/; k++) {
         MAKE_VECTOR_TYPE(INPUT1_TYPE, SIMD_WIDTH) b_tile[B_VEC_SIZE];
         // Loading B tile
@@ -244,36 +242,28 @@ KERNEL(gemm_tiled_opt)(
             b_ptr = b_ptr + (input1_offset * sglid);
             b_tile[0] = (N > b_raw_global_id) ? VLOAD(0, b_ptr) : 0;
             INPUT1_TYPE* b_ptr1 = b_ptr + (input1_offset * SIMD_WIDTH);
-            b_tile[1] = (N > b_raw_global_id) ? VLOAD(0, b_ptr1) : 0;
-//            if (get_global_id(1) == 0 && get_global_id(2) == 0)
-//                printf("get_global_id(0) : %d, b:%d f:%d y:%d x:%d k: %d sglid:%d input1_offset*sglid : %d input1_offset1 : %d b_ptr[0]: %f b_tile[0][0] : %f b_tile[1][0]: %f\n",
-//                           get_global_id(0), b, f, y, x, k, sglid, input1_offset * sglid, input1_offset1, (float)b_ptr[0], (float)b_tile[0][0], (float)b_tile[1][0]); // 3K
+            b_tile[1] = (N > b_raw_global_id + 16) ? VLOAD(0, b_ptr1) : 0;
             b_ptr = b_ptr + input1_offset1 /*k_stride*/ - (input1_offset * sglid);
         }
 
         // Loading A tile and tile C calculation
+        A_FLOATN a_read = BLOCK_READ_A(a_ptr, 0);
         unroll_for (uint dot_id = 0; dot_id < tile_m_iterations; dot_id++) {
-            A_FLOATN a_read = TILE_K_NOT_DIVISIBLE ? a_ptr[sglid] : BLOCK_READ_A(a_ptr, 0);
             a_ptr += input0_offset;
             unroll_for (uint subtile_k_id = 0; subtile_k_id < TILE_K / SIMD_WIDTH; subtile_k_id++) {
                 unroll_for (uint simd_local_id = 0; simd_local_id < SIMD_WIDTH; simd_local_id++) {
                     half a_read_ = sub_group_broadcast(a_read, simd_local_id);
-//                    c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read, simd_local_id)), b_tile[simd_local_id], c_tile[dot_id]);
-//                    half2 b_tile_ = {b_tile[simd_local_id][0], b_tile[simd_local_id][1]};
                     half2 b_tile_ = {b_tile[0][simd_local_id], b_tile[1][simd_local_id]};
                     c_tile[dot_id] = mad((half2)(a_read_), b_tile_, c_tile[dot_id]);
                 }
             }
+            a_read = BLOCK_READ_A(a_ptr, 0);
         }
         a_ptr = a_ptr + input0_offset1 - (input0_offset * tile_m_iterations);
     }
-//    if (get_global_id(1) == 0 && get_global_id(2) == 0)
-//        printf("get_global_id(0) : %d, b:%d f:%d y:%d x:%d input1_offset %d input1_offset1 %d\n", get_global_id(0), b, f, y, x, input1_offset, input1_offset1); // 3K
-//        printf("batch_offset_output_diff = %d\n", batch_offset_output_diff); // 3K
     // Writing result in the global memory
     unroll_for (uint write_id = 0; write_id < tile_m_iterations; write_id++) {
         if (b_raw_global_id < N) {
-//            ACCUMULATOR_TYPE dequantized = TO_ACCUMULATOR_TYPE(ALPHA) * c_tile[write_id];
             half2 dequantized = (half2)(ALPHA) * c_tile[write_id];
             //FUSED_OPS_SCALAR;
             //OUTPUT_TYPE res = FUSED_OPS_RESULT_SCALAR;
@@ -284,9 +274,6 @@ KERNEL(gemm_tiled_opt)(
             *d_ptr_tmp = dequantized[0];
             if (b_raw_global_id + 16 < N)
                 *(d_ptr_tmp + 16) = dequantized[1];
-//            if (get_global_id(1) == 0 && get_global_id(2) == 0) {
-//                printf("get_global_id(0) : %d, b:%d f:%d y:%d x:%d sglid : %d => write to idx %d \n", get_global_id(0), b, f, y, x, sglid, batch_offset_output + sglid); // 3K
-//            }
         }
         d_ptr += batch_offset_output_diff;
     } // Writing result in the global memory end
@@ -309,27 +296,21 @@ KERNEL(gemm_tiled_opt)(
         B_FLOATN b_tile[TILE_K];
         unroll_for (uint b_load_id = 0; b_load_id < TILE_K; b_load_id++) {
             {
-//                b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
                 b_tile[b_load_id] = BLOCK_READ_B(b_ptr, 0);
                 b_ptr += input1_offset;
             }
         }
         // Loading A tile and tile C calculation
+        A_FLOATN a_read = TILE_K_NOT_DIVISIBLE ? a_ptr[sglid] : BLOCK_READ_A(a_ptr, 0);
         unroll_for (uint dot_id = 0; dot_id < tile_m_iterations; dot_id++) {
-            A_FLOATN a_read = TILE_K_NOT_DIVISIBLE ? a_ptr[sglid] : BLOCK_READ_A(a_ptr, 0);
             a_ptr += input0_offset;
             unroll_for (uint subtile_k_id = 0; subtile_k_id < TILE_K / SIMD_WIDTH; subtile_k_id++) {
                 unroll_for (uint simd_local_id = 0; simd_local_id < SIMD_WIDTH; simd_local_id++) {
-        #if TILE_K > SIMD_WIDTH
-                    c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read[subtile_k_id], simd_local_id)),
-                                         b_tile[subtile_k_id * SIMD_WIDTH + simd_local_id], c_tile[dot_id]);
-        #else // TILE_K > SIMD_WIDTH
                     half a_read_ = sub_group_broadcast(a_read, simd_local_id);
-//                    c_tile[dot_id] = mad((INPUT0_TYPE)(sub_group_broadcast(a_read, simd_local_id)), b_tile[simd_local_id], c_tile[dot_id]);
                     c_tile[dot_id] = mad((half2)(a_read_, a_read_), b_tile[simd_local_id], c_tile[dot_id]);
-        #endif // TILE_K > SIMD_WIDTH
                 }
             }
+            a_read = TILE_K_NOT_DIVISIBLE ? a_ptr[sglid] : BLOCK_READ_A(a_ptr, 0);
         } // Loading A tile and tile C calculation end
         a_ptr = a_ptr + input0_offset1 - (input0_offset * tile_m_iterations);
     } // Full tile calculation end
@@ -338,7 +319,6 @@ KERNEL(gemm_tiled_opt)(
         B_FLOATN b_tile[TILE_K];
         unroll_for (uint b_load_id = 0; b_load_id < TILE_K_LEFTOVER; b_load_id++) {
                 {
-//                    b_tile[b_load_id] = TILE_N_NOT_DIVISIBLE ? (b_raw_global_id > N - 1 ? 0 : b_ptr[sglid]) : BLOCK_READ_B(b_ptr, 0);
                     b_tile[b_load_id] = BLOCK_READ_B(b_ptr, 0);
                     b_ptr += input1_offset;
                 }
