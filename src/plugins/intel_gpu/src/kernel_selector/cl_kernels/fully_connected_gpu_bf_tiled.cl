@@ -269,8 +269,8 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
             uint weights_idx = weights_offset + local_id * SIMD * FILTER_LOAD_ITERS * FILTER_LOAD_BLOCK_SIZE;
             uint wei_local_idx = local_id * SIMD * FILTER_LOAD_ITERS * FILTER_LOAD_BLOCK_SIZE + sglid;
 
-            SLM_FILTER_PACKED_VEC wei_packed = BLOCK_READN(FILTER_TYPE, FILTER_LOAD_BLOCK_SIZE, weights, weights_idx);
             unroll_for(uint load_iter = 0; load_iter < FILTER_LOAD_ITERS; ++load_iter) {
+                SLM_FILTER_PACKED_VEC wei_packed = BLOCK_READN(FILTER_TYPE, FILTER_LOAD_BLOCK_SIZE, weights, weights_idx);
                 SLM_FILTER_UNPACKED_VEC wei_unpacked = UNPACK_INT4x2(ACCUMULATOR_TYPE, *((INT4_PACKED_TYPE_PRELOAD*)&wei_packed));
 
                 ACCUMULATOR_TYPE* w = (ACCUMULATOR_TYPE*)(&wei_unpacked);
@@ -307,8 +307,6 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                         w[w_idx] = (w[w_idx] - dzp) * ds;
                     }
                 }
-                weights_idx += SIMD * FILTER_LOAD_BLOCK_SIZE;
-                wei_packed = BLOCK_READN(FILTER_TYPE, FILTER_LOAD_BLOCK_SIZE, weights, weights_idx);
 
                 #define STORE_TO_SLM(vec2) slm_wei_vec[wei_local_idx] = vec2; wei_local_idx += SIMD;
 
@@ -335,15 +333,12 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
 
                 #undef STORE_TO_SLM
 
-//                weights_idx += SIMD * FILTER_LOAD_BLOCK_SIZE;
-//                wei_packed = BLOCK_READN(FILTER_TYPE, FILTER_LOAD_BLOCK_SIZE, weights, weights_idx);
+                weights_idx += SIMD * FILTER_LOAD_BLOCK_SIZE;
             }
 
             wei_local_idx = sglid;
 
             barrier(CLK_LOCAL_MEM_FENCE);
-        #else
-            FILTER_PACKED_VEC_TYPE wei_packed = FILTER_BLOCK_READ(weights, weights_offset);
         #endif
 
         unroll_for(uint ki = 0; ki < (TILE_IFM * SIMD) / TILE_K; ++ki) {
@@ -366,7 +361,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     #endif
                     #undef LOAD_FROM_SLM
                 #else
-                    //FILTER_PACKED_VEC_TYPE wei_packed = FILTER_BLOCK_READ(weights, weights_offset);
+                    FILTER_PACKED_VEC_TYPE wei_packed = FILTER_BLOCK_READ(weights, weights_offset);
                     wei = UNPACK_INT4x2(ACCUMULATOR_TYPE, *((INT4_PACKED_TYPE*)&wei_packed));
                 #endif
             #else
@@ -410,9 +405,6 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                 }
             #endif
             weights_offset += TILE_K_OFM_PACKED * SIMD;
-            #if !USE_USM || !COMPRESSED_WEIGHTS_INT4
-                wei_packed = FILTER_BLOCK_READ(weights, weights_offset);
-            #endif
 
             unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
                 const uint total_k = ki * TILE_K + kii;
