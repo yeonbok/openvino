@@ -69,6 +69,8 @@
 // Check alignment restrictions for using block writes on output.
 #define USE_BLOCK_WRITE ((OUTPUT_TYPE_SIZE * TILE_OUT_B_PITCH) % 16 == 0 && (OUTPUT_TYPE_SIZE * OUTPUT_OFFSET) % 16 == 0)
 
+#define LOAD_FROM_SLM(vec2) vec2 = slm_wei_vec[wei_local_idx]; wei_local_idx += SIMD;
+
 #if !REALIGN_FP16_OFFSET
 #   if OUTPUT_3D
 #       define MAIN_LOOP_ELEMENTS_COUNT  INPUT0_SIZE_Y
@@ -269,8 +271,9 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
             uint weights_idx = weights_offset + local_id * SIMD * FILTER_LOAD_ITERS * FILTER_LOAD_BLOCK_SIZE;
             uint wei_local_idx = local_id * SIMD * FILTER_LOAD_ITERS * FILTER_LOAD_BLOCK_SIZE + sglid;
 
+// prefetching
+            SLM_FILTER_PACKED_VEC wei_packed = BLOCK_READN(FILTER_TYPE, FILTER_LOAD_BLOCK_SIZE, weights, weights_idx);
             unroll_for(uint load_iter = 0; load_iter < FILTER_LOAD_ITERS; ++load_iter) {
-                SLM_FILTER_PACKED_VEC wei_packed = BLOCK_READN(FILTER_TYPE, FILTER_LOAD_BLOCK_SIZE, weights, weights_idx);
                 SLM_FILTER_UNPACKED_VEC wei_unpacked = UNPACK_INT4x2(ACCUMULATOR_TYPE, *((INT4_PACKED_TYPE_PRELOAD*)&wei_packed));
 
                 ACCUMULATOR_TYPE* w = (ACCUMULATOR_TYPE*)(&wei_unpacked);
@@ -334,32 +337,33 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                 #undef STORE_TO_SLM
 
                 weights_idx += SIMD * FILTER_LOAD_BLOCK_SIZE;
+                wei_packed = BLOCK_READN(FILTER_TYPE, FILTER_LOAD_BLOCK_SIZE, weights, weights_idx);
             }
 
             wei_local_idx = sglid;
 
             barrier(CLK_LOCAL_MEM_FENCE);
         #endif
-
+// prefetching
+        #if COMPRESSED_WEIGHTS_INT4 && USE_SLM
+            FILTER_VEC_TYPE wei = 0;
+            #if TILE_K == 1
+                LOAD_FROM_SLM(wei.s01);
+            #elif TILE_K == 2
+                LOAD_FROM_SLM(wei.s01);
+                LOAD_FROM_SLM(wei.s23);
+            #elif TILE_K == 4
+                LOAD_FROM_SLM(wei.s01);
+                LOAD_FROM_SLM(wei.s23);
+                LOAD_FROM_SLM(wei.s45);
+                LOAD_FROM_SLM(wei.s67);
+            #else
+            #error "FC bf_tiled kernel: unsupported TILE_K size for SLM kernel"
+            #endif
+        #endif
         unroll_for(uint ki = 0; ki < (TILE_IFM * SIMD) / TILE_K; ++ki) {
             #if COMPRESSED_WEIGHTS_INT4
                 #if USE_SLM
-                    FILTER_VEC_TYPE wei = 0;
-                    #define LOAD_FROM_SLM(vec2) vec2 = slm_wei_vec[wei_local_idx]; wei_local_idx += SIMD;
-                    #if TILE_K == 1
-                        LOAD_FROM_SLM(wei.s01);
-                    #elif TILE_K == 2
-                        LOAD_FROM_SLM(wei.s01);
-                        LOAD_FROM_SLM(wei.s23);
-                    #elif TILE_K == 4
-                        LOAD_FROM_SLM(wei.s01);
-                        LOAD_FROM_SLM(wei.s23);
-                        LOAD_FROM_SLM(wei.s45);
-                        LOAD_FROM_SLM(wei.s67);
-                    #else
-                    #error "FC bf_tiled kernel: unsupported TILE_K size for SLM kernel"
-                    #endif
-                    #undef LOAD_FROM_SLM
                 #else
                     FILTER_PACKED_VEC_TYPE wei_packed = FILTER_BLOCK_READ(weights, weights_offset);
                     wei = UNPACK_INT4x2(ACCUMULATOR_TYPE, *((INT4_PACKED_TYPE*)&wei_packed));
@@ -419,6 +423,21 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     }
                 }
             }
+            #if COMPRESSED_WEIGHTS && USE_SLM
+            #if TILE_K == 1
+                LOAD_FROM_SLM(wei.s01);
+            #elif TILE_K == 2
+                LOAD_FROM_SLM(wei.s01);
+                LOAD_FROM_SLM(wei.s23);
+            #elif TILE_K == 4
+                LOAD_FROM_SLM(wei.s01);
+                LOAD_FROM_SLM(wei.s23);
+                LOAD_FROM_SLM(wei.s45);
+                LOAD_FROM_SLM(wei.s67);
+            #else
+            #error "FC bf_tiled kernel: unsupported TILE_K size for SLM kernel"
+            #endif
+            #endif
 #if DECOMPRESSION_SCALE_POST_OP && (TILE_IFM * SIMD > DECOMPRESSION_SCALE_GROUP_SIZE)
             unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
                 unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
@@ -437,6 +456,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
             }
 #endif
         }
+
 #if DECOMPRESSION_SCALE_POST_OP && (TILE_IFM * SIMD <= DECOMPRESSION_SCALE_GROUP_SIZE)
         unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
             unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
@@ -848,6 +868,7 @@ KERNEL(fc)(
 #undef BIAS_BLOCK_READ
 #undef OUTPUT_BLOCK_WRITE
 
+#undef LOAD_FROM_SLM
 #undef USE_BLOCK_WRITE
 
 #undef MAIN_LOOP_ELEMENTS_COUNT
