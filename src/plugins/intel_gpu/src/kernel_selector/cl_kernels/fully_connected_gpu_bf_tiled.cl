@@ -168,9 +168,13 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
     uint out_f = (feature_mega_block * DISPATCH_FSV + feature_mini_block) * (TILE_OFM * SIMD);
     uint out_b = ((batch_mega_block * DISPATCH_BSV + batch_mini_block) * TILE_B);
 #endif
-
+#if TILE_B != 1
     ACCUMULATOR_VEC_TYPE acc[TILE_B] = { };
     INPUT_VEC_TYPE       in_0[TILE_B] = { };
+#else
+    ACCUMULATOR_VEC_TYPE acc = (ACCUMULATOR_VEC_TYPE)ACCUMULATOR_VAL_ZERO;
+    INPUT_VEC_TYPE       in_0 = (INPUT_VEC_TYPE)ACCUMULATOR_VAL_ZERO;
+#endif
 
 #if !USE_SLM
     FILTER_VEC_TYPE wei = 0;
@@ -233,9 +237,13 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
         #if COMPRESSED_WEIGHTS
             tmp_wei = (tmp_wei - d_zp) * d_scale;
         #endif
-        unroll_for(uint bi = 0; bi < TILE_B; ++bi) {
+        #if TILE_B != 1
+        unroll_for(uint bi = 0; bi < tile_b; ++bi) {
             acc[bi] = _sub_group_shuffle(tmp_input, bi) * tmp_wei;
         }
+        #else
+        acc = _sub_group_shuffle(tmp_input, 0) * tmp_wei;
+        #endif
 
         weights_offset += TILE_OFM * SIMD;
         input_offset += 1;
@@ -246,20 +254,29 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
     uint iterations = MAIN_LOOP_ELEMENTS_COUNT / (TILE_IFM * SIMD);
     __attribute__((opencl_unroll_hint(1)))
     for (uint ni = 0; ni < iterations; ++ni) {
-        // Load input.
         #define LOAD_IN_0(bi) do {                                  \
                 in_0[bi] = INPUT_BLOCK_READ(input, input_offset);   \
                 input_offset += TILE_IN_B_PITCH;                    \
-            } while (false)
-
-        CONST_LOOP(TILE_B, LOAD_IN_0);
+        } while (false)
+ 
+        #if TILE_B != 1
+            // Load input.
+           CONST_LOOP(TILE_B, LOAD_IN_0);
+        #else
+            in_0 = INPUT_BLOCK_READ(input, input_offset);
+            input_offset += TILE_IN_B_PITCH;
+        #endif
         #undef LOAD_IN_0
         input_offset += TILE_IFM * SIMD - TILE_IN_B_PITCH * TILE_B;
         // NOTE: Manually unrolling multiplication loop leads to lower register pressure and allows for bigger block sizes,
         //       but significantly degrades readability and generality of code.
         //       It doesn't also show noticable performance improvement on tested configurations.
         #if DECOMPRESSION_SCALE_POST_OP
+        #if TILE_B != 1
             ACCUMULATOR_VEC_TYPE acc_tmp[TILE_B] = { };
+        #else
+            ACCUMULATOR_VEC_TYPE acc_tmp;
+        #endif
         #endif
 
         #if USE_SLM && COMPRESSED_WEIGHTS_INT4
@@ -417,12 +434,24 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
             unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
                 const uint total_k = ki * TILE_K + kii;
                 unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+#if TILE_B != 1
                     INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
-                    unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
-#if DECOMPRESSION_SCALE_POST_OP
-                        ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
 #else
+                    INPUT0_TYPE in_val = _sub_group_shuffle((INPUT0_TYPE)(in_0[total_k / SIMD]), total_k % SIMD);
+#endif
+                    unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
+#if TILE_B != 1
+    #if DECOMPRESSION_SCALE_POST_OP
+                        ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+    #else
                         ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+    #endif
+#else
+    #if DECOMPRESSION_SCALE_POST_OP
+                        acc_tmp[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+    #else
+                        acc[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+    #endif
 #endif
                     }
                 }
@@ -439,8 +468,13 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     #else
                         ACCUMULATOR_TYPE ds = d_scales[fi % DECOMPRESSION_SCALE_LENGTH];
                     #endif
+                    #if TILE_B != 1
                     ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
                     acc_tmp[bi][fi] = 0;
+                    #else
+                    acc[fi] += (ACCUMULATOR_TYPE)(acc_tmp[fi]) * ds;
+                    acc_tmp[fi] = 0;
+                    #endif
                 }
             }
 #endif
@@ -457,7 +491,11 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                 #else
                     ACCUMULATOR_TYPE ds = d_scales[fi % DECOMPRESSION_SCALE_LENGTH];
                 #endif
+                #if TILE_B != 1
                 ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
+                #else
+                ((ACCUMULATOR_TYPE)acc)[fi] += ((ACCUMULATOR_TYPE)acc_tmp)[fi] * ds;
+                #endif
             }
         }
 #endif
@@ -472,8 +510,13 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                 in_0[bi] = INPUT_BLOCK_READ(input, input_offset);   \
                 input_offset += TILE_IN_B_PITCH;                    \
             } while (false)
-
-        CONST_LOOP(TILE_B, LOAD_IN_0);
+ 
+        #if TILE_B != 1
+            CONST_LOOP(TILE_B, LOAD_IN_0);
+        #else
+            in_0 = INPUT_BLOCK_READ(input, input_offset);
+            input_offset += TILE_IN_B_PITCH;
+        #endif
         #undef LOAD_IN_0
         input_offset += TILE_IFM * SIMD - TILE_IN_B_PITCH * TILE_B;
         unroll_for(uint ki = 0; ki < CEIL_DIV(LEFTOVER_IFM, TILE_K); ++ki) {
@@ -526,8 +569,13 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
                         const uint total_k = ki * TILE_K + kii;
                         if (total_k < LEFTOVER_IFM) {
+                            #if TILE_B != 1
                             INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
                             ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+                            #else
+                            INPUT0_TYPE in_val = _sub_group_shuffle((INPUT0_TYPE)(in_0[total_k / SIMD]), total_k % SIMD);
+                            ((ACCUMULATOR_TYPE)acc)[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+                            #endif
                         }
                     }
                 }
@@ -538,10 +586,14 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
 #endif // MAIN_LOOP_ELEMENTS_COUNT % (TILE_IFM * SIMD) != 0
     // =====================================================================================================================================
     // Post-processing: bias, activation, fused-ops
+#if TILE_B != 1
     ACTIVATION_VEC_TYPE activated[TILE_B] = { };
     for (uint bi = 0; bi < TILE_B; ++bi) {
         activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
     }
+#else
+    ACTIVATION_VEC_TYPE activated = TO_ACTIVATION_VEC_TYPE(acc);
+#endif
 
 #if BIAS_TERM
     #if TILE_OUT_F_NUM % (TILE_OFM * SIMD) == 0
@@ -553,27 +605,54 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
         }
     #endif
     unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+    #if TILE_B != 1
         activated[bi] += TO_ACTIVATION_VEC_TYPE(bias);
+    #else
+        activated += TO_ACTIVATION_VEC_TYPE(bias);
+    #endif
     }
 #endif
 
+#if TILE_B != 1
     OUTPUT_VEC_TYPE result[TILE_B] = { };
-#if HAS_FUSED_OPS
+    #if HAS_FUSED_OPS
     unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
-    #if TILE_OFM > 1
+        #if TILE_OFM > 1
         unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
             FUSED_OPS_VEC;
             result[bi][fi] = FUSED_OPS_RESULT_VEC;
         }
-    #else
+        #else
         FUSED_OPS_SCALAR;
         result[bi] = FUSED_OPS_RESULT_SCALAR;
-    #endif // TILE_OFM > 1
+        #endif // TILE_OFM > 1
     }
-#else
+    #else
     unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
         result[bi] = TO_OUTPUT_VEC_TYPE(ACTIVATION_TYPED(activated[bi], ACTIVATION_PARAMS_TYPED));
     }
+    #endif
+#else
+    OUTPUT_VEC_TYPE result;
+    #if HAS_FUSED_OPS
+    unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+        #if TILE_OFM > 1
+        unroll_for(uint fi = 0; fi < TILE_OFM; ++fi) {
+            FUSED_OPS_VEC;
+            result[fi] = FUSED_OPS_RESULT_VEC;
+        }
+        #else
+        FUSED_OPS_SCALAR;
+        result = FUSED_OPS_RESULT_SCALAR;
+        #endif // TILE_OFM > 1
+    }
+    #else
+    #if TILE_B != 1
+    result = TO_OUTPUT_VEC_TYPE(ACTIVATION_TYPED(activated[bi], ACTIVATION_PARAMS_TYPED));
+    #else
+    result = TO_OUTPUT_VEC_TYPE(ACTIVATION_TYPED(activated, ACTIVATION_PARAMS_TYPED));
+    #endif
+    #endif
 #endif
     // =====================================================================================================================================
     // Write results
@@ -592,7 +671,11 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                 output_offset += TILE_OUT_B_PITCH;                          \
             } while (false)
 #endif
+        #if TILE_B != 1
         CONST_LOOP(TILE_B, WRITE_OUTPUT);
+        #else
+        OUTPUT_BLOCK_WRITE(output, output_offset, result);
+        #endif
         #undef WRITE_OUTPUT
     } else {
         output_offset += sglid;
@@ -618,12 +701,13 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
         //#undef WRITE_OUTPUT
         //#undef WRITE_OUTPUT_FEATURE
 
+#if TILE_B != 1
         for (uint bi = 0; bi < TILE_B; ++bi) {
             for (uint fi = 0; fi < TILE_OFM; ++fi) {
                 const bool should_write =
-#if IS_DYNAMIC
+    #if IS_DYNAMIC
                     bi + out_b < BATCH_SIZE &&
-#endif
+    #endif
                     (TILE_OUT_F_NUM % (TILE_OFM * SIMD) == 0 ||
                     out_f + fi * SIMD + sglid < TILE_OUT_F_NUM);
                 if (should_write) {
@@ -633,6 +717,20 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
             }
             output_offset += TILE_OUT_B_PITCH - TILE_OFM * SIMD;
         }
+#else
+        for (uint fi = 0; fi < TILE_OFM; ++fi) {
+            const bool should_write =
+    #if IS_DYNAMIC
+                out_b < BATCH_SIZE &&
+    #endif
+                (TILE_OUT_F_NUM % (TILE_OFM * SIMD) == 0 ||
+                out_f + fi * SIMD + sglid < TILE_OUT_F_NUM);
+            if (should_write) {
+                output[output_offset] = (OUTPUT_TYPE)(result[fi]);
+            }
+            output_offset += SIMD;
+        }
+#endif
     }
     // =====================================================================================================================================
 }
