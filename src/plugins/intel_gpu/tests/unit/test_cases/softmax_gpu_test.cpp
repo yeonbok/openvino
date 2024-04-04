@@ -1253,7 +1253,7 @@ TEST(softmax_gpu_bfyx_f16, opt_softmax_bf_axis_3) {
     run_softmax_bfyx_opt(1, 4, 2, 3083, 3);
 }
 
-
+#define USE_SIMPLE_LAYOUT 1
 #define PROFILING_SOFTMAX_KERNEL 1
 #if PROFILING_SOFTMAX_KERNEL
 
@@ -1333,6 +1333,9 @@ static void prof_softmax_bfyx_opt(const int64_t b, const int64_t f, const int64_
                     << (static_cast<float>(time_records.front()) / 1000.f)  << " ms" << std::endl;
     }
 
+#ifndef USE_SIMPLE_LAYOUT
+    std::cout << "Skip output validation ..." << std::endl;
+#else
     std::vector<ov::float16> output_ref(buf_size);
     ov::reference::softmax<ov::float16>(input_data.data(), output_ref.data(), input_layout_static.get_shape(), ov::AxisSet{axis});
     ASSERT_NE(output, nullptr);
@@ -1341,17 +1344,30 @@ static void prof_softmax_bfyx_opt(const int64_t b, const int64_t f, const int64_
     for (size_t idx = 0; idx < static_cast<size_t>(buf_size); idx++) {
         ASSERT_NEAR(float(output_ptr[idx]), float(output_ref[idx]), threshold_fp16) << idx << ", " << std::fixed << setprecision(8) << output_ptr[idx] << " vs " << output_ref[idx];
     }
+#endif
 }
 
 TEST(softmax_gpu_bfyx_f16, opt_softmax_bf_perf_01) {
+#ifdef USE_SIMPLE_LAYOUT
     prof_softmax_bfyx_opt(1, 2, 2048, 3083, 3);
+#else
+    prof_softmax_bfyx_opt(1, 32, 3083, 3083, 3);
+#endif
 }
 
 TEST(softmax_gpu_bfyx_f16, opt_softmax_bf_perf_02) {
+#ifdef USE_SIMPLE_LAYOUT
     prof_softmax_bfyx_opt(1, 2, 2048, 3584, 3);
+#else
+    prof_softmax_bfyx_opt(1, 32, 3083, 3584, 3);
+#endif
 }
 
 TEST(softmax_gpu_bfyx_f16, opt_softmax_bf_perf_03) {
+#ifdef USE_SIMPLE_LAYOUT
     prof_softmax_bfyx_opt(1, 2, 2048, 1739, 3);
+#else
+    prof_softmax_bfyx_opt(1, 32, 3083, 1739, 3);
+#endif
 }
 #endif
