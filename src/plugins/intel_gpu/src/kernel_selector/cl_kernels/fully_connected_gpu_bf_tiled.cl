@@ -186,13 +186,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
 #endif
 
 #if COMPRESSED_WEIGHTS_INT4
-#if TILE_OFM == 1
-    uint weights_offset = (( out_f / 32 )* 32) * (INPUT_ELEMENTS_COUNT / 2) + 16 * ((out_f / 16) & 0x1);
-   // if (gid == 3) 
-   //     printf("ksize : %d out_f : %d weights_offset: %d input_element_count : %d\n", INPUT0_SIZE_Y, out_f, weights_offset, INPUT_ELEMENTS_COUNT);
-#else
     uint weights_offset = out_f * (INPUT_ELEMENTS_COUNT / 2);
-#endif
 #else
     uint weights_offset = out_f * INPUT_ELEMENTS_COUNT;
 #endif
@@ -242,6 +236,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
         unroll_for(uint bi = 0; bi < TILE_B; ++bi) {
             acc[bi] = _sub_group_shuffle(tmp_input, bi) * tmp_wei;
         }
+
         weights_offset += TILE_OFM * SIMD;
         input_offset += 1;
     }
@@ -417,12 +412,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     }
                 }
             #endif
-
-            #if TILE_OFM == 1
-            weights_offset += TILE_K_OFM_PACKED /*1*/ * 2/*because osv32*/ * SIMD;
-            #else
             weights_offset += TILE_K_OFM_PACKED * SIMD;
-            #endif
 
             unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
                 const uint total_k = ki * TILE_K + kii;
@@ -430,17 +420,9 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
                     unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
 #if DECOMPRESSION_SCALE_POST_OP
-                    #if TILE_OFM > 1
                         ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
-                    #else
-                        acc_tmp[bi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
-                    #endif
 #else
-                    #if TILE_OFM > 1
                         ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
-                    #else
-                        acc[bi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
-                    #endif
 #endif
                     }
                 }
@@ -457,13 +439,8 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     #else
                         ACCUMULATOR_TYPE ds = d_scales[fi % DECOMPRESSION_SCALE_LENGTH];
                     #endif
-                    #if TILE_OFM > 1
                     ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
                     acc_tmp[bi][fi] = 0;
-                    #else
-                    acc[bi] += acc_tmp[bi] * ds;
-                    acc_tmp[bi] = 0;
-                    #endif
                 }
             }
 #endif
@@ -480,11 +457,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                 #else
                     ACCUMULATOR_TYPE ds = d_scales[fi % DECOMPRESSION_SCALE_LENGTH];
                 #endif
-                #if TILE_OFM > 1
                 ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
-                #else
-                acc[bi] += acc_tmp[bi] * ds;
-                #endif
             }
         }
 #endif
@@ -546,11 +519,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     }
                 }
             #endif
-            #if TILE_OFM == 1
-            weights_offset += TILE_K_OFM_PACKED * SIMD * 2;
-            #else
             weights_offset += TILE_K_OFM_PACKED * SIMD;
-            #endif
 
             unroll_for (uint kii = 0; kii < TILE_K; ++kii) {
                 unroll_for (uint fi = 0; fi < TILE_OFM; ++fi) {
@@ -558,11 +527,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                         const uint total_k = ki * TILE_K + kii;
                         if (total_k < LEFTOVER_IFM) {
                             INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
-                            #if TILE_OFM > 1
                             ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
-                            #else
-                            acc[bi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
-                            #endif
                         }
                     }
                 }
