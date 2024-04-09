@@ -352,7 +352,10 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     dispatchData.gws[1] = 1;
     dispatchData.gws[2] = can_use_slm ? aligned_batch : 1;
 
-    dispatchData.lws[0] = simd;
+    if (dispatchData.gws[2] == 1 && !can_use_slm)
+        dispatchData.lws[0] = 32;
+    else
+        dispatchData.lws[0] = simd;
     dispatchData.lws[1] = 1;
     dispatchData.lws[2] = can_use_slm ? lws_batches : 1;
 

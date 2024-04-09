@@ -151,6 +151,16 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
 #endif
     uint sglid = (uint)get_sub_group_local_id();
 
+#if USE_SLM
+    uint out_f = gid * (TILE_OFM * SIMD);
+    uint out_b = LWS_BATCHES * TILE_B * (uint)get_group_id(2) + local_id * TILE_B;
+#else
+#if TILE_B == 1
+    //uint out_f = (get_global_id(2) * TILE_OFM) / 32;
+    uint out_f = gid * 2 * (TILE_OFM * SIMD);
+    if (get_local_id(0) >= 16) out_f += 32;
+    uint out_b = 0;
+#else
     // Dispatch as bs_fs_bsv_fsv, where bsv = DISPATCH_BSV and fsv = DISPATCH_FSV.
     // This allows more fine grained control over dispatch order than using work-groups and
     // avoids requirement of threads being available for whole work-group.
@@ -160,13 +170,9 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
     uint batch_mini_block = gid / DISPATCH_FSV % DISPATCH_BSV;
     uint feature_mega_block = gid / (DISPATCH_FSV * DISPATCH_BSV) % (CEIL_DIV(TILE_OUT_F_NUM, TILE_OFM * SIMD) / DISPATCH_FSV);
     uint batch_mega_block = gid / (DISPATCH_FSV * DISPATCH_BSV * CEIL_DIV(TILE_OUT_F_NUM, TILE_OFM * SIMD) / DISPATCH_FSV);
-
-#if USE_SLM
-    uint out_f = gid * (TILE_OFM * SIMD);
-    uint out_b = LWS_BATCHES * TILE_B * (uint)get_group_id(2) + local_id * TILE_B;
-#else
     uint out_f = (feature_mega_block * DISPATCH_FSV + feature_mini_block) * (TILE_OFM * SIMD);
     uint out_b = ((batch_mega_block * DISPATCH_BSV + batch_mini_block) * TILE_B);
+#endif
 #endif
 
     ACCUMULATOR_VEC_TYPE acc[TILE_B] = { };
