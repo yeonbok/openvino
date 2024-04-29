@@ -83,6 +83,10 @@ public:
 
     void update_dispatch_data(const kernel_impl_params& impl_param) override {
         auto kernel_params = get_kernel_params(impl_param, true);
+        // reset
+        for (auto& k : _kernel_data.kernels) {
+            k.skip_execution = 0;
+        }
         (_kernel_data.update_dispatch_data_func)(kernel_params, _kernel_data);
     }
 };

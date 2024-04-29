@@ -78,7 +78,7 @@ ConcatenationKernelBase::DispatchData ConcatenationKernelBase::SetDefault(const 
     DispatchData dispatchData;
 
     const auto& dims = params.inputs[0].GetDims();
-    auto layout = params.inputs[0].GetLayout();
+    const auto& layout = params.inputs[0].GetLayout();
 
     std::vector<int> idx = { DataTensor::Channelndex(layout, Tensor::DataChannelName::BATCH),
                              DataTensor::Channelndex(layout, Tensor::DataChannelName::FEATURE),
@@ -107,28 +107,29 @@ void ConcatenationKernelBase::GetUpdateDispatchDataFunc(KernelData& kd) const {
         for (size_t i = 0; i < prim_params.inputs.size(); i++) {
             size_t ifm_offset = 0;
 
-            const auto& input = prim_params.inputs[i];
-            auto newParams = prim_params;
-            newParams.inputs.resize(1);
-            newParams.inputs[0] = input;
-            size_t ifm = input.Feature().v;
-            newParams.isAligned = ifm_offset % GetAlignment(newParams) == 0;
-            newParams.misalignment = ifm_offset % GetAlignment(newParams);
-            ifm_offset += ifm;
-
             auto& kernel = kd.kernels[i];
-            DispatchData dispatchData = SetDefault(newParams);
-            kernel.params.workGroups.global = dispatchData.gws;
-            kernel.params.workGroups.local = dispatchData.lws;
-            kernel.skip_execution = KernelData::SkipKernelExecution(newParams);
+            const auto& input = prim_params.inputs[i];
+            if (!kernel.skip_execution) {
+                auto newParams = prim_params;
+                newParams.inputs.resize(1);
+                newParams.inputs[0] = input;
+                size_t ifm = input.Feature().v;
+                newParams.isAligned = ifm_offset % GetAlignment(newParams) == 0;
+                newParams.misalignment = ifm_offset % GetAlignment(newParams);
+                ifm_offset += ifm;
 
-            ScalarDescriptor s;
-            s.t = ScalarDescriptor::Types::UINT32;
-            s.v.u32 = lastOffset;
-            kernel.params.scalars.resize(1);
-            kernel.params.scalars[0] = s;
-
-            size_t concatChannelIndex = (size_t)DataTensor::Channelndex(input.GetLayout(), GetConcatChannel(prim_params));
+                DispatchData dispatchData = SetDefault(newParams);
+                kernel.params.workGroups.global = dispatchData.gws;
+                kernel.params.workGroups.local = dispatchData.lws;
+                kernel.skip_execution = KernelData::SkipKernelExecution(newParams);
+                ScalarDescriptor s;
+                s.t = ScalarDescriptor::Types::UINT32;
+                s.v.u32 = lastOffset;
+                kernel.params.scalars.resize(1);
+                kernel.params.scalars[0] = s;
+            }
+            size_t concatChannelIndex =
+                (size_t)DataTensor::Channelndex(input.GetLayout(), GetConcatChannel(prim_params));
             lastOffset += (uint32_t)input.GetDims()[concatChannelIndex].v;
         }
     };
