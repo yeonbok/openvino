@@ -131,6 +131,19 @@ std::vector<layout> strided_slice_inst::calc_output_layouts(strided_slice_node c
         const_data.emplace(3, strides_tensor);
 
         output_shapes = ov::op::v1::shape_infer(&op, input_shapes, ta);
+    } else if (!begin_data.empty() && !strides_data.empty()) {
+        // only end_data is empty
+        auto begin_tensor = make_tensor({ begin_shape, data_types::i64, format::bfyx }, static_cast<void*>(begin_data.data()));
+        auto strides_tensor = make_tensor({ strides_shape, data_types::i64, format::bfyx }, static_cast<void*>(strides_data.data()));
+        const_data.emplace(1, begin_tensor);
+        const_data.emplace(3, strides_tensor);
+
+        auto end_mem = constant_mem.at(2);
+        cldnn::mem_lock<uint8_t, mem_lock_type::read> lock2(end_mem, impl_param.get_stream());
+        auto end_tensor = make_tensor(end_mem->get_layout(), lock2.data());
+        const_data.emplace(2, end_tensor);
+
+        output_shapes = ov::op::v1::shape_infer(&op, input_shapes, ta);
     } else {
         auto begin_mem = constant_mem.at(1);
         auto end_mem = constant_mem.at(2);
