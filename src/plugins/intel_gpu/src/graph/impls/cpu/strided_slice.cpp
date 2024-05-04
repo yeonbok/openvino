@@ -93,7 +93,8 @@ struct strided_slice_impl : public typed_primitive_impl<strided_slice> {
 
         if (!pass_through_events) {
             for (auto e : events) {
-                e->wait();
+                if (e != nullptr)
+                    e->wait();
             }
         }
 
@@ -175,7 +176,8 @@ struct strided_slice_impl : public typed_primitive_impl<strided_slice> {
             }
         }
 
-        return stream.create_user_event(true);
+//        return stream.create_user_event(true);
+        return nullptr;
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}

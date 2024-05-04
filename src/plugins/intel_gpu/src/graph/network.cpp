@@ -1399,7 +1399,6 @@ std::vector<std::pair<primitive_inst*, int>> network::get_primitives(const std::
 void network::execute_primitive(const std::shared_ptr<primitive_inst>& primitive,
                                 const std::vector<event::ptr>& events) {
     event::ptr ev = primitive->execute(events);
-
     // Collect events under any of the following conditions:
     // 1) OOO queue execution
     // 2) Profiling mode is enabled

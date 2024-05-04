@@ -143,13 +143,12 @@ struct activation_impl : public typed_primitive_impl<activation> {
         auto& stream = instance.get_network().get_stream();
 
         const bool pass_through_events = (stream.get_queue_type() == QueueTypes::out_of_order) && instance.get_node().is_in_shape_of_subgraph();
-
         if (!pass_through_events) {
             for (auto e : events) {
-                e->wait();
+                if (e != nullptr)
+                    e->wait();
             }
         }
-
         if (!op) {
             switch (activation_function) {
             case activation_func::pow:
@@ -285,7 +284,8 @@ struct activation_impl : public typed_primitive_impl<activation> {
             }
         }
 
-        return stream.create_user_event(true);
+//        return stream.create_user_event(true);
+        return nullptr;
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}

@@ -45,7 +45,8 @@ struct crop_impl : public typed_primitive_impl<crop> {
 
         if (!pass_through_events) {
             for (auto e : events) {
-                e->wait();
+                if (e != nullptr)
+                    e->wait();
             }
         }
 
@@ -108,7 +109,8 @@ struct crop_impl : public typed_primitive_impl<crop> {
             }
         }
 
-        return stream.create_user_event(true);
+//        return stream.create_user_event(true);
+        return nullptr;
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}

@@ -271,7 +271,8 @@ event::ptr primitive_inst::set_output_memory(memory::ptr mem_new, bool check, si
     // skip all the buzz if no action actually required
     event::ptr ev = nullptr;
     if (_outputs[idx] && eng.is_the_same_buffer(*mem_new, *_outputs[idx])) {
-        return get_network().get_stream().create_user_event(true);
+        //return get_network().get_stream().create_user_event(true);
+        return ev;
     }
 
     auto ol = _impl_params->get_output_layout(idx);
@@ -282,7 +283,7 @@ event::ptr primitive_inst::set_output_memory(memory::ptr mem_new, bool check, si
     if (is_constant()) {
         ev = mem_new->copy_from(_network.get_stream(), *_outputs[idx], false);
     } else {
-        ev = get_network().get_stream().create_user_event(true);
+//        ev = get_network().get_stream().create_user_event(true);
         _outputs[idx] = mem_new;
     }
     return ev;
@@ -1298,12 +1299,18 @@ bool primitive_inst::has_inner_networks() const {
 }
 
 event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
+    for (const auto& e : events) {
+        if (e == nullptr)
+            std::cout << id() << "null dependency!!!!" << std::endl;
+    }
+
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("primitive_inst::execute: " + id()));
     const auto primitive_id = id();
     OPENVINO_ASSERT(_has_valid_input, primitive_id, " has invalid/unset input");
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_TRACE_DETAIL << "-----------------------------------------------------------------" << std::endl;
     GPU_DEBUG_TRACE_DETAIL << "Execute " << id() << " (type: " << _impl_params->desc->type_string() << ") " << std::endl;
+//    std::cout << "Execute " << id() << " (type: " << _impl_params->desc->type_string() << ") " << std::endl;
     for (size_t i = 0; i < _deps.size(); ++i) {
         GPU_DEBUG_TRACE_DETAIL << "- inputs[" << i << "] : " <<  _deps[i].first->id() << std::endl;
     }
@@ -1339,9 +1346,10 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         }
 
         if (can_skip_execution) {
-            auto ev = get_network().get_stream().create_user_event(true);
+            //auto ev = get_network().get_stream().create_user_event(true);
             update_shape_done_by_other = false; // reset
-            return ev;
+            //return ev;
+            return nullptr;
         }
 
         // Check successor reorder if layouts are same

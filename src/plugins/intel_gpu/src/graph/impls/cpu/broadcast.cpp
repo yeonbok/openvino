@@ -66,7 +66,8 @@ struct broadcast_impl : public typed_primitive_impl<broadcast> {
 
         if (!pass_through_events) {
             for (auto e : events) {
-                e->wait();
+                if (e != nullptr)
+                    e->wait();
             }
         }
 
@@ -119,7 +120,8 @@ struct broadcast_impl : public typed_primitive_impl<broadcast> {
             }
         }
 
-        return stream.create_user_event(true);
+//        return stream.create_user_event(true);
+        return nullptr;
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}
