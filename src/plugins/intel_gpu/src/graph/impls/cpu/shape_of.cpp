@@ -68,7 +68,8 @@ struct shape_of_impl : public typed_primitive_impl<shape_of> {
             }
         }
 
-        return stream.create_user_event(true);
+//        return stream.create_user_event(true);
+        return nullptr;
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}

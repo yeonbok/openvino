@@ -46,7 +46,8 @@ struct read_value_impl : public typed_primitive_impl<read_value> {
 
     event::ptr execute_impl(const std::vector<event::ptr>& events, read_value_inst& instance) override {
         for (auto e : events) {
-            e->wait();
+            if (e != nullptr)
+                e->wait();
         }
 
         auto& variable = instance.get_network().get_variable(variable_id);
@@ -68,7 +69,8 @@ struct read_value_impl : public typed_primitive_impl<read_value> {
             return instance.output_memory(0).copy_from(stream, *variable.get_memory(), false);
         }
 
-        return instance.get_network().get_stream().create_user_event(true);
+//        return instance.get_network().get_stream().create_user_event(true);
+        return nullptr;
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}

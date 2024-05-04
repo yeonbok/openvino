@@ -43,7 +43,8 @@ struct range_impl : public typed_primitive_impl<range> {
 
         if (!pass_through_events) {
             for (auto e : events) {
-                e->wait();
+                if (e != nullptr)
+                    e->wait();
             }
         }
 
@@ -86,7 +87,8 @@ struct range_impl : public typed_primitive_impl<range> {
             }
         }
 
-        return stream.create_user_event(true);
+//        return stream.create_user_event(true);
+        return nullptr;
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}

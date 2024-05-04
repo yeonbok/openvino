@@ -57,7 +57,8 @@ struct concatenation_impl : public typed_primitive_impl<concatenation> {
 
         if (!pass_through_events) {
             for (auto e : events) {
-                e->wait();
+                if (e != nullptr)
+                    e->wait();
             }
         }
 
@@ -94,7 +95,6 @@ struct concatenation_impl : public typed_primitive_impl<concatenation> {
 
         OPENVINO_ASSERT(op->evaluate(output_host_tensors, input_host_tensors),
                         "[GPU] Couldn't execute concat primitive with id ", instance.id());
-
         for (size_t i = 0; i < input_mem_ptrs.size(); i++)
             input_mem_ptrs[i]->unlock(stream);
 
@@ -106,7 +106,8 @@ struct concatenation_impl : public typed_primitive_impl<concatenation> {
             }
         }
 
-        return stream.create_user_event(true);
+        //return stream.create_user_event(true);
+        return nullptr;
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}

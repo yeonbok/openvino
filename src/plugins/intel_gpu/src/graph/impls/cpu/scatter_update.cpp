@@ -57,7 +57,8 @@ struct scatter_update_impl : public typed_primitive_impl<scatter_update> {
 
         if (!pass_through_events) {
             for (auto e : events) {
-                e->wait();
+                if (e != nullptr)
+                    e->wait();
             }
         }
 
@@ -101,7 +102,8 @@ struct scatter_update_impl : public typed_primitive_impl<scatter_update> {
             }
         }
 
-        return stream.create_user_event(true);
+        //return stream.create_user_event(true);
+        return nullptr;
     }
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}

@@ -104,7 +104,8 @@ protected:
         if (group && !is_output)
             return stream.group_events(events);
 
-        return events.empty() ? stream.create_user_event(true)
+//        return events.empty() ? stream.create_user_event(true)
+        return events.empty() ? nullptr
                               : stream.enqueue_marker(events, is_output);
     }
 
