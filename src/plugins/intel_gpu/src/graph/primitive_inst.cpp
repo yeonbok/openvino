@@ -72,7 +72,11 @@ static std::string skip_broadcast_stage_name = "skip_broadcast";
 static std::string skip_permute_stage_name = "skip_permute";
 static std::string execute_cpu_stage_name = "execute_cpu";
 static std::string execute_gpu_stage_name = "execute_gpu";
-#define PROFILE 0
+static std::string on_execute_stage_name = "on_execute";
+static std::string update_weights_stage_name = "update_weight";
+static std::string set_args_stage_name = "set_args";
+static std::string buffer_fusing_stage_name = "buffer_fusing";
+#define PROFILE 1
 #if PROFILE
 #define PROFILE_START(stage) std::chrono::steady_clock::time_point start_##stage; \
                              start_##stage = Time::now();
@@ -80,15 +84,16 @@ static std::string execute_gpu_stage_name = "execute_gpu";
                             std::chrono::duration<float> dur_##stage = Time::now() - start_##stage; \
                             auto time_##stage = std::chrono::duration_cast<ms>(dur_##stage).count(); \
                             get_network().##total_time += time_##stage;
-                            //std::cout << id() << ", " << stage##_stage_name << ", " << time_##stage << std::endl;
+//                            std::cout << id() << ", " << stage##_stage_name << ", " << time_##stage << std::endl;
 
 #define PROFILE_START_POINT(stage) std::chrono::steady_clock::time_point start_##stage; \
                              start_##stage = Time::now();
 
-#define PROFILE_END_POINT(stage) \
+#define PROFILE_END_POINT(stage,total_time) \
                             std::chrono::duration<float> dur_##stage = Time::now() - start_##stage; \
                             auto time_##stage = std::chrono::duration_cast<ms>(dur_##stage).count(); \
-                            std::cout << id() << ", " << stage##_stage_name << ", " << time_##stage << std::endl;
+                            get_network().##total_time += time_##stage;
+                            //std::cout << id() << ", " << stage##_stage_name << ", " << time_##stage << std::endl;
 #else
 #define PROFILE_START(stage)
 #define PROFILE_END(stage,total_time)
@@ -1242,6 +1247,7 @@ void primitive_inst::do_runtime_in_place_concat() {
     if (get_users().size() != 1) return;
 
     auto concat_inst = get_user_insts().front();
+
     if (!concat_inst->get_node().is_type<concatenation>() || !concat_inst->get_node().can_be_optimized())
         return;
     // Currently does not support cascaded concats
@@ -1320,7 +1326,9 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     const auto orig_outputs = _outputs;
     std::vector<event::ptr> dependencies;
     if (is_dynamic() && !has_inner_networks()) {
+        PROFILE_START(buffer_fusing)
         do_runtime_in_place_concat();
+        PROFILE_END(buffer_fusing,total_buffer_fusing)
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
         update_shape();
 
@@ -1415,7 +1423,9 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
             PROFILE_END(update_impl,total_update_impl);
             if (update_impl_res) {
                 need_args_update = true;
+                PROFILE_START(update_weights)
                 auto ev = update_weights();
+                PROFILE_END(update_weights,total_update_weights);
                 if (ev)
                     dependencies.push_back(ev);
                 PROFILE_START(realloc)
@@ -1438,11 +1448,15 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
             return dep.first->mem_changed();
     });
 
+    PROFILE_START(set_args)
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
     if ((is_dynamic() && need_args_update) || has_mutable_input() || is_output() || has_dynamic_dependencies_insts) {
         set_arguments();
     }
+    PROFILE_END(set_args,total_set_args)
+    PROFILE_START(on_execute)
     on_execute();
+    PROFILE_END(on_execute, total_on_execute)
 
     if (!_node->is_type<condition>() && !_node->is_type<loop>()) {
         for (size_t i = 0; i < _outputs.size(); ++i) {
@@ -1514,7 +1528,6 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
                 }
             }
         }
-
         return ev;
     }
 }

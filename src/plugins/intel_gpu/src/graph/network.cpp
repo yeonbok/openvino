@@ -930,9 +930,13 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 #endif
 #if PRINT
     auto total_host_start = Time::now();
+    total_buffer_fusing = 0;
+    total_update_weights = 0;
+    total_set_args = 0;
     total_update_shape = 0;
     total_update_impl = 0;
     total_realloc = 0;
+    total_on_execute = 0;
     total_exec_gpu = 0;
     total_exec_cpu = 0;
     total_runtime_skip_kv_cache = 0;
@@ -943,6 +947,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     total_runtime_skip_permute = 0;
     total_update_padding = 0;
 #endif
+    total_primitive_exec = 0;
     // Wait for previous execution completion
     reset_execution(false);
     GPU_DEBUG_IF(debug_config->dump_runtime_memory_pool > 0) {
@@ -1267,7 +1272,10 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     std::cout << "====================================================================" << std::endl;
     std::cout << "iter " << curr_iter << " total_update_shape : " << total_update_shape << " ms" << std::endl;
     std::cout << "iter " << curr_iter << " total_update_impl : " << total_update_impl << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total_update_weights : " << total_update_weights << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total_set_arg : " << total_set_args << " ms" << std::endl;
     std::cout << "iter " << curr_iter << " total_realloc : " << total_realloc << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total_rt_buffer_fusing : " << total_buffer_fusing << " ms" << std::endl;
     std::cout << "iter " << curr_iter << " total_rt_skip_kv_cache : " << total_runtime_skip_kv_cache << " ms"
               << std::endl;
     std::cout << "iter " << curr_iter << " total_rt_skip_gather : " << total_runtime_skip_gather << " ms"
@@ -1283,6 +1291,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     std::cout << "iter " << curr_iter << " total_update_padding : " << total_update_padding << " ms" << std::endl;
     std::cout << "iter " << curr_iter << " total execute time (GPU) : " << total_exec_gpu << " ms" << std::endl;
     std::cout << "iter " << curr_iter << " total execute time (CPU) : " << total_exec_cpu << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total on_execute:  " << total_on_execute << " ms" << std::endl;
     std::cout << "iter " << curr_iter << " total_host_ime " << total_host_time << " ms" << std::endl;
     #endif
     GPU_DEBUG_IF(debug_config->dump_runtime_memory_pool > 0) {

@@ -66,10 +66,15 @@ class ICompilationContext;
 struct network {
 public:
     using ptr = std::shared_ptr<network>;
+    double total_buffer_fusing;
+    double total_update_weights;
+    double total_set_args;
+    double total_primitive_exec;
     double total_host_time;
     double total_update_shape;
     double total_update_impl;
     double total_realloc;
+    double total_on_execute;
     double total_exec_gpu;
     double total_exec_cpu;
     double total_runtime_skip_kv_cache;
