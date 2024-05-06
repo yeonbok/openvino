@@ -84,7 +84,7 @@ public:
     double total_runtime_skip_reorder;
     double total_runtime_skip_permute;
     double total_update_padding;
-
+    std::unordered_map<std::string, layout> layout_cache;
     explicit network(program::ptr program, const ExecutionConfig& config, stream::ptr stream, bool is_internal = false, bool is_primary_stream = true);
     network(engine& engine,
             const topology& topo,
