@@ -948,8 +948,6 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     total_update_padding = 0;
 #endif
     total_primitive_exec = 0;
-
-    layout_cache.clear();
     // Wait for previous execution completion
     reset_execution(false);
     GPU_DEBUG_IF(debug_config->dump_runtime_memory_pool > 0) {

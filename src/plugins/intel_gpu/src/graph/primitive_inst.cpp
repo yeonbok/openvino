@@ -76,7 +76,7 @@ static std::string on_execute_stage_name = "on_execute";
 static std::string update_weights_stage_name = "update_weight";
 static std::string set_args_stage_name = "set_args";
 static std::string buffer_fusing_stage_name = "buffer_fusing";
-#define PROFILE 0
+#define PROFILE 1
 #if PROFILE
 #define PROFILE_START(stage) std::chrono::steady_clock::time_point start_##stage; \
                              start_##stage = Time::now();
@@ -410,19 +410,6 @@ void primitive_inst::update_shape() {
         PROFILE_END(update_shape,total_update_shape);
         return;
     }
-    std::string name_wo_layer_number = "";
-    std::string layer_id = "";
-    if (id().find(".layers.") != std::string::npos) {
-        auto prefix = id().substr(0, id().find(".layers."));
-        name_wo_layer_number = id().substr(id().find(".layers.") + 8);
-        int i = 0;
-        for (; i < name_wo_layer_number.size(); ++i) {
-            if (!std::isdigit(name_wo_layer_number[i]))
-                break;
-            layer_id += name_wo_layer_number[i];
-        }
-        name_wo_layer_number = prefix + name_wo_layer_number.substr(i);
-    }
 
     std::vector<event::ptr> dependencies_events;
     auto queue_type = get_network().get_stream().get_queue_type();
@@ -453,7 +440,17 @@ void primitive_inst::update_shape() {
         }
     }
 
+    if (has_runtime_deps) {
+        OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("update_shape_sync: " + id()));
+        if (!dependencies_events.empty() && queue_type == QueueTypes::out_of_order) {
+            _network.get_stream().wait_for_events(dependencies_events);
+        } else if (queue_type == QueueTypes::in_order) {
+            _network.get_stream().finish();
+        }
+    }
+
     _impl_params->memory_deps = memory_deps;
+
     auto update_output_layout = [&](layout& layout, size_t idx) {
         if (!_node->is_type<reshape>()) {
             auto data_padding = padding::max(_impl_params->get_output_layout(idx).data_padding, layout.data_padding);
@@ -466,41 +463,18 @@ void primitive_inst::update_shape() {
         }
         _impl_params->output_layouts[idx] = layout;
     };
-    bool skip_shape_infer = false;
-    if (name_wo_layer_number != "" && layer_id != "31" &&
-        _network.layout_cache.find(name_wo_layer_number) != _network.layout_cache.end()) {
-//        std::cout << id() << " : set layout from cache (" << name_wo_layer_number << ")"
-//                  << _network.layout_cache[name_wo_layer_number].to_short_string() << std::endl;
-        update_output_layout(_network.layout_cache[name_wo_layer_number], 0);
-        skip_shape_infer = true;
-    }
 
-    if (has_runtime_deps && !skip_shape_infer) {
-        OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("update_shape_sync: " + id()));
-        if (!dependencies_events.empty() && queue_type == QueueTypes::out_of_order) {
-            _network.get_stream().wait_for_events(dependencies_events);
-        } else if (queue_type == QueueTypes::in_order) {
-            _network.get_stream().finish();
+    auto new_layouts = _node->type()->calc_output_layouts(*_node, *_impl_params);
+    if (new_layouts.empty()) {
+        auto new_layout = _node->type()->calc_output_layout(*_node, *_impl_params);
+        update_output_layout(new_layout, 0);
+    } else {
+        for (size_t i = 0; i != new_layouts.size(); ++i) {
+            auto new_layout = new_layouts[i];
+            update_output_layout(new_layout, i);
         }
     }
 
-    if (!skip_shape_infer) {
-        auto new_layouts = _node->type()->calc_output_layouts(*_node, *_impl_params);
-        if (new_layouts.empty()) {
-            auto new_layout = _node->type()->calc_output_layout(*_node, *_impl_params);
-            update_output_layout(new_layout, 0);
-        } else {
-            for (size_t i = 0; i != new_layouts.size(); ++i) {
-                auto new_layout = new_layouts[i];
-                update_output_layout(new_layout, i);
-            }
-        }
-        if (name_wo_layer_number != "" && layer_id != "31") {
-            _network.layout_cache[name_wo_layer_number] = new_layouts[0];
-//            std::cout << id() << " : add layout from cache (" << name_wo_layer_number << ")" << std::endl;
-//            std::cout << new_layouts[0].to_short_string() << std::endl;
-        }
-    }
     // Update descriptors of fused operations and set output_layout's shape to all fused ops
     // It's legal as long as fused ops don't change the shape
     for (auto& fused_prim : _impl_params->fused_desc) {
