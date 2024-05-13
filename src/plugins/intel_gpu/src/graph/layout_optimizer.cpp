@@ -2038,7 +2038,7 @@ void layout_optimizer::select_preferred_formats_for_onednn(program_node& node, d
                           << " For index : " << idx << std::endl;
         }
         // Optimized out permute from permute-gemm pattern. i.e. permute -> gemm
-        if (node.is_type<gemm>()) {
+        if (node.is_type<gemm>() && node.get_program().get_config().get_property(ov::intel_gpu::optimize_data)) {
             // Only the formats below support permute opt out in gemm and permute pattern. For other formats, need to check the gemm performance.
             std::vector<format> gemm_in_foramt_white_list = {
                 format::bfyx,
@@ -2046,6 +2046,7 @@ void layout_optimizer::select_preferred_formats_for_onednn(program_node& node, d
                 format::byfx,
                 format::bxfy,
             };
+
             for (size_t idx = 0 ; idx < node.get_dependencies().size() ; idx++) {
                 if (node.get_dependency(idx).is_type<permute>()) {
                     auto& pnode = node.get_dependency(idx);
@@ -2061,6 +2062,7 @@ void layout_optimizer::select_preferred_formats_for_onednn(program_node& node, d
                             auto permute_order = desc->permute_order;
                             std::vector<size_t> l_permute_order(std::begin(permute_order), std::end(permute_order));
                             if (format::traits(static_cast<format::type>(candidate))._order == l_permute_order) {
+                                std::cout << pnode.id() << " is optimized out!" << std::endl;
                                 pnode.init_preferred_fmt(1, 1);
                                 pnode.set_preferred_output_fmt(0, format(static_cast<format::type>(candidate)));
                                 pnode.can_be_optimized(true);
