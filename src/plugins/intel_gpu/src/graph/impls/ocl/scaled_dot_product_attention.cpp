@@ -24,11 +24,33 @@ struct scaled_dot_product_attention_impl : typed_primitive_impl_ocl<scaled_dot_p
     static kernel_selector::sdpa_configuration get_sdpa_configuration(const kernel_impl_params& impl_param) {
         kernel_selector::sdpa_configuration config;
 
-        const auto query_ps = impl_param.get_input_layout(0).get_partial_shape();
-        if (query_ps[query_ps.size() - 1].is_static())
-            config.head_size = query_ps[query_ps.size() - 1].get_length();
+        auto transpose_pshape = [](const ov::PartialShape& pshape, const std::vector<int64_t>& order) {
+            auto transposed_pshape = ov::PartialShape::dynamic(pshape.rank());
+            for (size_t i = 0; i < order.size(); i++) {
+                transposed_pshape[i] = pshape[order[i]];
+            }
+            return transposed_pshape;
+        };
 
-        config.is_causal = impl_param.typed_desc<scaled_dot_product_attention>()->is_causal;
+        const auto& prim = impl_param.typed_desc<scaled_dot_product_attention>();
+        const auto query_shape = transpose_pshape(impl_param.get_input_layout(0).get_partial_shape(), prim->input_q_transpose_order);
+        const auto key_shape = transpose_pshape(impl_param.get_input_layout(1).get_partial_shape(), prim->input_k_transpose_order);
+        const auto value_shape = transpose_pshape(impl_param.get_input_layout(2).get_partial_shape(), prim->input_v_transpose_order);
+
+        OPENVINO_ASSERT(key_shape == value_shape, "[GPU] The shapes of key and value inputs are expected to be equal");
+        for (size_t i = 0; i < query_shape.size(); ++i) {
+            if (query_shape[i].is_static() && key_shape[i].is_static() && query_shape[i].is_static()) {
+                if (query_shape[i].get_length() > key_shape[i].get_length()) {
+                    config.broadcast_axis = prim->input_k_transpose_order[i];
+                    config.group_size = query_shape[i].get_length() / key_shape[i].get_length();
+                }
+            }
+        }
+
+        if (query_shape[query_shape.size() - 1].is_static())
+            config.head_size = query_shape[query_shape.size() - 1].get_length();
+
+        config.is_causal = prim->is_causal;
 
         return config;
     }

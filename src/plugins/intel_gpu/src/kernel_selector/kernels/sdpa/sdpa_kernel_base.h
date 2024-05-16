@@ -61,10 +61,17 @@ struct TransposedDimensionAccessHelperJit : DimensionAccessHelperJit, Transposed
     std::pair<std::string, std::string> b_pad() { return {pad_before_after_sizes[(transposed_order[0] * 2) + 0], pad_before_after_sizes[(transposed_order[0] * 2) + 1]}; }
 };
 
+struct GQA_configuration {
+};
+
 struct sdpa_configuration {
     int64_t head_size = -1;
     int64_t heads_num = -1;
     int64_t kv_heads_num = -1;
+
+    // GQA configuration
+    int64_t group_size = -1;
+    int64_t broadcast_axis = -1;
 
     bool is_causal = false;
 };

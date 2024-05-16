@@ -64,6 +64,7 @@
 #include "plugin/transformations/indirect_kv_cache.hpp"
 #include "plugin/transformations/convert_convolution.hpp"
 #include "plugin/transformations/unsqueeze_broadcast_reshape_matmul_fusion.hpp"
+#include "plugin/transformations/unsqueeze_broadcast_reshape_sdpa_fusion.hpp"
 #include "transformations/common_optimizations/broadcast_elementwise_fusion.hpp"
 #include "transformations/common_optimizations/broadcast_transition.hpp"
 #include "transformations/common_optimizations/common_optimizations.hpp"
@@ -139,6 +140,19 @@
 #include "transformations/rt_info/fused_names_attribute.hpp"
 #include "transformations/rt_info/keep_const_precision.hpp"
 #include "transformations/smart_reshape/matmul_sr.hpp"
+
+template <typename T>
+T convert_to(const std::string &str) {
+    std::istringstream ss(str);
+    T res;
+    ss >> res;
+    return res;
+}
+
+template <>
+std::string convert_to(const std::string &str) {
+    return str;
+}
 
 namespace {
 template<typename T>
@@ -302,6 +316,13 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
 
         manager.register_pass<ov::pass::CommonOptimizations>();
 
+        bool use_sdpa = true;
+        if (const auto env_var = std::getenv("USE_SDPA")) {
+            use_sdpa = convert_to<bool>(env_var);
+        }
+        std::cout << "Use SDPA set to " << (use_sdpa ? "TRUE" : "FALSE") << "\n";
+
+
         // Disable SDPA decomposition once additional transformations are added:
         // 1) Input/Output Transpose fusion
         // 2) Indirect inputs support
@@ -314,7 +335,7 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
             // - The number of dimensions for each input is expected to be 4
             // - SDPA impl could be slower on GPUs with IMMAD support in non-LLM scenarios,
             //   because oneDNN can be used for those cases - SDPA requires DPAS support
-            return false;
+            return use_sdpa;
         });
 
         manager.register_pass<ov::pass::WrapInterpolateIntoTransposes>();
@@ -762,6 +783,8 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         if (!device_info.supports_immad) {
             manager.register_pass<ov::intel_gpu::UnsqueezeBroadcastReshapeMatmulFusion>();
         }
+        manager.register_pass<ov::intel_gpu::UnsqueezeBroadcastReshapeSDPAFusion>();
+
         manager.register_pass<ov::intel_gpu::SwiGLUFusion>();
         manager.register_pass<ov::intel_gpu::IndirectKVCache>();
         manager.register_pass<ov::intel_gpu::ConvertConvolutionToInternal>();

@@ -47,20 +47,58 @@ static std::string GetDimsOrder(const std::vector<int64_t>& order_idx) {
     return dims_order;
 }
 
+static std::string GetBroadcastInputStr(const size_t input_rank, const int64_t axes, const int64_t val) {
+    std::vector<std::string> dims;
+    if (input_rank == 1) {
+        dims = {"x"};
+    } else if (input_rank == 2) {
+        dims = {"y", "x"};
+    } else if (input_rank == 3) {
+        dims = {"f", "y", "x"};
+    } else if (input_rank == 4) {
+        dims = {"b", "f", "y", "x"};
+    } else if (input_rank == 5) {
+        dims = {"b", "f", "z", "y", "x"};
+    } else if (input_rank == 6) {
+        dims = {"b", "f", "w", "z", "y", "x"};
+    }
+    return dims[axes] + " /= " + std::to_string(val) + ";";
+}
+
 JitConstants SDPAKernelBase::GetJitConstants(const sdpa_params& params) const {
     auto jit = MakeBaseParamsJitConstants(params);
+
+    if (params.conf.broadcast_axis != -1) {
+        std::cout << "Has broadcast axis = "
+            << params.conf.broadcast_axis << ", val = " << GetBroadcastInputStr(params.inputs[0].GetDims().size(),
+                                                                       params.conf.broadcast_axis,
+                                                                       params.conf.group_size) << "\n";
+        jit.AddConstant(MakeJitConstant("DO_BROADCAST_KEY_VALUE", GetBroadcastInputStr(params.inputs[0].GetDims().size(),
+                                                                                       params.conf.broadcast_axis,
+                                                                                       params.conf.group_size)));
+    }
 
     jit.AddConstant(MakeJitConstant("IS_CAUSAL", params.conf.is_causal));
     jit.AddConstant(MakeJitConstant("HAS_ATTN_MASK_INPUT", params.inputs.size() > 3));
     jit.AddConstant(MakeJitConstant("HAS_SCALE_INPUT", params.inputs.size() > 4));
 
-    if (!params.input0_order.empty()) {
+    auto is_default_order = [](const std::vector<int64_t>& order) {
+        for (size_t i = 0; i < order.size(); i++)
+            if (order[i] != static_cast<int64_t>(i))
+                return false;
+        return true;
+    };
+
+    if ((!params.input0_order.empty() && !is_default_order(params.input0_order)) || params.conf.broadcast_axis != -1) {
+        std::cout << "Has transpose input0\n";
         jit.AddConstant(MakeJitConstant("INPUT0_DIMS_ORDER", GetDimsOrder(params.input0_order)));
     }
-    if (!params.input1_order.empty()) {
+    if ((!params.input1_order.empty() && !is_default_order(params.input1_order)) || params.conf.broadcast_axis != -1) {
+        std::cout << "Has transpose input1\n";
         jit.AddConstant(MakeJitConstant("INPUT1_DIMS_ORDER", GetDimsOrder(params.input1_order)));
     }
-    if (!params.input2_order.empty()) {
+    if ((!params.input2_order.empty() && !is_default_order(params.input2_order)) || params.conf.broadcast_axis != -1) {
+        std::cout << "Has transpose input2\n";
         jit.AddConstant(MakeJitConstant("INPUT2_DIMS_ORDER", GetDimsOrder(params.input2_order)));
     }
 
