@@ -124,6 +124,10 @@ KERNEL(sdpa_opt)(
     const uint b1_idx = batch_idx % NUM_HEADS; /* HEADS_NUM dim */
     #define BLOCK_SIZE_NEW 16
 
+#if TARGET_SEQ_LEN_BLOCK_SIZE != 1 && TARGET_SEQ_LEN_BLOCK_SIZE != 16
+    #error TARGET_SEQ_LEN_BLOCK_SIZE unexpected size
+#endif
+
 #if TARGET_SEQ_LEN_BLOCK_SIZE > 1
     const uint target_seq_idx = (uint)get_global_id(1) * TARGET_SEQ_LEN_BLOCK_SIZE;
 #else
@@ -200,8 +204,8 @@ KERNEL(sdpa_opt)(
             // Main Gemm1 calculation loop
             // Each SG performs element-wise multiplications of Q[HEAD_SIZE]xK[HEAD_SIZE] values
             // HEAD_SIZE / SUBGROUPS_PER_WG times in the loop and saves the result to the qk_local SLM buffer
-
-            for (uint seq_len = sgid * TARGET_SEQ_LEN_BLOCK_SIZE; seq_len < ALIGN(partition_seq_len, SUBGROUP_SIZE); seq_len += HEAD_SIZE) {
+            uint seq_len = sgid * TARGET_SEQ_LEN_BLOCK_SIZE;
+            for (; seq_len + SUBGROUP_SIZE <= partition_seq_len; seq_len += SUBGROUPS_PER_WG * SUBGROUP_SIZE) {
 #ifdef INPUT1_DIMS_ORDER
                 uint key_offset = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, start_partition_idx + seq_len, 0);
 #else
@@ -221,7 +225,10 @@ KERNEL(sdpa_opt)(
                         query_local_offset += TARGET_SEQ_LEN_BLOCK_SIZE;
                     }
 
+                    // TODO: add leftovers loop handling with if full else loop with inters
+                    // TODO: CHECK THE ACCURACY with
                     unroll_for (uint key_row_idx = 0; key_row_idx < TARGET_SEQ_LEN_BLOCK_SIZE; key_row_idx++) {
+                    // for (uint key_row_idx = 0; key_row_idx < min(partition_seq_len - seq_len, (uint)TARGET_SEQ_LEN_BLOCK_SIZE); key_row_idx++) {
                         INPUT1_TYPE key_vals = KEY_BLOCK_READ(key_input, key_offset + key_row_idx * HEAD_SIZE + head_idx_index);
 
                         unroll_for (uint i = 0; i < SUBGROUP_SIZE; i++) {
@@ -233,18 +240,79 @@ KERNEL(sdpa_opt)(
                 {
 #if !IS_CAUSAL && HAS_ATTN_MASK_INPUT
                     const uint attn_mask_offset = INPUT3_GET_INDEX_SAFE(b0_idx, b1_idx, target_seq_idx + sglid, start_partition_idx + seq_len);
-                    MAKE_VECTOR_TYPE(INPUT3_TYPE, 16) attn_mask_vec;
+                    MAKE_VECTOR_TYPE(INPUT3_TYPE, 16) attn_mask_vec = INPUT3_VAL_MIN;
                     for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
-                        attn_mask_vec[i] = attn_mask_offset + i < start_partition_idx + partition_seq_len ? attn_mask[attn_mask_offset + i] : INPUT3_VAL_MIN;
+                        attn_mask_vec[i] = INPUT3_VAL_MIN;
+                    }
+                    for (uint i = 0; i < min(partition_seq_len - seq_len, (uint)TARGET_SEQ_LEN_BLOCK_SIZE); i++) {
+                        attn_mask_vec[i] = attn_mask[attn_mask_offset + i];
                     }
 #endif
-                    for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
+                    unroll_for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
                         acc[i] *= scale_val;
 #if IS_CAUSAL
                         if (start_partition_idx + seq_len + i > target_seq_idx + sglid)
                             acc[i] += INPUT0_VAL_MIN;
 #elif !IS_CAUSAL && HAS_ATTN_MASK_INPUT
-                        acc[i] += attn_mask_vec[attn_mask_offset];
+                        acc[i] += attn_mask_vec[i];
+#endif
+                        qk_max = SOFTMAX_ACCUMULATOR_MAX_FUNC(qk_max, TO_SOFTMAX_ACCUMULATOR_TYPE(acc[i]));
+                        qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = acc[i];
+                    }
+                }
+            }
+
+            const int leftover_iters = partition_seq_len - seq_len;
+            if (leftover_iters > 0) {
+#ifdef INPUT1_DIMS_ORDER
+                uint key_offset = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, start_partition_idx + seq_len, 0);
+#else
+                uint key_offset = INPUT1_GET_INDEX(b0_idx, b1_idx, start_partition_idx + seq_len, 0);
+#endif
+
+                INPUT0_TYPE acc[TARGET_SEQ_LEN_BLOCK_SIZE] = {INPUT0_VAL_ZERO};
+
+                for (uint head_idx_index = 0; head_idx_index < HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
+                    #define KEY_BLOCK_READ(ptr, offset) BLOCK_READN(INPUT1_TYPE, 1, ptr, offset);
+                    #define QUERY_VEC MAKE_VECTOR_TYPE(INPUT1_TYPE, 16)
+
+                    QUERY_VEC queries_vec;
+                    uint query_local_offset = (head_idx_index * TARGET_SEQ_LEN_BLOCK_SIZE) + sglid;
+                    unroll_for (uint q_row_idx = 0; q_row_idx < TARGET_SEQ_LEN_BLOCK_SIZE; q_row_idx++) {
+                        queries_vec[q_row_idx] = query_local[query_local_offset];
+                        query_local_offset += TARGET_SEQ_LEN_BLOCK_SIZE;
+                    }
+
+                    // TODO: add leftovers loop handling with if full else loop with inters
+                    // TODO: CHECK THE ACCURACY with
+                    for (uint key_row_idx = 0; key_row_idx < leftover_iters; key_row_idx++) {
+                    // for (uint key_row_idx = 0; key_row_idx < min(partition_seq_len - seq_len, (uint)TARGET_SEQ_LEN_BLOCK_SIZE); key_row_idx++) {
+                        INPUT1_TYPE key_vals = KEY_BLOCK_READ(key_input, key_offset + key_row_idx * HEAD_SIZE + head_idx_index);
+
+                        unroll_for (uint i = 0; i < SUBGROUP_SIZE; i++) {
+                            acc[key_row_idx] = mad(sub_group_broadcast(key_vals, i), queries_vec[i], acc[key_row_idx]);
+                        }
+                    }
+                }
+
+                {
+#if !IS_CAUSAL && HAS_ATTN_MASK_INPUT
+                    const uint attn_mask_offset = INPUT3_GET_INDEX_SAFE(b0_idx, b1_idx, target_seq_idx + sglid, start_partition_idx + seq_len);
+                    MAKE_VECTOR_TYPE(INPUT3_TYPE, 16) attn_mask_vec = INPUT3_VAL_MIN;
+                    for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
+                        attn_mask_vec[i] = INPUT3_VAL_MIN;
+                    }
+                    for (uint i = 0; i < min(partition_seq_len - seq_len, (uint)TARGET_SEQ_LEN_BLOCK_SIZE); i++) {
+                        attn_mask_vec[i] = attn_mask[attn_mask_offset + i];
+                    }
+#endif
+                    unroll_for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
+                        acc[i] *= scale_val;
+#if IS_CAUSAL
+                        if (start_partition_idx + seq_len + i > target_seq_idx + sglid)
+                            acc[i] += INPUT0_VAL_MIN;
+#elif !IS_CAUSAL && HAS_ATTN_MASK_INPUT
+                        acc[i] += attn_mask_vec[i];
 #endif
                         qk_max = SOFTMAX_ACCUMULATOR_MAX_FUNC(qk_max, TO_SOFTMAX_ACCUMULATOR_TYPE(acc[i]));
                         qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = acc[i];
@@ -293,6 +361,12 @@ KERNEL(sdpa_opt)(
         {
             // Save QK max to SLM
             qk_max_vals[sglid * SUBGROUPS_PER_WG + sgid] = qk_max;
+
+
+            // if (get_global_id(0) == 0 && get_global_id(1) == 63 && get_global_id(2) < 256)
+            //     printf("%d, %d, %d; qk_max %f\n",
+            //         get_global_id(0), get_global_id(1), get_global_id(2), qk_max);
+
         }
 
         {
@@ -303,7 +377,7 @@ KERNEL(sdpa_opt)(
 #else
             const uint seq_idx_end = 1;
 #endif
-            // TODO: FIX THIS hardcoded 16
+            // TODO: FIX THIS hardcoded 16 for single token
             #define QK_MAX_NUMS (16 / SUBGROUPS_PER_WG)
             OUTPUT_TYPE qk_max[QK_MAX_NUMS];
             for (uint i = 0; i < QK_MAX_NUMS; i++)
@@ -311,11 +385,23 @@ KERNEL(sdpa_opt)(
 
             barrier(CLK_LOCAL_MEM_FENCE);
 
+
+            // if (get_global_id(0) == 0 && (get_global_id(1) == 63 || get_global_id(1) == 62) && (get_global_id(2) == 0 || get_global_id(2) == 384)) {
+            //     printf("%d, %d. qk_local 1st row: %f %f %f %f  %f %f %f %f .. %f %f %f %f\nqk_local 2nd row: %f %f %f %f  %f %f %f %f .. %f %f %f %f\n",
+            //         get_global_id(1), get_global_id(2),
+            //         qk_local[0], qk_local[1], qk_local[2], qk_local[3], qk_local[4], qk_local[5], qk_local[6], qk_local[7],
+            //         qk_local[SEQ_LEN_PARTITION_SIZE - 4], qk_local[SEQ_LEN_PARTITION_SIZE - 3], qk_local[SEQ_LEN_PARTITION_SIZE - 2], qk_local[SEQ_LEN_PARTITION_SIZE - 1],
+            //         qk_local[SEQ_LEN_PARTITION_SIZE + 0], qk_local[SEQ_LEN_PARTITION_SIZE + 1], qk_local[SEQ_LEN_PARTITION_SIZE + 2], qk_local[SEQ_LEN_PARTITION_SIZE + 3],
+            //         qk_local[SEQ_LEN_PARTITION_SIZE + 4], qk_local[SEQ_LEN_PARTITION_SIZE + 5], qk_local[SEQ_LEN_PARTITION_SIZE + 6], qk_local[SEQ_LEN_PARTITION_SIZE + 7],
+            //         qk_local[SEQ_LEN_PARTITION_SIZE * 2 - 4], qk_local[SEQ_LEN_PARTITION_SIZE * 2 - 3], qk_local[SEQ_LEN_PARTITION_SIZE * 2 - 2], qk_local[SEQ_LEN_PARTITION_SIZE * 2 - 1]);
+            // }
+
+            // TODO: try ternary operator with MIN value?
             if (sglid < SUBGROUPS_PER_WG)
                 for (uint i = 0; i < QK_MAX_NUMS; i++)
                     qk_max[i] = qk_max_vals[(i * SUBGROUPS_PER_WG * SUBGROUPS_PER_WG) + sgid * SUBGROUPS_PER_WG + sglid];
 
-            // TODO: cam remove this?
+            // TODO: can remove this?
             sub_group_barrier(CLK_LOCAL_MEM_FENCE);
 
             for (uint i = 0; i < QK_MAX_NUMS; i++) {
@@ -324,6 +410,7 @@ KERNEL(sdpa_opt)(
 
             SOFTMAX_ACCUMULATOR_TYPE exp_sum[QK_MAX_NUMS] = {SOFTMAX_ACCUMULATOR_VAL_ZERO};
             for (uint i = 0; i < QK_MAX_NUMS; i++) {
+                // TODO: Try full loop, with ternary operator
                 for (uint qk_idx = sglid; qk_idx < partition_seq_len; qk_idx += SUBGROUP_SIZE) {
                     const uint qk_offset = i * SUBGROUPS_PER_WG * SEQ_LEN_PARTITION_SIZE + sgid * SEQ_LEN_PARTITION_SIZE + qk_idx;
                     SOFTMAX_ACCUMULATOR_TYPE qk_val = qk_local[qk_offset];
@@ -351,14 +438,16 @@ KERNEL(sdpa_opt)(
                 // Use single WI in the WG, since all the WIs have the same value
                 if (num_of_partitions > 1 && sglid == 0) {
                     for (uint i = 0; i < QK_MAX_NUMS; i++) {
-                        const uint exp_sums_offset = b0_idx * (NUM_HEADS * TARGET_SEQ_LEN * num_of_partitions) +
-                                                     b1_idx * (TARGET_SEQ_LEN * num_of_partitions) +
-                                                     (target_seq_idx + sgid + (i * SUBGROUPS_PER_WG)) * (num_of_partitions) +
-                                                     partition_idx;
-                        exp_sums[exp_sums_offset] = exp_sum[i];
+                        if (target_seq_idx + sgid + (i * SUBGROUPS_PER_WG) < TARGET_SEQ_LEN) {
+                            const uint exp_sums_offset = b0_idx * (NUM_HEADS * TARGET_SEQ_LEN * num_of_partitions) +
+                                                        b1_idx * (TARGET_SEQ_LEN * num_of_partitions) +
+                                                        (target_seq_idx + sgid + (i * SUBGROUPS_PER_WG)) * (num_of_partitions) +
+                                                        partition_idx;
+                            exp_sums[exp_sums_offset] = exp_sum[i];
 
-                        const uint max_logits_offset = exp_sums_offset;
-                        max_logits[max_logits_offset] = qk_max[i];
+                            const uint max_logits_offset = exp_sums_offset;
+                            max_logits[max_logits_offset] = qk_max[i];
+                        }
                     }
                 }
             }
@@ -366,6 +455,16 @@ KERNEL(sdpa_opt)(
             barrier(CLK_LOCAL_MEM_FENCE);
         } // SoftMax calculation end
     } // Gemm1 + SoftMax calculations end
+
+    // if (get_global_id(0) == 0 && (get_global_id(1) == 63 || get_global_id(1) == 62) && (get_global_id(2) == 0 || get_global_id(2) == 384)) {
+    //     printf("%d, %d. SF qk_local 1st row: %f %f %f %f  %f %f %f %f .. %f %f %f %f\n______SF qk_local 2nd row: %f %f %f %f  %f %f %f %f .. %f %f %f %f\n",
+    //         get_global_id(1), get_global_id(2),
+    //         qk_local[0], qk_local[1], qk_local[2], qk_local[3], qk_local[4], qk_local[5], qk_local[6], qk_local[7],
+    //         qk_local[SEQ_LEN_PARTITION_SIZE - 4], qk_local[SEQ_LEN_PARTITION_SIZE - 3], qk_local[SEQ_LEN_PARTITION_SIZE - 2], qk_local[SEQ_LEN_PARTITION_SIZE - 1],
+    //         qk_local[SEQ_LEN_PARTITION_SIZE + 0], qk_local[SEQ_LEN_PARTITION_SIZE + 1], qk_local[SEQ_LEN_PARTITION_SIZE + 2], qk_local[SEQ_LEN_PARTITION_SIZE + 3],
+    //         qk_local[SEQ_LEN_PARTITION_SIZE + 4], qk_local[SEQ_LEN_PARTITION_SIZE + 5], qk_local[SEQ_LEN_PARTITION_SIZE + 6], qk_local[SEQ_LEN_PARTITION_SIZE + 7],
+    //         qk_local[SEQ_LEN_PARTITION_SIZE * 2 - 4], qk_local[SEQ_LEN_PARTITION_SIZE * 2 - 3], qk_local[SEQ_LEN_PARTITION_SIZE * 2 - 2], qk_local[SEQ_LEN_PARTITION_SIZE * 2 - 1]);
+    // }
 
     const uint seq_len_leftover_start = (partition_seq_len / SUBGROUP_SIZE) * SUBGROUP_SIZE;
     if (seq_len_leftover_start != partition_seq_len) {
@@ -431,6 +530,18 @@ KERNEL(sdpa_opt)(
             }
         }
 
+        // if ((get_global_id(0) == 0 || get_global_id(0) == 31) && (get_global_id(1) == 63 || get_global_id(1) == 62 || get_global_id(1) == 0) && (get_global_id(2) == 0 || get_global_id(2) == 384 || get_global_id(2) == 15 || get_global_id(2) == 16 || get_global_id(2) == 400 || get_global_id(2) == 511)) {
+        //     uint test = min(TARGET_SEQ_LEN - target_seq_idx, (uint)TARGET_SEQ_LEN_BLOCK_SIZE);
+        //     if (test != 1)
+        //         printf("%d, %d, %d. Output_left: %f %f %f %f  %f %f %f %f. (Save %d elements)\n",
+        //             get_global_id(0), get_global_id(1), get_global_id(2), acc[0], acc[1], acc[2], acc[3], acc[4], acc[5], acc[6], acc[7], test);
+        //     else
+        //         printf("%d, %d, %d. Output_left: %f. (Save %d elements)\n",
+        //             get_global_id(0), get_global_id(1), get_global_id(2), acc[0], test);
+        // }
+
+
+
         // If the number of partitions is greater than 1, save results to the temporary buffer;
         // otherwise, save results directly to the main output.
         if (num_of_partitions > 1) {
@@ -446,6 +557,11 @@ KERNEL(sdpa_opt)(
                                             (target_seq_idx + seq_idx) * (num_of_partitions * HEAD_SIZE) +
                                             partition_idx * (HEAD_SIZE) +
                                             head_size_idx;
+
+                // if (get_global_id(0) == 0) {
+                //     printf("1) tmp_out[%d]=%f\n", tmp_out_offset, acc[seq_idx]);
+                // }
+
                 tmp_out[tmp_out_offset] = acc[seq_idx];
             }
         } else {
@@ -494,6 +610,17 @@ KERNEL(sdpa_opt)(
             }
         }
 
+        // if ((get_global_id(0) == 0 || get_global_id(0) == 31) && (get_global_id(1) == 63 || get_global_id(1) == 62 || get_global_id(1) == 0) && (get_global_id(2) == 0 || get_global_id(2) == 384 || get_global_id(2) == 15 || get_global_id(2) == 16 || get_global_id(2) == 400 || get_global_id(2) == 511)) {
+        //     uint test = min(TARGET_SEQ_LEN - target_seq_idx, (uint)TARGET_SEQ_LEN_BLOCK_SIZE);
+        //     if (test != 1)
+        //         printf("%d, %d, %d. Output_main: %f %f %f %f  %f %f %f %f. (Save %d elements)\n",
+        //             get_global_id(0), get_global_id(1), get_global_id(2), acc[0], acc[1], acc[2], acc[3], acc[4], acc[5], acc[6], acc[7], test);
+        //     else
+        //         printf("%d, %d, %d. Output_main: %f. (Save %d elements)\n",
+        //             get_global_id(0), get_global_id(1), get_global_id(2), acc[0], test);
+        // }
+
+
         // If the number of partitions is greater than 1, save results to the temporary buffer;
         // otherwise, save results directly to the main output.
         if (num_of_partitions > 1) {
@@ -510,6 +637,15 @@ KERNEL(sdpa_opt)(
                                             partition_idx * (HEAD_SIZE) +
                                             head_size_idx;
                 tmp_out[tmp_out_offset] = acc[seq_idx];
+
+                // if (get_global_id(0) == 0) {
+                //     printf("3) b=%d, tsq=%d, seq_idx=%d, p=%d, h=%d; tmp_out[%d]=%f\n",
+                //         get_global_id(0), target_seq_idx, seq_idx, partition_idx, get_global_id(2), tmp_out_offset, acc[seq_idx]);
+                // }
+
+                // if (get_global_id(0) == 0) {
+                //     printf("2) tmp_out[%d]=%f\n", tmp_out_offset, acc[seq_idx]);
+                // }
             }
         } else {
 #if TARGET_SEQ_LEN_BLOCK_SIZE > 1
