@@ -205,7 +205,7 @@ KERNEL(sdpa_opt)(
             // Each SG performs element-wise multiplications of Q[HEAD_SIZE]xK[HEAD_SIZE] values
             // HEAD_SIZE / SUBGROUPS_PER_WG times in the loop and saves the result to the qk_local SLM buffer
             uint seq_len = sgid * TARGET_SEQ_LEN_BLOCK_SIZE;
-            for (; seq_len + SUBGROUP_SIZE <= partition_seq_len; seq_len += SUBGROUPS_PER_WG * SUBGROUP_SIZE) {
+            for (; seq_len < partition_seq_len; seq_len += SUBGROUPS_PER_WG * SUBGROUP_SIZE) {
 #ifdef INPUT1_DIMS_ORDER
                 uint key_offset = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, start_partition_idx + seq_len, 0);
 #else
@@ -241,9 +241,6 @@ KERNEL(sdpa_opt)(
 #if !IS_CAUSAL && HAS_ATTN_MASK_INPUT
                     const uint attn_mask_offset = INPUT3_GET_INDEX_SAFE(b0_idx, b1_idx, target_seq_idx + sglid, start_partition_idx + seq_len);
                     MAKE_VECTOR_TYPE(INPUT3_TYPE, 16) attn_mask_vec = INPUT3_VAL_MIN;
-                    for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
-                        attn_mask_vec[i] = INPUT3_VAL_MIN;
-                    }
                     for (uint i = 0; i < min(partition_seq_len - seq_len, (uint)TARGET_SEQ_LEN_BLOCK_SIZE); i++) {
                         attn_mask_vec[i] = attn_mask[attn_mask_offset + i];
                     }
@@ -256,64 +253,12 @@ KERNEL(sdpa_opt)(
 #elif !IS_CAUSAL && HAS_ATTN_MASK_INPUT
                         acc[i] += attn_mask_vec[i];
 #endif
-                        qk_max = SOFTMAX_ACCUMULATOR_MAX_FUNC(qk_max, TO_SOFTMAX_ACCUMULATOR_TYPE(acc[i]));
-                        qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = acc[i];
-                    }
-                }
-            }
-
-            const int leftover_iters = partition_seq_len - seq_len;
-            if (leftover_iters > 0) {
-#ifdef INPUT1_DIMS_ORDER
-                uint key_offset = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, start_partition_idx + seq_len, 0);
-#else
-                uint key_offset = INPUT1_GET_INDEX(b0_idx, b1_idx, start_partition_idx + seq_len, 0);
-#endif
-
-                INPUT0_TYPE acc[TARGET_SEQ_LEN_BLOCK_SIZE] = {INPUT0_VAL_ZERO};
-
-                for (uint head_idx_index = 0; head_idx_index < HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
-                    #define KEY_BLOCK_READ(ptr, offset) BLOCK_READN(INPUT1_TYPE, 1, ptr, offset);
-                    #define QUERY_VEC MAKE_VECTOR_TYPE(INPUT1_TYPE, 16)
-
-                    QUERY_VEC queries_vec;
-                    uint query_local_offset = (head_idx_index * TARGET_SEQ_LEN_BLOCK_SIZE) + sglid;
-                    unroll_for (uint q_row_idx = 0; q_row_idx < TARGET_SEQ_LEN_BLOCK_SIZE; q_row_idx++) {
-                        queries_vec[q_row_idx] = query_local[query_local_offset];
-                        query_local_offset += TARGET_SEQ_LEN_BLOCK_SIZE;
-                    }
-
-                    // TODO: add leftovers loop handling with if full else loop with inters
-                    // TODO: CHECK THE ACCURACY with
-                    for (uint key_row_idx = 0; key_row_idx < leftover_iters; key_row_idx++) {
-                    // for (uint key_row_idx = 0; key_row_idx < min(partition_seq_len - seq_len, (uint)TARGET_SEQ_LEN_BLOCK_SIZE); key_row_idx++) {
-                        INPUT1_TYPE key_vals = KEY_BLOCK_READ(key_input, key_offset + key_row_idx * HEAD_SIZE + head_idx_index);
-
-                        unroll_for (uint i = 0; i < SUBGROUP_SIZE; i++) {
-                            acc[key_row_idx] = mad(sub_group_broadcast(key_vals, i), queries_vec[i], acc[key_row_idx]);
+                        /* Adding this clamp improves perf from 62->59 */
+                        acc[i] = SOFTMAX_ACCUMULATOR_MIN_FUNC(SOFTMAX_ACCUMULATOR_MAX_FUNC(acc[i], INPUT0_VAL_MIN), INPUT0_VAL_MAX);
+                        if (seq_len + i >= partition_seq_len) {
+                            acc[i] = INPUT0_VAL_MIN;
                         }
-                    }
-                }
 
-                {
-#if !IS_CAUSAL && HAS_ATTN_MASK_INPUT
-                    const uint attn_mask_offset = INPUT3_GET_INDEX_SAFE(b0_idx, b1_idx, target_seq_idx + sglid, start_partition_idx + seq_len);
-                    MAKE_VECTOR_TYPE(INPUT3_TYPE, 16) attn_mask_vec = INPUT3_VAL_MIN;
-                    for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
-                        attn_mask_vec[i] = INPUT3_VAL_MIN;
-                    }
-                    for (uint i = 0; i < min(partition_seq_len - seq_len, (uint)TARGET_SEQ_LEN_BLOCK_SIZE); i++) {
-                        attn_mask_vec[i] = attn_mask[attn_mask_offset + i];
-                    }
-#endif
-                    unroll_for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
-                        acc[i] *= scale_val;
-#if IS_CAUSAL
-                        if (start_partition_idx + seq_len + i > target_seq_idx + sglid)
-                            acc[i] += INPUT0_VAL_MIN;
-#elif !IS_CAUSAL && HAS_ATTN_MASK_INPUT
-                        acc[i] += attn_mask_vec[i];
-#endif
                         qk_max = SOFTMAX_ACCUMULATOR_MAX_FUNC(qk_max, TO_SOFTMAX_ACCUMULATOR_TYPE(acc[i]));
                         qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = acc[i];
                     }
