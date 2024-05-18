@@ -198,9 +198,56 @@ KERNEL(sdpa_opt)(
                 #undef QUERY_BLOCK_SIZE
                 #undef QUERY_STEP
 
-                barrier(CLK_LOCAL_MEM_FENCE);
             }
 
+            {
+#if !IS_CAUSAL && HAS_ATTN_MASK_INPUT
+                // uint seq_len = sgid * SUBGROUP_SIZE;
+                // for (; seq_len + SUBGROUP_SIZE <= (partition_seq_len / SUBGROUP_SIZE) * SUBGROUP_SIZE; seq_len += SUBGROUPS_PER_WG * SUBGROUP_SIZE) {
+                //     if (target_seq_idx + TARGET_SEQ_LEN_BLOCK_SIZE <= TARGET_SEQ_LEN) {
+                //         uint i = 0;
+                //         for (; i < min(TARGET_SEQ_LEN - target_seq_idx, (uint)TARGET_SEQ_LEN_BLOCK_SIZE); i++) {
+                //             const uint attn_mask_offset = INPUT3_GET_INDEX_SAFE(b0_idx, b1_idx, target_seq_idx + i, seq_len);
+                //             INPUT3_TYPE attn_mask_val = BLOCK_READN(INPUT3_TYPE, 1, attn_mask, attn_mask_offset);
+                //             qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = attn_mask_val;
+                //         }
+                //         for (; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
+                //             qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = INPUT3_VAL_MIN;
+                //         }
+                //     } else {
+                //         unroll_for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
+                //             const uint attn_mask_offset = INPUT3_GET_INDEX_SAFE(b0_idx, b1_idx, target_seq_idx + i, seq_len);
+                //             INPUT3_TYPE attn_mask_val = BLOCK_READN(INPUT3_TYPE, 1, attn_mask, attn_mask_offset);
+                //             qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = attn_mask_val;
+                //         }
+                //     }
+                // }
+
+                // if (seq_len < SEQ_LEN_PARTITION_SIZE) {
+                //     if (target_seq_idx + TARGET_SEQ_LEN_BLOCK_SIZE <= TARGET_SEQ_LEN) {
+                //         uint i = 0;
+                //         for (; i < min(TARGET_SEQ_LEN - target_seq_idx, (uint)TARGET_SEQ_LEN_BLOCK_SIZE); i++) {
+                //             const uint attn_mask_offset = INPUT3_GET_INDEX_SAFE(b0_idx, b1_idx, target_seq_idx + i, seq_len + sglid);
+                //             INPUT3_TYPE attn_mask_val = seq_len + sglid >= partition_seq_len ? INPUT3_VAL_MIN : attn_mask[attn_mask_offset];
+                //             qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = attn_mask_val;
+                //         }
+                //         for (; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
+                //             qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = INPUT3_VAL_MIN;
+                //         }
+                //     } else {
+                //         unroll_for (uint i = 0; i < TARGET_SEQ_LEN_BLOCK_SIZE; i++) {
+                //             const uint attn_mask_offset = INPUT3_GET_INDEX_SAFE(b0_idx, b1_idx, target_seq_idx + i, seq_len + sglid);
+                //             INPUT3_TYPE attn_mask_val = seq_len + sglid >= partition_seq_len ? INPUT3_VAL_MIN : attn_mask[attn_mask_offset];
+                //             qk_local[sglid * SEQ_LEN_PARTITION_SIZE + seq_len + i] = attn_mask_val;
+                //         }
+                //     }
+                // }
+#endif
+            }
+
+            {
+                barrier(CLK_LOCAL_MEM_FENCE);
+            }
             // Main Gemm1 calculation loop
             // Each SG performs element-wise multiplications of Q[HEAD_SIZE]xK[HEAD_SIZE] values
             // HEAD_SIZE / SUBGROUPS_PER_WG times in the loop and saves the result to the qk_local SLM buffer
@@ -217,6 +264,10 @@ KERNEL(sdpa_opt)(
                 for (uint head_idx_index = 0; head_idx_index < HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
                     #define KEY_BLOCK_READ(ptr, offset) BLOCK_READN(INPUT1_TYPE, 1, ptr, offset);
                     #define QUERY_VEC MAKE_VECTOR_TYPE(INPUT1_TYPE, 16)
+
+                    // unroll_for (uint key_row_idx = 0; key_row_idx < TARGET_SEQ_LEN_BLOCK_SIZE; key_row_idx++) {
+                    //     prefetch(key_input + key_offset + key_row_idx * HEAD_SIZE + head_idx_index + sglid, 1);
+                    // }
 
                     QUERY_VEC queries_vec;
                     uint query_local_offset = (head_idx_index * TARGET_SEQ_LEN_BLOCK_SIZE) + sglid;
