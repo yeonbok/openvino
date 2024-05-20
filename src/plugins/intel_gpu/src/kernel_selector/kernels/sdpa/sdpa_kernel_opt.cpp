@@ -33,7 +33,7 @@ std::string convert_to(const std::string &str) {
 
 static size_t get_target_seq_len_block_size() {
     static bool called = false;
-    size_t block_size = 8;
+    size_t block_size = 16;
     if (const auto env_var = std::getenv("BLOCK_SIZE")) {
         block_size = convert_to<size_t>(env_var);
     }
