@@ -39,7 +39,7 @@ struct scaled_dot_product_attention_impl : typed_primitive_impl_ocl<scaled_dot_p
 
         OPENVINO_ASSERT(key_shape == value_shape, "[GPU] The shapes of key and value inputs are expected to be equal");
         for (size_t i = 0; i < query_shape.size(); ++i) {
-            if (query_shape[i].is_static() && key_shape[i].is_static() && query_shape[i].is_static()) {
+            if (query_shape[i].is_static() && key_shape[i].is_static() && value_shape[i].is_static()) {
                 if (query_shape[i].get_length() > key_shape[i].get_length()) {
                     config.broadcast_axis = prim->input_k_transpose_order[i];
                     config.group_size = query_shape[i].get_length() / key_shape[i].get_length();
