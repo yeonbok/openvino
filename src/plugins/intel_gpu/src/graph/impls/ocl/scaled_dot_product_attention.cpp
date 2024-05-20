@@ -21,6 +21,15 @@ struct scaled_dot_product_attention_impl : typed_primitive_impl_ocl<scaled_dot_p
         return make_unique<scaled_dot_product_attention_impl>(*this);
     }
 
+    void load(BinaryInputBuffer& ib) override {
+        parent::load(ib);
+        if (is_dynamic()) {
+            auto& kernel_selector = kernel_selector_t::Instance();
+            auto kernel_impl = kernel_selector.GetImplementation(_kernel_data.kernelName);
+            kernel_impl->GetUpdateDispatchDataFunc(_kernel_data);
+        }
+    }
+
     static kernel_selector::sdpa_configuration get_sdpa_configuration(const kernel_impl_params& impl_param) {
         kernel_selector::sdpa_configuration config;
 
