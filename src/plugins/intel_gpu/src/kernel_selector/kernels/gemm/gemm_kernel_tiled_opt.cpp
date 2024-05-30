@@ -113,7 +113,8 @@ GemmKernelTiledOpt::GemmTuningData GemmKernelTiledOpt::SetTuningParams(const gem
             && !params.engineInfo.supports_immad) {
             // - Not supports transposed input0 / transposed input1 for OTHER mode yet
             // - If output X dim (= N) is transposed, cannot read eltwise as aligned data
-            tuning_data.tile_n_size = 32;
+//            tuning_data.tile_n_size = 32;
+            tuning_data.tile_n_size = 16;
         } else {
             tuning_data.tile_n_size = 16;
         }

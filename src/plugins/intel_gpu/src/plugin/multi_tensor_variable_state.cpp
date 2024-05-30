@@ -74,7 +74,7 @@ void copy_element(const void* src, void* dst, size_t src_offset, size_t dst_offs
     static_cast<T*>(dst)[dst_offset] = static_cast<const T*>(src)[src_offset];
 }
 
-static void rearrange_cache(cldnn::memory::ptr kv_in_mem, cldnn::memory::ptr bt_mem, cldnn::memory::ptr kv_out_mem, cldnn::stream& stream, size_t concat_axis) {
+static void rearrange_cache(cldnn::memory::ptr kv_in_mem, cldnn::memory::ptr bt_mem, cldnn::memory::ptr kv_out_mem, cldnn::stream& stream, size_t concat_axis, size_t beam_axis) {
     auto kv_layout = kv_in_mem->get_layout();
     auto kv_shape = kv_layout.get_shape();
     cldnn::mem_lock<uint8_t, cldnn::mem_lock_type::read> kv_in_ptr(kv_in_mem, stream);
@@ -87,7 +87,8 @@ static void rearrange_cache(cldnn::memory::ptr kv_in_mem, cldnn::memory::ptr bt_
         for (size_t f = 0; f < kv_shape[1]; f++) {
             for (size_t y = 0; y < kv_shape[2]; y++) {
                 for (size_t x = 0; x < kv_shape[3]; x++) {
-                    size_t b_kv = bt_in_ptr[b* kv_shape[concat_axis] + y];
+                    size_t beam_idx = (beam_axis == 0) ? b : f;
+                    size_t b_kv = bt_in_ptr[beam_idx * kv_shape[concat_axis] + y];
 
                     auto in_idx = std::vector<int>{static_cast<int>(b_kv), static_cast<int>(f), static_cast<int>(y), static_cast<int>(x)};
                     auto out_idx = std::vector<int>{static_cast<int>(b), static_cast<int>(f), static_cast<int>(y), static_cast<int>(x)};
@@ -118,7 +119,7 @@ ov::SoPtr<ov::ITensor> VariableStateIndirectKVCache::get_state() const {
         auto& engine = m_context->get_engine();
         auto tmp_mem = engine.allocate_memory(kv_layout, engine.get_lockable_preferred_memory_allocation_type(), false);
 
-        rearrange_cache(kv_mem, bt_mem, tmp_mem, m_context->get_engine().get_service_stream(), m_concat_axis);
+        rearrange_cache(kv_mem, bt_mem, tmp_mem, m_context->get_engine().get_service_stream(), m_concat_axis, m_beam_axis);
 
         convert_and_copy(tmp_mem, tensor._ptr.get(), m_context->get_engine().get_service_stream());
 

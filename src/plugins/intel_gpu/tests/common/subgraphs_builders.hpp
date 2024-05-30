@@ -36,10 +36,20 @@ inline std::shared_ptr<ov::Model> make_llm_kv_cache_pattern(ov::Dimension batch 
                                                             bool stateful = false,
                                                             bool fuse_cache_reorder = false,
                                                             bool build_state_initializer = false,
-                                                            size_t num_groups = 1) {
-    ov::PartialShape kv_cache_size = {batch, n_heads / num_groups, -1, n_features};
-    ov::PartialShape new_token_size = {batch, -1, n_heads / num_groups, n_features};
-    ov::PartialShape matmul_in_size = {batch, n_heads, -1, -1};
+                                                            size_t num_groups = 1,
+                                                            size_t gather_axis = 1) {
+    ov::PartialShape kv_cache_size;
+    ov::PartialShape new_token_size;
+    ov::PartialShape matmul_in_size;
+    if (gather_axis == 0) {
+        kv_cache_size = {batch, n_heads / num_groups, -1, n_features};
+        new_token_size = {batch, -1, n_heads / num_groups, n_features};
+        matmul_in_size = {batch, n_heads, -1, -1};
+    } else if (gather_axis == 1) {
+        kv_cache_size = {n_heads / num_groups, batch, -1, n_features};
+        new_token_size = {n_heads / num_groups, -1, batch, n_features};
+        matmul_in_size = {n_heads, batch, -1, -1};
+    }
 
     auto in_kv_prev = std::make_shared<ov::op::v0::Parameter>(element_type, kv_cache_size);
     in_kv_prev->set_friendly_name("past_key_values");
@@ -54,7 +64,7 @@ inline std::shared_ptr<ov::Model> make_llm_kv_cache_pattern(ov::Dimension batch 
         auto in_beam_idx = std::make_shared<ov::op::v0::Parameter>(ov::element::i32, ov::PartialShape{batch});
         in_beam_idx->set_friendly_name("beam_idx");
         params.push_back(in_beam_idx);
-        auto axis = std::make_shared<ov::op::v0::Constant>(ov::element::i32, ov::Shape{}, 0);
+        auto axis = std::make_shared<ov::op::v0::Constant>(ov::element::i32, ov::Shape{}, gather_axis);
         auto gather = std::make_shared<ov::op::v8::Gather>(in_kv_prev, in_beam_idx, axis, 0);
         concat_input = gather;
     }
@@ -62,20 +72,44 @@ inline std::shared_ptr<ov::Model> make_llm_kv_cache_pattern(ov::Dimension batch 
     std::shared_ptr<ov::Node> state_initializer = nullptr;
     if (stateful && build_state_initializer) {
         auto shapeof = std::make_shared<ov::op::v3::ShapeOf>(in_new_token, ov::element::i32);
+        if (gather_axis == 0) {
+            auto indices = std::make_shared<ov::op::v0::Constant>(ov::element::i32, ov::Shape{1}, 0);
+            auto axis = std::make_shared<ov::op::v0::Constant>(ov::element::i32, ov::Shape{}, 0);
+            auto gather = std::make_shared<ov::op::v8::Gather>(shapeof, indices, axis, 0);
 
-        auto indices = std::make_shared<ov::op::v0::Constant>(ov::element::i32, ov::Shape{1}, 0);
-        auto axis = std::make_shared<ov::op::v0::Constant>(ov::element::i32, ov::Shape{}, 0);
-        auto gather = std::make_shared<ov::op::v8::Gather>(shapeof, indices, axis, 0);
-
-        auto bcast_value = std::make_shared<ov::op::v0::Constant>(element_type, ov::Shape{}, 0.0f);
-        ov::NodeVector dims = {gather};
-        for (size_t i = 1; i < kv_cache_size.size(); i++) {
-            dims.push_back(std::make_shared<ov::op::v0::Constant>(ov::element::i32, ov::Shape{1}, static_cast<int32_t>(kv_cache_size[i].get_min_length())));
+            auto bcast_value = std::make_shared<ov::op::v0::Constant>(element_type, ov::Shape{}, 0.0f);
+            ov::NodeVector dims = {gather};
+            for (size_t i = 1; i < kv_cache_size.size(); i++) {
+                dims.push_back(
+                    std::make_shared<ov::op::v0::Constant>(ov::element::i32,
+                                                           ov::Shape{1},
+                                                           static_cast<int32_t>(kv_cache_size[i].get_min_length())));
+            }
+            auto shape = std::make_shared<ov::op::v0::Concat>(dims, 0);
+            state_initializer = std::make_shared<ov::op::v3::Broadcast>(bcast_value, shape);
+        } else if (gather_axis == 1) {
+            ov::NodeVector dims = {};
+            dims.push_back(
+                std::make_shared<ov::op::v0::Constant>(ov::element::i32,
+                                                       ov::Shape{1},
+                                                       static_cast<int32_t>(kv_cache_size[0].get_min_length())));
+            auto indices = std::make_shared<ov::op::v0::Constant>(ov::element::i32, ov::Shape{1}, 2);
+            auto axis = std::make_shared<ov::op::v0::Constant>(ov::element::i32, ov::Shape{}, 0);
+            auto gather = std::make_shared<ov::op::v8::Gather>(shapeof, indices, axis, 0);
+            dims.push_back(gather);
+            auto bcast_value = std::make_shared<ov::op::v0::Constant>(element_type, ov::Shape{}, 0.0f);
+            for (size_t i = 2; i < kv_cache_size.size(); i++) {
+                dims.push_back(
+                    std::make_shared<ov::op::v0::Constant>(ov::element::i32,
+                                                           ov::Shape{1},
+                                                           static_cast<int32_t>(kv_cache_size[i].get_min_length())));
+            }
+            auto shape = std::make_shared<ov::op::v0::Concat>(dims, 0);
+            state_initializer = std::make_shared<ov::op::v3::Broadcast>(bcast_value, shape);
+        } else {
+            OPENVINO_ASSERT(false, "gather axis should be either of 0 or 1");
         }
-        auto shape = std::make_shared<ov::op::v0::Concat>(dims, 0);
-        state_initializer = std::make_shared<ov::op::v3::Broadcast>(bcast_value, shape);
     }
-
     auto transpose_const = ov::op::v0::Constant::create(ov::element::i32, {new_token_size.size()}, {0, 2, 1, 3});
     auto transpose = std::make_shared<ov::op::v1::Transpose>(in_new_token, transpose_const);
     auto concat = std::make_shared<ov::op::v0::Concat>(ov::OutputVector{concat_input, transpose}, concat_axis);

@@ -260,7 +260,8 @@ class KVCacheTests: public ::testing::Test {
                                                 size_t num_iter = 10,
                                                 size_t num_groups = 1,
                                                 bool set_state_on_each_iter = false,
-                                                int32_t initial_batch = -1) {
+                                                int32_t initial_batch = -1,
+                                                size_t gather_axis = 0) {
     #if defined(ANDROID)
         GTEST_SKIP();
     #endif
@@ -284,8 +285,9 @@ class KVCacheTests: public ::testing::Test {
         }
 
         const size_t n_heads = 32;
-        const size_t n_features = 10;
-        const size_t context_size = 20;
+//        const size_t n_features = 10;
+        const size_t n_features = 16;
+        const size_t context_size = 15;
 
         ov::element::Type element_type = model_element_type;
 
@@ -299,7 +301,9 @@ class KVCacheTests: public ::testing::Test {
                                                       stateful,
                                                       fuse_cache_reorder,
                                                       build_state_initializer && stateful,
-                                                      num_groups);
+                                                      num_groups,
+                                                      gather_axis);
+
         auto ref_model = tests::make_llm_kv_cache_pattern(build_state_initializer ? ov::Dimension::dynamic() : batch,
                                                           n_heads,
                                                           n_features,
@@ -308,7 +312,8 @@ class KVCacheTests: public ::testing::Test {
                                                           !stateful,
                                                           fuse_cache_reorder,
                                                           build_state_initializer && !stateful,
-                                                          num_groups);
+                                                          num_groups,
+                                                          gather_axis);
         if (is_caching_test) {
             core->compile_model(model, ov::test::utils::DEVICE_GPU, properties);
         }
@@ -379,11 +384,25 @@ class KVCacheTests: public ::testing::Test {
             {
                 // first infer
                 size_t init_batch = initial_batch == -1 ? batch : static_cast<size_t>(initial_batch);
-                const ov::Shape new_token_size_initial = {init_batch, context_size, n_heads / num_groups, n_features};
-                const ov::Shape kv_cache_size_initial = {init_batch, n_heads / num_groups, cache_size, n_features};
-                const ov::Shape matmul_in_size_initial = {init_batch, n_heads, context_size, context_size};
+                ov::Shape new_token_size_initial;
+                ov::Shape kv_cache_size_initial;
+                ov::Shape matmul_in_size_initial;
 
-                auto new_token_data = ov::test::utils::create_and_fill_tensor(element_type, new_token_size_initial);
+                if (gather_axis == 0) {
+                    new_token_size_initial = {init_batch, context_size, n_heads / num_groups, n_features};
+                    kv_cache_size_initial = {init_batch, n_heads / num_groups, cache_size, n_features};
+                    matmul_in_size_initial = {init_batch, n_heads, context_size, context_size};
+                } else if (gather_axis == 1) {
+                    new_token_size_initial = {n_heads / num_groups, context_size, init_batch, n_features};
+                    kv_cache_size_initial = {n_heads / num_groups, init_batch, cache_size, n_features};
+                    matmul_in_size_initial = {n_heads, init_batch, context_size, context_size};
+                }
+                ov::Tensor new_token_data;
+                if (getenv("NEW_TOKEN_ORIG") != nullptr) {
+                    new_token_data = ov::test::utils::create_and_fill_tensor(element_type, new_token_size_initial);
+                } else {
+                    new_token_data = ov::test::utils::create_and_fill_tensor(element_type, new_token_size_initial, 0, 10, 1);
+                }
                 auto matmul_data = ov::test::utils::create_and_fill_tensor(element_type, matmul_in_size_initial);
 
                 new_token_input.set_shape(new_token_data.get_shape());
@@ -431,11 +450,26 @@ class KVCacheTests: public ::testing::Test {
             };
 
             const size_t input_tokens = 1;
-            const ov::Shape new_token_size = {batch, input_tokens, n_heads / num_groups, n_features};
+            ov::Shape new_token_size;
+            if (gather_axis == 0) {
+                new_token_size = {batch, input_tokens, n_heads / num_groups, n_features};
+            } else if (gather_axis == 1) {
+                new_token_size = {n_heads / num_groups, input_tokens, batch, n_features};
+            }
             size_t context_length = cache_size + input_tokens;
             for (size_t i = 0; i < num_iter; i++, context_length += input_tokens) {
-                ov::Shape matmul_in_size_loop = {batch, n_heads, input_tokens, context_length};
-                auto new_token_data = ov::test::utils::create_and_fill_tensor(element_type, new_token_size);
+                ov::Shape matmul_in_size_loop;
+                if (gather_axis == 0) {
+                    matmul_in_size_loop = {batch, n_heads, input_tokens, context_length};
+                } else if (gather_axis == 1) {
+                    matmul_in_size_loop = {n_heads, batch, input_tokens, context_length};
+                }
+                ov::Tensor new_token_data;
+                if (getenv("NEW_TOKEN_ORIG") != nullptr) {
+                    new_token_data = ov::test::utils::create_and_fill_tensor(element_type, new_token_size);
+                } else {
+                    new_token_data = ov::test::utils::create_and_fill_tensor(element_type, new_token_size, 0, 10, 1);
+                }
                 auto matmul_data = ov::test::utils::create_and_fill_tensor(element_type, matmul_in_size_loop);
                 size_t beam_idx_array_idx = i == 0 ? 2 : i % 2;
                 if (fuse_cache_reorder) {
@@ -513,6 +547,11 @@ TEST_F(KVCacheTests, smoke_multipleIterations_stateful_gather_with_initializer_b
     this->test_smoke_multipleIterations_stateful(false, true, true, 3);
 }
 
+TEST_F(KVCacheTests, smoke_multipleIterations_stateful_gather_with_initializer_batch_3_gather_1) {
+    this->test_smoke_multipleIterations_stateful(false, true, true, 3, 2, ov::element::f16, 10, 1, false, -1, 1);
+}
+
+
 TEST_F(KVCacheTests, smoke_multipleIterations_stateful_gather_with_initializer_batch_1_3) {
     this->test_smoke_multipleIterations_stateful(false, true, true, 3, 2, ov::element::f16, 10, 1, false, 1);
 }
@@ -520,7 +559,6 @@ TEST_F(KVCacheTests, smoke_multipleIterations_stateful_gather_with_initializer_b
 TEST_F(KVCacheTests, smoke_multipleIterations_stateful_gather_with_initializer_batch_1_5) {
     this->test_smoke_multipleIterations_stateful(false, true, true, 5, 2, ov::element::f16, 10, 1, false, 1);
 }
-
 
 TEST_F(KVCacheTests, smoke_multipleIterations_stateful_same_shape_after_reset) {
     this->test_smoke_multipleIterations_stateful(false, false, false, 1, 2, ov::element::f16, 0);

@@ -809,7 +809,8 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         manager.register_pass<ov::intel_gpu::UnsqueezeBroadcastReshapeSDPAFusion>();
 
         manager.register_pass<ov::intel_gpu::SwiGLUFusion>();
-        manager.register_pass<ov::intel_gpu::IndirectKVCache>();
+        if (getenv("DISABLE_INDIRECT_GEMM") == nullptr)
+            manager.register_pass<ov::intel_gpu::IndirectKVCache>();
         manager.register_pass<ov::intel_gpu::ConvertConvolutionToInternal>();
 
         const size_t zp_pad_size = device_info.supports_immad ? 16 : 32;
