@@ -65,7 +65,8 @@
 namespace cldnn {
 
 namespace {
-
+#define PRINT 0
+#define PRINT_ITER 0
 #ifdef GPU_DEBUG_CONFIG
 void dump_perf_data_raw(std::string dump_path, const std::list<std::shared_ptr<primitive_inst>>& exec_order) {
     auto layouts_to_str = [](const std::vector<layout>& layouts) -> std::string {
@@ -925,6 +926,7 @@ std::map<primitive_id, network_output> network::execute(const std::vector<event:
     return result;
 }
 
+using Time = std::chrono::high_resolution_clock;
 void network::execute_impl(const std::vector<event::ptr>& events) {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, "NetworkImpl::Execute");
     int64_t curr_iter = -1;
@@ -932,7 +934,21 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
 #ifdef GPU_DEBUG_CONFIG
     curr_iter = iteration;
 #endif
-
+#if PRINT
+    auto total_host_start = Time::now();
+    total_update_shape = 0;
+    total_update_impl = 0;
+    total_realloc = 0;
+    total_exec_gpu = 0;
+    total_exec_cpu = 0;
+    total_runtime_skip_kv_cache = 0;
+    total_runtime_skip_gather = 0;
+    total_runtime_skip_strided_slice = 0;
+    total_runtime_skip_broadcast = 0;
+    total_runtime_skip_reorder = 0;
+    total_runtime_skip_permute = 0;
+    total_update_padding = 0;
+#endif
     // Wait for previous execution completion
     reset_execution(false);
     GPU_DEBUG_IF(debug_config->dump_memory_pool > 0) {
@@ -945,7 +961,9 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         GPU_DEBUG_TRACE << "============================================================================" << std::endl;
         GPU_DEBUG_TRACE << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;
     }
-
+    #if PRINT_ITER
+    std::cout << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;
+    #endif
     std::vector<memory::ptr> in_out_mem;
     auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
         return shared_mem_type == shared_mem_type::shared_mem_vasurface ||
@@ -1245,17 +1263,38 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // provide proper event to execution. Flushing pipeline should prevent this kind of issues.
     // In scenarios with a big number of very small networks it can provide performance drop.
     get_stream().flush();
-
+    #if PRINT
+    using ms = std::chrono::duration<double, std::ratio<1, 1000>>;
+    std::chrono::duration<float> dur = Time::now() - total_host_start;
+    auto total_host_time = std::chrono::duration_cast<ms>(dur).count();
+    #endif
     // Deallocate events from the previos iteration
     _old_events.clear();
 
-    GPU_DEBUG_IF(debug_config->dump_memory_pool > 0) {
-        auto& iters = debug_config->dump_memory_pool_iters;
-        if (iters.empty() || iters.find(curr_iter) != iters.end()) {
-            dump_memory_pool(debug_config->dump_memory_pool_path, curr_iter);
-            GPU_DEBUG_COUT << "============================================================================" << std::endl;
-        }
-    }
+#if PRINT
+    std::cout << "====================================================================" << std::endl;
+    std::cout << "      iter " << curr_iter << std::endl;
+    std::cout << "====================================================================" << std::endl;
+    std::cout << "iter " << curr_iter << " total_update_shape : " << total_update_shape << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total_update_impl : " << total_update_impl << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total_realloc : " << total_realloc << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total_rt_skip_kv_cache : " << total_runtime_skip_kv_cache << " ms"
+        << std::endl;
+    std::cout << "iter " << curr_iter << " total_rt_skip_gather : " << total_runtime_skip_gather << " ms"
+        << std::endl;
+    std::cout << "iter " << curr_iter << " total_rt_skip_strided_slice : " << total_runtime_skip_strided_slice
+        << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total_rt_skip_broadcast : " << total_runtime_skip_broadcast << " ms"
+        << std::endl;
+    std::cout << "iter " << curr_iter << " total_rt_skip_reorder : " << total_runtime_skip_reorder << " ms"
+        << std::endl;
+    std::cout << "iter " << curr_iter << " total_rt_skip_permute : " << total_runtime_skip_permute << " ms"
+        << std::endl;
+    std::cout << "iter " << curr_iter << " total_update_padding : " << total_update_padding << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total execute time (GPU) : " << total_exec_gpu << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total execute time (CPU) : " << total_exec_cpu << " ms" << std::endl;
+    std::cout << "iter " << curr_iter << " total_host_ime " << total_host_time << " ms" << std::endl;
+#endif
 
 #ifdef GPU_DEBUG_CONFIG
     iteration++;
