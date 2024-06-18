@@ -70,7 +70,7 @@ std::string kv_cache_inst::to_string(const kv_cache_node& node) {
 }
 
 int32_t kv_cache_inst::get_prealloc_iter_num() {
-    return 128 + kv_cache_id % 64;
+    return 200 + kv_cache_id % 64;
 }
 
 void kv_cache_inst::update_shape_info_tensor(const kernel_impl_params& params) {

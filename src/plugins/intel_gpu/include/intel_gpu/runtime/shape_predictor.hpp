@@ -67,12 +67,12 @@ private:
     const engine* _engine;
 
     // Iterations mode preallocation
-    const size_t _next_iters_preallocation_count = 10;
-    const size_t _max_per_iter_size = 16 * 1024; // 16KB => maximum preallocation size is 16KB * 10iters = 160KB
+    const size_t _next_iters_preallocation_count = 200;
+    const size_t _max_per_iter_size = 16 * 1024 * 1024; // 16KB => maximum preallocation size is 16KB * 10iters = 160KB
     const size_t _max_per_dim_diff = 2;
 
     // Percentage mode preallocation
-    const float _buffers_preallocation_ratio = 1.0f;
+    const float _buffers_preallocation_ratio = 1.1f;
 };
 
 }  // namespace cldnn

@@ -593,13 +593,13 @@ event::ptr primitive_inst::realloc_if_needed() {
     }
 
     // If we allocated too large memory, reclaim the memory.
-    if (updated_layout.get_buffer_size().count() * 10 < _max_output_layout_count) {
-        GPU_DEBUG_TRACE_DETAIL << id() << ": Updated output size " << updated_layout.count()
-                               << " is much smaller than current memory size! " << _max_output_layout_count
-                               << "Reset memory" << std::endl;
-        _max_output_layout_count = 0;
-    }
-
+//    if (updated_layout.get_buffer_size().count() * 10 < _max_output_layout_count) {
+//        GPU_DEBUG_TRACE_DETAIL << id() << ": Updated output size " << updated_layout.count()
+//                               << " is much smaller than current memory size! " << _max_output_layout_count
+//                               << "Reset memory" << std::endl;
+//        _max_output_layout_count = 0;
+//    }
+//
     bool can_reuse_buffer = _outputs[0] && updated_layout.count() <= _max_output_layout_count;
     // Handle runtime dynamic concat optimization
     if (_node->is_type<concatenation>() && can_be_optimized() && allocation_done_by_other) {
@@ -640,6 +640,11 @@ event::ptr primitive_inst::realloc_if_needed() {
         GPU_DEBUG_TRACE_DETAIL << id() << ": realloc output memory. "
                                <<  " Current buffer_size=" << _max_output_layout_count
                                <<  " Requested buffer_size=" << updated_layout.count() << std::endl;
+//	std::cout << id() << ": realloc output memory. "
+//		<< " Current output layout " << _impl_params->output_layouts[0].to_short_string()
+//		<<  " Current buffer_size=" << _max_output_layout_count
+//		<<  " Requested buffer_size=" << updated_layout.count() << std::endl;
+//
         _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
         GPU_DEBUG_CODE(std::string memalloc_info = "");
         GPU_DEBUG_CODE(for (size_t out_idx = 0; out_idx < _outputs.size(); ++out_idx) {
