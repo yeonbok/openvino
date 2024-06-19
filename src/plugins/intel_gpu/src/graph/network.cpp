@@ -372,6 +372,8 @@ static std::string get_file_path_for_binary_dump(cldnn::layout layout, std::stri
 Network will always have net_id = 0 when it will be cldnn internal micronetwork (created i.e by propagate_constants
 opt pass).
 */
+
+bool no_flush = false;
 network::network(program::ptr program, const ExecutionConfig& config, stream::ptr stream, bool is_internal, bool is_primary_stream)
     : _program(program)
     , _config(config)
@@ -386,7 +388,9 @@ network::network(program::ptr program, const ExecutionConfig& config, stream::pt
     if (!_internal) {
         net_id = get_unique_net_id();
     }
-
+    if (getenv("NO_FLUSH") != nullptr)
+	no_flush = true;
+	
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_IF(debug_config->after_proc.size() != 0) {
         wait_for_the_turn();
@@ -437,6 +441,10 @@ network::~network() {
         if (host_exec_times.size() >= 2) {
             double first = static_cast<double>(host_exec_times[0]);
             double avg = static_cast<double>(std::accumulate(host_exec_times.begin() + 1, host_exec_times.end(), (size_t)0, std::plus<size_t>()));
+	    for (size_t i = 0; i < host_exec_times.size(); ++i)
+            if (getenv("HOST_VERBOSE") != nullptr) {
+    	        std::cout << i << " : " << host_exec_times[i] << " us" << std::endl;
+            }
             avg /= (host_exec_times.size() - 1);
             std::string resolution = " us";
             if (avg > 1000.0) {
@@ -1034,7 +1042,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // since it reduces `bubbles` number in pipeline and GPU's idle time by timely flushing new kernels to device.
     // The freqency of flushing (16) is selected empirically, see details in tickets 116365, 116287, 139931.
     const bool is_out_of_order_queue = get_stream().get_queue_type() == QueueTypes::out_of_order;
-    const bool needs_flushing = _is_dynamic;
+    const bool needs_flushing = _is_dynamic && !no_flush;
     const size_t flush_frequency = needs_flushing ? 16 : 0;
     size_t executed_prims = 0;
 

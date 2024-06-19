@@ -28,7 +28,8 @@
 #include <map>
 #include <functional>
 #include <utility>
-
+#define PROFILE_INFER 0
+#define PROFILE_STAGES 0
 namespace {
 
 inline bool can_use_usm_host(const cldnn::engine& engine) {
@@ -87,6 +88,7 @@ namespace intel_gpu {
 // ---------------------------- OpenVINO API impl ------------------------------------------------ //
 // ----------------------------------------------------------------------------------------------- //
 
+static int counter = 0;
 SyncInferRequest::SyncInferRequest(const std::shared_ptr<const CompiledModel>& compiled_model)
     : ov::ISyncInferRequest(compiled_model)
     , m_graph(compiled_model->get_graph(0))
@@ -113,10 +115,16 @@ SyncInferRequest::SyncInferRequest(const std::shared_ptr<const CompiledModel>& c
 
 void SyncInferRequest::infer() {
     OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "SyncInferRequest::infer");
+    #if PROFILE_INFER
+    auto start = std::chrono::high_resolution_clock::now();
+    #endif
     setup_stream_graph();
     std::lock_guard<std::mutex> lk(m_graph->get_mutex());
     enqueue();
     wait();
+    #if PROFILE_INFER
+    std::cout << "iter " << counter << " : infer took " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count() << " mcs " << std::endl;
+    #endif
 }
 
 std::vector<ov::ProfilingInfo> SyncInferRequest::get_profiling_info() const {
@@ -246,7 +254,10 @@ void SyncInferRequest::enqueue() {
     // set input and output memory from request blob maps
     // into the network object primitives
     std::vector<cldnn::event::ptr> dependencies;
-
+    counter++;
+    #if PROFILE_STAGES
+    auto start = std::chrono::high_resolution_clock::now();
+    #endif
     for (const auto& it : m_input_ports_map) {
         size_t port_idx = it.first;
         const auto& port = it.second;
@@ -261,6 +272,13 @@ void SyncInferRequest::enqueue() {
         }
     }
 
+    #if PROFILE_STAGES
+    std::cout << "iter " << counter << " : Prepare input took " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count() << " mcs " << std::endl;
+    #endif
+
+    #if PROFILE_STAGES
+    start = std::chrono::high_resolution_clock::now();
+    #endif
     for (const auto& it : m_output_ports_map) {
         size_t port_idx = it.first;
         const auto& port = it.second;
@@ -268,6 +286,9 @@ void SyncInferRequest::enqueue() {
         auto events = prepare_output(port_idx, port, m_user_outputs.at(port_idx));
         std::move(events.begin(), events.end(), std::back_inserter(dependencies));
     }
+    #if PROFILE_STAGES
+    std::cout << "iter " << counter << " : Prepare output took " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count() << " mcs " << std::endl;
+    #endif
 
     for (const auto& it : m_variables) {
         const auto& name = it.first;
@@ -279,7 +300,13 @@ void SyncInferRequest::enqueue() {
     network->set_shape_predictor(m_shape_predictor);
 
     m_internal_outputs.clear();
+    #if PROFILE_STAGES
+    start = std::chrono::high_resolution_clock::now();
+    #endif
     m_internal_outputs = network->execute(dependencies);
+    #if PROFILE_STAGES
+    std::cout << "iter " << counter << " : network->execute() took " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count() << " mcs " << std::endl;
+    #endif
 
     // If dump layers path is set, only runs first inference.
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -298,9 +325,14 @@ void SyncInferRequest::wait() {
     // wait for completion & collect outputs as requested by the model
     // for in_order_queue, it is enough to call finish only once
     bool do_sync_per_output = (network.get_stream().get_queue_type() == QueueTypes::in_order) ? false : true;
+    #if PROFILE_STAGES
+    auto start = std::chrono::high_resolution_clock::now();
+    #endif
     if (!do_sync_per_output)
         network.get_stream().finish();
-
+    #if PROFILE_STAGES
+    std::cout << "iter " << counter << " : clFinish took " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count() << " mcs " << std::endl;
+    #endif
     std::vector<cldnn::event::ptr> copy_events;
 
     for (const auto& it : m_output_ports_map) {
@@ -388,9 +420,15 @@ void SyncInferRequest::wait() {
             if (!same_mem && output_memory->size()) {
                 GPU_DEBUG_TRACE_DETAIL << internal_name << " with index " << port_idx << " copy from: " << output_memory->buffer_ptr() << " to "
                                        << (!is_remote ? output_tensor->data() : remote_ptr->get_original_memory()->buffer_ptr()) << std::endl;
+                #if PROFILE_STAGES
+                auto start = std::chrono::high_resolution_clock::now();
+                #endif
                 if (auto ev = copy_output_data(output_memory, *output_tensor)) {
                     copy_events.push_back(ev);
                 }
+                #if PROFILE_STAGES
+                std::cout << "iter " << counter << " : Copy output data took " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count() << " mcs " << std::endl;
+                #endif
             }
         } else if (is_remote && is_dynamic) {
             auto& stream = m_graph->get_network()->get_stream();
@@ -411,7 +449,13 @@ void SyncInferRequest::wait() {
         auto& stream = network.get_stream();
         if (stream.get_queue_type() == QueueTypes::in_order) {
             // wait only the last one
+            #if PROFILE_STAGES
+            auto start = std::chrono::high_resolution_clock::now();
+            #endif
             stream.wait_for_events({copy_events.back()});
+            #if PROFILE_STAGES
+            std::cout << "iter " << counter << " : Wait for copy of output evnet " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count() << " mcs " << std::endl;
+            #endif
         } else {
             stream.wait_for_events(copy_events);
         }
