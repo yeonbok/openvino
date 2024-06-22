@@ -1320,6 +1320,16 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         update_shape();
 
         bool can_skip_execution = false;
+        if (_node->is_in_state_init_subgraph() && !_node->is_type<read_value>()) {
+            auto state_prim = _node->get_state_of_init_subgraph()->as<read_value>().get_primitive();
+            const auto& variable = get_network().get_variable(state_prim->variable_id);
+            GPU_DEBUG_TRACE_DETAIL << id() << " is in init_subgraph of state " << state_prim->id << std::endl;
+            if (variable.is_set()) {
+                can_skip_execution = true;
+                GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping init subgraph because target state " << state_prim->id
+                                       << "is already set " << std::endl;
+            }
+        }
         if (_impl_params->output_layouts[0].count() == 0) {
             GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping because output data is empty " << std::endl;
             can_skip_execution = true;
