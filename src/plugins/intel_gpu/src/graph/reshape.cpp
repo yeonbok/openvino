@@ -11,6 +11,7 @@
 #include "openvino/core/validation_util.hpp"
 #include "primitive_type_base.h"
 #include "reshape_inst.h"
+#include "kv_cache_inst.h"
 #include "reshape_shape_inference.hpp"
 #include "squeeze_shape_inference.hpp"
 #include "unsqueeze_shape_inference.hpp"
@@ -86,12 +87,21 @@ padding propagate_padding(const layout& in_layout, const ov::PartialShape& out_s
                 // If we have a non-squeezable case (pad along removed axis), then out padding is reset
                 // and kernel must be executed
                 auto rm_axis = *rm_iter;
-                if (pad_lower[rm_axis] != 0 || pad_upper[rm_axis] != 0 || pad_mask[rm_axis] != 0 )
+                if (pad_lower[rm_axis] != 0 || pad_upper[rm_axis] != 0 || pad_mask[rm_axis] != 0)
                     return padding();
             }
         }
+        if (update_pad_lower.size() < 4) {
+            for (auto i = update_pad_lower.size(); i < 4; ++i) {
+                update_pad_lower.push_back(0);
+                update_pad_upper.push_back(0);
+                update_pad_mask.push_back(0);
+            }
+            std::swap(update_pad_lower[2], update_pad_lower[3]);
+            std::swap(update_pad_upper[2], update_pad_upper[3]);
+            std::swap(update_pad_mask[2], update_pad_mask[3]);
+        }
     }
-
     auto convert_pad = [](const std::vector<int32_t> pad) {
         return tensor(format::get_default_format(pad.size()), pad, 0);
     };
@@ -176,14 +186,45 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, 
     const auto ta = ov::make_tensor_accessor(const_data);
     padding out_pad = padding();
 
-    auto run_shape_infer = [&](reshape::reshape_mode mode) {
+    auto run_shape_infer = [&](reshape::reshape_mode mode, const std::vector<int64_t>& pattern_vec) {
          switch (mode) {
             case reshape::reshape_mode::base: {
-                OPENVINO_ASSERT(!input_layout.has_dynamic_pad());
                 ov::op::v1::Reshape op;
                 op.set_special_zero(prim->special_zero);
                 op.set_friendly_name(prim->id.c_str());
                 output_shapes = ov::op::v1::shape_infer(&op, input_shapes, ta);
+//                std::cout << "output shape: " << output_shapes[0].to_string() << std::endl;
+                bool squeezable = true;
+                if (input_layout.has_dynamic_pad()) {
+//                    std::cout << "x" << std::endl;
+                    const auto& input_shape = input_shapes[0];
+                    if (input_shape.size() > pattern_vec.size()) {
+                        // squeezej
+                        // to check squeezability
+                    }
+                    if (squeezable) {
+                        std::unordered_map<size_t, ov::Tensor> tmp_const_data;
+                        // Actually the target is not "squeezable" we need to support general case 
+                        // Below is just a poc with hard coding to check whether the resulting behavior is okay
+                        // Todo in the future
+                        // At build time
+                        //     set can_Be_optimized true if the dynamic padding is not on the merge axes (or likely not on the merged axes)
+                        // At runtime
+                        //     if the can_be_opt is decided not true with the actual shape, reset
+                        //     otherwise propagate
+                        //     no need to do like below, need to implemenet a new propagation function
+                        std::vector<int64_t> squeeze_pattern = {0};
+                        auto tmp_pattern_tensor =
+                            make_tensor(layout{ov::PartialShape{2}, data_types::i32, format::bfyx},
+                                        static_cast<void*>(squeeze_pattern.data()));
+                        tmp_const_data.emplace(1, tmp_pattern_tensor);
+                        const auto tmp_ta = ov::make_tensor_accessor(tmp_const_data);
+                        out_pad = propagate_padding(input_layout, output_shapes[0], reshape::reshape_mode::squeeze, tmp_ta);
+                    } else {
+                        OPENVINO_ASSERT(false);
+                    }
+                }
+
                 break;
             }
             case reshape::reshape_mode::squeeze: {
@@ -212,15 +253,36 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, 
 
         auto pattern_ptr = pattern_lock.data();
         auto pattern_tensor = make_tensor(pattern_mem->get_layout(), pattern_ptr);
+//        std::cout << "================================" << std::endl;
+//        std::cout << prim->id << std::endl;
+//        std::cout << "input : " << impl_param.input_layouts[0].to_short_string() << std::endl;
+        std::vector<int64_t> pattern_vec;
+        if (impl_param.input_layouts[1].data_type == ov::element::i32) {
+            for (size_t i = 0; i < impl_param.input_layouts[1].get_shape()[0]; ++i) {
+                cldnn::mem_lock<int32_t, mem_lock_type::read> lock(pattern_mem, impl_param.get_stream());
+//                std::cout << lock[i] << ", ";
+                pattern_vec.push_back(static_cast<int64_t>(lock[i]));
+            }
+//            std::cout << std::endl;
+        }
 
         const_data.emplace(1, pattern_tensor);
-        run_shape_infer(prim->mode);
+        run_shape_infer(prim->mode, pattern_vec);
     } else {
+//        std::cout << "================================" << std::endl;
+//        std::cout << prim->id << std::endl;
+//        std::cout << "input : " << impl_param.input_layouts[0].to_short_string() << std::endl;
+//        std::cout << " (pattern is const)" << std::endl;
+//        std::cout << " mode: " << prim->mode << std::endl;
         auto pattern_data = prim->output_pattern;
+//        for (auto p : pattern_data) {
+//            std::cout << p << ", ";
+//        }
+//        std::cout << std::endl;
         auto pattern_tensor = make_tensor({pattern_shape, data_types::i64, format::bfyx}, static_cast<void*>(pattern_data.data()));
 
         const_data.emplace(1, pattern_tensor);
-        run_shape_infer(prim->mode);
+        run_shape_infer(prim->mode, pattern_data);
     }
 
     auto output_format = input_layout.format;
@@ -232,7 +294,16 @@ std::vector<layout> reshape_inst::calc_output_layouts(reshape_node const& node, 
     if (new_out_pad == padding())
         new_out_pad = impl_param.get_output_layout(0).data_padding;
 
-    return { layout {output_shapes[0], input_layout.data_type, format::adjust_to_rank(output_format, output_shapes[0].size()), new_out_pad} };
+    auto output_layout = layout {output_shapes[0], input_layout.data_type, format::adjust_to_rank(output_format, output_shapes[0].size()), new_out_pad};
+    if (node.get_dependency(0).is_type<kv_cache>()) {
+        std::cout << "####################################" << std::endl;
+        std::cout << prim->id << std::endl;
+        std::cout << "input layout" << std::endl;
+        std::cout << input_layout.to_string() << std::endl;
+        std::cout << "output layout" << std::endl;
+        std::cout << output_layout.to_string() << std::endl;
+    }
+    return { output_layout };
 }
 
 template std::vector<layout> reshape_inst::calc_output_layouts<ov::PartialShape>(reshape_node const& node, const kernel_impl_params& impl_param);

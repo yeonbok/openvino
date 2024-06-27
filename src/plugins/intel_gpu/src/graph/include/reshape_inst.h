@@ -62,7 +62,8 @@ public:
             return false;
 
         if (input().get_output_layout(false).has_dynamic_pad()) {
-            return typed_desc()->mode != reshape::reshape_mode::base;
+//            return typed_desc()->mode != reshape::reshape_mode::base;
+            return true;
         }
 
         if (has_padding())

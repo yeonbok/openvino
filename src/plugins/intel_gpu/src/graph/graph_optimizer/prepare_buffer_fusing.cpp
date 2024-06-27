@@ -345,9 +345,10 @@ void concat_in_place_optimization::update_in_place_concat_paddings(
 
 static bool can_reshape_be_optimized(const reshape_node& node) {
     // In case if pad is not propagated, the primitive can't be optimized out
-    if (node.get_input_layout(0).has_dynamic_pad() && !node.get_output_layout(0).has_dynamic_pad()) {
-        return false;
-    }
+//    if (node.get_input_layout(0).has_dynamic_pad() && !node.get_output_layout(0).has_dynamic_pad()) {
+//        std::cout << "hit" << std::endl;
+//        return false;
+//    }
 
     if (node.has_fused_primitives())
         return false;
@@ -359,7 +360,6 @@ static bool can_reshape_be_optimized(const reshape_node& node) {
 
     if (node.is_in_place())
         return true;
-
     return false;
 }
 
