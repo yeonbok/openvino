@@ -514,15 +514,18 @@ event::ptr primitive_inst::realloc_if_needed() {
     // Update param if fake_alignment is available
     auto updated_params = get_fake_aligned_params_if_possible(*_impl_params);
 
-    const auto& actual_layout = updated_params.get_output_layout();
-    OPENVINO_ASSERT(actual_layout.is_static(), "[GPU] Can't realloc mem for dynamic layout");
+    const auto& actual_layouts = updated_params.output_layouts;
+    OPENVINO_ASSERT(actual_layouts[0].is_static(), "[GPU] Can't realloc mem for dynamic layout");
 
     // input_layout node is supposed to always use external memory in dynamic case
     if (_node->is_type<input_layout>())
         return ev;
 
     auto& sp = *get_network().get_shape_predictor();
-    auto dt_size = ov::element::Type(actual_layout.data_type).bitwidth();
+    std::vector<size_t> dt_sizes;
+    for (size_t i = 0; i < actual_layouts.size(); ++i) {
+        dt_sizes[i] = ov::element::Type(actual_layouts[i].data_type).bitwidth();
+    }
     // read_value/assign nodes are supposed to always use variable memory
     if (auto stateful_prim = dynamic_cast<memory_state::variable*>(this)) {
         auto& variable_id = stateful_prim->variable_id();
@@ -538,12 +541,16 @@ event::ptr primitive_inst::realloc_if_needed() {
 
                 _outputs[0] = variable.get_memory();
                 // To record shape predictor
-                auto prealloc_info = sp.predict_preallocation_shape(id(), _impl_params->output_layouts[0], true);
+                sp.predict_preallocation_shape(id(), _impl_params->output_layouts[0], 0, true);
+                if (_outputs.size() > 1)
+                    sp.predict_preallocation_shape(id(), _impl_params->output_layouts[1], 1, true);
                 return ev;
             } else if (_outputs[0] && variable.get_memory() && get_network().get_engine().is_the_same_buffer(*_outputs[0], *variable.get_memory())) {
                 GPU_DEBUG_TRACE_DETAIL << id() << " : realloc_if_needed: Reset output mem" << std::endl;
                 _outputs[0] = nullptr;
-                _max_output_layout_count = 0;
+                _outputs[1] = nullptr;
+                _max_output_layout_count[0] = 0;
+                _max_output_layout_count[1] = 0;
             } else {
                 GPU_DEBUG_TRACE_DETAIL << id() << " : realloc_if_needed: can_be_optimized = false and memories are not being shared" << std::endl;
             }
@@ -556,14 +563,14 @@ event::ptr primitive_inst::realloc_if_needed() {
         // For nodes that can be optimized, variable memory is used as output memory
         // so there is no need for output memory reallocation
         if (can_be_optimized()) {
-            _max_output_layout_count = variable.get_actual_mem_size() / (dt_size / 8);
+            _max_output_layout_count[0] = variable.get_actual_mem_size() / (dt_sizes[0] / 8);
             GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("can_be_optimized");
             return ev;
         }
     }
 
     // Update output layout with respect to FC's fake alignment
-    auto updated_layout = actual_layout;
+    auto updated_layouts = actual_layouts;
     std::vector<cldnn::primitive_inst *> user_insts;
     {
         auto user_insts_origin = get_user_insts();
@@ -595,10 +602,17 @@ event::ptr primitive_inst::realloc_if_needed() {
 
             auto fc_impl_params = *user->_impl_params;
             auto fc_input_layout = user->get_node().type()->get_fake_aligned_params(fc_impl_params).input_layouts[0];
-            if (fc_input_layout.bytes_count() > updated_layout.bytes_count()) {
-                GPU_DEBUG_TRACE_DETAIL << id() << ": increase output layout allocation size from " << actual_layout.to_short_string() << " -> "
+            size_t dep_idx = 0;
+            for (auto dep : user->_deps) {
+                if (dep.first->id() == id()) {
+                    dep_idx = dep.second;
+                    break;
+                }
+            }
+            if (fc_input_layout.bytes_count() > updated_layouts[dep_idx].bytes_count()) {
+                GPU_DEBUG_TRACE_DETAIL << id() << ": increase output layout allocation size from " << actual_layouts[dep_idx].to_short_string() << " -> "
                                        << fc_input_layout.to_short_string() << " to meet the input buffer alignment requirements for FC\n";
-                updated_layout = fc_input_layout;
+                updated_layouts[dep_idx] = fc_input_layout;
             }
         }
     }
@@ -613,26 +627,31 @@ event::ptr primitive_inst::realloc_if_needed() {
                    _network.get_engine().is_the_same_buffer(dep_memory(0), output_memory(0))) {
             // Clear out memory if if was previously reused, but now primitive can't be optimized
             _outputs[0] = nullptr;
-            _max_output_layout_count = 0;
+            _max_output_layout_count[0] = 0;
         }
     }
 
     // update layout to ensure that it repsects paddings for correct allocation size
     if (_node_output_layout.data_padding.get_dynamic_pad_dims() != tensor(0)) {
-        size_t rank = updated_layout.get_partial_shape().size();
-        auto current_buf_shape = updated_layout.get_buffer_size().get_partial_shape(rank, std::min(static_cast<size_t>(4), rank));
-        updated_layout = layout(current_buf_shape, updated_layout.data_type, updated_layout.format);
+        size_t rank = updated_layouts[0].get_partial_shape().size();
+        auto current_buf_shape = updated_layouts[0].get_buffer_size().get_partial_shape(rank, std::min(static_cast<size_t>(4), rank));
+        updated_layouts[0] = layout(current_buf_shape, updated_layouts[0].data_type, updated_layouts[0].format);
     }
 
     // If we allocated too large memory, reclaim the memory.
-    if (updated_layout.get_buffer_size().count() * 10 < _max_output_layout_count) {
-        GPU_DEBUG_TRACE_DETAIL << id() << ": Updated output size " << updated_layout.get_buffer_size().count()
-                               << " is much smaller than current memory size! " << _max_output_layout_count
-                               << "Reset memory" << std::endl;
-        _max_output_layout_count = 0;
+    for (auto i = 0; i < updated_layouts.size(); ++i) {
+        if (updated_layouts[i].get_buffer_size().count() * 10 < _max_output_layout_count[i]) {
+            GPU_DEBUG_TRACE_DETAIL << id() << ": Updated output[" << i << "] size " << updated_layouts[i].get_buffer_size().count()
+                                   << " is much smaller than current memory size! " << _max_output_layout_count[i]
+                                   << "Reset memory of output " << i << std::endl;
+            _max_output_layout_count[i] = 0;
+        }
     }
 
-    bool can_reuse_buffer = _outputs[0] && updated_layout.get_buffer_size().count() <= _max_output_layout_count;
+    std::vector<bool> can_reuse_buffer;
+    for (size_t i = 0; i < _outputs.size(); ++i) {
+        can_reuse_buffer.push_back(_outputs[i] && updated_layouts[i].get_buffer_size().count() <= _max_output_layout_count[i]);
+    }
     // Handle runtime dynamic concat optimization
     if (_node->is_type<concatenation>() && can_be_optimized() && allocation_done_by_other) {
         allocation_done_by_other = false;
@@ -640,48 +659,102 @@ event::ptr primitive_inst::realloc_if_needed() {
         return ev;
     }
 
-    std::pair<bool, ov::Shape> prealloc_info;
+//    std::vector<std::pair<bool, ov::Shape>> prealloc_infos;
     int32_t tmp_prealloc_count = get_prealloc_iter_num();
     GPU_DEBUG_IF(debug_config->mem_preallocation_params.is_initialized) {
         // If debug config is set, repsect the config most
         tmp_prealloc_count = -1;
     }
-    prealloc_info = sp.predict_preallocation_shape(id(), updated_layout, can_reuse_buffer, tmp_prealloc_count);
-
-    if (prealloc_info.first && sp.can_preallocate(ov::shape_size(prealloc_info.second) * (dt_size / 8))) {
-        auto new_layout = updated_layout;
-        new_layout.set_partial_shape(prealloc_info.second);
-        updated_params.output_layouts[0] = new_layout;
+    if (_node->is_type<kv_cache>()) {
+        std::cout << id() << std::endl;
+        std::cout << "before prealloc info" << std::endl;
+        std::cout << " --- output[0] layout : " << _impl_params->output_layouts[0].to_short_string() << std::endl;
+        std::cout << " --- updated_param.output_layout[0] : " << updated_params.output_layouts[0].to_short_string() << std::endl;
+        std::cout << " --- output[1] layout : " << _impl_params->output_layouts[1].to_short_string() << std::endl;
+        std::cout << " --- updated_param.output_layout[1] : " << updated_params.output_layouts[1].to_short_string() << std::endl;
     }
 
-    if (updated_params.output_layouts[0].get_buffer_size().count() < updated_layout.get_buffer_size().count())
-        updated_params.output_layouts[0] = updated_layout;
-    if (can_reuse_buffer) {
-        GPU_DEBUG_TRACE_DETAIL << id() << ": reuse previously allocated output buffer - "
-                               << actual_layout.get_buffer_size().count() << "/" << _max_output_layout_count
-                               << std::endl;
-        if (_outputs[0]->get_layout() != actual_layout) {
-            _outputs[0] = _network.get_engine().reinterpret_buffer(*_outputs[0], actual_layout);
+    for (size_t i = 0; i < updated_layouts.size(); ++i) {
+        std::pair<bool, ov::Shape> prealloc_info = 
+            sp.predict_preallocation_shape(id(), updated_layouts[i], can_reuse_buffer[i], i, tmp_prealloc_count);
+        if (prealloc_info.first && sp.can_preallocate(ov::shape_size(prealloc_info.second) * (dt_sizes[i] / 8))) {
+            auto new_layout = updated_layouts[i];
+            new_layout.set_partial_shape(prealloc_info.second);
+            updated_params.output_layouts[i] = new_layout;
         }
-        if (need_reset_output_memory() && !can_be_optimized()) {
-            GPU_DEBUG_TRACE_DETAIL << id() << " : Need reset output memory considering user" << std::endl;
-            ev = _outputs[0]->fill(_network.get_stream());
-        }
-        GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("reuse_buffer");
-    } else {
-        GPU_DEBUG_TRACE_DETAIL << id() << ": realloc output memory. "
-                               <<  " Current buffer_size=" << _max_output_layout_count
-                               <<  " Requested buffer_size=" << updated_layout.get_buffer_size().count() << std::endl;
-        _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
-        GPU_DEBUG_CODE(std::string memalloc_info = "");
-        GPU_DEBUG_CODE(for (size_t out_idx = 0; out_idx < _outputs.size(); ++out_idx) {
-            memalloc_info += (((_outputs.size() > 1) ? ("o" + to_string(out_idx) + ":") : "") +
-                              (_outputs[out_idx]->from_memory_pool ? "from_pool" : "new_alloc"));
-        })
-        GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO(memalloc_info);
+    }
+    if (_node->is_type<kv_cache>()) {
+        std::cout << "after prealloc info" << std::endl;
+        std::cout << " --- updated_param.output_layout[0] : " << updated_params.output_layouts[0].to_short_string() << std::endl;
+        std::cout << " --- updated_param.output_layout[1] : " << updated_params.output_layouts[1].to_short_string() << std::endl;
+    }
 
-        // TODO : need to handle multiple outputs
-        _max_output_layout_count = updated_params.output_layouts[0].get_buffer_size().count();
+    for (size_t i = 0; i < updated_layouts.size(); ++i) {
+        if (updated_params.output_layouts[i].get_buffer_size().count() < updated_layouts[i].get_buffer_size().count()) {
+            if (_node->is_type<kv_cache>()) {
+                std::cout << "updated_params.output_layouts[" << i << "].get_buffer_size().count() : "
+                          << updated_params.output_layouts[i].get_buffer_size().count() << std::endl;
+                std::cout << "updated_layouts[" << i << "].get_buffer_size().count() : "
+                          << updated_layouts[i].get_buffer_size().count() << std::endl;
+            }
+            updated_params.output_layouts[i] = updated_layouts[i];
+        }
+    }
+    if (_node->is_type<kv_cache>()) {
+        std::cout << "Can reuse buffer 0 ? " << can_reuse_buffer[0] << std::endl;
+        std::cout << "Can reuse buffer 1 ? " << can_reuse_buffer[1] << std::endl;
+    }
+    for (size_t i = 0; i < actual_layouts.size(); ++i) {
+        if (can_reuse_buffer[i]) {
+            GPU_DEBUG_TRACE_DETAIL << id() << ": reuse previously allocated output buffer - "
+                                   << actual_layouts[i].get_buffer_size().count() << "/" << _max_output_layout_count[i]
+                                   << std::endl;
+            for (size_t i = 0; i < actual_layouts.size(); ++i) {
+                if (_outputs[i]->get_layout() != actual_layouts[i]) {
+                    _outputs[i] = _network.get_engine().reinterpret_buffer(*_outputs[i], actual_layouts[i]);
+                }
+            }
+            if (need_reset_output_memory() && !can_be_optimized()) {
+                GPU_DEBUG_TRACE_DETAIL << id() << " : Need reset output memory considering user" << std::endl;
+                ev = _outputs[0]->fill(_network.get_stream());
+            }
+            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("reuse_buffer");
+        } else {
+            GPU_DEBUG_TRACE_DETAIL << id() << ": realloc output memories. " << std::endl;
+            for (size_t i = 0; i < updated_layouts.size(); ++i) {
+                GPU_DEBUG_TRACE_DETAIL << " outputs[" << i << "] "
+                                       << " Current buffer_size=" << _max_output_layout_count[i]
+                                       << " Requested buffer_size=" << updated_layouts[i].get_buffer_size().count()
+                                       << std::endl;
+            }
+//            _outputs = allocate_outputs(&updated_params, need_reset_output_memory(), true);
+            _outputs[i] = allocate_output(_network.get_engine(),
+                                          _network.get_memory_pool(),
+                                          *_node,
+                                          updated_params,
+                                          _runtime_memory_dependencies,
+                                          get_network_id(),
+                                          _network.is_internal(),
+                                          i,
+                                          need_reset_output_memory(),
+                                          is_output_buffer(this, true),
+                                          output_memory_ptr(i).get(),
+                                          true);
+            if (_node->is_type<kv_cache>()) {
+                std::cout << "Allocated outputs with following shapes " << std::endl;
+                std::cout << " --- updated_param.output_layout[" << i << "] : "
+                          << updated_params.output_layouts[i].to_short_string() << std::endl;
+            }
+            GPU_DEBUG_CODE(std::string memalloc_info = "");
+            GPU_DEBUG_CODE(for (size_t out_idx = 0; out_idx < _outputs.size(); ++out_idx) {
+                memalloc_info += (((_outputs.size() > 1) ? ("o" + to_string(out_idx) + ":") : "") +
+                                  (_outputs[out_idx]->from_memory_pool ? "from_pool" : "new_alloc"));
+            })
+            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO(memalloc_info);
+
+            // TODO : need to handle multiple outputs
+            _max_output_layout_count[i] = updated_params.output_layouts[i].get_buffer_size().count();
+        }
     }
     // Set variable memory same as output memory
     if (_node->is_type<kv_cache>()) {
@@ -1105,7 +1178,7 @@ void primitive_inst::do_runtime_in_place_kv_cache() {
 
     GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << id() << " initial present_layout : " << present_layout.to_string() << std::endl;
     GPU_DEBUG_TRACE_DETAIL << "[do runtime kv_cache opt] " << id() << " initial past_layout : " << past_layout.to_string() << std::endl;
-    auto max_pad = kv_cache_inst::get_max_pad(past_layout, _deps[0].first->_max_output_layout_count, sequence_axis_legacy, "past_layout");
+    auto max_pad = kv_cache_inst::get_max_pad(past_layout, _deps[0].first->_max_output_layout_count[0], sequence_axis_legacy, "past_layout");
 
     if (max_pad > 0) {
         kv_cache_inst::update_pad(present_layout, max_pad - 1, sequence_axis_legacy);
@@ -1733,8 +1806,12 @@ primitive_inst::primitive_inst(network & network, program_node const& node, bool
         }
     }
     _impl_params->strm = _network.get_stream_ptr();
-    if (_outputs[0])
-        _max_output_layout_count = _outputs[0]->get_layout().get_buffer_size().count();
+    for (size_t i = 0; i <_outputs.size(); ++i) {
+        if (_outputs[i])
+            _max_output_layout_count[i] = _outputs[i]->get_layout().get_buffer_size().count();
+        else
+            _max_output_layout_count[i] = 0;
+    }
 }
 
 memory::ptr primitive_inst::allocate_internal_buffer(size_t idx, bool reset) {
