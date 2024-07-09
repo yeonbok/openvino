@@ -522,7 +522,7 @@ event::ptr primitive_inst::realloc_if_needed() {
         return ev;
 
     auto& sp = *get_network().get_shape_predictor();
-    std::vector<size_t> dt_sizes;
+    std::vector<size_t> dt_sizes(actual_layouts.size());
     for (size_t i = 0; i < actual_layouts.size(); ++i) {
         dt_sizes[i] = ov::element::Type(actual_layouts[i].data_type).bitwidth();
     }
@@ -541,9 +541,13 @@ event::ptr primitive_inst::realloc_if_needed() {
 
                 _outputs[0] = variable.get_memory();
                 // To record shape predictor
-                sp.predict_preallocation_shape(id(), _impl_params->output_layouts[0], 0, true);
-                if (_outputs.size() > 1)
-                    sp.predict_preallocation_shape(id(), _impl_params->output_layouts[1], 1, true);
+//                std::cout << id() << " is can_be_optimized!!! " << std::endl;
+//                std::cout << " add shape record for output 0 " << _impl_params->output_layouts[0].to_short_string() << std::endl;
+                sp.predict_preallocation_shape(id(), _impl_params->output_layouts[0], true, 0);
+                if (_outputs.size() > 1) {
+//                    std::cout << " add shape record for output 1 " << _impl_params->output_layouts[1].to_short_string() << std::endl;
+                    sp.predict_preallocation_shape(id(), _impl_params->output_layouts[1], true, 1);
+                }
                 return ev;
             } else if (_outputs[0] && variable.get_memory() && get_network().get_engine().is_the_same_buffer(*_outputs[0], *variable.get_memory())) {
                 GPU_DEBUG_TRACE_DETAIL << id() << " : realloc_if_needed: Reset output mem" << std::endl;
@@ -639,7 +643,7 @@ event::ptr primitive_inst::realloc_if_needed() {
     }
 
     // If we allocated too large memory, reclaim the memory.
-    for (auto i = 0; i < updated_layouts.size(); ++i) {
+    for (size_t i = 0; i < updated_layouts.size(); ++i) {
         if (updated_layouts[i].get_buffer_size().count() * 10 < _max_output_layout_count[i]) {
             GPU_DEBUG_TRACE_DETAIL << id() << ": Updated output[" << i << "] size " << updated_layouts[i].get_buffer_size().count()
                                    << " is much smaller than current memory size! " << _max_output_layout_count[i]
@@ -648,9 +652,9 @@ event::ptr primitive_inst::realloc_if_needed() {
         }
     }
 
-    std::vector<bool> can_reuse_buffer;
+    std::vector<bool> can_reuse_buffer(_outputs.size(), false);
     for (size_t i = 0; i < _outputs.size(); ++i) {
-        can_reuse_buffer.push_back(_outputs[i] && updated_layouts[i].get_buffer_size().count() <= _max_output_layout_count[i]);
+        can_reuse_buffer[i] = (_outputs[i] && updated_layouts[i].get_buffer_size().count() <= _max_output_layout_count[i]);
     }
     // Handle runtime dynamic concat optimization
     if (_node->is_type<concatenation>() && can_be_optimized() && allocation_done_by_other) {
@@ -665,17 +669,19 @@ event::ptr primitive_inst::realloc_if_needed() {
         // If debug config is set, repsect the config most
         tmp_prealloc_count = -1;
     }
-    if (_node->is_type<kv_cache>()) {
-        std::cout << id() << std::endl;
-        std::cout << "before prealloc info" << std::endl;
-        std::cout << " --- output[0] layout : " << _impl_params->output_layouts[0].to_short_string() << std::endl;
-        std::cout << " --- updated_param.output_layout[0] : " << updated_params.output_layouts[0].to_short_string() << std::endl;
-        std::cout << " --- output[1] layout : " << _impl_params->output_layouts[1].to_short_string() << std::endl;
-        std::cout << " --- updated_param.output_layout[1] : " << updated_params.output_layouts[1].to_short_string() << std::endl;
-    }
+//    if (_node->is_type<kv_cache>()) {
+//        std::cout << id() << std::endl;
+//        std::cout << "before prealloc info" << std::endl;
+//        std::cout << " --- output[0] layout : " << _impl_params->output_layouts[0].to_short_string() << std::endl;
+//        std::cout << " --- updated_param.output_layout[0] : " << updated_params.output_layouts[0].to_short_string() << std::endl;
+//        std::cout << " --- output[1] layout : " << _impl_params->output_layouts[1].to_short_string() << std::endl;
+//        std::cout << " --- updated_param.output_layout[1] : " << updated_params.output_layouts[1].to_short_string() << std::endl;
+//    }
 
     for (size_t i = 0; i < updated_layouts.size(); ++i) {
-        std::pair<bool, ov::Shape> prealloc_info = 
+//        if (_node->is_type<kv_cache>())
+//            std::cout << "tmp prealloc count : " << tmp_prealloc_count << std::endl;
+        std::pair<bool, ov::Shape> prealloc_info =
             sp.predict_preallocation_shape(id(), updated_layouts[i], can_reuse_buffer[i], i, tmp_prealloc_count);
         if (prealloc_info.first && sp.can_preallocate(ov::shape_size(prealloc_info.second) * (dt_sizes[i] / 8))) {
             auto new_layout = updated_layouts[i];
@@ -683,27 +689,27 @@ event::ptr primitive_inst::realloc_if_needed() {
             updated_params.output_layouts[i] = new_layout;
         }
     }
-    if (_node->is_type<kv_cache>()) {
-        std::cout << "after prealloc info" << std::endl;
-        std::cout << " --- updated_param.output_layout[0] : " << updated_params.output_layouts[0].to_short_string() << std::endl;
-        std::cout << " --- updated_param.output_layout[1] : " << updated_params.output_layouts[1].to_short_string() << std::endl;
-    }
+//    if (_node->is_type<kv_cache>()) {
+//        std::cout << "after prealloc info" << std::endl;
+//        std::cout << " --- updated_param.output_layout[0] : " << updated_params.output_layouts[0].to_short_string() << std::endl;
+//        std::cout << " --- updated_param.output_layout[1] : " << updated_params.output_layouts[1].to_short_string() << std::endl;
+//    }
 
     for (size_t i = 0; i < updated_layouts.size(); ++i) {
         if (updated_params.output_layouts[i].get_buffer_size().count() < updated_layouts[i].get_buffer_size().count()) {
-            if (_node->is_type<kv_cache>()) {
-                std::cout << "updated_params.output_layouts[" << i << "].get_buffer_size().count() : "
-                          << updated_params.output_layouts[i].get_buffer_size().count() << std::endl;
-                std::cout << "updated_layouts[" << i << "].get_buffer_size().count() : "
-                          << updated_layouts[i].get_buffer_size().count() << std::endl;
-            }
+//            if (_node->is_type<kv_cache>()) {
+//                std::cout << "updated_params.output_layouts[" << i << "].get_buffer_size().count() : "
+//                          << updated_params.output_layouts[i].get_buffer_size().count() << std::endl;
+//                std::cout << "updated_layouts[" << i << "].get_buffer_size().count() : "
+//                          << updated_layouts[i].get_buffer_size().count() << std::endl;
+//            }
             updated_params.output_layouts[i] = updated_layouts[i];
         }
     }
-    if (_node->is_type<kv_cache>()) {
-        std::cout << "Can reuse buffer 0 ? " << can_reuse_buffer[0] << std::endl;
-        std::cout << "Can reuse buffer 1 ? " << can_reuse_buffer[1] << std::endl;
-    }
+//    if (_node->is_type<kv_cache>()) {
+//        std::cout << "Can reuse buffer 0 ? " << can_reuse_buffer[0] << std::endl;
+//        std::cout << "Can reuse buffer 1 ? " << can_reuse_buffer[1] << std::endl;
+//    }
     for (size_t i = 0; i < actual_layouts.size(); ++i) {
         if (can_reuse_buffer[i]) {
             GPU_DEBUG_TRACE_DETAIL << id() << ": reuse previously allocated output buffer - "
@@ -740,22 +746,22 @@ event::ptr primitive_inst::realloc_if_needed() {
                                           is_output_buffer(this, true),
                                           output_memory_ptr(i).get(),
                                           true);
-            if (_node->is_type<kv_cache>()) {
-                std::cout << "Allocated outputs with following shapes " << std::endl;
-                std::cout << " --- updated_param.output_layout[" << i << "] : "
-                          << updated_params.output_layouts[i].to_short_string() << std::endl;
-            }
-            GPU_DEBUG_CODE(std::string memalloc_info = "");
-            GPU_DEBUG_CODE(for (size_t out_idx = 0; out_idx < _outputs.size(); ++out_idx) {
-                memalloc_info += (((_outputs.size() > 1) ? ("o" + to_string(out_idx) + ":") : "") +
-                                  (_outputs[out_idx]->from_memory_pool ? "from_pool" : "new_alloc"));
-            })
-            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO(memalloc_info);
-
+//            if (_node->is_type<kv_cache>()) {
+//                std::cout << "Allocated outputs with following shapes " << std::endl;
+//                std::cout << " --- updated_param.output_layout[" << i << "] : "
+//                          << updated_params.output_layouts[i].to_short_string() << std::endl;
+//            }
             // TODO : need to handle multiple outputs
             _max_output_layout_count[i] = updated_params.output_layouts[i].get_buffer_size().count();
         }
     }
+    GPU_DEBUG_CODE(std::string memalloc_info = "");
+    GPU_DEBUG_CODE(for (size_t out_idx = 0; out_idx < _outputs.size(); ++out_idx) {
+        memalloc_info += (((_outputs.size() > 1) ? ("o" + to_string(out_idx) + ":") : "") +
+                          (_outputs[out_idx]->from_memory_pool ? "from_pool" : "new_alloc"));
+    })
+    GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO(memalloc_info);
+
     // Set variable memory same as output memory
     if (_node->is_type<kv_cache>()) {
         auto desc = _node->as<kv_cache>().get_primitive();
@@ -1503,6 +1509,10 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         GPU_DEBUG_TRACE_DETAIL << "- inputs[" << i << "] : " <<  _deps[i].first->id() << std::endl;
     }
     GPU_DEBUG_TRACE_DETAIL << "-----------------------------------------------------------------" << std::endl;
+//    if (_node->is_type<kv_cache>()) {
+//        std::cout << "-----------------------------------------------------------------" << std::endl;
+//        std::cout << "Execute " << id() << " (type: " << _impl_params->desc->type_string() << ") " << std::endl;
+//    }
     bool need_args_update = false;
     _mem_changed = false;
     const auto orig_outputs = _outputs;
@@ -1722,7 +1732,8 @@ primitive_inst::primitive_inst(network& network)
     , _impl_params(make_unique<kernel_impl_params>())
     , _impl(nullptr)
     , _dynamic_impl(nullptr)
-    , _outputs({memory::ptr()})
+//    , _outputs({memory::ptr()})
+    , _outputs({})
     , _reordered_weights_cache(network.get_weights_cache_capacity())
     , _output_changed(false)
     , _mem_allocated(false)
@@ -1736,7 +1747,8 @@ primitive_inst::primitive_inst(network & network, program_node const& node, bool
     , _impl(node.get_selected_impl() ? node.get_selected_impl()->clone() : nullptr)
     , _dynamic_impl(nullptr)
     , _runtime_memory_dependencies(node.get_memory_dependencies())
-    , _outputs({memory::ptr()})
+//    , _outputs({memory::ptr()})
+    , _outputs({})
     , _reordered_weights_cache(network.get_weights_cache_capacity())
     , _output_changed(false)
     , _is_dynamic(node.is_dynamic() || node.generates_dynamic_output())
@@ -1806,12 +1818,19 @@ primitive_inst::primitive_inst(network & network, program_node const& node, bool
         }
     }
     _impl_params->strm = _network.get_stream_ptr();
-    for (size_t i = 0; i <_outputs.size(); ++i) {
-        if (_outputs[i])
-            _max_output_layout_count[i] = _outputs[i]->get_layout().get_buffer_size().count();
-        else
-            _max_output_layout_count[i] = 0;
+    for (size_t i = 0; i < get_node().get_output_layouts().size(); ++i) {
+        if (_outputs.size() > i) {
+            _max_output_layout_count.push_back(_outputs[i] ? _outputs[i]->get_layout().get_buffer_size().count() : 0);
+        } else {
+            _outputs.push_back(memory::ptr());
+            _max_output_layout_count.push_back(0);
+        }
     }
+//    std::cout << id() << "_outputs.size() " << _outputs.size() << std::endl;
+//    std::cout << id() << "max_output_layout_count.size() " << _max_output_layout_count.size() << std::endl;
+//    std::cout << id() << "# output layouts:  " << get_node().get_output_layouts().size() << std::endl;
+    OPENVINO_ASSERT(_outputs.size() == get_node().get_output_layouts().size());
+    OPENVINO_ASSERT(_max_output_layout_count.size() == get_node().get_output_layouts().size());
 }
 
 memory::ptr primitive_inst::allocate_internal_buffer(size_t idx, bool reset) {

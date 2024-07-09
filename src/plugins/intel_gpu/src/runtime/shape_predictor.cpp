@@ -71,6 +71,11 @@ std::pair<bool, ov::Shape> ShapePredictor::predict_preallocation_shape(const std
     if (out_idx > 0) {
         id_record += ("_out" + to_string(out_idx));
     }
+
+//    if (orig_id.find("kvcache") != std::string::npos) {
+//        std::cout << id_record << ": iters_prealloc_count " << custom_next_iters_prealloc_count << std::endl;
+//        std::cout << "layout: " << layout.to_short_string() << std::endl;
+//    }
     add_shape(id_record, current_shape);
 
     // Save shape information and exit without pre-allocation suggestion if current
@@ -101,6 +106,17 @@ std::pair<bool, ov::Shape> ShapePredictor::predict_preallocation_shape(const std
                 break;
             }
         }
+//        if (orig_id.find("kvcache") != std::string::npos) {
+//            std::cout << id_record << " : " << "can_use_iterations_prealloc: " << can_use_iterations_preallocation << std::endl;
+//            std::cout << "shapes: ";
+//            for (size_t i = 0; i < shapes_num; ++i) {
+//                std::cout << shapes[i].to_string() << std::endl;
+//            }
+//            std::cout << "diffs: ";
+//            for (size_t i = 0; i < diffs.size(); ++i)
+//                std::cout << diffs[i] << ", ";
+//            std::cout << std::endl;
+//        }
 
         if (can_use_iterations_preallocation)
             can_use_iterations_preallocation = !all_zeroes(diffs[0]);
