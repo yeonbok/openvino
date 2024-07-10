@@ -1266,7 +1266,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // provide proper event to execution. Flushing pipeline should prevent this kind of issues.
     // In scenarios with a big number of very small networks it can provide performance drop.
     get_stream().flush();
-
+    mems_for_delayed_free.clear();
     // Deallocate events from the previos iteration
     _old_events.clear();
 
@@ -1584,5 +1584,7 @@ void network::set_variables_state_info(const std::string& variable_id,
     _variables_state_info.at(variable_id).m_primitives.insert(p);
 }
 
-
+void network::touch_mems_for_delayed_free(memory::ptr mem_new) {
+    mems_for_delayed_free.push_back(mem_new);
+}
 }  // namespace cldnn

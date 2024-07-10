@@ -226,6 +226,7 @@ public:
 
     std::shared_ptr<ShapePredictor> get_shape_predictor() { return _shape_predictor; }
     void set_shape_predictor(std::shared_ptr<ShapePredictor> shape_predictor) { _shape_predictor = shape_predictor; }
+    void touch_mems_for_delayed_free(memory::ptr mem_new);
 
 #ifdef GPU_DEBUG_CONFIG
     int64_t get_current_iteration_num() { return iteration; }
@@ -282,6 +283,7 @@ private:
     void set_variables_state_info(const std::string& variable_id, const layout& variable_layout, ov::element::Type user_specified_type, const primitive* p);
     void dump_memory_pool(std::string dump_path, int64_t curr_iter);
 
+    std::vector<memory::ptr> mems_for_delayed_free;
     std::vector<uint64_t> host_exec_times;
 #ifdef GPU_DEBUG_CONFIG
     int64_t iteration = 0;

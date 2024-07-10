@@ -261,6 +261,7 @@ event::ptr primitive_inst::set_output_memory(memory::ptr mem_new, bool check, si
         ev = mem_new->copy_from(_network.get_stream(), *_outputs[idx], false);
     } else {
         ev = get_network().get_stream().create_user_event(true);
+        get_network().touch_mems_for_delayed_free(_outputs[idx]);
         _outputs[idx] = mem_new;
     }
     return ev;
