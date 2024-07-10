@@ -261,7 +261,6 @@ event::ptr primitive_inst::set_output_memory(memory::ptr mem_new, bool check, si
         ev = mem_new->copy_from(_network.get_stream(), *_outputs[idx], false);
     } else {
         ev = get_network().get_stream().create_user_event(true);
-        get_network().touch_mems_for_delayed_free(_outputs[idx]);
         _outputs[idx] = mem_new;
     }
     return ev;
@@ -718,6 +717,9 @@ event::ptr primitive_inst::realloc_if_needed() {
                                    << " Current buffer_size=" << _max_output_layout_count[i]
                                    << " Requested buffer_size=" << updated_layouts[i].get_buffer_size().count()
                                    << std::endl;
+            if (!_node->can_share_buffer() || _node->can_be_optimized() || _node->is_output()) {
+                _network.touch_mems_for_delayed_free(_outputs[i]);
+            }
             _outputs[i] = allocate_output(_network.get_engine(),
                                           _network.get_memory_pool(),
                                           *_node,

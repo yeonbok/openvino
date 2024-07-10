@@ -162,6 +162,11 @@ public:
     void dump(uint32_t id, uint32_t iter, std::string dump_dir_path = "");
     size_t get_total_mem_pool_size(allocation_type type);
 
+    std::vector<memory_record> trash_can;
+    void empty_trash() {
+        trash_can.clear();
+    }
+
 private:
     void dump_to_screen(uint32_t id, uint32_t iter);
     void dump_to_file(uint32_t id, uint32_t iter, std::string dump_dir_path);

@@ -75,6 +75,7 @@ void memory_pool::release_memory(memory* mem, const size_t& unique_id, primitive
                     }
 #endif
                     // if this was the only user of the memory, then free it up
+                    trash_can.push_back(it->second);
                     it = _non_padded_pool.erase(it);
                 }
 

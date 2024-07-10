@@ -1267,6 +1267,7 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // In scenarios with a big number of very small networks it can provide performance drop.
     get_stream().flush();
     mems_for_delayed_free.clear();
+    get_memory_pool().empty_trash();
     // Deallocate events from the previos iteration
     _old_events.clear();
 
