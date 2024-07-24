@@ -140,6 +140,8 @@ public:
     int disable_runtime_skip_reorder;                           // Disable runtime skip reorder
     int disable_primitive_fusing;                               // Disable primitive fusing
     int disable_fake_alignment;                                 // Disable fake alignment
+    int disable_reclaim;                                        // Disable fake alignment
+    int print_per_iter;                                         // Disable fake alignment
     int enable_dynamic_quantize;                                // Enable Dynamic quantization for fully connected primitive
     int disable_horizontal_fc_fusion;                           // Disable fc horizontal fusion
     std::set<int64_t> dump_iteration;                           // Dump n-th execution of network.

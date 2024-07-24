@@ -111,12 +111,21 @@ SyncInferRequest::SyncInferRequest(const std::shared_ptr<const CompiledModel>& c
     allocate_states();
 }
 
+auto iter = 0;
 void SyncInferRequest::infer() {
+    using ms = std::chrono::milliseconds;
+    auto _start = std::chrono::high_resolution_clock::now();
     OV_ITT_SCOPED_TASK(itt::domains::intel_gpu_plugin, "SyncInferRequest::infer");
     setup_stream_graph();
     std::lock_guard<std::mutex> lk(m_graph->get_mutex());
     enqueue();
     wait();
+    auto _finish = std::chrono::high_resolution_clock::now();
+    GPU_DEBUG_GET_INSTANCE(debug_config);
+    GPU_DEBUG_IF(debug_config->print_per_iter) {
+        auto stage_duration = std::chrono::duration_cast<ms>(_finish - _start).count();
+        std::cout << iter++ << "," << stage_duration << ", ms" << std::endl;
+    }
 }
 
 std::vector<ov::ProfilingInfo> SyncInferRequest::get_profiling_info() const {

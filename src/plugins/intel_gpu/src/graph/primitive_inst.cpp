@@ -689,6 +689,10 @@ event::ptr primitive_inst::realloc_if_needed() {
         if (required_buffer_size * 10 < _max_output_layout_count[i]) {
             reclaim = true;
         }
+        GPU_DEBUG_GET_INSTANCE(debug_config);
+        GPU_DEBUG_IF(debug_config->disable_reclaim) {
+            reclaim = false;
+        }
         if (reclaim) {
             GPU_DEBUG_TRACE_DETAIL << id() << ": Updated output[" << i << "] size " << updated_layouts[i].get_linear_size()
                                    << " is much smaller than current memory size! " << _max_output_layout_count[i]

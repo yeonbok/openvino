@@ -132,6 +132,8 @@ static void print_help_messages() {
     message_list.emplace_back("OV_GPU_PrintMultiKernelPerf", "Print execution time of each kernel in multi-kernel primitimive");
     message_list.emplace_back("OV_GPU_PrintInputDataShapes",  "Print data_shapes of input layers for benchmark_app.");
     message_list.emplace_back("OV_GPU_DisableUsm", "Disable usm usage");
+    message_list.emplace_back("OV_GPU_DisableReclaim", "Disable usm usage");
+    message_list.emplace_back("OV_GPU_PrintPerITer", "Disable usm usage");
     message_list.emplace_back("OV_GPU_DisableOnednn", "Disable onednn for discrete GPU (no effect for integrated GPU)");
     message_list.emplace_back("OV_GPU_DisableOnednnPermuteFusion", "Disable permute fusion for onednn gemm (no effect for integrated GPU)");
     message_list.emplace_back("OV_GPU_DisableOnednnOptPostOps", "Disable onednn optimize post operators");
@@ -248,6 +250,8 @@ debug_configuration::debug_configuration()
         , disable_runtime_skip_reorder(0)
         , disable_primitive_fusing(0)
         , disable_fake_alignment(0)
+        , disable_reclaim(0)
+        , print_per_iter(0)
         , enable_dynamic_quantize(0)
         , disable_horizontal_fc_fusion(0) {
 #ifdef GPU_DEBUG_CONFIG
@@ -300,6 +304,8 @@ debug_configuration::debug_configuration()
     get_gpu_debug_env_var("DisableRuntimeSkipReorder", disable_runtime_skip_reorder);
     get_gpu_debug_env_var("DisablePrimitiveFusing", disable_primitive_fusing);
     get_gpu_debug_env_var("DisableFakeAlignment", disable_fake_alignment);
+    get_gpu_debug_env_var("DisableReclaim", disable_reclaim);
+    get_gpu_debug_env_var("PrintPerIter", print_per_iter);
     get_gpu_debug_env_var("EnableDynamicQuantize", enable_dynamic_quantize);
     get_gpu_debug_env_var("DisableHorizontalFCFusion", disable_horizontal_fc_fusion);
     std::string dump_iteration_str;
