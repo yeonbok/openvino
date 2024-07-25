@@ -268,7 +268,7 @@ event::ptr primitive_inst::set_output_memory(memory::ptr mem_new, bool check, si
 
 void primitive_inst::update_shape() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("update_shape: " + id()));
-    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::shape_inference);
+//    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::shape_inference);
     if (update_shape_done_by_other) {
         update_shape_done_by_other = false; // reset
         GPU_DEBUG_TRACE_DETAIL << id() << ": update shape is done by other: "
@@ -495,7 +495,7 @@ kernel_impl_params primitive_inst::get_fake_aligned_params_if_possible(kernel_im
 event::ptr primitive_inst::realloc_if_needed() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("realloc_if_needed: " + id()));
     GPU_DEBUG_GET_INSTANCE(debug_config);
-    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::memory_allocation);
+//    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::memory_allocation);
 
     event::ptr ev = nullptr;
     const auto& users = get_user_insts();
@@ -544,7 +544,7 @@ event::ptr primitive_inst::realloc_if_needed() {
                 // To record shape predictor
                 for (size_t j = 0; j < _impl_params->output_layouts.size(); ++j)
                     sp.predict_preallocation_shape(id(), _impl_params->output_layouts[j], true, j);
-                GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("can_be_optimized");
+//                GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("can_be_optimized");
                 return ev;
             } else if (_outputs[0] && variable.get_memory() && get_network().get_engine().is_the_same_buffer(*_outputs[0], *variable.get_memory())) {
                 GPU_DEBUG_TRACE_DETAIL << id() << " : realloc_if_needed: Reset output mem" << std::endl;
@@ -565,7 +565,7 @@ event::ptr primitive_inst::realloc_if_needed() {
         // so there is no need for output memory reallocation
         if (can_be_optimized()) {
             _max_output_layout_count[0] = variable.get_actual_mem_size() / dt_sizes_in_B[0];
-            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("can_be_optimized");
+//            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("can_be_optimized");
             return ev;
         }
     }
@@ -647,7 +647,7 @@ event::ptr primitive_inst::realloc_if_needed() {
     if (_node->is_runtime_skippable() || _node->is_type<crop>()) {
         if (can_be_optimized()) {
             _max_output_layout_count = _deps[0].first->_max_output_layout_count;
-            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("can_be_optimized");
+//            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("can_be_optimized");
             return ev;
         } else if (_outputs[0] && dep_memory_ptr(0) &&
                    _network.get_engine().is_the_same_buffer(dep_memory(0), output_memory(0))) {
@@ -704,7 +704,7 @@ event::ptr primitive_inst::realloc_if_needed() {
     // Handle runtime dynamic concat optimization
     if (_node->is_type<concatenation>() && can_be_optimized() && allocation_done_by_other) {
         allocation_done_by_other = false;
-        GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("concat_alloc_by_other");
+//        GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("concat_alloc_by_other");
         return ev;
     }
 
@@ -756,7 +756,7 @@ event::ptr primitive_inst::realloc_if_needed() {
                 GPU_DEBUG_TRACE_DETAIL << id() << " : Need reset output memory considering user" << std::endl;
                 ev = _outputs[i]->fill(_network.get_stream());
             }
-            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("reuse_buffer");
+//            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("reuse_buffer");
         } else {
             GPU_DEBUG_TRACE_DETAIL << id() << ": realloc output memory. " << std::endl;
             GPU_DEBUG_TRACE_DETAIL << " outputs[" << i << "] "
@@ -779,7 +779,7 @@ event::ptr primitive_inst::realloc_if_needed() {
             GPU_DEBUG_CODE(std::string memalloc_info = "");
             GPU_DEBUG_CODE(memalloc_info += (((_outputs.size() > 1) ? ("o" + to_string(i) + ":") : "") +
                                   (_outputs[i]->from_memory_pool ? "from_pool" : "new_alloc"));)
-            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO(memalloc_info);
+//            GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO(memalloc_info);
         }
     }
 
@@ -869,7 +869,7 @@ event::ptr primitive_inst::realloc_if_needed() {
                                 (_intermediates_memory[i]->from_memory_pool ? "from_pool" : "new_alloc")));
             }
         }
-        GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO(memalloc_info);
+//        GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO(memalloc_info);
     }
     return ev;
 }
@@ -960,7 +960,7 @@ void primitive_inst::update_shape_info_tensor(const kernel_impl_params& params) 
 
 bool primitive_inst::update_impl(bool use_async_compilation) {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("update_impl: " + id()));
-    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::update_implementation);
+//    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::update_implementation);
     auto prev_impl_str =  _impl != nullptr ? _impl->get_kernel_name() : "nullptr";
 
     if (_impl != nullptr && (_impl->is_cpu() || can_be_optimized())) {
@@ -1016,7 +1016,7 @@ bool primitive_inst::update_impl(bool use_async_compilation) {
                 if (is_current_impl_dynamic)
                     _dynamic_impl = std::move(_impl);
                 _impl = cached_impl->clone();
-                GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
+//                GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
                 GPU_DEBUG_TRACE_DETAIL << id() << ": get impl from cache " << _impl->get_kernel_name() << std::endl;
             // impl is not replaced
             } else if (!shape_changed() && _impl != nullptr && _impl->is_dynamic()) {
@@ -1737,7 +1737,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
 void primitive_inst::set_arguments() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("set_arguments: " + id()));
-    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::set_arguments);
+//    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::set_arguments);
     OPENVINO_ASSERT(_has_valid_input, id(), " has invalid/unset input");
     _impl->set_arguments(*this);
 }
@@ -1961,7 +1961,7 @@ void primitive_inst::allocate_internal_buffers(bool reset) {
 
 event::ptr primitive_inst::update_weights() {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("update_weights: " + id()));
-    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::update_weights);
+//    GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::update_weights);
     if (!_impl)
         return nullptr;
 
@@ -1993,17 +1993,17 @@ event::ptr primitive_inst::update_weights() {
         _impl_params->weights_layout = optional_layout(expected_layout);
 
         if (_reordered_weights_cache.has(expected_layout)) {
-            GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
+//            GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
             GPU_DEBUG_TRACE_DETAIL << id() << ": reuse weights for " << expected_layout.to_short_string() << std::endl;
             return nullptr;
         } else if (original_layout.compatible(expected_layout)) {
-            GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
+//            GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
             GPU_DEBUG_TRACE_DETAIL << id() << ": reinterpret original weights memory from " << original_layout.to_short_string()
                                            << " to " << expected_layout.to_short_string() << std::endl;
             _reordered_weights_cache.add(expected_layout, engine.reinterpret_buffer(*original_weights_memory, expected_layout));
             return nullptr;
         } else {
-            GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(false);
+//            GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(false);
             auto& cache = get_network().get_program()->get_implementations_cache();
             auto reorder_inst = std::make_shared<cldnn::reorder_inst>(get_network());
 
@@ -2069,7 +2069,7 @@ event::ptr primitive_inst::update_weights() {
         }
     }
 
-    GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
+//    GPU_DEBUG_PROFILED_STAGE_CACHE_HIT(true);
 
     return nullptr;
 }
