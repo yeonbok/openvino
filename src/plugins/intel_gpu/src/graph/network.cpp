@@ -1012,7 +1012,11 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // since it reduces `bubbles` number in pipeline and GPU's idle time by timely flushing new kernels to device.
     // The freqency of flushing (16) is selected empirically, see details in tickets 116365, 116287, 139931.
     const bool is_out_of_order_queue = get_stream().get_queue_type() == QueueTypes::out_of_order;
-    const bool needs_flushing = _is_dynamic;
+    bool needs_flushing = _is_dynamic;
+    GPU_DEBUG_IF(debug_config->disable_flush) {
+        needs_flushing = false;
+    }
+
     const size_t flush_frequency = needs_flushing ? 16 : 0;
     size_t executed_prims = 0;
 

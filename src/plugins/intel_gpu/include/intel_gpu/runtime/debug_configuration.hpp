@@ -141,6 +141,7 @@ public:
     int disable_primitive_fusing;                               // Disable primitive fusing
     int disable_fake_alignment;                                 // Disable fake alignment
     int disable_reclaim;                                        // Disable fake alignment
+    int disable_flush;                                        // Disable fake alignment
     int print_per_iter;                                         // Disable fake alignment
     int enable_dynamic_quantize;                                // Enable Dynamic quantization for fully connected primitive
     int disable_horizontal_fc_fusion;                           // Disable fc horizontal fusion

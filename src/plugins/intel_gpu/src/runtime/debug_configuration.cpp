@@ -133,6 +133,7 @@ static void print_help_messages() {
     message_list.emplace_back("OV_GPU_PrintInputDataShapes",  "Print data_shapes of input layers for benchmark_app.");
     message_list.emplace_back("OV_GPU_DisableUsm", "Disable usm usage");
     message_list.emplace_back("OV_GPU_DisableReclaim", "Disable usm usage");
+    message_list.emplace_back("OV_GPU_DisableFlush", "Disable usm usage");
     message_list.emplace_back("OV_GPU_PrintPerITer", "Disable usm usage");
     message_list.emplace_back("OV_GPU_DisableOnednn", "Disable onednn for discrete GPU (no effect for integrated GPU)");
     message_list.emplace_back("OV_GPU_DisableOnednnPermuteFusion", "Disable permute fusion for onednn gemm (no effect for integrated GPU)");
@@ -251,6 +252,7 @@ debug_configuration::debug_configuration()
         , disable_primitive_fusing(0)
         , disable_fake_alignment(0)
         , disable_reclaim(0)
+        , disable_flush(0)
         , print_per_iter(0)
         , enable_dynamic_quantize(0)
         , disable_horizontal_fc_fusion(0) {
@@ -305,6 +307,7 @@ debug_configuration::debug_configuration()
     get_gpu_debug_env_var("DisablePrimitiveFusing", disable_primitive_fusing);
     get_gpu_debug_env_var("DisableFakeAlignment", disable_fake_alignment);
     get_gpu_debug_env_var("DisableReclaim", disable_reclaim);
+    get_gpu_debug_env_var("DisableFlush", disable_flush);
     get_gpu_debug_env_var("PrintPerIter", print_per_iter);
     get_gpu_debug_env_var("EnableDynamicQuantize", enable_dynamic_quantize);
     get_gpu_debug_env_var("DisableHorizontalFCFusion", disable_horizontal_fc_fusion);
