@@ -226,11 +226,14 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
     const uint osv32_weight_base = (( (int) (out_f >> power_of_two_for_osv) ) << power_of_two_for_osv);
     const uint osv_weight_stride = (INPUT_ELEMENTS_COUNT >> 1);
     const uint out_f_offset = (int)((out_f >> power_of_two_for_simd) & 0x1) << power_of_two_for_simd;
-    // out_f(32) : 32 + osv_weight_stride + 0;
-    // out_f(48) : 32 + osv_weight_stride + 16;
-    // out_f(64) : 64 + osv_weight_stride + 0;
+    // out_f(32) : 32 * osv_weight_stride + 0;
+    // out_f(48) : 32 * osv_weight_stride + 16;
+    // out_f(64) : 64 * osv_weight_stride + 0;
     // ...
     uint weights_offset =  osv32_weight_base * osv_weight_stride + out_f_offset;
+//    if (TILE_K == 4 && out_f == 32 && get_global_id(0) < 100)  {
+//        printf("out_f[%d] global_id(0):%d weights_offset = %d\n", out_f, get_global_id(0), weights_offset);
+//    }
     #else
     uint weights_offset = out_f * (INPUT_ELEMENTS_COUNT / 2);
     #endif
@@ -410,7 +413,29 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     #endif
                     #undef LOAD_FROM_SLM
                 #else
-                    FILTER_PACKED_VEC_TYPE wei_packed = FILTER_BLOCK_READ(weights, weights_offset);
+//                    printf("here!\n");
+                    #ifndef IS_DYNAMIC
+                        #if INPUT0_BATCH_NUM == 1 && TILE_K == 4 && FILTER_LAYOUT_OS_IS_YX_OSV32_ISV2
+                        FILTER_PACKED_VEC_TYPE wei_packed;
+                        wei_packed[0] = BLOCK_READN(FILTER_TYPE, 1, weights, weights_offset);
+                        wei_packed[1] = BLOCK_READN(FILTER_TYPE, 1, weights, weights_offset + 32);
+//                        if (INPUT0_BATCH_NUM == 1 && out_f == 32 && ni < 100 && get_global_id(0) < 100 && ni == 0)  {
+//                            int k_idx = ni * TILE_IFM * SIMD + ki * TILE_K;
+//                            printf("TILE_K: %d, out_f:%d, sglid:%d, global_id(0):%d, weights_offset = %d, ni:%d, ki:%d, wei[%d]&wei[%d]:%d, wei[%d]&wei[%d]=%d \n",
+//                                    TILE_K, out_f, sglid, get_global_id(0), weights_offset, ni, ki, k_idx, k_idx+1, wei_packed[0], k_idx+2, k_idx+3, wei_packed[1]);
+//                        }
+                        #else
+                        FILTER_PACKED_VEC_TYPE wei_packed = FILTER_BLOCK_READ(weights, weights_offset);
+                        #endif
+                    #else
+                        FILTER_PACKED_VEC_TYPE wei_packed = FILTER_BLOCK_READ(weights, weights_offset);
+                    #endif
+//                        if (INPUT0_BATCH_NUM == 1 && FILTER_IFM_NUM == 13696 && out_f == 32 && ni < 100 && get_global_id(0) < 100 && ni == 0)  {
+//                            int k_idx = ni * TILE_IFM * SIMD + ki * TILE_K;
+//                            printf("filter_ifm_num : %d out_f:%d, sglid:%d, global_id(0):%d, weights_offset = %d, ni:%d, ki:%d, wei[%d]&wei[%d]:%d \n",
+//                                    FILTER_IFM_NUM, out_f, sglid, get_global_id(0), weights_offset, ni, ki, k_idx, k_idx+1, wei_packed);
+//
+//                        }
                     wei = UNPACK_INT4(ACCUMULATOR_TYPE, *((INT4_PACKED_TYPE*)&wei_packed));
                 #endif
             #else
@@ -620,7 +645,10 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
     #undef LEFTOVER_IFM
 #endif // MAIN_LOOP_ELEMENTS_COUNT % (TILE_IFM * SIMD) != 0
     // =====================================================================================================================================
-    // Post-processing: bias, activation, fused-ops
+//    if (FILTER_IFM_NUM == 13696 && INPUT0_BATCH_NUM == 1)  {
+//        printf("output[%d] = %f\n", out_f + sglid, acc[0]);
+//    }
+//    // Post-processing: bias, activation, fused-ops
     ACTIVATION_VEC_TYPE activated[TILE_B] = { };
     for (uint bi = 0; bi < TILE_B; ++bi) {
         activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
