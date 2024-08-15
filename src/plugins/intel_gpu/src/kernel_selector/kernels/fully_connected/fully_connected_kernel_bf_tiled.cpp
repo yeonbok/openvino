@@ -314,8 +314,8 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
                 GPU_DEBUG_TRACE_DETAIL << "FC bf tiled: Set ofm_tile 1. (output_f : " << output_f
                     << ", computeUnitsCount : " << params.engineInfo.computeUnitsCount
                     << " min_num_threads : " << min_num_threads << ")" << std::endl;
-                if (params.weights.IFM().v >= params.weights.OFM().v * 3 && params.weights.OFM().v <= 4096) {
-                    GPU_DEBUG_TRACE_DETAIL << "K: " << params.weights.IFM().v << " N: " << params.weights.OFM().v << " => set TILE_K_SIZE 4" << std::endl;
+                if (std::getenv("ORIG") == nullptr && params.weights.IFM().v >= params.weights.OFM().v * 3 && params.weights.OFM().v <= 4096) {
+                    std::cout << "K: " << params.weights.IFM().v << " N: " << params.weights.OFM().v << " => set TILE_K_SIZE 4" << std::endl;
                     return selector.Default(tune_params(1, 1, 4, 4, 1, 1, EXE_MODE_DEFAULT));
                 } else {
                     return selector.Default(tune_params(1, 1, 4, 2, 1, 1, EXE_MODE_DEFAULT));
@@ -665,7 +665,6 @@ KernelsData FullyConnected_bf_tiled::GetTunedKernelsDataByIndex(const Params &pa
         return {};
 
     tune_params tparams = GetAutoTuneParams(fc_params, KernelType::ANY, autoTuneIndex);
-
     WeightsLayout weights_layout = WeightsLayout::os_iyx_osv16;
     if (fc_params.compressed && fc_params.inputs[0].GetDType() == Datatype::F16
         // ioyx => os_is_yx_osv32_isv2 is not supported yet
@@ -677,6 +676,11 @@ KernelsData FullyConnected_bf_tiled::GetTunedKernelsDataByIndex(const Params &pa
     } else if (tparams.tile_ofm * simd == 64) {
         weights_layout = WeightsLayout::os_iyx_osv64;
     }
+
+//    if (std::getenv("ORIG") == nullptr && fc_params.weights.IFM().v >= fc_params.weights.OFM().v * 3 && fc_params.weights.OFM().v <= 4096) {
+//        weights_layout = WeightsLayout::os_iyx_osv16;
+//    }
+
 
     KernelsData kernels_data;
     if (should_dynamic_quantize(fc_params)) {

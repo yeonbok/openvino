@@ -1013,7 +1013,7 @@ bool primitive_inst::update_impl(bool use_async_compilation) {
             }
         }
         if (!cached_impl) {
-            if (_dynamic_impl || is_current_impl_dynamic) {
+            if (!_node->is_type<fully_connected>() && (_dynamic_impl || is_current_impl_dynamic)) {
                 if (use_async_compilation) {
                     auto& compilation_context = prog->get_compilation_context();
                     compilation_context.push_task(updated_params, [this, &compilation_context, updated_params]() {
@@ -1532,9 +1532,12 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_TRACE_DETAIL << "-----------------------------------------------------------------" << std::endl;
     GPU_DEBUG_TRACE_DETAIL << "Execute " << id() << " (type: " << _impl_params->desc->type_string() << ") " << std::endl;
-    for (size_t i = 0; i < _deps.size(); ++i) {
-        GPU_DEBUG_TRACE_DETAIL << "- inputs[" << i << "] : " <<  _deps[i].first->id() << std::endl;
-    }
+//    if (_node->is_type<fully_connected>()) {
+//        std::cout << "Execute " << id() << " (type: " << _impl_params->desc->type_string() << ") " << std::endl;
+//        for (size_t i = 0; i < _deps.size(); ++i) {
+//            std::cout << "- inputs[" << i << "] : " <<  _deps[i].first->id() << " : " << _deps[i].first->_impl_params->output_layouts[0].to_short_string() << std::endl;
+//        }
+//    }
     GPU_DEBUG_TRACE_DETAIL << "-----------------------------------------------------------------" << std::endl;
     bool need_args_update = false;
     _mem_changed = false;

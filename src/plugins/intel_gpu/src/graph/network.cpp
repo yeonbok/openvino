@@ -945,6 +945,8 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
         GPU_DEBUG_TRACE << "============================================================================" << std::endl;
         GPU_DEBUG_TRACE << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;
     }
+//    std::cout << "============================================================================" << std::endl;
+//    std::cout << "Start network execution (net_id : " << get_id() << ", iter :" << curr_iter << ")" << std::endl;
 
     std::vector<memory::ptr> in_out_mem;
     auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
