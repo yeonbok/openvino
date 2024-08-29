@@ -1204,6 +1204,21 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
 
     auto shape_type = shape_types::any;
 
+
+    if (node.is_type<fully_connected>() || node.is_type<gemm>()) {
+      if (node.is_type<fully_connected>()) {
+          auto& fc_node = node.as<fully_connected>();
+          auto prim = fc_node.get_primitive();
+          if (fc_node.weights().get_output_layout().data_type==ov::element::u4 &&
+          // fc_node.get_output_layout().data_type==ov::element::f16 &&
+          (fc_node.weights().get_output_layout().get_partial_shape()[1]==4096 ||
+          fc_node.weights().get_output_layout().get_partial_shape()[1]==11008)) {
+              std::cout << fc_node.id() << ": use sycl impl!\n";
+              return impl_types::sycl;
+          }
+      }
+    }
+
     auto impl = test_format<std::shared_ptr<ImplementationManager>>(node, preferred_format,
         [&shape_type](program_node& n) {
             return test_no_input_pad<std::shared_ptr<ImplementationManager>>(n, [&shape_type](program_node& n) {
@@ -1211,10 +1226,10 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
         });
     });
 
-    if (impl)
-        return impl->get_impl_type();
-    else
-        return impl_types::any;
+    if (impl)$
+         return impl->get_impl_type();$
+     else$
+         return impl_types::any;$
 }
 
 format layout_optimizer::get_preferred_format(program_node& node) {
