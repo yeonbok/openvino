@@ -1736,6 +1736,17 @@ impl_types layout_optimizer::get_preferred_impl_type(program_node& node, format 
         }
     // TODO: uncomment this code when onednn gemm implementations will have real perf improvements vs cldnn
     } else if (node.is_type<fully_connected>() || node.is_type<gemm>()) {
+        if (node.is_type<fully_connected>()) {
+            auto& fc_node = node.as<fully_connected>();
+            auto prim = fc_node.get_primitive();
+            if (fc_node.weights().get_output_layout().data_type==ov::element::u4 &&
+            // fc_node.get_output_layout().data_type==ov::element::f16 &&
+            (fc_node.weights().get_output_layout().get_partial_shape()[1]==4096 ||
+            fc_node.weights().get_output_layout().get_partial_shape()[1]==11008)) {
+                std::cout << fc_node.id() << ": use sycl impl!\n";
+                return impl_types::sycl;
+            }
+        }
         if (!_optimization_attributes.use_onednn_impls)
             return impl_types::ocl;
 
