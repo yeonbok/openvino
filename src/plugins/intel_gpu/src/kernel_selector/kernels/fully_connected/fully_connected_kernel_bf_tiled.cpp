@@ -373,7 +373,7 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
                 if (params.weights.GetLayout() == WeightsLayout::os_iyx_osv16) {
                     return selector.Default(tune_params(1, 1, 4, 4, 1, 1, 1, EXE_MODE_DEFAULT));
                 } else if (params.weights.GetLayout() == WeightsLayout::os_iyx_osv64) {
-                    return selector.Default(tune_params(1, 4, 4, 2, 2, 1, 1, EXE_MODE_DEFAULT));
+                    return selector.Default(tune_params(1, 4, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
                 } else {
                     return selector.Default(tune_params(1, 2, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
                 }
