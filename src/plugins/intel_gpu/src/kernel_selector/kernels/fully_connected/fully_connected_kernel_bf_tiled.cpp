@@ -4,6 +4,7 @@
 
 #include "fully_connected_kernel_bf_tiled.h"
 #include "kernel_selector_utils.h"
+#include "swiglu/swiglu_kernel_base.h"
 #include <vector>
 #include <functional>
 #include "common_types.h"
@@ -38,6 +39,7 @@ static std::pair<size_t, size_t> get_output_aligned_bf_size(const fully_connecte
                                                             uint32_t align_b = 1,
                                                             int32_t align_f = 1) {
     size_t output_f = (needs_align == true) ? CeilDiv(params.outputs[0].Feature().v, align_f) : params.outputs[0].Feature().v;
+
     size_t output_b = params.outputs[0].Batch().v;
     // 3D output
     if (params.outputs[0].GetLayout() == DataLayout::bfyx) {
@@ -377,14 +379,14 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
             }
         } else {
             // Try to use SLM kernels if possible
-            if (preferred_kernel_type != KernelType::DEFAULT) {
-                if (params.is_shape_agnostic && !should_dynamic_quantize(params)) {
-                    selector.Case(tune_params(16, 2, 2, 4, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
-                            .Case(tune_params(16, 2, 1, 4, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM));
-                }
-                selector.Case(tune_params(8, 2, 2, 4, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
-                        .Case(tune_params(8, 2, 1, 4, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM));
-            }
+//            if (preferred_kernel_type != KernelType::DEFAULT) {
+//                if (params.is_shape_agnostic && !should_dynamic_quantize(params)) {
+//                    selector.Case(tune_params(16, 2, 2, 4, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
+//                            .Case(tune_params(16, 2, 1, 4, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM));
+//                }
+//                selector.Case(tune_params(8, 2, 2, 4, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
+//                        .Case(tune_params(8, 2, 1, 4, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM));
+//            }
             if (params.weights.GetLayout() == WeightsLayout::os_iyx_osv16)
                 return selector.Default(tune_params(8, 1, 1, 4, 1, 1, EXE_MODE_DEFAULT));
             else
@@ -466,6 +468,7 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
 
     auto tparams = GetAutoTuneParams(params, kernel_type, autoTuneIndex);
 
+    std::cout << "output size : " << params.outputs[0].Y().v << std::endl;
     auto threads = get_output_aligned_bf_size(params, true, tparams.tile_b, tparams.tile_ofm * simd);
     auto batch_threads = threads.first;
     auto feature_threads = threads.second;
@@ -513,7 +516,16 @@ JitConstants FullyConnected_bf_tiled::GetJitConstants(const fully_connected_para
     size_t tile_k_ofm = dispatchData.tile_nk * dispatchData.tile_n;
     size_t tile_k_ofm_packed = tile_k_ofm;
     size_t quantize_grp_size = get_dynamic_quantize_group_size(params);
-
+    bool swiglu_fused = false;
+    if (!params.fused_ops.empty()) {
+        if (params.fused_ops.size() == 1 && params.fused_ops[0].GetType() == kernel_selector::KernelType::SWIGLU) {
+            std::cout << "Only swiglu!" << std::endl;
+            swiglu_fused = true;
+            jit.AddConstant(MakeJitConstant("SWIGLU_SPLITS", 2));
+            jit.AddConstant(MakeJitConstant("SWIGLU_STRIDE", get_output_aligned_bf_size(params, false).second));
+            jit.AddConstant(MakeJitConstant("TILE_OFM_SWIGLU", dispatchData.tile_n * 2));
+        }
+    }
     WeightsType weights_dt = params.weights.GetDType();
     if (weights_dt == WeightsType::UINT4 || weights_dt == WeightsType::INT4) {
         tile_k_ofm_packed /= 2;
@@ -641,26 +653,28 @@ JitConstants FullyConnected_bf_tiled::GetJitConstants(const fully_connected_para
     }
 
     if (!params.fused_ops.empty()) {
-        std::vector<std::string> idx_order_scalar = { "(out_b + bi)", "(out_f + sglid)", "0", "0" };
-        std::vector<std::string> idx_order_vec = { "(out_b + bi)", "(out_f + sglid + fi * SIMD)", "0", "0" };
-        if (params.outputs[0].GetLayout() == DataLayout::bfyx) {
-            idx_order_scalar = { "(out_b + bi) / OUTPUT_FEATURE_NUM", "(out_b + bi) % OUTPUT_FEATURE_NUM", "(out_f + sglid)", "0" };
-            idx_order_vec = { "(out_b + bi) / OUTPUT_FEATURE_NUM", "(out_b + bi) % OUTPUT_FEATURE_NUM", "(out_f + sglid + fi * SIMD)", "0" };
-        }
+        if (!swiglu_fused) {
+            // TODO : can we assume that swiglu is the only fused primitive?
+            std::vector<std::string> idx_order_scalar = {"(out_b + bi)", "(out_f + sglid)", "0", "0"};
+            std::vector<std::string> idx_order_vec = {"(out_b + bi)", "(out_f + sglid + fi * SIMD)", "0", "0"};
+            if (params.outputs[0].GetLayout() == DataLayout::bfyx) {
+                idx_order_scalar = {"(out_b + bi) / OUTPUT_FEATURE_NUM",
+                                    "(out_b + bi) % OUTPUT_FEATURE_NUM",
+                                    "(out_f + sglid)",
+                                    "0"};
+                idx_order_vec = {"(out_b + bi) / OUTPUT_FEATURE_NUM",
+                                 "(out_b + bi) % OUTPUT_FEATURE_NUM",
+                                 "(out_f + sglid + fi * SIMD)",
+                                 "0"};
+            }
 
-        // Simplify fused ops configuration to prevent mixed layout exception in jitter
-        // for common cases with bfyx -> bf layouts and eltwise fusing (such scenarios currently don't work for vectors)
-        FusedOpsConfiguration conf_scalar = { "_SCALAR",
-                                              idx_order_scalar,
-                                              "activated[bi]",
-                                              activation_dt,
-                                              1 };
-        FusedOpsConfiguration conf_vec = { "_VEC",
-                                           idx_order_vec,
-                                           "activated[bi][fi]",
-                                           activation_dt,
-                                           1 };
-        jit.Merge(MakeFusedOpsJitConstants(params, { conf_scalar, conf_vec }));
+            // Simplify fused ops configuration to prevent mixed layout exception in jitter
+            // for common cases with bfyx -> bf layouts and eltwise fusing (such scenarios currently don't work for
+            // vectors)
+            FusedOpsConfiguration conf_scalar = {"_SCALAR", idx_order_scalar, "activated[bi]", activation_dt, 1};
+            FusedOpsConfiguration conf_vec = {"_VEC", idx_order_vec, "activated[bi][fi]", activation_dt, 1};
+            jit.Merge(MakeFusedOpsJitConstants(params, {conf_scalar, conf_vec}));
+        }
     }
 
     return jit;

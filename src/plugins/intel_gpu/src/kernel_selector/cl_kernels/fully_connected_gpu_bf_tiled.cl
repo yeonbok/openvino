@@ -97,6 +97,11 @@ KERNEL(quantize_input)(
 // Macros for vectorized types.
 #define INPUT_VEC_TYPE             MAKE_VECTOR_TYPE(INPUT0_TYPE, TILE_IFM)
 #define ACCUMULATOR_VEC_TYPE       MAKE_VECTOR_TYPE(ACCUMULATOR_TYPE, TILE_OFM)
+#ifdef SWIGLU_STRIDE
+#define ACCUMULATOR_VEC_TYPE_SWIGLU MAKE_VECTOR_TYPE(ACCUMULATOR_TYPE, TILE_OFM_SWIGLU)
+#else
+#define ACCUMULATOR_VEC_TYPE_SWIGLU ACCUMULATOR_VEC_TYPE
+#endif
 #define FILTER_VEC_TYPE            MAKE_VECTOR_TYPE(ACCUMULATOR_TYPE, TILE_K_OFM)
 #define FILTER_PACKED_VEC_TYPE     MAKE_VECTOR_TYPE(FILTER_TYPE, TILE_K_OFM_PACKED)
 #define BIAS_VEC_TYPE              MAKE_VECTOR_TYPE(BIAS_TYPE, TILE_OFM)
@@ -209,7 +214,8 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
     uint out_b = ((batch_mega_block * DISPATCH_BSV + batch_mini_block) * TILE_B);
 #endif
 
-    ACCUMULATOR_VEC_TYPE acc[TILE_B] = { };
+//    ACCUMULATOR_VEC_TYPE acc[TILE_B] = { };
+    ACCUMULATOR_VEC_TYPE_SWIGLU acc[TILE_B] = { };
     INPUT_VEC_TYPE       in_0[TILE_B] = { };
 
 #if !USE_SLM
@@ -293,9 +299,25 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
         input_offset += 1;
     }
 #endif
+    uint input_offset_init = input_offset;
+    uint weights_offset_init = weights_offset;
+    uint out_f_init = out_f;
     // =====================================================================================================================================
     // Main computation loop
     uint iterations = MAIN_LOOP_ELEMENTS_COUNT / (TILE_IFM * SIMD);
+
+    #ifdef SWIGLU_SPLITS
+//    if (get_global_id(0) == 0 && get_global_id(1) == 0 && get_global_id(2) == 0)
+//        printf("swiglu fused\n");
+    __attribute__((opencl_unroll_hint(1)))
+    for (uint si = 0; si < SWIGLU_SPLITS; ++si) {
+        input_offset = input_offset_init;
+        weights_offset = weights_offset_init + si * (FILTER_IFM_NUM / 2) * SWIGLU_STRIDE;
+        out_f += SWIGLU_STRIDE * si;
+//        if (out_f == 32 && sglid == 0) {
+//            printf("si = %d weight offset = %d, input_offset : %d, out_f : %d iterations: %d\n", si, weights_offset, input_offset, out_f, iterations);
+//        }
+    #endif
     __attribute__((opencl_unroll_hint(1)))
     for (uint ni = 0; ni < iterations; ++ni) {
         // Load input.
@@ -512,6 +534,17 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                         ACCUMULATOR_TYPE ds = d_scales[fi % DECOMPRESSION_SCALE_LENGTH];
                     #endif
                     #if TILE_OFM > 1
+                    #ifdef SWIGLU_SPLITS
+                    // not executed
+//                    if (get_global_id(0) == 0 && get_global_id(1) == 0 && get_global_id(2) == 0 && bi == 0) {
+//                        printf("acc[%d][%d] = accm_tmp[%d][%d]\n", bi, fi + TILE_OFM * si, bi, fi);
+//                    }
+                    ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi + TILE_OFM * si] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
+                    acc_tmp[bi][fi] = 0;
+                    #else
+                    ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
+                    acc_tmp[bi][fi] = 0;
+                    #endif
                     ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
                     acc_tmp[bi][fi] = 0;
                     #else
@@ -535,7 +568,14 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     ACCUMULATOR_TYPE ds = d_scales[fi % DECOMPRESSION_SCALE_LENGTH];
                 #endif
                 #if TILE_OFM > 1
+                #ifdef SWIGLU_SPLITS
+//                if (get_global_id(0) == 0 && get_global_id(1) == 0 && get_global_id(2) == 0 && bi == 0) {
+//                    printf("acc[%d][%d] = accm_tmp[%d][%d]\n", bi, fi + TILE_OFM * si, bi, fi);
+//                }
+                ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi + TILE_OFM * si] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
+                #else
                 ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
+                #endif
                 #else
                 acc[bi] += acc_tmp[bi] * ds;
                 #endif
@@ -554,7 +594,10 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
             }
         }
 #endif
-    }
+    } // Main compute loop : ni
+    #ifdef SWIGLU_SPLITS
+    }  // Main compute loop : si
+    #endif
     // =====================================================================================================================================
     // Leftovers
 #if MAIN_LOOP_ELEMENTS_COUNT % (TILE_IFM * SIMD) != 0
@@ -638,10 +681,53 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
 #endif // MAIN_LOOP_ELEMENTS_COUNT % (TILE_IFM * SIMD) != 0
     // =====================================================================================================================================
     // Post-processing: bias, activation, fused-ops
+    #ifdef SWIGLU_SPLITS
+    out_f = out_f_init;
+    #endif
+
+    // output[0][0], [0][16], [0][13696], [0][13696+16]
+//    #ifdef SWIGLU_SPLITS
+//        if (out_b == 0 && out_f == 0 && sglid == 1) {
+//            int b_idx = 1;
+//            printf("out[%d][%d] = %f (acc[%d][0])\n", b_idx, out_f + sglid + 0, acc[b_idx][0], b_idx);
+//            printf("out[%d][%d] = %f (acc[%d][1])\n", b_idx, out_f + sglid + 16, acc[b_idx][1], b_idx);
+//            printf("out[%d][%d] = %f (acc[%d][2])\n", b_idx, out_f + sglid + 13696, acc[b_idx][2], b_idx);
+//            printf("out[%d][%d] = %f (acc[%d][3]\n", b_idx, out_f + sglid + 13696 + 16, acc[b_idx][3], b_idx);
+//        }
+//    #else
+//        int b_idx = 1;
+//        if (out_b == 0 && out_f == 0 && sglid == 1) {
+//            printf("out[%d][%d] = %f\n", b_idx, out_f + sglid + 0, acc[b_idx][0]);
+//            printf("out[%d][%d] = %f\n", b_idx, out_f + sglid + 16, acc[b_idx][1]);
+//        }
+//        if (out_b == 0 && out_f == 13696 && sglid == 1) {
+//            printf("out[%d][%d] = %f\n", b_idx, out_f + sglid, acc[b_idx][0]);
+//            printf("out[%d][%d] = %f\n", b_idx, out_f + sglid + 16, acc[b_idx][1]);
+//        }
+//    #endif
+
     ACTIVATION_VEC_TYPE activated[TILE_B] = { };
     for (uint bi = 0; bi < TILE_B; ++bi) {
+        #ifdef SWIGLU_SPLITS
+        ACCUMULATOR_VEC_TYPE gate = {acc[bi][0], acc[bi][1]};
+        ACCUMULATOR_VEC_TYPE no_gate = {acc[bi][2], acc[bi][3]};
+        gate /= (ACCUMULATOR_VAL_ONE + exp(-(ACCUMULATOR_VAL_ONE * gate)));
+//        if (out_f == 0 && sglid == 1 && out_b == 0 && bi == 1) {
+//            printf("gate[0] (acc[%d][0]) : %f\n", bi, acc[bi][0]);
+//            printf("gate[1] (acc[%d][1]) : %f\n", bi, acc[bi][1]);
+//            printf("no_gate[0] (acc[%d][2]) : %f\n", bi, acc[bi][2]);
+//            printf("no_gate[1] (acc[%d][3]) : %f\n", bi, acc[bi][3]);
+//        }
+        activated[bi] = TO_ACTIVATION_VEC_TYPE(gate * no_gate);
+//        if (out_f == 0 && sglid == 1 && out_b == 0 && bi == 1) {
+//            printf("swiglu[%d][%d] (swiglu[%d]) = %f\n", bi, out_f + sglid, bi * 13696 + out_f + sglid, swiglu[0]);
+//            printf("swiglu[%d][%d] (swiglu[%d])= %f\n", bi, out_f + sglid + 16, bi * 13696 + out_f + 16 + sglid, swiglu[1]);
+//        }
+        #else
         activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
+        #endif
     }
+
 
 #if BIAS_TERM
     #if TILE_OUT_F_NUM % (TILE_OFM * SIMD) == 0
@@ -832,6 +918,7 @@ inline void FUNC(fc_bf_tiled_kernel_dyn_quan)(
 
     const uint scale_pitch = TILE_IN_B_PITCH / QUANTIZE_GROUP_SIZE;
     MAKE_VECTOR_TYPE(int, TILE_B) acc_tmp[TILE_OFM] = { };
+
     __attribute__((opencl_unroll_hint(1)))
     for (uint ni = 0; ni < iterations; ++ni) {
         uint in_offset = input_offset + (idx_sglid + batch_sglid * TILE_IN_B_PITCH);

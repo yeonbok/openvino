@@ -7,6 +7,7 @@
 #include "data_inst.h"
 #include "mutable_data_inst.h"
 #include "reorder_inst.h"
+#include "swiglu_inst.h"
 #include "input_layout_inst.h"
 #include "arg_max_min_inst.h"
 #include "fully_connected_inst.h"
@@ -1038,7 +1039,7 @@ bool primitive_inst::update_impl(bool use_async_compilation) {
             }
         }
         if (!cached_impl) {
-            if (_dynamic_impl || is_current_impl_dynamic) {
+            if ((!_node->is_type<fully_connected>()) && (_dynamic_impl || is_current_impl_dynamic)) {
                 if (use_async_compilation) {
                     auto& compilation_context = prog->get_compilation_context();
                     compilation_context.push_task(updated_params, [this, &compilation_context, updated_params]() {
@@ -2392,7 +2393,7 @@ bool primitive_inst::is_valid_fusion() const {
         if (fd.is_type<eltwise>() || fd.is_type<activation>()) {
             fused_eltwise_prims.push_back(fd);
         } else {
-            if (fd.is_type<reorder>() || fd.is_type<quantize>())
+            if (fd.is_type<reorder>() || fd.is_type<quantize>() || fd.is_type<swiglu>())
                 continue;
 
             OPENVINO_THROW("[GPU] Unsupported fused operation in dynamic shape: type=", fd.desc->type_string(), ", id=", fd.desc->id);

@@ -32,11 +32,13 @@
 #include "intel_gpu/primitives/embedding_bag.hpp"
 #include "intel_gpu/primitives/extract_image_patches.hpp"
 
+#include "swiglu_inst.h"
 #include "activation_inst.h"
 #include "eltwise_inst.h"
 #include "quantize_inst.h"
 #include "reorder_inst.h"
 
+#include "kernel_selector/kernels/swiglu/swiglu_kernel_base.h"
 #include "kernel_selector/kernels/activation/activation_kernel_base.h"
 #include "kernel_selector/kernels/depth_to_space/depth_to_space_kernel_base.h"
 #include "kernel_selector/kernels/eltwise/eltwise_kernel_base.h"
@@ -1003,14 +1005,15 @@ kernel_selector::activation_function get_kernel_selector_activation_param(activa
 }
 
 std::shared_ptr<kernel_selector::fuse_params> convert_fuse_params(std::shared_ptr<NodeFuseParams> p) {
-    if (p->type() == activation::type_id()) {
+    if (p->type() == swiglu::type_id()) {
+        return std::make_shared<kernel_selector::swiglu_fuse_params>(13696, 2);
+    } else if (p->type() == activation::type_id()) {
         auto casted = std::dynamic_pointer_cast<ActivationFuseParams>(p);
         auto desc = casted->_desc;
         kernel_selector::base_activation_params p;
         p.function = get_kernel_selector_activation_param(desc->activation_function);
         p.m = desc->additional_params.a;
         p.n = desc->additional_params.b;
-
         return std::make_shared<kernel_selector::activation_fuse_params>(p);
     } else if (p->type() == depth_to_space::type_id()) {
         return std::make_shared<kernel_selector::depth_to_space_fuse_params>();
