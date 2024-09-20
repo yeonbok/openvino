@@ -7,6 +7,7 @@
 #include "data_inst.h"
 #include "mutable_data_inst.h"
 #include "reorder_inst.h"
+#include "swiglu_inst.h"
 #include "input_layout_inst.h"
 #include "arg_max_min_inst.h"
 #include "fully_connected_inst.h"
@@ -2372,7 +2373,7 @@ bool primitive_inst::is_valid_fusion() const {
         if (fd.is_type<eltwise>() || fd.is_type<activation>()) {
             fused_eltwise_prims.push_back(fd);
         } else {
-            if (fd.is_type<reorder>() || fd.is_type<quantize>())
+            if (fd.is_type<reorder>() || fd.is_type<quantize>() || fd.is_type<swiglu>())
                 continue;
 
             OPENVINO_THROW("[GPU] Unsupported fused operation in dynamic shape: type=", fd.desc->type_string(), ", id=", fd.desc->id);

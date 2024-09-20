@@ -37,6 +37,7 @@
 #include "strided_slice_inst.h"
 #include "cum_sum_inst.h"
 #include "embedding_bag_inst.h"
+#include "swiglu_inst.h"
 #include "extract_image_patches_inst.h"
 #include "reduce_inst.h"
 #include "group_normalization_inst.h"
@@ -56,6 +57,7 @@ using namespace cldnn;
 void prepare_primitive_fusing::run(program& p) {
     fuse_reorders(p);
     remove_redundant_reshape(p);
+    fuse_swiglu(p);
     fuse_bias(p);
     fuse_simple_primitives(p);
     fuse_constant_transposes(p);
@@ -158,6 +160,26 @@ void prepare_primitive_fusing::fuse_reorders(program &p) {
             input.set_output_layout(output_layout, false);
             p.extract_and_remove(node);
         });
+    }
+}
+
+void prepare_primitive_fusing::fuse_swiglu(program &p) {
+    auto itr = p.get_processing_order().begin();
+    std::map<primitive_id, std::vector<std::pair<primitive_id, size_t>>> fusing_history;
+    while (itr != p.get_processing_order().end()) {
+        auto node_itr = itr++;
+        auto& node = (*node_itr);
+        if (node->is_type<swiglu>()) {
+            std::cout << node->id() << std::endl;
+            auto prim = node->get_kernel_impl_params()->typed_desc<swiglu>();
+            std::cout << "split_axis : " << prim->axis
+                      << " split_length: " << prim->split_lengths << std::endl;
+            if (node->get_dependencies().size() == 1 && (node->get_dependency(0).is_type<fully_connected>())) {
+                auto& fc_node = node->get_dependency(0);
+                p.fuse_nodes(fc_node, *node, &fusing_history);
+            }
+            std::cout << "Fusing done" << std::endl;
+        }
     }
 }
 

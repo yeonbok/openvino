@@ -4,6 +4,7 @@
 
 #include "fully_connected_kernel_bf_tiled.h"
 #include "kernel_selector_utils.h"
+#include "swiglu/swiglu_kernel_ref.h"
 #include <vector>
 #include <functional>
 #include "common_types.h"
@@ -648,26 +649,29 @@ JitConstants FullyConnected_bf_tiled::GetJitConstants(const fully_connected_para
     }
 
     if (!params.fused_ops.empty()) {
-        std::vector<std::string> idx_order_scalar = { "(out_b + bi)", "(out_f + sglid)", "0", "0" };
-        std::vector<std::string> idx_order_vec = { "(out_b + bi)", "(out_f + sglid + fi * SIMD)", "0", "0" };
-        if (params.outputs[0].GetLayout() == DataLayout::bfyx) {
-            idx_order_scalar = { "(out_b + bi) / OUTPUT_FEATURE_NUM", "(out_b + bi) % OUTPUT_FEATURE_NUM", "(out_f + sglid)", "0" };
-            idx_order_vec = { "(out_b + bi) / OUTPUT_FEATURE_NUM", "(out_b + bi) % OUTPUT_FEATURE_NUM", "(out_f + sglid + fi * SIMD)", "0" };
-        }
+        if (params.fused_ops.size() == 1 && params.fused_ops[0].GetType() == kernel_selector::KernelType::SWIGLU) {
+            std::cout << "Only swiglu!" << std::endl;
+        } else {
+            std::vector<std::string> idx_order_scalar = {"(out_b + bi)", "(out_f + sglid)", "0", "0"};
+            std::vector<std::string> idx_order_vec = {"(out_b + bi)", "(out_f + sglid + fi * SIMD)", "0", "0"};
+            if (params.outputs[0].GetLayout() == DataLayout::bfyx) {
+                idx_order_scalar = {"(out_b + bi) / OUTPUT_FEATURE_NUM",
+                                    "(out_b + bi) % OUTPUT_FEATURE_NUM",
+                                    "(out_f + sglid)",
+                                    "0"};
+                idx_order_vec = {"(out_b + bi) / OUTPUT_FEATURE_NUM",
+                                 "(out_b + bi) % OUTPUT_FEATURE_NUM",
+                                 "(out_f + sglid + fi * SIMD)",
+                                 "0"};
+            }
 
-        // Simplify fused ops configuration to prevent mixed layout exception in jitter
-        // for common cases with bfyx -> bf layouts and eltwise fusing (such scenarios currently don't work for vectors)
-        FusedOpsConfiguration conf_scalar = { "_SCALAR",
-                                              idx_order_scalar,
-                                              "activated[bi]",
-                                              activation_dt,
-                                              1 };
-        FusedOpsConfiguration conf_vec = { "_VEC",
-                                           idx_order_vec,
-                                           "activated[bi][fi]",
-                                           activation_dt,
-                                           1 };
-        jit.Merge(MakeFusedOpsJitConstants(params, { conf_scalar, conf_vec }));
+            // Simplify fused ops configuration to prevent mixed layout exception in jitter
+            // for common cases with bfyx -> bf layouts and eltwise fusing (such scenarios currently don't work for
+            // vectors)
+            FusedOpsConfiguration conf_scalar = {"_SCALAR", idx_order_scalar, "activated[bi]", activation_dt, 1};
+            FusedOpsConfiguration conf_vec = {"_VEC", idx_order_vec, "activated[bi][fi]", activation_dt, 1};
+            jit.Merge(MakeFusedOpsJitConstants(params, {conf_scalar, conf_vec}));
+        }
     }
 
     return jit;
