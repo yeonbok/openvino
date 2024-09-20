@@ -25,7 +25,6 @@ inline void (FUNC_NAME)(
 ) {
     uint gid = (uint)get_group_id(0);
     uint sglid = (uint)get_sub_group_local_id();
-
     // Dispatch as bs_fs_bsv_fsv, where bsv = DISPATCH_BSV and fsv = DISPATCH_FSV.
     // This allows more fine grained control over dispatch order than using work-groups and
     // avoids requirement of threads being available for whole work-group.
@@ -39,7 +38,7 @@ inline void (FUNC_NAME)(
     uint out_f = (feature_mega_block * DISPATCH_FSV + feature_mini_block) * (TILE_OFM * SIMD);
     uint out_b = ((batch_mega_block * DISPATCH_BSV + batch_mini_block) * FORCED_TILE_B);
 
-    ACCUMULATOR_VEC_TYPE acc[FORCED_TILE_B] = { };
+    ACCUMULATOR_VEC_TYPE_SWIGLU acc[FORCED_TILE_B] = { };
     INPUT_VEC_TYPE       in_0[FORCED_TILE_B] = { };
 
     FILTER_VEC_TYPE wei = 0;
@@ -107,9 +106,23 @@ inline void (FUNC_NAME)(
         input_offset += 1;
     }
 #endif
+    uint input_offset_init = input_offset;
+    uint weights_offset_init = weights_offset;
+    uint out_f_init = out_f;
     // =====================================================================================================================================
     // Main computation loop
     uint iterations = MAIN_LOOP_ELEMENTS_COUNT / (TILE_IFM * SIMD);
+
+    #ifdef SWIGLU_SPLITS
+    __attribute__((opencl_unroll_hint(1)))
+    for (uint si = 0; si < SWIGLU_SPLITS; ++si) {
+        input_offset = input_offset_init;
+        weights_offset = weights_offset_init + si * (FILTER_IFM_NUM / 2) * SWIGLU_STRIDE;
+        out_f += SWIGLU_STRIDE * si;
+//        if (out_f == 32 && sglid == 0) {
+//            printf("si = %d weight offset = %d, input_offset : %d, out_f : %d iterations: %d\n", si, weights_offset, input_offset, out_f, iterations);
+//        }
+    #endif
     __attribute__((opencl_unroll_hint(1)))
     for (uint ni = 0; ni < iterations; ++ni) {
         // Load input.
@@ -184,7 +197,11 @@ inline void (FUNC_NAME)(
 #if DECOMPRESSION_SCALE_POST_OP
                         ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[W_IDX];
 #else
+                    #ifdef SWIGLU_SPLITS
+                        ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi + TILE_OFM * si] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[W_IDX];
+                    #else
                         ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[W_IDX];
+                    #endif
 #endif
                     }
                 }
@@ -201,7 +218,11 @@ inline void (FUNC_NAME)(
                     #else
                         ACCUMULATOR_TYPE ds = d_scales[fi % DECOMPRESSION_SCALE_LENGTH];
                     #endif
+                    #ifdef SWIGLU_SPLITS
+                    ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi + TILE_OFM * si] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
+                    #else
                     ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
+                    #endif
                     acc_tmp[bi][fi] = 0;
                 }
             }
@@ -219,11 +240,18 @@ inline void (FUNC_NAME)(
                 #else
                     ACCUMULATOR_TYPE ds = d_scales[fi % DECOMPRESSION_SCALE_LENGTH];
                 #endif
+                #ifdef SWIGLU_SPLITS
+                ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi + TILE_OFM * si] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
+                #else
                 ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += ((ACCUMULATOR_TYPE*)(&acc_tmp[bi]))[fi] * ds;
+                #endif
             }
         }
 #endif
-    }
+    } // Main compute loop : ni
+    #ifdef SWIGLU_SPLITS
+    }  // Main compute loop : si
+    #endif
     // =====================================================================================================================================
     // Leftovers
 #if MAIN_LOOP_ELEMENTS_COUNT % (TILE_IFM * SIMD) != 0
@@ -287,7 +315,11 @@ inline void (FUNC_NAME)(
                         const uint total_k = ki * TILE_K + kii;
                         if (total_k < LEFTOVER_IFM) {
                             INPUT0_TYPE in_val = _sub_group_shuffle(((INPUT0_TYPE*)(&in_0[bi]))[total_k / SIMD], total_k % SIMD);
+                            #ifdef SWIGLU_SPLITS
+                            ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi + TILE_OFM * si] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+                            #else
                             ((ACCUMULATOR_TYPE*)(&acc[bi]))[fi] += in_val * ((ACCUMULATOR_TYPE*)(&wei))[kii * TILE_OFM + fi];
+                            #endif
                         }
                     }
                 }
@@ -298,9 +330,20 @@ inline void (FUNC_NAME)(
 #endif // MAIN_LOOP_ELEMENTS_COUNT % (TILE_IFM * SIMD) != 0
     // =====================================================================================================================================
     // Post-processing: bias, activation, fused-ops
+    #ifdef SWIGLU_SPLITS
+    out_f = out_f_init;
+    #endif
+
     ACTIVATION_VEC_TYPE activated[FORCED_TILE_B] = { };
     for (uint bi = 0; bi < FORCED_TILE_B; ++bi) {
+        #ifdef SWIGLU_SPLITS
+        ACCUMULATOR_VEC_TYPE gate = {acc[bi][0], acc[bi][1]};
+        ACCUMULATOR_VEC_TYPE no_gate = {acc[bi][2], acc[bi][3]};
+        gate /= (ACCUMULATOR_VAL_ONE + native_exp(-(ACCUMULATOR_VAL_ONE * gate)));
+        activated[bi] = TO_ACTIVATION_VEC_TYPE(gate * no_gate);
+        #else
         activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
+        #endif
     }
 
 #if BIAS_TERM

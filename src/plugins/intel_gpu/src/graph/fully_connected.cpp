@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 #include "fully_connected_inst.h"
+#include "swiglu_inst.h"
 #include "primitive_type_base.h"
 #include "json_object.h"
 #include <string>
@@ -157,6 +158,24 @@ std::vector<layout> fully_connected_inst::calc_output_layouts(fully_connected_no
     };
 
     std::vector<ShapeType> output_shapes = ov::op::v0::shape_infer(&op, input_shapes);
+    bool has_swiglu = false;
+    auto fused_prims = node.get_fused_primitives();
+    for (auto f : fused_prims) {
+        if (f.is_type<swiglu>()) {
+            has_swiglu = true;
+        }
+    }
+    // TODO shape infer using op
+//    ov::intel_gpu::op::SwiGLU swiglu_op;
+//    swiglu_op.set_axis(-1);
+//    swiglu_op.set_split_lengths(13696);
+//
+//
+    auto new_output_shapes = output_shapes;
+    if (has_swiglu) {
+        auto n_idx = output_shapes[0].size() - 1;
+        new_output_shapes[0][n_idx] = output_shapes[0][n_idx] / 2;
+    }
 
     bool is_static = input_layout.is_static() && weights_layout.is_static();
     bool allow_new_shape_infer = impl_param.get_program().is_new_shape_infer();
@@ -166,7 +185,7 @@ std::vector<layout> fully_connected_inst::calc_output_layouts(fully_connected_no
     if (node.get_preferred_output_fmt() != format::any)
         output_format = node.get_preferred_output_fmt();
 
-    return { layout{output_shapes[0], output_type, output_format} };
+    return { layout{new_output_shapes[0], output_type, output_format} };
 }
 
 kernel_impl_params fully_connected_inst::get_fake_aligned_params(kernel_impl_params const& orig_impl_param) {

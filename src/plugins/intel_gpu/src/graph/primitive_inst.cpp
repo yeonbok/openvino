@@ -33,6 +33,7 @@
 #include "paged_attention_inst.h"
 #include "gather_inst.h"
 #include "broadcast_inst.h"
+#include "swiglu_inst.h"
 #include "dynamic_quantize_inst.h"
 #include "experimental_detectron_roi_feature_extractor_inst.hpp"
 #include "impls/registry/implementation_manager.hpp"
@@ -2312,7 +2313,7 @@ bool primitive_inst::is_valid_fusion() const {
         if (fd.is_type<eltwise>() || fd.is_type<activation>()) {
             fused_eltwise_prims.push_back(fd);
         } else {
-            if (fd.is_type<reorder>() || fd.is_type<quantize>())
+            if (fd.is_type<reorder>() || fd.is_type<quantize>() || fd.is_type<swiglu>())
                 continue;
 
             OPENVINO_THROW("[GPU] Unsupported fused operation in dynamic shape: type=", fd.desc->type_string(), ", id=", fd.desc->id);
