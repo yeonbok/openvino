@@ -32,6 +32,7 @@
 #include "gather_inst.h"
 #include "broadcast_inst.h"
 #include "dynamic_quantize_inst.h"
+#include "swiglu_inst.h"
 #include "experimental_detectron_roi_feature_extractor_inst.hpp"
 #include "impls/registry/implementation_map.hpp"
 #include "graph_optimizer/prepare_buffer_fusing.h"
@@ -1038,7 +1039,7 @@ bool primitive_inst::update_impl(bool use_async_compilation) {
             }
         }
         if (!cached_impl) {
-            if (_dynamic_impl || is_current_impl_dynamic) {
+            if (!_node->is_type<fully_connected>() && (_dynamic_impl || is_current_impl_dynamic)) {
                 if (use_async_compilation) {
                     auto& compilation_context = prog->get_compilation_context();
                     compilation_context.push_task(updated_params, [this, &compilation_context, updated_params]() {
@@ -1563,6 +1564,8 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     GPU_DEBUG_GET_INSTANCE(debug_config);
     GPU_DEBUG_TRACE_DETAIL << "-----------------------------------------------------------------" << std::endl;
     GPU_DEBUG_TRACE_DETAIL << "Execute " << id() << " (type: " << _impl_params->desc->type_string() << ") " << std::endl;
+    if (_node->is_type<fully_connected>())
+        std::cout << "Execute " << id() << " (type: " << _impl_params->desc->type_string() << ") " << std::endl;
     for (size_t i = 0; i < _deps.size(); ++i) {
         GPU_DEBUG_TRACE_DETAIL << "- inputs[" << i << "] : " <<  _deps[i].first->id() << std::endl;
     }
@@ -2392,7 +2395,7 @@ bool primitive_inst::is_valid_fusion() const {
         if (fd.is_type<eltwise>() || fd.is_type<activation>()) {
             fused_eltwise_prims.push_back(fd);
         } else {
-            if (fd.is_type<reorder>() || fd.is_type<quantize>())
+            if (fd.is_type<reorder>() || fd.is_type<quantize>() || fd.is_type<swiglu>())
                 continue;
 
             OPENVINO_THROW("[GPU] Unsupported fused operation in dynamic shape: type=", fd.desc->type_string(), ", id=", fd.desc->id);

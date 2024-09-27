@@ -21,6 +21,15 @@ struct swiglu_params : public base_params {
     int32_t split_to_glu_idx;
 };
 
+struct swiglu_fuse_params : fuse_params {
+    explicit swiglu_fuse_params(size_t split_length, size_t split_size)
+        : fuse_params(KernelType::SWIGLU),
+          split_length(split_length),
+          split_size(split_size) {}
+    size_t split_length;
+    size_t split_size;
+};
+
 class SwiGLUKernelBase : public KernelBaseOpenCL {
 public:
     using KernelBaseOpenCL::KernelBaseOpenCL;

@@ -4,6 +4,7 @@
 
 #include "fully_connected_kernel_bf_tiled.h"
 #include "kernel_selector_utils.h"
+#include "swiglu/swiglu_kernel_base.h"
 #include <vector>
 #include <functional>
 #include "common_types.h"
@@ -386,6 +387,7 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
                 if (params.weights.GetLayout() == WeightsLayout::os_iyx_osv16) {
                     return selector.Default(tune_params(1, 1, 4, 4, 1, 1, 1, EXE_MODE_DEFAULT));
                 } else if (params.weights.GetLayout() == WeightsLayout::os_is_yx_osv64_isv2) {
+                    std::cout << "weight_ofm: " << params.weights.OFM().v << ", output_f:" << output_f << std::endl;
                     selector.Case(tune_params(1, 4, 4, 2, 2, 1, 1, EXE_MODE_DEFAULT))
                             .Case(tune_params(1, 4, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
                 } else {
@@ -483,11 +485,20 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     if (params.is_shape_agnostic)
         kernel_type = kernel_number == 0 ? KernelType::DEFAULT : KernelType::SLM;
 
-    auto tparams = GetAutoTuneParams(params, kernel_type, autoTuneIndex);
+    bool swiglu_fused = false;
+    if (!params.fused_ops.empty()) {
+        if (params.fused_ops.size() == 1 && params.fused_ops[0].GetType() == kernel_selector::KernelType::SWIGLU) {
+            swiglu_fused = true;
+        }
+    }
 
+    auto tparams = GetAutoTuneParams(params, kernel_type, autoTuneIndex);
+    std::cout << "output size : " << params.outputs[0].Y().v << std::endl;
     auto threads = get_output_aligned_bf_size(params, true, tparams.tile_b, tparams.tile_ofm * tparams.outer_ofm * simd);
     auto batch_threads = threads.first;
     auto feature_threads = threads.second;
+    if (swiglu_fused)
+        feature_threads *= 2;
 
     const size_t lws_batches = 8;
     const size_t aligned_batch = Align(batch_threads, lws_batches); // Each WG calculates 8x8 batches (TILE_B x LWS[2] size)
@@ -510,6 +521,7 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     dispatchData.tile_ms = tparams.dispatch_bsv;
     dispatchData.tile_ns = tparams.dispatch_fsv;
     dispatchData.use_slm = can_use_slm;
+    std::cout << "gws[0] : " << dispatchData.gws[0] << std::endl;
 
     return dispatchData;
 }
@@ -533,6 +545,16 @@ JitConstants FullyConnected_bf_tiled::GetJitConstants(const fully_connected_para
     size_t tile_k_ofm = dispatchData.tile_nk * dispatchData.tile_n;
     size_t tile_k_ofm_packed = tile_k_ofm;
     size_t quantize_grp_size = get_dynamic_quantize_group_size(params);
+    bool swiglu_fused = false;
+    if (!params.fused_ops.empty()) {
+        if (params.fused_ops.size() == 1 && params.fused_ops[0].GetType() == kernel_selector::KernelType::SWIGLU) {
+//            std::cout << "Only swiglu!" << std::endl;
+            swiglu_fused = true;
+            jit.AddConstant(MakeJitConstant("SWIGLU_SPLITS", 2));
+            jit.AddConstant(MakeJitConstant("SWIGLU_STRIDE", get_output_aligned_bf_size(params, false).second));
+            jit.AddConstant(MakeJitConstant("TILE_OFM_SWIGLU", dispatchData.tile_n * 2));
+        }
+    }
 
     WeightsType weights_dt = params.weights.GetDType();
     if (weights_dt == WeightsType::UINT4 || weights_dt == WeightsType::INT4) {
@@ -678,7 +700,8 @@ JitConstants FullyConnected_bf_tiled::GetJitConstants(const fully_connected_para
         jit.AddConstant(MakeJitConstant("BATCH_SIZE", "(OUTPUT_BATCH_NUM)"));
     }
 
-    if (!params.fused_ops.empty()) {
+    if (!params.fused_ops.empty() && !swiglu_fused) {
+        // TODO : can we assume that swiglu is the only fused primitive?
         std::vector<std::string> idx_order_scalar = { "(out_b + bi)", "(out_f + sglid)", "0", "0" };
         std::vector<std::string> idx_order_vec = { "(out_b + bi)", "(out_f + sglid + fi * SIMD)", "0", "0" };
         if (params.outputs[0].GetLayout() == DataLayout::bfyx) {
