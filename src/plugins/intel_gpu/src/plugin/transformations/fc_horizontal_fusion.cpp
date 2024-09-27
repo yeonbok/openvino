@@ -41,7 +41,9 @@ FullyConnectedHorizontalFusion::FullyConnectedHorizontalFusion() {
             return std::dynamic_pointer_cast<op::Placeholder>(node);
         };
         // Three FCs connected to the same input
-        const int min_num_fcs_to_fuse = 3;
+        size_t min_num_fcs_to_fuse = 3;
+        if (std::getenv("FUSE_MLP") != nullptr)
+            min_num_fcs_to_fuse = 2;
         const int max_num_fcs_to_fuse = 3;
         const auto& fc = std::dynamic_pointer_cast<op::FullyConnectedCompressed>(output.get_node_shared_ptr());
         const auto& input = fc->get_input_node_shared_ptr(0);
