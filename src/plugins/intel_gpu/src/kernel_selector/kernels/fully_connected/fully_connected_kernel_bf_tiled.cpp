@@ -409,24 +409,24 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
             }
         } else {
             // Try to use SLM kernels if possible
-//            if (preferred_kernel_type != KernelType::DEFAULT) {
-//                if (params.is_shape_agnostic && !should_dynamic_quantize(params)) {
-//                    selector.Case(tune_params(16, 2, 2, 4, 1, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
-//                            .Case(tune_params(16, 2, 1, 4, 1, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM));
-//                }
-//                selector.Case(tune_params(8, 2, 2, 4, 1, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
-//                        .Case(tune_params(8, 2, 1, 4, 1, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM));
-//            }
+            size_t forced_outer_ofm = swiglu_fused ? 2 : 1;
+            if (swiglu_fused)
+                std::cout << "swiglu!" << std::endl;
+            if (preferred_kernel_type != KernelType::DEFAULT) {
+                if (params.is_shape_agnostic && !should_dynamic_quantize(params)) {
+                    selector.Case(tune_params(16, 2, 2, 4, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
+                            .Case(tune_params(16, 2, 1, 4, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM));
+                }
+                selector.Case(tune_params(8, 2, 2, 4, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
+                        .Case(tune_params(8, 2, 1, 4, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM));
+            }
             // tune_params(tile_b, tile_ofm, tile_ifm, tile_k, outer_ofm, dispatch_bsv, dispatch_fsv, exec_options)
             if (params.weights.GetLayout() == WeightsLayout::os_iyx_osv16) {
-                return selector.Default(tune_params(8, 1, 1, 4, 1, 1, 1, EXE_MODE_DEFAULT));
+                return selector.Default(tune_params(8, 1, 1, 4, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT));
             } else if (params.weights.GetLayout() == WeightsLayout::os_is_yx_osv64_isv2) {
-                if (swiglu_fused)
-                    return selector.Default(tune_params(8, 4, 1, 2, 2, 1, 1, EXE_MODE_DEFAULT));
-                else
-                    return selector.Default(tune_params(8, 4, 1, 2, 1, 1, 1, EXE_MODE_DEFAULT));
+                return selector.Default(tune_params(8, 4, 1, 2, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT));
             } else {
-                return selector.Default(tune_params(8, 2, 1, 4, 1, 1, 1, EXE_MODE_DEFAULT));
+                return selector.Default(tune_params(8, 2, 1, 4, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT));
             }
         }
     } else if (params.compressed && params.engineInfo.supports_immad) {

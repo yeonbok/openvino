@@ -46,9 +46,6 @@ inline void (FUNC_NAME)(
     uint out_f = (feature_mega_block * DISPATCH_FSV + feature_mini_block) * (OUTER_OFM * TILE_OFM * SIMD);
     #endif
     uint out_b = ((batch_mega_block * DISPATCH_BSV + batch_mini_block) * FORCED_TILE_B);
-    if (gid == 0 && sglid == 0)
-        printf("common kernel!\n");
-
 
     ACCUMULATOR_VEC_TYPE acc[FORCED_TILE_B] = { };
     INPUT_VEC_TYPE       in_0[FORCED_TILE_B] = { };
