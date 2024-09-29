@@ -397,8 +397,12 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
                 } else if (params.weights.GetLayout() == WeightsLayout::os_is_yx_osv64_isv2) {
                     // Here : b1 static
                     std::cout << "weight_ofm: " << params.weights.OFM().v << ", output_f:" << output_f << std::endl;
-                    selector.Case(tune_params(1, 4, 4, 2, 2, 1, 1, EXE_MODE_DEFAULT))
-                            .Case(tune_params(1, 4, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
+                    if (swiglu_fused) {
+                        return selector.Default(tune_params(1, 4, 4, 2, 2, 1, 1, EXE_MODE_DEFAULT));
+                    } else {
+                        selector.Case(tune_params(1, 4, 4, 2, 2, 1, 1, EXE_MODE_DEFAULT))
+                                .Case(tune_params(1, 4, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
+                    }
                 } else {
                     return selector.Default(tune_params(1, 2, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
                 }
