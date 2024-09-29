@@ -320,8 +320,8 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
         #else
         out_f += TILE_OFM * SIMD * oi;
         #endif
-        if (out_f == 0 && out_b == 0)
-            printf("oi=%d out_b=%d, out_f=%d, sglid=%d, weights_offet = %d, input_offset = %d\n", oi, out_b, out_f, sglid, weights_offset, input_offset);
+//        if (out_f == 0 && out_b == 0)
+//            printf("oi=%d out_b=%d, out_f=%d, sglid=%d, weights_offet = %d, input_offset = %d\n", oi, out_b, out_f, sglid, weights_offset, input_offset);
 #endif
 
 #if REALIGN_FP16_OFFSET

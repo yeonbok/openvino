@@ -47,7 +47,7 @@ static std::pair<size_t, size_t> get_output_aligned_bf_size(const fully_connecte
     }
 
     output_b = (needs_align == true) ? CeilDiv(output_b, align_b) : output_b;
-    std::cout << "aligned bf size : out_b : " << output_b << " out_f : " << output_f << std::endl;
+//    std::cout << "aligned bf size : out_b : " << output_b << " out_f : " << output_f << std::endl;
 
     return {output_b, output_f};
 }
@@ -396,7 +396,7 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
                     return selector.Default(tune_params(1, 1, 4, 4, 1, 1, 1, EXE_MODE_DEFAULT));
                 } else if (params.weights.GetLayout() == WeightsLayout::os_is_yx_osv64_isv2) {
                     // Here : b1 static
-                    std::cout << "weight_ofm: " << params.weights.OFM().v << ", output_f:" << output_f << std::endl;
+//                    std::cout << "weight_ofm: " << params.weights.OFM().v << ", output_f:" << output_f << std::endl;
                     if (swiglu_fused) {
                         return selector.Default(tune_params(1, 4, 4, 2, 2, 1, 1, EXE_MODE_DEFAULT));
                     } else {
@@ -410,8 +410,6 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
         } else {
             // Try to use SLM kernels if possible
             size_t forced_outer_ofm = swiglu_fused ? 2 : 1;
-            if (swiglu_fused)
-                std::cout << "swiglu!" << std::endl;
             if (preferred_kernel_type != KernelType::DEFAULT) {
                 if (params.is_shape_agnostic && !should_dynamic_quantize(params)) {
                     selector.Case(tune_params(16, 2, 2, 4, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
@@ -511,14 +509,14 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     }
 
     auto tparams = GetAutoTuneParams(params, kernel_type, autoTuneIndex);
-    std::cout << "output size : " << params.outputs[0].Y().v << std::endl;
+//    std::cout << "output size : " << params.outputs[0].Y().v << std::endl;
     auto threads = get_output_aligned_bf_size(params, true, tparams.tile_b, tparams.tile_ofm * tparams.outer_ofm * simd);
 
     auto batch_threads = threads.first;
     auto feature_threads = threads.second;
     if (swiglu_fused)
         feature_threads *= 2;
-    std::cout << "batch_threads: " << batch_threads << std::endl;
+//    std::cout << "batch_threads: " << batch_threads << std::endl;
 
     const size_t lws_batches = 8;
     const size_t aligned_batch = Align(batch_threads, lws_batches); // Each WG calculates 8x8 batches (TILE_B x LWS[2] size)
@@ -541,8 +539,8 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     dispatchData.tile_ms = tparams.dispatch_bsv;
     dispatchData.tile_ns = tparams.dispatch_fsv;
     dispatchData.use_slm = can_use_slm;
-    std::cout << "gws[0] : " << dispatchData.gws[0] << std::endl;
-    std::cout << "gws[2] : " << dispatchData.gws[2] << std::endl;
+//    std::cout << "gws[0] : " << dispatchData.gws[0] << std::endl;
+//    std::cout << "gws[2] : " << dispatchData.gws[2] << std::endl;
 
     return dispatchData;
 }
