@@ -1010,8 +1010,10 @@ kernel_selector::activation_function get_kernel_selector_activation_param(activa
 
 std::shared_ptr<kernel_selector::fuse_params> convert_fuse_params(std::shared_ptr<NodeFuseParams> p) {
     if (p->type() == swiglu::type_id()) {
-        // TODO !!!!!!!!!!!!!!!!!!!!Fix this
-        return std::make_shared<kernel_selector::swiglu_fuse_params>(13696, 2);
+        auto casted = std::dynamic_pointer_cast<SwigluFuseParams>(p);
+        auto axis = casted->_desc->axis;
+        auto split_length = casted->_desc->split_lengths;
+        return std::make_shared<kernel_selector::swiglu_fuse_params>(axis, split_length);
     } else if (p->type() == activation::type_id()) {
         auto casted = std::dynamic_pointer_cast<ActivationFuseParams>(p);
         auto desc = casted->_desc;

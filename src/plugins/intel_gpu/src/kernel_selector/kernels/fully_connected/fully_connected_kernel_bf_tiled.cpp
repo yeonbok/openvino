@@ -148,6 +148,19 @@ static bool is_suitable_outer_ofm(const fully_connected_params& params, size_t o
             && output_f / 8 /* tile_ofm=4 and outer_ofm=2 */ > min_num_threads * 1.5);
 }
 
+static bool is_swiglu_fused(const fully_connected_params& params) {
+    bool swiglu_fused = false;
+    if (!params.fused_ops.empty()) {
+        for (auto p : params.fused_ops) {
+            if (p.GetType() == kernel_selector::KernelType::SWIGLU)
+                swiglu_fused = true;
+        }
+    }
+    if (swiglu_fused)
+        OPENVINO_ASSERT(params.fused_ops.size() == 1);
+    return swiglu_fused;
+}
+
 FullyConnected_bf_tiled::FullyConnected_bf_tiled() : FullyConnectedKernelBase("fully_connected_gpu_bf_tiled") {
     for (unsigned tile_b = 1; tile_b <= 32; ++tile_b)
     for (unsigned tile_ofm = 1; tile_ofm <= 4; tile_ofm *= 2)
@@ -375,12 +388,7 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
     while (max_tile_ofm * 2 * simd <= output_f && max_tile_ofm < 4)
         max_tile_ofm *= 2;
 
-    bool swiglu_fused = false;
-    if (!params.fused_ops.empty()) {
-        if (params.fused_ops.size() == 1 && params.fused_ops[0].GetType() == kernel_selector::KernelType::SWIGLU) {
-            swiglu_fused = true;
-        }
-    }
+    bool swiglu_fused = is_swiglu_fused(params);
 
     if (params.weights.GetDType() == WeightsType::UINT4 || params.weights.GetDType() == WeightsType::INT4) {
         if (!params.is_shape_agnostic && batch == 1) {
@@ -501,22 +509,13 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     if (params.is_shape_agnostic)
         kernel_type = kernel_number == 0 ? KernelType::DEFAULT : KernelType::SLM;
 
-    bool swiglu_fused = false;
-    if (!params.fused_ops.empty()) {
-        if (params.fused_ops.size() == 1 && params.fused_ops[0].GetType() == kernel_selector::KernelType::SWIGLU) {
-            swiglu_fused = true;
-        }
-    }
-
     auto tparams = GetAutoTuneParams(params, kernel_type, autoTuneIndex);
-//    std::cout << "output size : " << params.outputs[0].Y().v << std::endl;
     auto threads = get_output_aligned_bf_size(params, true, tparams.tile_b, tparams.tile_ofm * tparams.outer_ofm * simd);
 
     auto batch_threads = threads.first;
     auto feature_threads = threads.second;
-    if (swiglu_fused)
+    if (is_swiglu_fused(params))
         feature_threads *= 2;
-//    std::cout << "batch_threads: " << batch_threads << std::endl;
 
     const size_t lws_batches = 8;
     const size_t aligned_batch = Align(batch_threads, lws_batches); // Each WG calculates 8x8 batches (TILE_B x LWS[2] size)
@@ -564,15 +563,10 @@ JitConstants FullyConnected_bf_tiled::GetJitConstants(const fully_connected_para
     size_t tile_k_ofm = dispatchData.tile_nk * dispatchData.tile_n;
     size_t tile_k_ofm_packed = tile_k_ofm;
     size_t quantize_grp_size = get_dynamic_quantize_group_size(params);
-    bool swiglu_fused = false;
-    if (!params.fused_ops.empty()) {
-        if (params.fused_ops.size() == 1 && params.fused_ops[0].GetType() == kernel_selector::KernelType::SWIGLU) {
-//            std::cout << "Only swiglu!" << std::endl;
-            swiglu_fused = true;
-            jit.AddConstant(MakeJitConstant("SWIGLU_SPLITS", 2));
-            jit.AddConstant(MakeJitConstant("SWIGLU_STRIDE", get_output_aligned_bf_size(params, false).second));
-//            jit.AddConstant(MakeJitConstant("TILE_OFM_SWIGLU", dispatchData.tile_n * 2));
-        }
+
+    if (is_swiglu_fused(params)) {
+        auto split_length = params.fused_ops[0].GetOpParams<swiglu_fuse_params>()->split_length;
+        jit.AddConstant(MakeJitConstant("SWIGLU_LENGTH", split_length));
     }
 
     WeightsType weights_dt = params.weights.GetDType();
@@ -719,8 +713,7 @@ JitConstants FullyConnected_bf_tiled::GetJitConstants(const fully_connected_para
         jit.AddConstant(MakeJitConstant("BATCH_SIZE", "(OUTPUT_BATCH_NUM)"));
     }
 
-    if (!params.fused_ops.empty() && !swiglu_fused) {
-        // TODO : can we assume that swiglu is the only fused primitive?
+    if (!params.fused_ops.empty() && !is_swiglu_fused(params)) {
         std::vector<std::string> idx_order_scalar = { "(out_b + bi)", "(out_f + sglid)", "0", "0" };
         std::vector<std::string> idx_order_vec = { "(out_b + bi)", "(out_f + sglid + fi * SIMD)", "0", "0" };
         if (params.outputs[0].GetLayout() == DataLayout::bfyx) {

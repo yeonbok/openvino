@@ -22,12 +22,12 @@ struct swiglu_params : public base_params {
 };
 
 struct swiglu_fuse_params : fuse_params {
-    explicit swiglu_fuse_params(size_t split_length, size_t split_size)
+    explicit swiglu_fuse_params(int32_t axis, size_t split_lengths)
         : fuse_params(KernelType::SWIGLU),
-          split_length(split_length),
-          split_size(split_size) {}
+            axis(axis),
+            split_length(split_lengths) {}
+    int32_t axis;
     size_t split_length;
-    size_t split_size;
 };
 
 class SwiGLUKernelBase : public KernelBaseOpenCL {
