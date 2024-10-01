@@ -13,7 +13,6 @@ namespace cldnn {
 class SwigluFuseParams : public NodeFuseParams {
 public:
     SwigluFuseParams(std::shared_ptr<swiglu> desc) : NodeFuseParams(swiglu::type_id()), _desc(std::move(desc)) {}
-    size_t ops_count() const override { return 1; }
     std::shared_ptr<swiglu> _desc;
 };
 template <>

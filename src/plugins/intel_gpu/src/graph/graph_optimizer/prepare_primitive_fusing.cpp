@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include "intel_gpu/runtime/debug_configuration.hpp"
 #include "program_helpers.h"
 #include "pass_manager.h"
 
@@ -55,9 +56,11 @@
 using namespace cldnn;
 
 void prepare_primitive_fusing::run(program& p) {
+    GPU_DEBUG_GET_INSTANCE(debug_config);
     fuse_reorders(p);
     remove_redundant_reshape(p);
-    if (std::getenv("FUSE_SWIGLU") != nullptr)
+    // TODO : apply only for cldnn
+    if (!debug_config->disable_fc_swiglu_fusion)
         fuse_swiglu(p);
     fuse_bias(p);
     fuse_simple_primitives(p);
@@ -171,15 +174,18 @@ void prepare_primitive_fusing::fuse_swiglu(program &p) {
         auto node_itr = itr++;
         auto& node = (*node_itr);
         if (node->is_type<swiglu>()) {
-            std::cout << node->id() << std::endl;
             auto prim = node->get_kernel_impl_params()->typed_desc<swiglu>();
-            std::cout << "split_axis : " << prim->axis
-                      << " split_length: " << prim->split_lengths << std::endl;
-            if (node->get_dependencies().size() == 1 && (node->get_dependency(0).is_type<fully_connected>())) {
+            if (node->get_dependencies().size() == 1 &&
+                node->get_dependency(0).is_type<fully_connected>() &&
+                node->get_dependency(0).get_fused_primitives().empty() &&
+                prim->glu_type == ov::intel_gpu::op::SwiGLU::GluType::Swish &&
+                (prim->axis == -1 || prim->axis == static_cast<int64_t>(node->get_output_layout(0).get_partial_shape().size()) - 1)) {
                 auto& fc_node = node->get_dependency(0);
+                GPU_DEBUG_TRACE_DETAIL << node->id() << " : fuse swiglu to " << fc_node.id() << std::endl;
+                GPU_DEBUG_TRACE_DETAIL << " - split axis : " << prim->axis << std::endl;
+                GPU_DEBUG_TRACE_DETAIL << " - split length : " << prim->split_lengths << std::endl;
                 p.fuse_nodes(fc_node, *node, &fusing_history);
             }
-            std::cout << "Fusing done" << std::endl;
         }
     }
 }
@@ -210,6 +216,17 @@ void prepare_primitive_fusing::fuse_bias(program &p) {
 
         if (!is_bias_add)
             continue;
+
+        for (auto& dep : eltw_node.get_dependencies()) {
+            auto& fused_prims = dep.first->get_fused_primitives();
+            if (std::any_of(fused_prims.begin(), fused_prims.end(), [](const fused_primitive_desc& f_desc) {
+                return f_desc.is_type<swiglu>();
+            })) {
+                GPU_DEBUG_TRACE_DETAIL << "Skip fusing " << eltw_node.id() << " to " << dep.first->id() << " because "
+                                       << dep.first->id() << " has fused swiglu." << std::endl;
+                continue;
+            }
+        }
 
         auto is_3d_fully_connected = [](program_node& node) {
             if (!node.is_type<fully_connected>())
@@ -514,6 +531,14 @@ void prepare_primitive_fusing::fuse_simple_primitives(program &p) {
         };
 
         auto fc_supports_fusings = [&](fully_connected_node& node) -> bool {
+            auto& fused_prims = node.get_fused_primitives();
+            if (std::any_of(fused_prims.begin(), fused_prims.end(), [](const fused_primitive_desc& f_desc) {
+                    return f_desc.is_type<swiglu>();
+                })) {
+                GPU_DEBUG_TRACE_DETAIL << node.id() << " has fused swiglu. Skip fusing more primitives" << std::endl;
+                return false;
+            }
+
             if (lo.get_optimization_attributes().use_onednn_impls &&
                 lo.get_preferred_impl_type(node, format::any /*dummy*/) == impl_types::onednn) {
                 return true;
