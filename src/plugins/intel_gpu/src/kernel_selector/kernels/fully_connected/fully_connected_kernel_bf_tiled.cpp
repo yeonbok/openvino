@@ -142,12 +142,6 @@ static bool is_weight_horizontal(const fully_connected_params& params, size_t ou
             && output_f / 4 /* tile_ofm=4 */ > min_num_threads * 1.5);
 }
 
-static bool is_suitable_outer_ofm(const fully_connected_params& params, size_t output_f) {
-    size_t min_num_threads = params.engineInfo.computeUnitsCount * simd;
-    return (params.weights.OFM().v > params.weights.IFM().v * 6
-            && output_f / 8 /* tile_ofm=4 and outer_ofm=2 */ > min_num_threads * 1.5);
-}
-
 static bool is_swiglu_fused(const fully_connected_params& params) {
     bool swiglu_fused = false;
     if (!params.fused_ops.empty()) {
@@ -159,6 +153,14 @@ static bool is_swiglu_fused(const fully_connected_params& params) {
     if (swiglu_fused)
         OPENVINO_ASSERT(params.fused_ops.size() == 1);
     return swiglu_fused;
+}
+
+static bool is_suitable_outer_ofm(const fully_connected_params& params, size_t output_f) {
+    if (is_swiglu_fused(params))
+        return true;
+    size_t min_num_threads = params.engineInfo.computeUnitsCount * simd;
+    return (params.weights.OFM().v > params.weights.IFM().v * 6
+            && output_f / 8 /* tile_ofm=4 and outer_ofm=2 */ > min_num_threads * 1.5);
 }
 
 FullyConnected_bf_tiled::FullyConnected_bf_tiled() : FullyConnectedKernelBase("fully_connected_gpu_bf_tiled") {
@@ -412,13 +414,17 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
                                 .Case(tune_params(1, 4, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
                     }
                 } else {
-                    return selector.Default(tune_params(1, 2, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
+                    if (swiglu_fused)
+                        return selector.Default(tune_params(1, 2, 4, 2, 2, 1, 1, EXE_MODE_DEFAULT));
+                    else
+                        return selector.Default(tune_params(1, 2, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
                 }
             }
         } else {
             // Try to use SLM kernels if possible
             size_t forced_outer_ofm = swiglu_fused ? 2 : 1;
             if (preferred_kernel_type != KernelType::DEFAULT) {
+//                if (params.is_shape_agnostic && !should_dynamic_quantize(params) && !swiglu_fused) {
                 if (params.is_shape_agnostic && !should_dynamic_quantize(params)) {
                     selector.Case(tune_params(16, 2, 2, 4, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM))
                             .Case(tune_params(16, 2, 1, 4, forced_outer_ofm, 1, 1, EXE_MODE_DEFAULT, KernelType::SLM));
@@ -510,12 +516,14 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
         kernel_type = kernel_number == 0 ? KernelType::DEFAULT : KernelType::SLM;
 
     auto tparams = GetAutoTuneParams(params, kernel_type, autoTuneIndex);
-    auto threads = get_output_aligned_bf_size(params, true, tparams.tile_b, tparams.tile_ofm * tparams.outer_ofm * simd);
+    std::pair<size_t, size_t> threads;
+    if (is_swiglu_fused(params))
+        threads = get_output_aligned_bf_size(params, true, tparams.tile_b, tparams.tile_ofm * simd);
+    else
+        threads = get_output_aligned_bf_size(params, true, tparams.tile_b, tparams.tile_ofm * tparams.outer_ofm * simd);
 
     auto batch_threads = threads.first;
     auto feature_threads = threads.second;
-    if (is_swiglu_fused(params))
-        feature_threads *= 2;
 
     const size_t lws_batches = 8;
     const size_t aligned_batch = Align(batch_threads, lws_batches); // Each WG calculates 8x8 batches (TILE_B x LWS[2] size)

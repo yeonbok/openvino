@@ -312,7 +312,8 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
     uint input_offset_init = input_offset;
     uint weights_offset_init = weights_offset;
     uint out_f_init = out_f;
-    unroll_for (uint oi = 0; oi < OUTER_OFM; ++oi) {
+    __attribute__((opencl_unroll_hint(1)))
+    for (uint oi = 0; oi < OUTER_OFM; ++oi) {
         input_offset = input_offset_init;
         #ifdef SWIGLU_LENGTH
         weights_offset = weights_offset_init + oi * (FILTER_IFM_NUM / (TILE_K_OFM / TILE_K_OFM_PACKED) ) * SWIGLU_LENGTH;
