@@ -1484,7 +1484,11 @@ bool primitive_inst::has_inner_networks() const {
     return (_impl_params->inner_nets.size() > 0);
 }
 
-event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
+void primitive_inst::add_to_command_list(command_list* list) {
+    _impl->add_to_cmd_list(list, {}, *this);
+}
+
+std::vector<event::ptr> primitive_inst::prepare_primitive(const std::vector<event::ptr>& events) {
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("primitive_inst::execute: " + id()));
     const auto& primitive_id = id();
     OPENVINO_ASSERT(_has_valid_input, primitive_id, " has invalid/unset input");
@@ -1529,7 +1533,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         if (can_skip_execution) {
             auto ev = get_network().get_stream().aggregate_events(events);
             update_shape_done_by_other = false; // reset
-            return ev;
+            return { ev };
         }
 
         // Check successor reorder if layouts are same
@@ -1575,7 +1579,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
             _outputs[0] = outputs.at(last_prim_id).get_memory();
 
             _impl_params->output_layouts[0] = subgraph->get_output_layout(last_prim_id);
-            return outputs.at(last_prim_id).get_event();
+            return { outputs.at(last_prim_id).get_event() };
         }
 
         // Try update impl if current impl is dynamic because opt kernel may be added to impl cache through async compilation.
@@ -1681,10 +1685,16 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         dependencies = {grouped_ev};
     }
 
+    return dependencies;
+}
+
+event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
+    auto dependencies = prepare_primitive(events);
     {
         GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::inference);
         auto ev = _impl->execute(dependencies, *this);
 
+        GPU_DEBUG_GET_INSTANCE(debug_config);
         GPU_DEBUG_IF(!debug_config->dump_profiling_data.empty()) {
             get_network().get_stream().wait_for_events({ev});
 
