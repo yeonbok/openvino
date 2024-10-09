@@ -345,8 +345,11 @@ bool SDPAKernelMicro::Validate(const Params& p) const {
     return true;
 }
 
-JitConstants SDPAKernelMicro::GetJitConstants(const sdpa_params& params, const micro::Package& gemm_kq, const micro::Package& gemm_vs) const {
+JitConstants SDPAKernelMicro::GetJitConstants(const sdpa_params& params, const micro::Package& gemm_kq, const micro::Package& gemm_vs, bool is_dummy) const {
     auto jit = MakeBaseParamsJitConstants(params);
+    if (is_dummy) {
+        jit.AddConstant(MakeJitConstant("IS_DUMMY", 1));
+    }
     const auto& prim_params = dynamic_cast<const sdpa_params&>(params);
 
     const auto& Q = prim_params.inputs[0];
@@ -464,8 +467,12 @@ JitConstants SDPAKernelMicro::GetJitConstants(const sdpa_params& params, const m
     return jit;
 }
 
-CommonDispatchData SDPAKernelMicro::SetDefault(const sdpa_params& params, const micro::Package& gemm_kq, const micro::Package& gemm_vs) const {
+CommonDispatchData SDPAKernelMicro::SetDefault(const sdpa_params& params, const micro::Package& gemm_kq, const micro::Package& gemm_vs, bool is_dummy) const {
     CommonDispatchData dispatch_data;
+    if (is_dummy) {
+        dispatch_data.lws = {64, 64, 64};
+        dispatch_data.gws = {64, 64, 64};
+    }
 
     auto wg_tile_q = gemm_kq.getSetting("wg_tile_n");
     auto sg_per_wg = gemm_kq.getSetting("sg_per_wg_m") * gemm_kq.getSetting("sg_per_wg_n");
@@ -480,14 +487,14 @@ CommonDispatchData SDPAKernelMicro::SetDefault(const sdpa_params& params, const 
     return dispatch_data;
 }
 
-clKernelData SDPAKernelMicro::get_kernel_data(const sdpa_params& params, bool is_prefill) const {
-    auto name = kernelName + (is_prefill ? "_prefill" : "_generate");
+clKernelData SDPAKernelMicro::get_kernel_data(const sdpa_params& params, bool is_prefill, bool is_dummy) const {
+    auto name = kernelName + (is_prefill ? "_prefill" : is_dummy ? "_dummy" : "_generate");
 
     std::vector<micro::Package> gemms(2); // KQ and VS
     init_microkernels(params, gemms[kq_id], gemms[vs_id], is_prefill);
-    auto dispatch_data = SetDefault(params, gemms[kq_id], gemms[vs_id]);
+    auto dispatch_data = SetDefault(params, gemms[kq_id], gemms[vs_id], is_dummy);
     auto entry_point = GetEntryPoint(name, params.layerID, params);
-    auto jit = CreateJit(name, GetJitConstants(params, gemms[kq_id], gemms[vs_id]), entry_point);
+    auto jit = CreateJit(name, GetJitConstants(params, gemms[kq_id], gemms[vs_id], is_dummy), entry_point);
     clKernelData kernel;
 
     FillCLKernelData(kernel, dispatch_data, params.engineInfo, kernelName, jit, entry_point,
@@ -568,7 +575,7 @@ clKernelData SDPAKernelMicro::get_kernel_data(const sdpa_params& params, bool is
 }
 
 KernelsData SDPAKernelMicro::GetKernelsData(const Params& params) const {
-    const size_t num_kernels = params.is_shape_agnostic ? 2 : 1;
+    const size_t num_kernels = params.is_shape_agnostic ? 3 : 2;
     KernelData kd = KernelData::Default<sdpa_params>(params, num_kernels);
     const auto& prim_params = dynamic_cast<const sdpa_params&>(params);
 
@@ -577,7 +584,7 @@ KernelsData SDPAKernelMicro::GetKernelsData(const Params& params) const {
     }
 
     for (size_t i = 0; i < num_kernels; i++) {
-        kd.kernels[i] = get_kernel_data(prim_params, i == prefill_id);
+        kd.kernels[i] = get_kernel_data(prim_params, i == prefill_id, i == 0);
     }
 
     GetUpdateDispatchDataFunc(kd);
@@ -611,7 +618,7 @@ void SDPAKernelMicro::GetUpdateDispatchDataFunc(KernelData& kd) const {
         // TODO: Currently 2nd token version works slower than prefill version
         const bool is_prefill = true;//n_queries.v > 1;
 
-        OPENVINO_ASSERT(kernel_data.kernels.size() == 2, "[GPU] Invalid kernels size for update dispatch data func");
+//        OPENVINO_ASSERT(kernel_data.kernels.size() == 2, "[GPU] Invalid kernels size for update dispatch data func");
 
         size_t target_kernel = is_prefill ? prefill_id : generate_id;
 
@@ -619,7 +626,7 @@ void SDPAKernelMicro::GetUpdateDispatchDataFunc(KernelData& kd) const {
         kernel_data.kernels[generate_id].skip_execution = true;
 
         const auto& gemms = kernel_data.kernels[target_kernel].micro_kernels;
-        auto dispatchData = SetDefault(prim_params, gemms[kq_id]->p, gemms[vs_id]->p);
+        auto dispatchData = SetDefault(prim_params, gemms[kq_id]->p, gemms[vs_id]->p, false);
         kernel_data.kernels[target_kernel].params.workGroups.global = dispatchData.gws;
         kernel_data.kernels[target_kernel].params.workGroups.local = dispatchData.lws;
         kernel_data.kernels[target_kernel].skip_execution = KernelData::SkipKernelExecution(prim_params);
@@ -628,6 +635,13 @@ void SDPAKernelMicro::GetUpdateDispatchDataFunc(KernelData& kd) const {
         kernel_data.kernels[target_kernel].params.scalars.push_back(s_d);
         kernel_data.kernels[target_kernel].params.scalars.push_back(s_k);
         kernel_data.kernels[target_kernel].params.scalars.push_back(s_q);
+
+        {
+            kernel_data.kernels[dummy_id].skip_execution = false;
+            auto dispatchData_dummy = SetDefault(prim_params, gemms[kq_id]->p, gemms[vs_id]->p, true);
+            kernel_data.kernels[dummy_id].params.workGroups.global = dispatchData.gws;
+            kernel_data.kernels[dummy_id].params.workGroups.local = dispatchData.lws;
+        }
     };
 }
 

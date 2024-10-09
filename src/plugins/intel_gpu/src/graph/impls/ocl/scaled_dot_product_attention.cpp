@@ -121,7 +121,7 @@ protected:
         for (size_t kd_idx = 0; kd_idx < _kernels_data[stage].kernels.size(); ++kd_idx) {
             if (_kernels_data[stage].kernels[kd_idx].skip_execution)
                 continue;
-
+            bool is_dummy = kd_idx == 0;
             size_t idx_final = kernel_offset + kd_idx;
             // If any user of the desc's users is CPU implementation or network's output, set desc as a output event (event won't be nullptr)
             bool needs_completion_event = instance.needs_completion_event();
@@ -129,9 +129,10 @@ protected:
             auto& params = _kernels_data[stage].kernels[kd_idx].params;
             auto args = get_arguments(instance, stage);
             args.scalars = &params.scalars;
-
-            for (size_t i = 0; i < instance.get_intermediates_memories().size(); i++)
-                args.intermediates.push_back(instance.get_intermediates_memories()[i]);
+            if (!is_dummy) {
+                for (size_t i = 0; i < instance.get_intermediates_memories().size(); i++)
+                    args.intermediates.push_back(instance.get_intermediates_memories()[i]);
+            }
 
             stream.set_arguments(*_kernels[idx_final], _kernels_data[stage].kernels[kd_idx].params, args);
 

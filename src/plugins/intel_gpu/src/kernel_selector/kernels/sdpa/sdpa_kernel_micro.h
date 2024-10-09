@@ -23,18 +23,19 @@ public:
 protected:
     bool Validate(const Params& p) const override;
     void GetUpdateDispatchDataFunc(KernelData& kd) const override;
-    CommonDispatchData SetDefault(const sdpa_params& params, const micro::Package& gemm_kq, const micro::Package& gemm_vs) const;
-    JitConstants GetJitConstants(const sdpa_params& params, const micro::Package& gemm_kq, const micro::Package& gemm_vs) const;
+    CommonDispatchData SetDefault(const sdpa_params& params, const micro::Package& gemm_kq, const micro::Package& gemm_vs, bool is_dummy) const;
+    JitConstants GetJitConstants(const sdpa_params& params, const micro::Package& gemm_kq, const micro::Package& gemm_vs, bool is_dummy) const;
     std::vector<FusedOpType> GetSupportedFusedOps() const override {
         return {};
     }
 
     void init_microkernels(const sdpa_params& params, micro::Package& gemm_kq, micro::Package& gemm_vs, bool is_prefill) const;
-    clKernelData get_kernel_data(const sdpa_params& params, bool is_prefill) const;
+    clKernelData get_kernel_data(const sdpa_params& params, bool is_prefill, bool is_dummy) const;
 
 private:
-    static constexpr size_t prefill_id = 0;
-    static constexpr size_t generate_id = 1;
+    static constexpr size_t dummy_id = 0;
+    static constexpr size_t prefill_id = 1;
+    static constexpr size_t generate_id = 2;
 
     static constexpr size_t kq_id = 0;
     static constexpr size_t vs_id = 1;

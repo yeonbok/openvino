@@ -142,6 +142,9 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
         global SCALE_DATA_T *scale_ptr,
 #endif
         int d, int k, int q) {
+#ifdef IS_DUMMY
+    return;
+#else
     uint sg_ij = sub_group_broadcast(get_local_id(1), 0);
     uint b0 = get_group_id(1);
     uint b1 = get_group_id(2);
@@ -458,4 +461,5 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 #else
     tile_store(A_tile_half, A, d, q, lda, sg_i0_vs, sg_j0_vs);
 #endif
+#endif // not dummy
 }
