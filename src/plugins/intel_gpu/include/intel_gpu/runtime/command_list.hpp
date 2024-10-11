@@ -28,7 +28,7 @@ public:
 
     virtual void add(kernel& k, const kernel_arguments_desc& args_desc, const kernel_arguments_data& args) = 0;
 
-    bool is_mutable() { return true; }
+    bool is_mutable() { return false; }
 };
 
 }  // namespace cldnn

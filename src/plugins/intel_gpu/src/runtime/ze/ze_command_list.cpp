@@ -8,6 +8,8 @@
 #include "ze/ze_memory.hpp"
 #include "ze_api.h"
 
+#define MUTABLE 0
+
 namespace cldnn {
 namespace ze {
 
@@ -19,8 +21,12 @@ void ze_command_list::start() {
     if (m_command_list)
         reset();
 
+#if MUTABLE
     ze_mutable_command_list_exp_desc_t mutable_list_desc = { ZE_STRUCTURE_TYPE_MUTABLE_COMMAND_LIST_EXP_DESC, nullptr, 0 };
     ze_command_list_desc_t command_list_desc = { ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC, &mutable_list_desc, 0, 0 };
+#else
+    ze_command_list_desc_t command_list_desc = { ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC, nullptr, 0, 0 };
+#endif
     ZE_CHECK(zeCommandListCreate(m_engine.get_context(), m_engine.get_device(), &command_list_desc, &m_command_list));
 }
 
@@ -48,7 +54,7 @@ ze_command_list::~ze_command_list() {
 }
 
 uint64_t ze_command_list::get_command_id() {
-    if (is_mutable() && 0) {
+    if (is_mutable()) {
         ze_mutable_command_exp_flags_t flags =
             ZE_MUTABLE_COMMAND_EXP_FLAG_KERNEL_ARGUMENTS |
             ZE_MUTABLE_COMMAND_EXP_FLAG_GROUP_COUNT |
