@@ -3,6 +3,7 @@
 //
 
 #include "ze_event.hpp"
+#include "ze_engine.hpp"
 #include "ze/ze_common.hpp"
 
 #include <cassert>

@@ -785,6 +785,8 @@ void network::execute_list_impl(const std::vector<event::ptr>& events) {
         deps = {ev};
     }
 
+    get_stream().wait_for_events(deps);
+
     auto ev = _stream->enqueue_marker(deps, true);
     for (auto& inst : _outputs) {
         _events[inst->id()] = ev;

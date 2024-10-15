@@ -43,8 +43,10 @@ struct ExecutionGroup {
 private:
     std::shared_ptr<command_list> m_list = nullptr;
 
+    bool prepare_primitives();
     void build_list();
     bool requires_update();
+    void mutate_or_rebuild();
     void mutate();
     event::ptr execute(const std::vector<event::ptr>& dep_events);
 };

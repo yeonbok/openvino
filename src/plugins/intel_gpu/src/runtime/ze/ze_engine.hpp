@@ -9,6 +9,7 @@
 #include "intel_gpu/runtime/engine.hpp"
 #include "intel_gpu/runtime/stream.hpp"
 #include "intel_gpu/runtime/device.hpp"
+#include "ze_event_pool.hpp"
 
 #include <memory>
 
@@ -41,6 +42,8 @@ public:
     stream& get_service_stream() const override;
 
     kernel::ptr prepare_kernel(const kernel::ptr kernel) const override;
+
+    std::unique_ptr<ze_events_pool> create_events_pool(size_t capacity, bool profiling) const;
 
 #ifdef ENABLE_ONEDNN_FOR_GPU
     void create_onednn_engine(const ExecutionConfig& config) override;

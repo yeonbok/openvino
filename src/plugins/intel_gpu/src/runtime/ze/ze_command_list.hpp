@@ -5,6 +5,7 @@
 #pragma once
 
 #include "intel_gpu/runtime/command_list.hpp"
+#include "ze/ze_event_pool.hpp"
 #include "ze_common.hpp"
 #include "ze_engine.hpp"
 #include "ze_event.hpp"
@@ -25,10 +26,11 @@ public:
     void close() override;
 
     void add(kernel& k, const kernel_arguments_desc& args_desc, const kernel_arguments_data& args) override;
-
+    void mutate_command(kernel& k, const kernel_arguments_desc& args_desc, const kernel_arguments_data& args) override;
 
     ze_command_list_handle_t get_handle() const { return m_command_list; }
 
+    event::ptr get_output_event() const override;
 
 private:
 
@@ -37,6 +39,8 @@ private:
 
     const ze_engine& m_engine;
     ze_command_list_handle_t m_command_list = nullptr;
+    event::ptr m_output_event = nullptr;
+    std::unique_ptr<ze_events_pool> m_pool = nullptr;
     // mutable std::atomic<uint64_t> m_queue_counter{0};
     // std::atomic<uint64_t> m_last_barrier{0};
     // std::shared_ptr<ze_event> m_last_barrier_ev = nullptr;

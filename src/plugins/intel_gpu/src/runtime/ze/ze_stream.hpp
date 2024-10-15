@@ -25,7 +25,7 @@ public:
         , m_queue_counter(other.m_queue_counter.load())
         , m_last_barrier(other.m_last_barrier.load())
         , m_last_barrier_ev(other.m_last_barrier_ev)
-        , m_pool(other.m_pool) {}
+        , m_pool(std::move(other.m_pool)) {}
 
     ~ze_stream();
 
@@ -57,11 +57,12 @@ private:
     void sync_events(std::vector<event::ptr> const& deps, bool is_output = false);
 
     const ze_engine& _engine;
-    mutable ze_command_list_handle_t m_command_list = 0;
+    mutable ze_command_list_handle_t m_command_list = nullptr; // immediate
+    mutable ze_command_queue_handle_t m_queue = nullptr;
     mutable std::atomic<uint64_t> m_queue_counter{0};
     std::atomic<uint64_t> m_last_barrier{0};
     std::shared_ptr<ze_event> m_last_barrier_ev = nullptr;
-    ze_events_pool m_pool;
+    std::unique_ptr<ze_events_pool> m_pool;
 
 #ifdef ENABLE_ONEDNN_FOR_GPU
     std::shared_ptr<dnnl::stream> _onednn_stream = nullptr;

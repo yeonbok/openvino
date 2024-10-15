@@ -5,6 +5,7 @@
 #include "ze_engine.hpp"
 #include "intel_gpu/runtime/utils.hpp"
 #include "openvino/core/except.hpp"
+#include "ze/ze_event.hpp"
 #include "ze/ze_kernel.hpp"
 #include "ze_api.h"
 #include "ze_engine_factory.hpp"
@@ -237,6 +238,10 @@ stream& ze_engine::get_service_stream() const {
 
 std::shared_ptr<cldnn::engine> ze_engine::create(const device::ptr device, runtime_types runtime_type) {
     return std::make_shared<ze::ze_engine>(device, runtime_type);
+}
+
+std::unique_ptr<ze_events_pool> ze_engine::create_events_pool(size_t capacity, bool profiling) const {
+    return cldnn::make_unique<ze_events_pool>(*this, capacity, profiling);
 }
 
 std::shared_ptr<cldnn::engine> create_ze_engine(const device::ptr device, runtime_types runtime_type) {

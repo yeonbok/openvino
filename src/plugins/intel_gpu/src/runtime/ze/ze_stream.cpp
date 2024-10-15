@@ -8,7 +8,8 @@
 #include "openvino/core/except.hpp"
 #include "openvino/core/type/element_type.hpp"
 #include "openvino/runtime/properties.hpp"
-#include "ze/ze_command_list.hpp"
+#include "ze_command_list.hpp"
+#include "ze_api.h"
 #include "ze_event_pool.hpp"
 #include "ze_event.hpp"
 #include "ze_kernel.hpp"
@@ -23,150 +24,11 @@
 namespace cldnn {
 namespace ze {
 
-namespace {
-inline ze_group_count_t to_group_count(const std::vector<size_t>& v) {
-     switch (v.size()) {
-        case 1:
-            return {uint32_t(v[0]), uint32_t(1), uint32_t(1)};
-        case 2:
-            return {uint32_t(v[0]), uint32_t(v[1]), uint32_t(1)};
-        case 3:
-            return {uint32_t(v[0]), uint32_t(v[1]), uint32_t(v[2])};
-        default:
-            return {uint32_t(1), uint32_t(1), uint32_t(1)};
-    }
-}
-
-template<typename T>
-ze_result_t set_kernel_arg_scalar(ze_kernel_handle_t& kernel, uint32_t idx, const T& val) {
-    GPU_DEBUG_TRACE_DETAIL << "kernel: " << kernel << " set scalar " << idx << " (" << ov::element::from<T>().get_type_name() << ")" << val << "\n";
-    return zeKernelSetArgumentValue(kernel, idx, sizeof(T), &val);
-}
-
-ze_result_t set_kernel_arg(ze_kernel_handle_t& kernel, uint32_t idx, cldnn::memory::cptr mem) {
-    if (!mem)
-        return ZE_RESULT_ERROR_INVALID_ARGUMENT;
-
-    OPENVINO_ASSERT(memory_capabilities::is_usm_type(mem->get_allocation_type()), "Unsupported alloc type");
-    const auto& buf = std::dynamic_pointer_cast<const ze::gpu_usm>(mem)->get_buffer();
-    auto mem_type = std::dynamic_pointer_cast<const ze::gpu_usm>(mem)->get_allocation_type();
-    GPU_DEBUG_TRACE_DETAIL << "kernel: " << kernel << " set arg (" << mem_type << ") " << idx
-                            << " mem: " << buf.get() << " size: " << mem->size() << std::endl;
-
-    auto ptr = buf.get();
-    return zeKernelSetArgumentValue(kernel, idx, sizeof(ptr), &ptr);
-}
-
-void set_arguments_impl(ze_kernel_handle_t kernel,
-                         const arguments_desc& args,
-                         const kernel_arguments_data& data) {
-    using args_t = argument_desc::Types;
-    using scalar_t = scalar_desc::Types;
-
-    for (uint32_t i = 0; i < static_cast<uint32_t>(args.size()); i++) {
-        ze_result_t status = ZE_RESULT_NOT_READY;
-        switch (args[i].t) {
-            case args_t::INPUT:
-                if (args[i].index < data.inputs.size() && data.inputs[args[i].index]) {
-                    status = set_kernel_arg(kernel, i, data.inputs[args[i].index]);
-                }
-                break;
-            case args_t::INPUT_OF_FUSED_PRIMITIVE:
-                if (args[i].index < data.fused_op_inputs.size() && data.fused_op_inputs[args[i].index]) {
-                    status = set_kernel_arg(kernel, i, data.fused_op_inputs[args[i].index]);
-                }
-                break;
-            case args_t::INTERNAL_BUFFER:
-                if (args[i].index < data.intermediates.size() && data.intermediates[args[i].index]) {
-                    status = set_kernel_arg(kernel, i, data.intermediates[args[i].index]);
-                }
-                break;
-            case args_t::OUTPUT:
-                if (args[i].index < data.outputs.size() && data.outputs[args[i].index]) {
-                    status = set_kernel_arg(kernel, i, data.outputs[args[i].index]);
-                }
-                break;
-            case args_t::WEIGHTS:
-                status = set_kernel_arg(kernel, i, data.weights);
-                break;
-            case args_t::BIAS:
-                status = set_kernel_arg(kernel, i, data.bias);
-                break;
-            case args_t::WEIGHTS_ZERO_POINTS:
-                status = set_kernel_arg(kernel, i, data.weights_zero_points);
-                break;
-            case args_t::ACTIVATIONS_ZERO_POINTS:
-                status = set_kernel_arg(kernel, i, data.activations_zero_points);
-                break;
-            case args_t::COMPENSATION:
-                status = set_kernel_arg(kernel, i, data.compensation);
-                break;
-            case args_t::SCALE_TABLE:
-                status = set_kernel_arg(kernel, i, data.scale_table);
-                break;
-            case args_t::SLOPE:
-                status = set_kernel_arg(kernel, i, data.slope);
-                break;
-            case args_t::SCALAR:
-                if (data.scalars && args[i].index < data.scalars->size()) {
-                    const auto& scalar = (*data.scalars)[args[i].index];
-                    switch (scalar.t) {
-                        case scalar_t::UINT8:
-                            status = set_kernel_arg_scalar<uint8_t>(kernel, i, scalar.v.u8);
-                            break;
-                        case scalar_t::UINT16:
-                            status = set_kernel_arg_scalar<uint16_t>(kernel, i, scalar.v.u16);
-                            break;
-                        case scalar_t::UINT32:
-                            status = set_kernel_arg_scalar<uint32_t>(kernel, i, scalar.v.u32);
-                            break;
-                        case scalar_t::UINT64:
-                            status = set_kernel_arg_scalar<uint64_t>(kernel, i, scalar.v.u64);
-                            break;
-                        case scalar_t::INT8:
-                            status = set_kernel_arg_scalar<int8_t>(kernel, i, scalar.v.s8);
-                            break;
-                        case scalar_t::INT16:
-                            status = set_kernel_arg_scalar<int16_t>(kernel, i, scalar.v.s16);
-                            break;
-                        case scalar_t::INT32:
-                            status = set_kernel_arg_scalar<int32_t>(kernel, i, scalar.v.s32);
-                            break;
-                        case scalar_t::INT64:
-                            status = set_kernel_arg_scalar<int64_t>(kernel, i, scalar.v.s64);
-                            break;
-                        case scalar_t::FLOAT32:
-                            status = set_kernel_arg_scalar<float>(kernel, i, scalar.v.f32);
-                            break;
-                        case scalar_t::FLOAT64:
-                            status = set_kernel_arg_scalar<double>(kernel, i, scalar.v.f64);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-                break;
-            case args_t::CELL:
-                status = set_kernel_arg(kernel, i, data.cell);
-                break;
-            case args_t::SHAPE_INFO:
-                status = set_kernel_arg(kernel, i, data.shape_info);
-                break;
-            default:
-                break;
-        }
-        if (status != ZE_RESULT_SUCCESS) {
-            throw std::runtime_error("Error set arg " + std::to_string(i) + ", error code: " + std::to_string(status) + "\n");
-        }
-    }
-}
-
-}  // namespace
 
 ze_stream::ze_stream(const ze_engine &engine, const ExecutionConfig& config)
     : stream(config.get_property(ov::intel_gpu::queue_type), stream::get_expected_sync_method(config))
     , _engine(engine)
-    , m_pool(engine, config.get_property(ov::enable_profiling)) {
+    , m_pool(engine.create_events_pool(100, config.get_property(ov::enable_profiling))) {
     ze_command_queue_desc_t command_queue_desc = {};
     command_queue_desc.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC;
     command_queue_desc.pNext = nullptr;
@@ -176,10 +38,12 @@ ze_stream::ze_stream(const ze_engine &engine, const ExecutionConfig& config)
     command_queue_desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
     command_queue_desc.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL;
     ZE_CHECK(zeCommandListCreateImmediate(_engine.get_context(), _engine.get_device(), &command_queue_desc, &m_command_list));
+    ZE_CHECK(zeCommandQueueCreate(_engine.get_context(), _engine.get_device(), &command_queue_desc, &m_queue));
 }
 
 ze_stream::~ze_stream() {
     zeCommandListDestroy(m_command_list);
+    zeCommandQueueDestroy(m_queue);
 }
 
 void ze_stream::set_arguments(kernel& kernel, const kernel_arguments_desc& args_desc, const kernel_arguments_data& args) {
@@ -276,7 +140,7 @@ void ze_stream::wait() {
 }
 
 event::ptr ze_stream::create_user_event(bool set) {
-    auto ev = m_pool.create_user_event();
+    auto ev = m_pool->create_user_event();
     if (set)
         ev->set();
 
@@ -284,7 +148,7 @@ event::ptr ze_stream::create_user_event(bool set) {
 }
 
 event::ptr ze_stream::create_base_event() {
-    return m_pool.create_event(++m_queue_counter);
+    return m_pool->create_event(++m_queue_counter);
 }
 
 void ze_stream::flush() const { }
@@ -332,8 +196,16 @@ command_list::ptr ze_stream::create_command_list() const {
 
 event::ptr ze_stream::enqueue_command_list(command_list& list) {
     auto ze_list = downcast<ze_command_list>(list).get_handle();
-    ZE_CHECK(zeCommandListImmediateAppendCommandListsExp(m_command_list, 1, &ze_list, nullptr, 0, nullptr));
-    return create_user_event(true);
+    ZE_CHECK(zeCommandQueueExecuteCommandLists(m_queue, 1, &ze_list, nullptr));
+    ZE_CHECK(zeCommandQueueSynchronize(m_queue, -1));
+
+    auto out_ev = list.get_output_event();
+    auto ze_ev_handle = downcast<ze_event>(out_ev.get())->get();
+
+    m_last_barrier_ev = std::dynamic_pointer_cast<ze_event>(create_base_event());
+    ZE_CHECK(zeCommandListAppendBarrier(m_command_list, m_last_barrier_ev->get(), 1, &ze_ev_handle));
+    // ZE_CHECK(zeCommandListImmediateAppendCommandListsExp(m_command_list, 1, &ze_list, nullptr, 0, nullptr));
+    return m_last_barrier_ev;
 }
 
 }  // namespace ze

@@ -27,6 +27,9 @@ public:
     virtual void close() = 0;
 
     virtual void add(kernel& k, const kernel_arguments_desc& args_desc, const kernel_arguments_data& args) = 0;
+    virtual void mutate_command(kernel& k, const kernel_arguments_desc& args_desc, const kernel_arguments_data& args) = 0;
+
+    virtual event::ptr get_output_event() const = 0;
 
     bool is_mutable() { return false; }
 };

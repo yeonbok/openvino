@@ -5,6 +5,7 @@
 #include "ze_event_pool.hpp"
 #include "ze_event.hpp"
 #include "ze_common.hpp"
+#include "ze_engine.hpp"
 
 namespace cldnn {
 namespace ze {
@@ -25,8 +26,9 @@ ze_event_pool::~ze_event_pool() {
     zeEventPoolDestroy(m_handle);
 }
 
-ze_events_pool::ze_events_pool(const ze_engine& engine, bool enable_profiling)
+ze_events_pool::ze_events_pool(const ze_engine& engine, size_t capacity, bool enable_profiling)
     : m_engine(engine)
+    , m_capacity(capacity)
     , m_enable_profiling(enable_profiling) { }
 
 std::shared_ptr<ze_event> ze_events_pool::create_event(uint64_t queue_stamp) {
