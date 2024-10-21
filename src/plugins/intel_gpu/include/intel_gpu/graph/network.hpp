@@ -63,6 +63,20 @@ class ICompilationContext;
 
 struct network {
 public:
+    double total_host_start;
+    double total_host_time;
+    double total_update_shape;
+    double total_update_impl;
+    double total_realloc;
+    double total_exec_gpu;
+    double total_exec_cpu;
+    double total_runtime_skip_kv_cache;
+    double total_runtime_skip_gather;
+    double total_runtime_skip_strided_slice;
+    double total_runtime_skip_broadcast;
+    double total_runtime_skip_reorder;
+    double total_runtime_skip_permute;
+    double total_update_padding;
     using ptr = std::shared_ptr<network>;
 
     network(program::ptr program, stream::ptr stream, bool is_internal, bool is_primary_stream);

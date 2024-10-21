@@ -58,6 +58,9 @@
 namespace cldnn {
 namespace {
 
+#define PRINT 0
+#define PRINT_ITER 0
+using Time = std::chrono::high_resolution_clock;
 #ifdef GPU_DEBUG_CONFIG
 void dump_perf_data_raw(std::string dump_path, const std::list<std::shared_ptr<primitive_inst>>& exec_order) {
     auto layouts_to_str = [](const std::vector<layout>& layouts) -> std::string {
@@ -688,7 +691,9 @@ std::map<primitive_id, network_output> network::execute(const std::vector<event:
 
     // Wait for previous execution completion
     reset_execution(false);
-
+    #if PRINT_ITER
+    std::cout << "Start network execution (net_id : " << get_id() << ", iter :" << iteration << ")" << std::endl;
+    #endif
     std::vector<memory::ptr> in_out_mem;
     auto is_surface_lock_check_needed = [&](const shared_mem_type& shared_mem_type) {
         return shared_mem_type == shared_mem_type::shared_mem_vasurface ||
@@ -742,6 +747,22 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // This extra flush command is needed for dynamic models in both cases of out_of_order / in_order operating mode
     // since it reduces `bubbles` number in pipeline and GPU's idle time by timely flushing new kernels to device.
     // The freqency of flushing (16) is selected empirically, see details in tickets 116365, 116287, 139931.
+    #if PRINT
+    auto total_host_start = Time::now();
+    total_update_shape = 0;
+    total_update_impl = 0;
+    total_realloc = 0;
+    total_exec_gpu = 0;
+    total_exec_cpu = 0;
+    total_runtime_skip_kv_cache = 0;
+    total_runtime_skip_gather = 0;
+    total_runtime_skip_strided_slice = 0;
+    total_runtime_skip_broadcast = 0;
+    total_runtime_skip_reorder = 0;
+    total_runtime_skip_permute = 0;
+    total_update_padding = 0;
+    #endif
+
     const bool is_out_of_order_queue = get_stream().get_queue_type() == QueueTypes::out_of_order;
     const bool needs_flushing = _is_dynamic;
     const size_t flush_frequency = needs_flushing ? 16 : 0;
@@ -800,9 +821,38 @@ void network::execute_impl(const std::vector<event::ptr>& events) {
     // provide proper event to execution. Flushing pipeline should prevent this kind of issues.
     // In scenarios with a big number of very small networks it can provide performance drop.
     get_stream().flush();
+    #if PRINT
+    using ms = std::chrono::duration<double, std::ratio<1, 1000>>;
+    std::chrono::duration<float> dur = Time::now() - total_host_start;
+    auto total_host_time = std::chrono::duration_cast<ms>(dur).count();
+    #endif
 
     // Deallocate events from the previos iteration
     _old_events.clear();
+    #if PRINT
+    std::cout << "====================================================================" << std::endl;
+    std::cout << "      iter " << iteration << std::endl;
+    std::cout << "====================================================================" << std::endl;
+    std::cout << "iter " << iteration << " total_update_shape : " << total_update_shape << " ms" << std::endl;
+    std::cout << "iter " << iteration << " total_update_impl : " << total_update_impl << " ms" << std::endl;
+    std::cout << "iter " << iteration << " total_realloc : " << total_realloc << " ms" << std::endl;
+    std::cout << "iter " << iteration << " total_rt_skip_kv_cache : " << total_runtime_skip_kv_cache << " ms"
+        << std::endl;
+    std::cout << "iter " << iteration << " total_rt_skip_gather : " << total_runtime_skip_gather << " ms"
+        << std::endl;
+    std::cout << "iter " << iteration << " total_rt_skip_strided_slice : " << total_runtime_skip_strided_slice
+        << " ms" << std::endl;
+    std::cout << "iter " << iteration << " total_rt_skip_broadcast : " << total_runtime_skip_broadcast << " ms"
+        << std::endl;
+    std::cout << "iter " << iteration << " total_rt_skip_reorder : " << total_runtime_skip_reorder << " ms"
+        << std::endl;
+    std::cout << "iter " << iteration << " total_rt_skip_permute : " << total_runtime_skip_permute << " ms"
+        << std::endl;
+    std::cout << "iter " << iteration << " total_update_padding : " << total_update_padding << " ms" << std::endl;
+    std::cout << "iter " << iteration << " total execute time (GPU) : " << total_exec_gpu << " ms" << std::endl;
+    std::cout << "iter " << iteration << " total execute time (CPU) : " << total_exec_cpu << " ms" << std::endl;
+    std::cout << "iter " << iteration << " total_host_time :" << total_host_time << " ms" << std::endl;
+#endif
 }
 
 std::vector<primitive_id> network::get_input_ids() const {

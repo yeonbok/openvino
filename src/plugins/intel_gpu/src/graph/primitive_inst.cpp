@@ -57,6 +57,43 @@
 #include <impls/onednn/utils.hpp>
 #endif
 
+using Time = std::chrono::high_resolution_clock;
+using ms = std::chrono::duration<double, std::ratio<1, 1000>>;
+static std::string update_shape_stage_name = "update_shape";
+static std::string update_impl_stage_name = "update_impl";
+static std::string realloc_stage_name = "realloc";
+static std::string skip_reorder_stage_name = "skip_reorder";
+static std::string skip_gather_stage_name = "skip_gather";
+static std::string update_padding_stage_name = "update_padding";
+static std::string kv_cache_opt_stage_name = "kv_cache_opt";
+static std::string skip_strided_slice_stage_name = "skip_strided_slice";
+static std::string skip_broadcast_stage_name = "skip_broadcast";
+static std::string skip_permute_stage_name = "skip_permute";
+static std::string execute_cpu_stage_name = "execute_cpu";
+static std::string execute_gpu_stage_name = "execute_gpu";
+#define PROFILE 0
+#if PROFILE
+#define PROFILE_START(stage) std::chrono::steady_clock::time_point start_##stage; \
+                             start_##stage = Time::now();
+#define PROFILE_END(stage,total_time) \
+                            std::chrono::duration<float> dur_##stage = Time::now() - start_##stage; \
+                            auto time_##stage = std::chrono::duration_cast<ms>(dur_##stage).count(); \
+                            get_network().##total_time += time_##stage; \
+                            std::cout << id() << ", " << stage##_stage_name << ", " << time_##stage << std::endl;
+#define PROFILE_START_POINT(stage) std::chrono::steady_clock::time_point start_##stage; \
+                             start_##stage = Time::now();
+#define PROFILE_END_POINT(stage) \
+                            std::chrono::duration<float> dur_##stage = Time::now() - start_##stage; \
+                            auto time_##stage = std::chrono::duration_cast<ms>(dur_##stage).count(); \
+                            std::cout << id() << ", " << stage##_stage_name << ", " << time_##stage << std::endl;
+#else
+#define PROFILE_START(stage)
+#define PROFILE_END(stage,total_time)
+#define PROFILE_START_POINT(stage)
+#define PROFILE_END_POINT(stage)
+#endif
+
+
 namespace cldnn {
 namespace {
 
@@ -270,6 +307,7 @@ event::ptr primitive_inst::set_output_memory(memory::ptr mem_new, bool check, si
 }
 
 void primitive_inst::update_shape() {
+    PROFILE_START(update_shape)
     OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, openvino::itt::handle("update_shape: " + id()));
     GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::shape_inference);
     if (update_shape_done_by_other) {
@@ -329,6 +367,7 @@ void primitive_inst::update_shape() {
     // We assume that tensor ranks are static, thus shape_of doesn't need to update anything even if input shape is dynamic
     if (_node->is_type<shape_of>() && !input_shape_changed) {
         reset_shape_change();
+        PROFILE_END(update_shape,total_update_shape);
         return;
     }
 
@@ -336,6 +375,7 @@ void primitive_inst::update_shape() {
     // because actual output layout will be calculated after the end of body network execution.
     if (_node->is_type<loop>() && !input_shape_changed) {
         reset_shape_change();
+        PROFILE_END(update_shape,total_update_shape);
         return;
     }
 
@@ -351,6 +391,7 @@ void primitive_inst::update_shape() {
         if (!subgraph_input_changed) {
             GPU_DEBUG_TRACE_DETAIL << id() << ": skip shape_update, because it is in shape_of_subgraph and input shape is not changed\n";
             reset_shape_change();
+            PROFILE_END(update_shape,total_update_shape);
             return;
         }
     }
@@ -377,8 +418,10 @@ void primitive_inst::update_shape() {
         input_shape_changed = true;
     }
 
-    if (!_node->is_type<kv_cache>() && !input_shape_changed && _impl_params->get_output_layout().is_static())
+    if (!_node->is_type<kv_cache>() && !input_shape_changed && _impl_params->get_output_layout().is_static()) {
+        PROFILE_END(update_shape,total_update_shape);
         return;
+    }
 
     std::vector<event::ptr> dependencies_events;
     auto queue_type = get_network().get_stream().get_queue_type();
@@ -471,6 +514,7 @@ void primitive_inst::update_shape() {
         if (var_mem_size < _impl_params->get_output_layout(0).get_linear_size())
             set_shape_change();
     }
+    PROFILE_END(update_shape,total_update_shape);
 }
 
 kernel_impl_params primitive_inst::get_fake_aligned_params_if_possible(kernel_impl_params const& orig_impl_param) {
@@ -1535,13 +1579,27 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         // Check successor reorder if layouts are same
         // Need to set can_be_optimized for user reorder at predecessor because
         // if the user is can_be_optimized and output node then current nodes' output should be allocated to host.
+        PROFILE_START(skip_reorder)
         do_runtime_skip_reorder();
+        PROFILE_END(skip_reorder, total_runtime_skip_reorder)
+        PROFILE_START(skip_gather)
         do_runtime_skip_gather();
+        PROFILE_END(skip_gather, total_runtime_skip_gather)
+        PROFILE_START(update_padding)
         update_paddings();
+        PROFILE_END(update_padding, total_update_padding)
+        PROFILE_START(kv_cache_opt)
         do_runtime_in_place_kv_cache();
+        PROFILE_END(kv_cache_opt, total_runtime_skip_kv_cache)
+        PROFILE_START(skip_permute)
         do_runtime_skip_permute();
+        PROFILE_END(skip_permute, total_runtime_skip_permute)
+        PROFILE_START(skip_strided_slice)
         do_runtime_skip_strided_slice();
+        PROFILE_END(skip_strided_slice, total_runtime_skip_strided_slice)
+        PROFILE_START(skip_broadcast)
         do_runtime_skip_broadcast();
+        PROFILE_END(skip_broadcast, total_runtime_skip_broadcast)
         do_runtime_in_place_crop();
 
         if (!is_valid_fusion()) {
@@ -1583,12 +1641,17 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         const bool can_use_async_compilation = use_async_compilation();
         bool is_updated = false;
         if (shape_changed() || !_impl || (!shape_changed() && _impl->is_dynamic() && can_use_async_compilation)) {
-            if (update_impl(can_use_async_compilation)) {
+            PROFILE_START(update_impl)
+            bool update_impl_res = update_impl(can_use_async_compilation);
+            PROFILE_END(update_impl, total_update_impl)
+            if (update_impl_res) {
                 need_args_update = true;
                 auto ev = update_weights();
                 if (ev)
                     dependencies.push_back(ev);
+                PROFILE_START(realloc)
                 auto ev_reset = realloc_if_needed();
+                PROFILE_END(realloc, total_realloc)
                 if (ev_reset)
                     dependencies.push_back(ev_reset);
 
@@ -1683,8 +1746,17 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
     {
         GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::inference);
-        auto ev = _impl->execute(dependencies, *this);
-
+//        auto ev = _impl->execute(dependencies, *this);
+        cldnn::event::ptr ev = nullptr;
+        if (_impl->is_cpu()) {
+            PROFILE_START(execute_cpu)
+            ev  = _impl->execute(dependencies, *this);
+            PROFILE_END(execute_cpu,total_exec_cpu);
+        } else {
+            PROFILE_START(execute_gpu)
+            ev  = _impl->execute(dependencies, *this);
+            PROFILE_END(execute_gpu,total_exec_gpu);
+        }
         GPU_DEBUG_IF(!debug_config->dump_profiling_data.empty()) {
             get_network().get_stream().wait_for_events({ev});
 
