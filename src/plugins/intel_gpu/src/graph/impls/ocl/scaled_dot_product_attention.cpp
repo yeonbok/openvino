@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include "intel_gpu/primitives/scaled_dot_product_attention.hpp"
 #include "multi_stage_primitive.hpp"
 #include "scaled_dot_product_attention_inst.h"
 #include "kv_cache_inst.h"
@@ -288,6 +289,83 @@ public:
             }
             update_shapes(*_kernels_data[indirect_sdpa].params, impl_param);
             (_kernels_data[indirect_sdpa].update_dispatch_data_func)(*_kernels_data[indirect_sdpa].params, _kernels_data[indirect_sdpa]);
+        }
+    }
+
+    event::ptr add_to_cmd_list_impl_(command_list* list, const std::vector<event::ptr>& events, scaled_dot_product_attention_inst& instance, size_t stage) {
+        stream& stream = instance.get_network().get_stream();
+        if (instance.can_be_optimized()) {
+            return stream.aggregate_events(events, false, instance.is_output());
+        }
+        std::vector<event::ptr> tmp_events(events);
+        std::vector<event::ptr> all_events;
+
+        auto& kd = _kernels_data[stage];
+
+        for (size_t kd_idx = 0; kd_idx < kd.kernels.size(); ++kd_idx) {
+            if (kd.kernels[kd_idx].skip_execution)
+                continue;
+
+            auto& params = kd.kernels[kd_idx].params;
+            auto args = get_arguments(instance, stage);
+            args.scalars = &params.scalars;
+
+            for (const auto& m : instance.get_intermediates_memories()) {
+                args.intermediates.push_back(m);
+            }
+
+            const auto& gws = params.workGroups.global;
+            const auto& lws = params.workGroups.local;
+
+            GPU_DEBUG_TRACE_DETAIL << "Add kernel " << kd_idx << ": gws=[" << gws[0] << ", " << gws[1] << ", " << gws[2] << "] "
+                                    << "lws=[" << lws[0] << ", " << lws[1] << ", " << lws[2] << "]" << std::endl;
+
+            list->add(*_kernels[kd_idx], params, args);
+        }
+
+        if ((all_events.size() == 0) && (tmp_events.size() > 0))
+            return stream.aggregate_events(tmp_events);
+
+        bool group_events = (all_events.size() > 1);
+        return stream.aggregate_events(all_events, group_events);
+    }
+
+    event::ptr add_to_cmd_list_impl(command_list* list, const std::vector<event::ptr>& events, scaled_dot_product_attention_inst& instance) override {
+        if (need_indirect_load(instance))
+            return add_to_cmd_list_impl_(list, events, instance, indirect_sdpa);
+        else
+            return add_to_cmd_list_impl_(list, events, instance, default_sdpa);
+    }
+
+    void update_command_impl(command_list* list, const std::vector<event::ptr>& events, scaled_dot_product_attention_inst& instance) override {
+        if (instance.can_be_optimized()) {
+            return;
+        }
+
+        for (size_t stage = 1; stage < _kernels_data.size(); stage++) {
+            auto& kd = _kernels_data[stage];
+
+            for (size_t kd_idx = 0; kd_idx < kd.kernels.size(); ++kd_idx) {
+                if (kd.kernels[kd_idx].skip_execution)
+                    continue;
+
+                auto& params = kd.kernels[kd_idx].params;
+                auto args = get_arguments(instance, stage);
+                args.scalars = &params.scalars;
+
+                for (const auto& m : instance.get_intermediates_memories()) {
+                    args.intermediates.push_back(m);
+                }
+
+                const auto& gws = params.workGroups.global;
+                const auto& lws = params.workGroups.local;
+
+                GPU_DEBUG_TRACE_DETAIL << "Mutate kernel " << kd_idx << ": gws=[" << gws[0] << ", " << gws[1] << ", " << gws[2] << "] "
+                                    << "lws=[" << lws[0] << ", " << lws[1] << ", " << lws[2] << "]" << std::endl;
+
+
+                list->mutate_command(*_kernels[kd_idx], params, args);
+            }
         }
     }
 };

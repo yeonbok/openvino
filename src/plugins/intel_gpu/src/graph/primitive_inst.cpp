@@ -1489,7 +1489,37 @@ void primitive_inst::update_command(command_list* list) {
 }
 
 void primitive_inst::add_to_command_list(command_list* list) {
-    _impl->add_to_cmd_list(list, {}, *this);
+    if (!skip_execution() && !can_be_optimized()) {
+        if (is_dynamic())
+            _impl->update(*this, *_impl_params);
+        _impl->add_to_cmd_list(list, {}, *this);
+    }
+}
+
+bool primitive_inst::skip_execution() const {
+    bool can_skip_execution = false;
+    if (_impl_params->output_layouts[0].count() == 0) {
+        GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping because output data is empty " << std::endl;
+        can_skip_execution = true;
+    }
+
+    // subgraph_input_changed can be available only shape_of is dynamic.
+    // shape_of_subgraph for static shape_of could be run every inference if constant propagation does not work.
+    if (_node->is_in_shape_of_subgraph() && dependant_shape_of_insts.front()->is_dynamic()) {
+        bool subgraph_input_changed = false;
+        for (size_t i = 0; i < dependant_shape_of_insts.size(); i++) {
+            if (dependant_shape_of_insts[i]->shape_changed()) {
+                subgraph_input_changed = true;
+                break;
+            }
+        }
+        if (!subgraph_input_changed) {
+            GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping execution because dependent shapeof node is not changed " << std::endl;
+            can_skip_execution = true;
+        }
+    }
+
+    return can_skip_execution;
 }
 
 std::vector<event::ptr> primitive_inst::prepare_primitive(const std::vector<event::ptr>& events, bool* impl_updated) {
@@ -1512,29 +1542,7 @@ std::vector<event::ptr> primitive_inst::prepare_primitive(const std::vector<even
         OPENVINO_ASSERT(_node != nullptr, "[GPU] Invalid primitive_inst object for dynamic shapes case: program_node can't be null");
         update_shape();
 
-        bool can_skip_execution = false;
-        if (_impl_params->output_layouts[0].count() == 0) {
-            GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping because output data is empty " << std::endl;
-            can_skip_execution = true;
-        }
-
-        // subgraph_input_changed can be available only shape_of is dynamic.
-        // shape_of_subgraph for static shape_of could be run every inference if constant propagation does not work.
-        if (_node->is_in_shape_of_subgraph() && dependant_shape_of_insts.front()->is_dynamic()) {
-            bool subgraph_input_changed = false;
-            for (size_t i = 0; i < dependant_shape_of_insts.size(); i++) {
-                if (dependant_shape_of_insts[i]->shape_changed()) {
-                    subgraph_input_changed = true;
-                    break;
-                }
-            }
-            if (!subgraph_input_changed) {
-                GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping execution because dependent shapeof node is not changed " << std::endl;
-                can_skip_execution = true;
-            }
-        }
-
-        if (can_skip_execution) {
+        if (skip_execution()) {
             auto ev = get_network().get_stream().aggregate_events(events);
             update_shape_done_by_other = false; // reset
             return { ev };

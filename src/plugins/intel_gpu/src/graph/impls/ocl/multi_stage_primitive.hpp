@@ -232,6 +232,79 @@ protected:
         OPENVINO_ASSERT(this->_is_dynamic, "[GPU] update_dispatch_data() is called for static shape implementation ", this-> _kernel_name);
         OPENVINO_ASSERT(false, "[GPU] update_dispatch_data() is not implemented for dynamic implemenation ", this->_kernel_name);
     }
+
+    event::ptr add_to_cmd_list_impl(command_list* list, const std::vector<event::ptr>& events, typed_primitive_inst<PType>& instance) override {
+        stream& stream = instance.get_network().get_stream();
+        if (instance.can_be_optimized()) {
+            return stream.aggregate_events(events, false, instance.is_output());
+        }
+        std::vector<event::ptr> tmp_events(events);
+        std::vector<event::ptr> all_events;
+
+
+        for (size_t stage = 0 /*FIXME*/; stage < _kernels_data.size(); stage++) {
+            auto& kd = _kernels_data[stage];
+
+            for (size_t kd_idx = 0; kd_idx < kd.kernels.size(); ++kd_idx) {
+                if (kd.kernels[kd_idx].skip_execution)
+                    continue;
+
+                auto& params = kd.kernels[kd_idx].params;
+                auto args = get_arguments(instance, stage);
+                args.scalars = &params.scalars;
+
+                for (const auto& m : instance.get_intermediates_memories()) {
+                    args.intermediates.push_back(m);
+                }
+
+                const auto& gws = params.workGroups.global;
+                const auto& lws = params.workGroups.local;
+
+                GPU_DEBUG_TRACE_DETAIL << "Add kernel " << kd_idx << ": gws=[" << gws[0] << ", " << gws[1] << ", " << gws[2] << "] "
+                                       << "lws=[" << lws[0] << ", " << lws[1] << ", " << lws[2] << "]" << std::endl;
+
+                list->add(*_kernels[kd_idx], params, args);
+            }
+        }
+
+        if ((all_events.size() == 0) && (tmp_events.size() > 0))
+            return stream.aggregate_events(tmp_events);
+
+        bool group_events = (all_events.size() > 1);
+        return stream.aggregate_events(all_events, group_events);
+    }
+
+    void update_command_impl(command_list* list, const std::vector<event::ptr>& events, typed_primitive_inst<PType>& instance) override {
+        if (instance.can_be_optimized()) {
+            return;
+        }
+
+        for (size_t stage = 0; stage < _kernels_data.size(); stage++) {
+            auto& kd = _kernels_data[stage];
+
+            for (size_t kd_idx = 0; kd_idx < kd.kernels.size(); ++kd_idx) {
+                if (kd.kernels[kd_idx].skip_execution)
+                    continue;
+
+                auto& params = kd.kernels[kd_idx].params;
+                auto args = get_arguments(instance, stage);
+                args.scalars = &params.scalars;
+
+                for (const auto& m : instance.get_intermediates_memories()) {
+                    args.intermediates.push_back(m);
+                }
+
+                const auto& gws = params.workGroups.global;
+                const auto& lws = params.workGroups.local;
+
+                GPU_DEBUG_TRACE_DETAIL << "Mutate kernel " << kd_idx << ": gws=[" << gws[0] << ", " << gws[1] << ", " << gws[2] << "] "
+                                    << "lws=[" << lws[0] << ", " << lws[1] << ", " << lws[2] << "]" << std::endl;
+
+
+                list->mutate_command(*_kernels[kd_idx], params, args);
+            }
+        }
+    }
 };
 
 }  // namespace ocl

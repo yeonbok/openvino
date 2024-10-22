@@ -69,6 +69,12 @@ struct shape_of_impl : public typed_primitive_impl<shape_of> {
         return stream.create_user_event(true);
     }
 
+    event::ptr add_to_cmd_list_impl(command_list* list, const std::vector<event::ptr>& event, typed_primitive_inst<shape_of>& instance) override {
+        return execute_impl(event, instance);
+    }
+
+    void update_command_impl(command_list* list, const std::vector<event::ptr>& event, typed_primitive_inst<shape_of>& instance) override { }
+
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}
 
     void update(primitive_inst& inst, const kernel_impl_params& impl_param) override {}

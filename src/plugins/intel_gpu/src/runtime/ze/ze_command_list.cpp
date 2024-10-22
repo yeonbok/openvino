@@ -77,6 +77,7 @@ void ze_command_list::add(kernel& k, const kernel_arguments_desc& args_desc, con
     ze_group_count_t ze_args = { global.groupCountX / local.groupCountX, global.groupCountY / local.groupCountY, global.groupCountZ / local.groupCountZ };
 
     set_arguments_impl(ze_handle, args_desc.arguments, args);
+    ZE_CHECK(zeCommandListAppendBarrier(m_command_list, nullptr, 0, nullptr));
     ZE_CHECK(zeKernelSetGroupSize(ze_handle, local.groupCountX, local.groupCountY, local.groupCountZ));
     ZE_CHECK(zeCommandListAppendLaunchKernel(m_command_list, ze_handle, &ze_args, nullptr, 0, nullptr));
 }

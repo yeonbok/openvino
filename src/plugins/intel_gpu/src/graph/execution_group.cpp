@@ -7,17 +7,8 @@
 
 namespace cldnn {
 event::ptr ExecutionGroup::run(const std::vector<event::ptr>& dep_events) {
-    auto rt_type = m_engine.runtime_type();
-    if (rt_type == runtime_types::ocl) {
-        for (size_t i = m_interval.start; i < m_interval.end; i++) {
-            m_exec_order[i]->execute(dep_events);
-        }
-    } else if (rt_type == runtime_types::ze) {
-        mutate_or_rebuild();
-        return execute(dep_events);
-    }
-
-    return nullptr;
+    mutate_or_rebuild();
+    return execute(dep_events);
 }
 
 bool ExecutionGroup::prepare_primitives() {
@@ -33,8 +24,6 @@ bool ExecutionGroup::prepare_primitives() {
 }
 
 void ExecutionGroup::build_list() {
-    prepare_primitives();
-
     m_list = m_stream->create_command_list();
     m_list->start();
     for (size_t i = m_interval.start; i < m_interval.end; i++) {
@@ -66,13 +55,9 @@ void ExecutionGroup::mutate_or_rebuild() {
 }
 
 event::ptr ExecutionGroup::execute(const std::vector<event::ptr>& dep_events) {
-    // std::vector<event::ptr> ret_events;
-    // for (size_t i = m_interval.start; i < m_interval.end; i++) {
-        // ret_events.push_back(m_exec_order[i]->execute(dep_events));
-    // }
-    // return m_stream->enqueue_marker(ret_events);
-
-    return m_stream->enqueue_command_list(*m_list);
+    m_stream->enqueue_barrier();
+    auto ev = m_stream->enqueue_command_list(*m_list);
+    return m_stream->enqueue_marker({ev});
 }
 
 }  // namespace cldnn

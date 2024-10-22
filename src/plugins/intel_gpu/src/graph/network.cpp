@@ -352,11 +352,11 @@ void network::add_default_output_chains() {
 }
 
 void network::build_execution_groups() {
-    const size_t max_group_size = 10;
+    const size_t max_group_size = 100;
     ExecutionInterval interval = {0, 0};
 
     auto is_special_node = [](const program_node& node) {
-        return node.is_type<loop>() || node.is_type<condition>();
+        return node.is_type<loop>() || node.is_type<condition>() || node.is_in_shape_of_subgraph();
     };
 
     for (size_t i = 0; i < _exec_order.size();) {
@@ -760,7 +760,7 @@ std::map<primitive_id, network_output> network::execute(const std::vector<event:
     // in some cases.
     auto surf_lock = surfaces_lock::create(get_engine().type(), in_out_mem, get_stream());
 
-    if (1) {
+    if (!is_internal() && 0) {
         execute_list_impl(dependencies);
     } else {
         execute_impl(dependencies);

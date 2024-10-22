@@ -84,6 +84,7 @@ event::ptr ze_stream::enqueue_kernel(kernel& kernel,
     auto local = to_group_count(args_desc.workGroups.local);
     ze_group_count_t args = { global.groupCountX / local.groupCountX, global.groupCountY / local.groupCountY, global.groupCountZ / local.groupCountZ };
     ZE_CHECK(zeKernelSetGroupSize(kern, local.groupCountX, local.groupCountY, local.groupCountZ));
+    ZE_CHECK(zeCommandListAppendBarrier(m_command_list, nullptr, 0, nullptr));
     ZE_CHECK(zeCommandListAppendLaunchKernel(m_command_list,
                                              kern,
                                              &args,

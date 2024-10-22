@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include "intel_gpu/primitives/concatenation.hpp"
 #include "register.hpp"
 #include "concatenation_inst.h"
 #include "impls/registry/implementation_map.hpp"
@@ -110,6 +111,13 @@ struct concatenation_impl : public typed_primitive_impl<concatenation> {
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}
 
     void update(primitive_inst& inst, const kernel_impl_params& impl_param) override {}
+
+    event::ptr add_to_cmd_list_impl(command_list* list, const std::vector<event::ptr>& event, typed_primitive_inst<concatenation>& instance) override {
+        return execute_impl(event, instance);
+    }
+
+    void update_command_impl(command_list* list, const std::vector<event::ptr>& event, typed_primitive_inst<concatenation>& instance) override { }
+
 
 public:
     static std::unique_ptr<primitive_impl> create(const concatenation_node& arg, const kernel_impl_params& impl_param) {

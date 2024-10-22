@@ -17,25 +17,7 @@
 namespace cldnn {
 namespace ze {
 
-void *find_ze_symbol(const char *symbol) {
-#if defined(__linux__)
-    void *handle = dlopen("libze_loader.so.1", RTLD_NOW | RTLD_LOCAL);
-#elif defined(_WIN32)
-    HMODULE handle = LoadLibraryA("ze_loader.dll");
-#endif
-    if (!handle) {
-        return nullptr;
-    }
-
-#if defined(__linux__)
-    void *f = dlsym(handle, symbol);
-#elif defined(_WIN32)
-    void *f = GetProcAddress(handle, symbol);
-#endif
-    OPENVINO_ASSERT(f != nullptr);
-    return f;
-}
-
+namespace {
 
 template<typename T>
 ze_result_t set_kernel_arg_scalar(ze_kernel_handle_t& kernel, uint32_t idx, const T& val) {
@@ -56,6 +38,28 @@ ze_result_t set_kernel_arg(ze_kernel_handle_t& kernel, uint32_t idx, cldnn::memo
     auto ptr = buf.get();
     return zeKernelSetArgumentValue(kernel, idx, sizeof(ptr), &ptr);
 }
+}  // namespace
+
+void *find_ze_symbol(const char *symbol) {
+#if defined(__linux__)
+    void *handle = dlopen("libze_loader.so.1", RTLD_NOW | RTLD_LOCAL);
+#elif defined(_WIN32)
+    HMODULE handle = LoadLibraryA("ze_loader.dll");
+#endif
+    if (!handle) {
+        return nullptr;
+    }
+
+#if defined(__linux__)
+    void *f = dlsym(handle, symbol);
+#elif defined(_WIN32)
+    void *f = GetProcAddress(handle, symbol);
+#endif
+    OPENVINO_ASSERT(f != nullptr);
+    return f;
+}
+
+
 
 void set_arguments_impl(ze_kernel_handle_t kernel,
                          const arguments_desc& args,

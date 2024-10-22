@@ -421,6 +421,7 @@ void SyncInferRequest::wait() {
             output_tensor->set_shape(mem_shape);
         }
 
+
         // mapping remote blobs not needed -
         // let the user take care of them explicitly
         if (!is_remote_tensor_impl && output_memory) {
@@ -469,6 +470,9 @@ void SyncInferRequest::wait() {
             stream.wait_for_events(copy_events);
         }
     }
+
+    // std::cerr << "OUT TENSOR: " << m_user_outputs.begin()->second.ptr->data() << std::endl;
+
 
     // finally collect profiling info
     if (m_enable_profiling) {

@@ -72,7 +72,12 @@ struct read_value_impl : public typed_primitive_impl<read_value> {
 
     void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}
 
-public:
+    event::ptr add_to_cmd_list_impl(command_list* list, const std::vector<event::ptr>& event, typed_primitive_inst<read_value>& instance) override {
+        return execute_impl(event, instance);
+    }
+
+    void update_command_impl(command_list* list, const std::vector<event::ptr>& event, typed_primitive_inst<read_value>& instance) override { }
+
     static std::unique_ptr<primitive_impl> create(const read_value_node& arg, const kernel_impl_params& impl_param) {
         return make_unique<read_value_impl>(arg);
     }

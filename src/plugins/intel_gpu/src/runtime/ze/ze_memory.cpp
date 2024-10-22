@@ -126,8 +126,7 @@ event::ptr gpu_usm::fill(stream& stream, unsigned char pattern) {
     auto& _ze_stream = downcast<ze_stream>(stream);
     auto ev = _ze_stream.create_base_event();
     auto ev_ze = downcast<ze::ze_base_event>(ev.get())->get();
-    std::vector<unsigned char> temp_buffer(_bytes_count, pattern);
-    ZE_CHECK(zeCommandListAppendMemoryFill(_ze_stream.get_queue(), _buffer.get(), temp_buffer.data(), 1, _bytes_count, ev_ze, 0, nullptr));
+    ZE_CHECK(zeCommandListAppendMemoryFill(_ze_stream.get_queue(), _buffer.get(), &pattern, sizeof(pattern), _bytes_count, ev_ze, 0, nullptr));
 
     ev->wait();
     return ev;

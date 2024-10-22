@@ -224,6 +224,13 @@ struct eltwise_impl : public typed_primitive_impl<eltwise> {
 
     void update(primitive_inst& inst, const kernel_impl_params& impl_param) override {}
 
+    event::ptr add_to_cmd_list_impl(command_list* list, const std::vector<event::ptr>& event, typed_primitive_inst<eltwise>& instance) override {
+        return execute_impl(event, instance);
+    }
+
+    void update_command_impl(command_list* list, const std::vector<event::ptr>& event, typed_primitive_inst<eltwise>& instance) override { }
+
+
 public:
     static std::unique_ptr<primitive_impl> create(const eltwise_node& arg, const kernel_impl_params& impl_param) {
         return make_unique<eltwise_impl>();

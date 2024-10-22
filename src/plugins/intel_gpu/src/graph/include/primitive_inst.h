@@ -266,6 +266,8 @@ public:
     void do_runtime_in_place_crop();
     void configure_shape_of_dependencies();
 
+    bool skip_execution() const;
+
     memory::ptr fused_memory(size_t dep_id) const {
         return dep_memory_ptr(get_fused_mem_offset() + dep_id);
     }
