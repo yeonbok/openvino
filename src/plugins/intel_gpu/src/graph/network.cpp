@@ -760,7 +760,7 @@ std::map<primitive_id, network_output> network::execute(const std::vector<event:
     // in some cases.
     auto surf_lock = surfaces_lock::create(get_engine().type(), in_out_mem, get_stream());
 
-    if (!is_internal() && 0) {
+    if (!is_internal()) {
         execute_list_impl(dependencies);
     } else {
         execute_impl(dependencies);
