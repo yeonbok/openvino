@@ -9,6 +9,7 @@
 #include "data_inst.h"
 #include "mutable_data_inst.h"
 #include "reorder_inst.h"
+#include "scatter_elements_update_inst.h"
 #include "input_layout_inst.h"
 #include "arg_max_min_inst.h"
 #include "fully_connected_inst.h"
@@ -736,7 +737,7 @@ event::ptr primitive_inst::realloc_if_needed() {
     }
 
     // Clear out memory if was previously reused, but now primitive can't be optimized
-    if (!_node->is_type<concatenation>() && (_node->is_runtime_skippable() || _node->is_type<crop>())) {
+    if (!_node->is_type<concatenation>() && (_node->is_runtime_skippable() || _node->is_type<crop>() || _node->is_type<scatter_elements_update>())) {
         if (can_be_optimized()) {
             _max_output_layout_count = _deps[0].first->_max_output_layout_count;
             GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("can_be_optimized");
@@ -856,7 +857,8 @@ event::ptr primitive_inst::realloc_if_needed() {
                 _outputs[i] = _network.get_engine().reinterpret_buffer(*_outputs[i], actual_layouts[i]);
             }
             // TODO: check need_reset_output_memory per output
-            if (need_reset_output_memory() && !can_be_optimized()) {
+//            if (need_reset_output_memory() && !can_be_optimized()) {
+            if (!can_be_optimized()) {
                 GPU_DEBUG_TRACE_DETAIL << id() << " : Need reset output memory considering user" << std::endl;
                 ev = _outputs[i]->fill(_network.get_stream());
             }
@@ -1427,17 +1429,22 @@ void primitive_inst::do_runtime_skip_permute() {
     auto input_shape = _impl_params->get_input_layout(0).get_shape();
     const auto& permute_order = desc->permute_order;
     // Skippability
-    // 1. Check within "congituous transpose range"
-    // [2, 1, 0] => [2, 1, 0]
-    // [1, 0, 2, 3] => [1, 0, 2]
-    // [0, 2, 1, 3] => [2, 1]
-    // [0, 3, 1, 2] => [3, 1, 2]
-    // [2, 0, 1, 3] => [2, 0, 1]
-    // [3, 2, 1, 0] => [3, 2, 1, 0]
-    // [3, 2, 1, 0, 4] => [3, 2, 1, 0]
-    // [0, 2, 1, 3, 5, 4] => [2, 1], [5, 4]
-    // [4, 5, 2, 3, 0, 1] => [4, 5, 2, 3, 0, 1]
+    // 1. Focus on "congituous transpose range"
+    //    permute_order : [2, 1, 0]    => sub_ranges : permute_order[0, 1, 2]
+    //    permute_order : [1, 0, 2, 3] => sub_ranges : permute_order[0, 1, 2]
+    //    permute_order : [0, 2, 1, 3] => sub_ranges : permute_order[1, 2]
+    //    permute_order : [0, 3, 1, 2] => sub_ranges : permute_order[1, 2, 3]
+    //    permute_order : [2, 0, 1, 3] => sub_ranges : permute_order[0, 1, 2]
+    //    permute_order : [3, 2, 1, 0] => sub_ranges : permute_order[0, 1, 2, 3]
+    //    permute_order : [3, 2, 1, 0, 4] => sub_ranges : permute_order[0, 1, 2, 3]
+    //    permute_order : [0, 2, 1, 3, 5, 4] => sub_ranges : permute_order[1, 2], permute_order[4, 5]
+    //    permute_order : [4, 5, 2, 3, 0, 1] => sub_ranges : permute_order[0, 1, 2, 3, 4, 5]
     // 2. Within each transpose range, only 1 non-1 dimension allowed at max.
+    //   i.e., for the following case,
+    //   permute_order : [0, 2, 1, 3, 5, 4] => sub_ranges : permute_order[1, 2], permute_order[4, 5]
+    //   if the input shape is [1, 1, 4, 3, 1, 4] => true because there is only one non-1 dim in both {input_shape[1], input_shape[2]}
+    //      and {input_shape[4], input_shape[5]}
+    //   if the input shape is [1, 2, 4, 3, 1, 4] => false because there is more than one non-1 dim in {input_shape[1], input_shape[2]}
     size_t range_max_dim = 0;
     size_t count_not_one = 0;
     bool can_skip = true;
@@ -1698,19 +1705,19 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
         // subgraph_input_changed can be available only shape_of is dynamic.
         // shape_of_subgraph for static shape_of could be run every inference if constant propagation does not work.
-        if (_node->is_in_shape_of_subgraph() && dependant_shape_of_insts.front()->is_dynamic()) {
-            bool subgraph_input_changed = false;
-            for (size_t i = 0; i < dependant_shape_of_insts.size(); i++) {
-                if (dependant_shape_of_insts[i]->shape_changed()) {
-                    subgraph_input_changed = true;
-                    break;
-                }
-            }
-            if (!subgraph_input_changed) {
-                GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping execution because dependent shapeof node is not changed " << std::endl;
-                can_skip_execution = true;
-            }
-        }
+//        if (_node->is_in_shape_of_subgraph() && dependant_shape_of_insts.front()->is_dynamic()) {
+//            bool subgraph_input_changed = false;
+//            for (size_t i = 0; i < dependant_shape_of_insts.size(); i++) {
+//                if (dependant_shape_of_insts[i]->shape_changed()) {
+//                    subgraph_input_changed = true;
+//                    break;
+//                }
+//            }
+//            if (!subgraph_input_changed) {
+//                GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping execution because dependent shapeof node is not changed " << std::endl;
+//                can_skip_execution = true;
+//            }
+//        }
 
         if (can_skip_execution) {
             auto ev = get_network().get_stream().aggregate_events(events);
