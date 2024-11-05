@@ -6,6 +6,8 @@
 #include "gather_inst.h"
 #include "non_max_suppression_inst.h"
 #include "permute_inst.h"
+#include "scatter_elements_update_inst.h"
+#include "scatter_update_inst.h"
 #include "strided_slice_inst.h"
 #include "kv_cache_inst.h"
 #include "gemm_inst.h"
@@ -48,6 +50,17 @@ void mark_runtime_skippable_nodes::run(program& p) {
                                    << std::endl;
             continue;
         }
+
+        program_helpers::do_for_types<scatter_elements_update>(*node, [](scatter_elements_update_node& node) {
+            node.set_runtime_skippable(true);
+            node.can_be_optimized(true);
+        });
+
+        program_helpers::do_for_types<scatter_update>(*node, [](scatter_update_node& node) {
+            node.set_runtime_skippable(true);
+            node.can_be_optimized(true);
+        });
+
 
         program_helpers::do_for_types<gather>(*node, [](gather_node& node) {
             // Check pattern

@@ -58,17 +58,25 @@ void scatter_elements_update_inst::on_execute() {
     auto input1_shape = _impl_params->input_layouts[1].get_partial_shape();
     auto input2_shape = _impl_params->input_layouts[2].get_partial_shape();
 
-    if ((ov::shape_size(input1_shape.to_shape()) == 0) || (ov::shape_size(input2_shape.to_shape()) == 0))
+    if ((ov::shape_size(input1_shape.to_shape()) == 0) || (ov::shape_size(input2_shape.to_shape()) == 0)) {
+//        std::cout << "!!! Optimize out " << _node->id() << " because input is empty" << std::endl;
         update_output_memory();
+    }
 }
 
 void scatter_elements_update_inst::update_output_memory() {
-    if (_outputs.size() > 0 && static_cast<bool>(_outputs[0])
-        && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
+    if (!can_be_optimized() || _impl_params->is_dynamic())
         return;
+
+    if (_outputs.size() > 0 && static_cast<bool>(_outputs[0])
+        && _network.get_engine().is_the_same_buffer(output_memory(), input_memory())) {
+//        std::cout << "input / output has same buffer " << output_memory().buffer_ptr() << std::endl;
+        return;
+    }
 
     if (_node != nullptr)
         build_deps();
+//    std::cout << "input / output has different buffer => need update" << std::endl;
 
     // Can_be_optimized nodes are allocating from memory_pool too. In this case,
     // we need release the legacy output memory from memory pool explicitly.
@@ -77,6 +85,7 @@ void scatter_elements_update_inst::update_output_memory() {
         _network.get_memory_pool().release_memory(_outputs[0].get(), _node->get_unique_id(), _node->id(), _network.get_id());
     }
     _outputs = {_network.get_engine().reinterpret_buffer(input_memory(), _impl_params->get_output_layout())};
+//    std::cout << "updated output buffer: " << _outputs[0]->buffer_ptr() << std::endl;
     _mem_allocated = false;
 }
 }  // namespace cldnn

@@ -255,6 +255,7 @@ public:
     void update_paddings();
     void do_runtime_skip_reorder();
     void do_runtime_skip_gather();
+    void do_runtime_skip_scatter();
     void do_runtime_skip_permute();
     void do_runtime_skip_strided_slice();
     void do_runtime_skip_broadcast();

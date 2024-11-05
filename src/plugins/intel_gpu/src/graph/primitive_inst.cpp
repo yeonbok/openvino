@@ -10,6 +10,7 @@
 #include "mutable_data_inst.h"
 #include "reorder_inst.h"
 #include "scatter_elements_update_inst.h"
+#include "scatter_update_inst.h"
 #include "input_layout_inst.h"
 #include "arg_max_min_inst.h"
 #include "fully_connected_inst.h"
@@ -737,13 +738,15 @@ event::ptr primitive_inst::realloc_if_needed() {
     }
 
     // Clear out memory if was previously reused, but now primitive can't be optimized
-    if (!_node->is_type<concatenation>() && (_node->is_runtime_skippable() || _node->is_type<crop>() || _node->is_type<scatter_elements_update>())) {
+    if (!_node->is_type<concatenation>() &&
+        (_node->is_runtime_skippable() || _node->is_type<crop>())) {
         if (can_be_optimized()) {
             _max_output_layout_count = _deps[0].first->_max_output_layout_count;
             GPU_DEBUG_PROFILED_STAGE_MEMALLOC_INFO("can_be_optimized");
             return ev;
-        } else if (_outputs[0] && dep_memory_ptr(0) &&
-                   _network.get_engine().is_the_same_buffer(dep_memory(0), output_memory(0))) {
+//        } else if (_outputs[0] && dep_memory_ptr(0) &&
+//                   _network.get_engine().is_the_same_buffer(dep_memory(0), output_memory(0))) {
+        } else {
             // Clear out memory if was previously reused, but now primitive can't be optimized
             _outputs[0] = nullptr;
             _max_output_layout_count[0] = 0;
@@ -857,8 +860,7 @@ event::ptr primitive_inst::realloc_if_needed() {
                 _outputs[i] = _network.get_engine().reinterpret_buffer(*_outputs[i], actual_layouts[i]);
             }
             // TODO: check need_reset_output_memory per output
-//            if (need_reset_output_memory() && !can_be_optimized()) {
-            if (!can_be_optimized()) {
+            if (need_reset_output_memory() && !can_be_optimized()) {
                 GPU_DEBUG_TRACE_DETAIL << id() << " : Need reset output memory considering user" << std::endl;
                 ev = _outputs[i]->fill(_network.get_stream());
             }
@@ -1201,6 +1203,20 @@ void primitive_inst::update_paddings() {
                 reset_pad(*u->_impl_params, u->_node);
             }
         }
+    }
+}
+
+void primitive_inst::do_runtime_skip_scatter() {
+    if (!get_node().is_type<scatter_elements_update>() && !get_node().is_type<scatter_update>()) {
+        return;
+    }
+    auto input1_shape = _impl_params->input_layouts[1].get_partial_shape();
+    auto input2_shape = _impl_params->input_layouts[2].get_partial_shape();
+
+    if ((ov::shape_size(input1_shape.to_shape()) == 0) || (ov::shape_size(input2_shape.to_shape()) == 0)) {
+        set_can_be_optimized(true);
+    } else {
+        set_can_be_optimized(false);
     }
 }
 
@@ -1705,19 +1721,19 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
 
         // subgraph_input_changed can be available only shape_of is dynamic.
         // shape_of_subgraph for static shape_of could be run every inference if constant propagation does not work.
-//        if (_node->is_in_shape_of_subgraph() && dependant_shape_of_insts.front()->is_dynamic()) {
-//            bool subgraph_input_changed = false;
-//            for (size_t i = 0; i < dependant_shape_of_insts.size(); i++) {
-//                if (dependant_shape_of_insts[i]->shape_changed()) {
-//                    subgraph_input_changed = true;
-//                    break;
-//                }
-//            }
-//            if (!subgraph_input_changed) {
-//                GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping execution because dependent shapeof node is not changed " << std::endl;
-//                can_skip_execution = true;
-//            }
-//        }
+        if (_node->is_in_shape_of_subgraph() && dependant_shape_of_insts.front()->is_dynamic()) {
+            bool subgraph_input_changed = false;
+            for (size_t i = 0; i < dependant_shape_of_insts.size(); i++) {
+                if (dependant_shape_of_insts[i]->shape_changed()) {
+                    subgraph_input_changed = true;
+                    break;
+                }
+            }
+            if (!subgraph_input_changed) {
+                GPU_DEBUG_TRACE_DETAIL << id() << " : Skipping execution because dependent shapeof node is not changed " << std::endl;
+                can_skip_execution = true;
+            }
+        }
 
         if (can_skip_execution) {
             auto ev = get_network().get_stream().aggregate_events(events);
@@ -1733,6 +1749,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         update_paddings();
         do_runtime_in_place_kv_cache();
         do_runtime_skip_permute();
+        do_runtime_skip_scatter();
         do_runtime_skip_strided_slice();
         do_runtime_skip_broadcast();
         do_runtime_in_place_crop();
@@ -1775,7 +1792,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         // Only try update weight and realloc when impl is updated.
         const bool can_use_async_compilation = use_async_compilation();
         bool is_updated = false;
-        if (shape_changed() || !_impl || (!shape_changed() && _impl->is_dynamic() && can_use_async_compilation)) {
+        if (shape_changed() || ((_node->is_type<scatter_update>() || _node->is_type<scatter_elements_update>()) && !can_be_optimized()) || !_impl || (!shape_changed() && _impl->is_dynamic() && can_use_async_compilation)) {
             if (update_impl(can_use_async_compilation)) {
                 need_args_update = true;
                 auto ev = update_weights();
@@ -1821,14 +1838,24 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
         return false;
     };
 
-    bool use_shared_kernels = _node->get_program().get_config().get_property(ov::intel_gpu::hint::enable_kernels_reuse);
+//    bool use_shared_kernels = _node->get_program().get_config().get_property(ov::intel_gpu::hint::enable_kernels_reuse);
+    bool use_shared_kernels = true;
 
     // Output buffer may be changed under the following conditions, so we need to set args to kernel on each iteration
     if ((is_dynamic() && need_args_update) || has_mutable_input() || is_output() || has_dynamic_dependencies_insts(this) || use_shared_kernels) {
         set_arguments();
     }
-    on_execute();
 
+    on_execute();
+//    if (_node->is_type<scatter_elements_update>()) {
+//        std::cout << "After on_execute() " << std::endl;
+//        std::cout << "==========================================" << std::endl;
+//        std::cout << id() << " : can_be_optimized? " << can_be_optimized() << std::endl;
+//        std::cout << "input1 : " << _impl_params->input_layouts[1].to_short_string() << std::endl;
+//        std::cout << "input2 : " << _impl_params->input_layouts[2].to_short_string() << std::endl;
+//    }
+
+ 
     if (!_node->is_type<condition>() && !_node->is_type<loop>()) {
         for (size_t i = 0; i < _outputs.size(); ++i) {
             if ((!orig_outputs[i] && _outputs[i]) || (orig_outputs[i] && !_outputs[i])) {
@@ -1844,7 +1871,7 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     GPU_DEBUG_TRACE << id() << ": execute " << _impl->get_kernel_name() << " (is_dynamic=" << _impl->is_dynamic()
                     << ", "
                     << "can_be_optimized=" << can_be_optimized() << ")" << std::endl;
-
+//    std::cout << "output memory : " << _outputs[0]->buffer_ptr() << std::endl;
     const bool out_of_order_queue = get_network().get_stream().get_queue_type() == QueueTypes::out_of_order;
     if (_exec_deps.empty() && dependencies.empty()) {
         dependencies = events;
