@@ -225,6 +225,8 @@ debug_configuration::debug_configuration()
         , print_input_data_shapes(0)
         , disable_usm(0)
         , disable_onednn(0)
+        , disable_memcpy(0)
+        , disable_mem_reclaim(0)
         , disable_onednn_sdpa(0)
         , disable_onednn_opt_post_ops(0)
         , dump_profiling_data(std::string(""))
@@ -278,6 +280,8 @@ debug_configuration::debug_configuration()
     get_gpu_debug_env_var("DumpLayersResult", dump_layers_result);
     get_gpu_debug_env_var("DumpLayersInput", dump_layers_input);
     get_gpu_debug_env_var("DisableOnednn", disable_onednn);
+    get_gpu_debug_env_var("DisableMemCopy", disable_memcpy);
+    get_gpu_debug_env_var("DisableReclaimMem", disable_mem_reclaim);
     get_gpu_debug_env_var("DisableOnednnSDPA", disable_onednn_sdpa);
     get_gpu_debug_env_var("DisableOnednnOptPostOps", disable_onednn_opt_post_ops);
     get_gpu_debug_env_var("DumpProfilingData", dump_profiling_data);

@@ -428,7 +428,11 @@ void SyncInferRequest::wait() {
             if (!is_generic_remote) {
                 auto dst_ptr = static_cast<uint8_t*>(output_tensor->data());
                 bool same_mem = same_host_mem(output_memory, dst_ptr);
-                if (!same_mem && output_memory->size()) {
+                bool copy_mem = true;
+                GPU_DEBUG_GET_INSTANCE(debug_config);
+                GPU_DEBUG_IF(debug_config->disable_memcpy && m_graph->get_network()->get_current_iteration_num() >= 2)
+                    copy_mem = false;
+                if (!same_mem && output_memory->size() && copy_mem) {
                     GPU_DEBUG_TRACE_DETAIL << internal_name << " with index " << port_idx << " copy from: " << output_memory->buffer_ptr() << " to "
                         << (!is_remote_tensor_impl ? output_tensor->data() : remote_tensor_impl_ptr->get_original_memory()->buffer_ptr()) << std::endl;
                     if (auto ev = copy_output_data(output_memory, *output_tensor)) {
@@ -879,7 +883,13 @@ std::vector<cldnn::event::ptr> SyncInferRequest::prepare_input(const std::string
             // The current input_layout (wait_for_events) does not provide proper synchronization for subsequent CPU implementations
             // For IOQ, it creates an already set user event, leading to accessing memory that hasn't completed copying
             // For OOOQ, it enqueues a barrier that is ignored by the memory_lock functions, also causing access to not ready memory
-            ret_event = memory->copy_from(stream, src_ptr, need_lockable_mem);
+            bool copy_mem = true;
+            GPU_DEBUG_GET_INSTANCE(debug_config);
+            GPU_DEBUG_IF(debug_config->disable_memcpy && network->get_current_iteration_num() >= 2)
+                copy_mem = false;
+            if (copy_mem) {
+                ret_event = memory->copy_from(stream, src_ptr, need_lockable_mem); // here
+            }
         }
     }
     if (convert_needed) {
@@ -892,7 +902,13 @@ std::vector<cldnn::event::ptr> SyncInferRequest::prepare_input(const std::string
         if (!is_remote_tensor_impl && !is_generic_remote) {
             auto src_ptr = static_cast<uint8_t*>(user_tensor->data());
             if (!same_host_mem(memory, src_ptr)) {
-                ret_event = memory->copy_from(stream, src_ptr, false);
+                bool copy_mem = true;
+                GPU_DEBUG_GET_INSTANCE(debug_config);
+                GPU_DEBUG_IF(debug_config->disable_memcpy && network->get_current_iteration_num() >= 2)
+                    copy_mem = false;
+                if (copy_mem) { // here
+                    ret_event = memory->copy_from(stream, src_ptr, false);
+                }
             }
         } else if (is_generic_remote) {
             user_tensor->copy_to(device_tensor);

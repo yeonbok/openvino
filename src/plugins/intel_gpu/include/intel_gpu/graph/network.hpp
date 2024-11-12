@@ -201,6 +201,7 @@ public:
     void set_shape_predictor(std::shared_ptr<ShapePredictor> shape_predictor) { _shape_predictor = shape_predictor; }
 
 #ifdef GPU_DEBUG_CONFIG
+public:
     int64_t get_current_iteration_num() { return iteration; }
 #endif
 
