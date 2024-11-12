@@ -119,6 +119,8 @@ struct sdpa_params : public base_params {
     DataTensor value_cache_comp_scale;
     DataTensor value_cache_comp_zp;
 
+    bool use_sdpa_micro = true;
+
     sdpa_configuration conf;
 };
 

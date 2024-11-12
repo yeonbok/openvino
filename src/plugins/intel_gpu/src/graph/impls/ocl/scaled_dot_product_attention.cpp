@@ -237,6 +237,9 @@ public:
         const auto& desc = impl_param.typed_desc<scaled_dot_product_attention>();
         auto params = get_default_params<kernel_selector::sdpa_params>(impl_param, is_dynamic);
 
+        GPU_DEBUG_GET_INSTANCE(debug_config);
+        GPU_DEBUG_IF(debug_config->disable_onednn_sdpa)
+            params.use_sdpa_micro = false;
         auto data_inputs_num = impl_param.input_layouts.size();
         if (has_indirect_inputs(impl_param))
             data_inputs_num--;

@@ -315,6 +315,9 @@ bool SDPAKernelMicro::Validate(const Params& p) const {
         return false;
 
     const sdpa_params& params = static_cast<const sdpa_params&>(p);
+    if (!params.use_sdpa_micro) {
+        return false;
+    }
 
     if (params.conf.is_paged_attention)
         return false;
