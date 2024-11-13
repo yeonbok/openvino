@@ -224,6 +224,7 @@ debug_configuration::debug_configuration()
         , print_multi_kernel_perf(0)
         , print_input_data_shapes(0)
         , disable_usm(0)
+        , repeat_gemm(0)
         , disable_onednn(0)
         , disable_memcpy(0)
         , disable_mem_reclaim(0)
@@ -279,6 +280,7 @@ debug_configuration::debug_configuration()
     get_gpu_debug_env_var("DumpLayersDstOnly", dump_layers_dst_only);
     get_gpu_debug_env_var("DumpLayersResult", dump_layers_result);
     get_gpu_debug_env_var("DumpLayersInput", dump_layers_input);
+    get_gpu_debug_env_var("RepeatGemm", repeat_gemm);
     get_gpu_debug_env_var("DisableOnednn", disable_onednn);
     get_gpu_debug_env_var("DisableMemCopy", disable_memcpy);
     get_gpu_debug_env_var("DisableReclaimMem", disable_mem_reclaim);

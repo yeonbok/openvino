@@ -107,9 +107,10 @@ public:
     int print_multi_kernel_perf;                                // Print execution time of each kernel in multi-kernel primitimive
     int print_input_data_shapes;                                // Print the input data_shape for benchmark_app.
     int disable_usm;                                            // Disable usm usage
+    int repeat_gemm;
+    int disable_onednn;                                         // Disable onednn for discrete GPU (no effect for integrated GPU)
     int disable_memcpy;
     int disable_mem_reclaim;
-    int disable_onednn;                                         // Disable onednn for discrete GPU (no effect for integrated GPU)
     int disable_onednn_sdpa;                                    // Disable onednn_sdpa
     int disable_onednn_opt_post_ops;                            // Disable onednn optimize post operators
     std::string dump_profiling_data;                            // Enables dump of extended performance profiling to specified dir

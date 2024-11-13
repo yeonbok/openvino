@@ -1856,6 +1856,14 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
     {
         GPU_DEBUG_PROFILED_STAGE(instrumentation::pipeline_stage::inference);
         auto ev = _impl->execute(dependencies, *this);
+        event::ptr ev1 = nullptr;
+        event::ptr ev2 = nullptr;
+        GPU_DEBUG_IF(debug_config->repeat_gemm && _node->is_type<fully_connected>() && get_network().get_id() == 1) {
+            dependencies.push_back(ev);
+            ev1 = _impl->execute(dependencies, *this);
+            dependencies.push_back(ev1);
+            ev2 = _impl->execute(dependencies, *this);
+        }
 
         GPU_DEBUG_IF(!debug_config->dump_profiling_data.empty()) {
             get_network().get_stream().wait_for_events({ev});
@@ -1870,6 +1878,9 @@ event::ptr primitive_inst::execute(const std::vector<event::ptr>& events) {
             }
         }
 
+        GPU_DEBUG_IF(debug_config->repeat_gemm && _node->is_type<fully_connected>() && get_network().get_id() == 1) {
+            return ev2;
+        }
         return ev;
     }
 }
