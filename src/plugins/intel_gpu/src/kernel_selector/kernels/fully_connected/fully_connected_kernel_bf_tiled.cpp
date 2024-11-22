@@ -868,7 +868,7 @@ KernelsData FullyConnected_bf_tiled::GetTunedKernelsDataByIndex(const Params &pa
     auto output_f = get_output_aligned_bf_size(fc_params, false).second;
 
     WeightsLayout weights_layout = WeightsLayout::os_iyx_osv16;
-    if (fc_params.compressed && fc_params.inputs[0].GetDType() == Datatype::F16
+    if (!is_swiglu_fused(fc_params) && fc_params.compressed && fc_params.inputs[0].GetDType() == Datatype::F16
         && (fc_params.weights.GetLayout() == WeightsLayout::oiyx || fc_params.weights.GetLayout() == WeightsLayout::os_is_yx_osv64_isv2)
         && (fc_params.weights.GetDType() == WeightsType::INT4 || fc_params.weights.GetDType() == WeightsType::UINT4)
         && is_weight_horizontal(fc_params, output_f)) {
