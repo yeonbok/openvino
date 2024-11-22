@@ -453,10 +453,11 @@ FullyConnected_bf_tiled::GetAutoTuneParams(const fully_connected_params& params,
                                 .Case(tune_params(1, 4, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
                     }
                 } else {
-                    if (swiglu_fused)
+                    if (swiglu_fused) {
                         return selector.Default(tune_params(1, 2, 4, 2, 2, 1, 1, EXE_MODE_DEFAULT));
-                    else
+                    } else {
                         return selector.Default(tune_params(1, 2, 4, 2, 1, 1, 1, EXE_MODE_DEFAULT));
+                    }
                 }
             }
         } else {

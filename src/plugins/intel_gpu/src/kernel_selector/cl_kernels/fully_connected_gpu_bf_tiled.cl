@@ -861,8 +861,14 @@ inline void FUNC(fc_bf_tiled_kernel_dyn_quan)(
     // full dispatch pipeline.
     uint feature_mini_block = gid % DISPATCH_FSV;
     uint batch_mini_block = gid / DISPATCH_FSV % DISPATCH_BSV;
+    #ifdef SWIGLU_LENGTH
     uint feature_mega_block = gid / (DISPATCH_FSV * DISPATCH_BSV) % (CEIL_DIV(TILE_OUT_F_NUM, TILE_OFM * SIMD) / DISPATCH_FSV);
     uint batch_mega_block = gid / (DISPATCH_FSV * DISPATCH_BSV * CEIL_DIV(TILE_OUT_F_NUM, TILE_OFM * SIMD) / DISPATCH_FSV);
+    #else
+    uint feature_mega_block = gid / (DISPATCH_FSV * DISPATCH_BSV) % (CEIL_DIV(TILE_OUT_F_NUM, OUTER_OFM * TILE_OFM * SIMD) / DISPATCH_FSV);
+    uint batch_mega_block = gid / (DISPATCH_FSV * DISPATCH_BSV * CEIL_DIV(TILE_OUT_F_NUM, OUTER_OFM * TILE_OFM * SIMD) / DISPATCH_FSV);
+    #endif
+
 
     FILTER_VEC_TYPE wei = 0;
 
@@ -939,6 +945,24 @@ inline void FUNC(fc_bf_tiled_kernel_dyn_quan)(
         #endif
         ACCUMULATOR_TYPE* d_zps = (ACCUMULATOR_TYPE*)(&d_zp);
     #endif
+
+    ACTIVATION_VEC_TYPE activated[TILE_B] = { };
+#if OUTER_OFM > 1
+    uint input_offset_init = input_offset;
+    uint weights_offset_init = weights_offset;
+    uint out_f_init = out_f;
+    __attribute__((opencl_unroll_hint(1)))
+    for (uint oi = 0; oi < OUTER_OFM; ++oi) {
+        input_offset = input_offset_init;
+        #ifdef SWIGLU_LENGTH
+        weights_offset = weights_offset_init + oi * (FILTER_IFM_NUM / (TILE_K_OFM / TILE_K_OFM_PACKED) ) * SWIGLU_LENGTH;
+        out_f += SWIGLU_LENGTH * oi;
+        #else
+        out_f += TILE_OFM * SIMD * oi;
+        #endif
+//        if (out_f == 0 && out_b == 0)
+//            printf("oi=%d out_b=%d, out_f=%d, sglid=%d, weights_offet = %d, input_offset = %d\n", oi, out_b, out_f, sglid, weights_offset, input_offset);
+#endif
 
     // =====================================================================================================================================
     // Main computation loop
@@ -1209,10 +1233,26 @@ inline void FUNC(fc_bf_tiled_kernel_dyn_quan)(
 
     // =====================================================================================================================================
     // Post-processing: bias, activation, fused-ops
-    ACTIVATION_VEC_TYPE activated[TILE_B] = { };
     for (uint bi = 0; bi < TILE_B; ++bi) {
+        #ifdef SWIGLU_LENGTH
+        if (oi == 0) {
+            activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
+            activated[bi] /= (ACCUMULATOR_VAL_ONE + native_exp(-(ACCUMULATOR_VAL_ONE * activated[bi])));
+        } else {
+            activated[bi] *= TO_ACTIVATION_VEC_TYPE(acc[bi]);
+        }
+        #else
         activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
+        #endif
+#if OUTER_OFM > 1
+        acc[bi] = 0;
+#endif
     }
+
+#if OUTER_OFM > 1 && defined(SWIGLU_LENGTH)
+    }
+    out_f = out_f_init;
+#endif
 
 #if BIAS_TERM
     #if TILE_OUT_F_NUM % (TILE_OFM * SIMD) == 0
@@ -1285,6 +1325,11 @@ inline void FUNC(fc_bf_tiled_kernel_dyn_quan)(
             output_offset += TILE_OUT_B_PITCH - TILE_OFM * SIMD;
         }
     }
+#if OUTER_OFM > 1 && !defined(SWIGLU_LENGTH)
+//    out_f += TILE_OFM * SIMD;
+//    input_offset = input_offset_init;
+    }
+#endif
     // =====================================================================================================================================
 }
 #endif
