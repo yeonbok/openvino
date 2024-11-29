@@ -332,8 +332,6 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
         #else
         out_f += TILE_OFM * SIMD * oi;
         #endif
-//        if (out_f == 0 && out_b == 0)
-//            printf("oi=%d out_b=%d, out_f=%d, sglid=%d, weights_offet = %d, input_offset = %d\n", oi, out_b, out_f, sglid, weights_offset, input_offset);
 #endif
 
 #if REALIGN_FP16_OFFSET
@@ -704,6 +702,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
     unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
         #ifdef SWIGLU_LENGTH
         if (oi == 0) {
+            // swish
             activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
             activated[bi] /= (ACCUMULATOR_VAL_ONE + native_exp(-(ACCUMULATOR_VAL_ONE * activated[bi])));
         } else {
@@ -960,8 +959,6 @@ inline void FUNC(fc_bf_tiled_kernel_dyn_quan)(
         #else
         out_f += TILE_OFM * SIMD * oi;
         #endif
-//        if (out_f == 0 && out_b == 0)
-//            printf("oi=%d out_b=%d, out_f=%d, sglid=%d, weights_offet = %d, input_offset = %d\n", oi, out_b, out_f, sglid, weights_offset, input_offset);
 #endif
 
     // =====================================================================================================================================

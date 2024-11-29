@@ -18,7 +18,7 @@
 namespace ov {
 namespace intel_gpu {
 
-FullyConnectedHorizontalFusion::FullyConnectedHorizontalFusion(bool supports_immad) {
+FullyConnectedHorizontalFusion::FullyConnectedHorizontalFusion(bool fuse_mlp_swiglu) {
     using namespace ov::pass::pattern;
 
     GPU_DEBUG_GET_INSTANCE(debug_config);
@@ -28,7 +28,7 @@ FullyConnectedHorizontalFusion::FullyConnectedHorizontalFusion(bool supports_imm
     // For cldnn, two fcs in mlp will be fused at horizontal fc fusion, and then swiglu will be fused at prepare_primitive_fusion
     // i.e., eltwise((fc + swish), fc) => fused_fc + swiglu => fused_fc_swilgu
     // Onednn gemms are to be handled in a different way (TBD)
-    if (!supports_immad && !debug_config->disable_fc_swiglu_fusion)
+    if (fuse_mlp_swiglu)
         min_num_fcs_to_fuse = 2;
     const int max_num_fcs_to_fuse = 3;
     auto is_target_pattern = [min_num_fcs_to_fuse, max_num_fcs_to_fuse](const Output<Node>& output) {

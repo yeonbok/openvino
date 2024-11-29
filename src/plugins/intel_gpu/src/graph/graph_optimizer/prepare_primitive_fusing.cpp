@@ -56,12 +56,9 @@
 using namespace cldnn;
 
 void prepare_primitive_fusing::run(program& p) {
-    GPU_DEBUG_GET_INSTANCE(debug_config);
     fuse_reorders(p);
     remove_redundant_reshape(p);
-    // TODO : apply only for cldnn
-    if (!debug_config->disable_fc_swiglu_fusion)
-        fuse_swiglu(p);
+    fuse_swiglu(p);
     fuse_bias(p);
     fuse_simple_primitives(p);
     fuse_constant_transposes(p);
@@ -168,12 +165,20 @@ void prepare_primitive_fusing::fuse_reorders(program &p) {
 }
 
 void prepare_primitive_fusing::fuse_swiglu(program &p) {
+    GPU_DEBUG_GET_INSTANCE(debug_config);
+    bool disable_fc_swiglu_fusion = false;
+    GPU_DEBUG_IF(debug_config->disable_fc_swiglu_fusion == 1)
+        disable_fc_swiglu_fusion = true;
+    // Apply only for high performant GPU
+    if (disable_fc_swiglu_fusion || p.get_engine().get_device_info().execution_units_count < 128)
+        return;
     auto itr = p.get_processing_order().begin();
     std::map<primitive_id, std::vector<std::pair<primitive_id, size_t>>> fusing_history;
     while (itr != p.get_processing_order().end()) {
         auto node_itr = itr++;
         auto& node = (*node_itr);
         if (node->is_type<swiglu>()) {
+            // TODO: to support other types of glu
             auto prim = node->get_kernel_impl_params()->typed_desc<swiglu>();
             if (node->get_dependencies().size() == 1 &&
                 node->get_dependency(0).is_type<fully_connected>() &&
