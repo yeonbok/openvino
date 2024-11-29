@@ -908,7 +908,7 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
             disable_horizontal_fc_fusion = true;
 
         if (!disable_horizontal_fc_fusion)
-            manager.register_pass<ov::intel_gpu::FullyConnectedHorizontalFusion>();
+            manager.register_pass<ov::intel_gpu::FullyConnectedHorizontalFusion>(device_info.supports_immad);
 
         // ZP should not be folded for FC. But still, ZP should be folded for Gather.
         // Therefore, run MarkDequantizationSubgraph again to fold ZP constant.
