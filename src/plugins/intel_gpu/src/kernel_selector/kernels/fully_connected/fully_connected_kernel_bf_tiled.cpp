@@ -105,6 +105,7 @@ static size_t get_dynamic_quantize_group_size(const fully_connected_params& para
 }
 
 static bool should_dynamic_quantize(const fully_connected_params& params, bool print_log = false) {
+    return false;
     size_t dynamic_quantization_group_size = get_dynamic_quantize_group_size(params);
 
     if (params.inputs[0].GetFirstElementOffset() != 0)
@@ -911,7 +912,8 @@ KernelsData FullyConnected_bf_tiled::GetTunedKernelsDataByIndex(const Params &pa
 
         if (params.is_shape_agnostic) {
             auto tparams = GetAutoTuneParams(fc_params, KernelType::SLM, autoTuneIndex);
-            auto can_select_slm_kernel = tparams.kernel_type == KernelType::SLM;
+//            auto can_select_slm_kernel = tparams.kernel_type == KernelType::SLM;
+            auto can_select_slm_kernel = false;
 
             if (!can_select_slm_kernel)
                 return kernels_data;

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-#include "include/batch_headers/common.cl"
 #include "include/batch_headers/sub_group_block_read.cl"
 #include "include/batch_headers/sub_group_block_write.cl"
 #include "include/batch_headers/sub_group_shuffle.cl"
@@ -20,50 +19,6 @@
 #define INPUT_LOAD_SIZE                     4
 
 #if FC_KERNEL_DYNAMIC_QUANTIZE
-KERNEL(quantize_input)(
-    const __global INPUT0_TYPE* input,
-    __global DQ_TYPE* quantized_input,
-    __global INPUT0_TYPE* quan_var
-) {
-    const uint offset = get_global_id(0);
-
-    const uint input_offset = offset * QUANTIZE_GROUP_SIZE;
-    const uint quantize_block = QUANTIZE_GROUP_SIZE / 4;
-    MAKE_VECTOR_TYPE(INPUT0_TYPE, INPUT_LOAD_SIZE) input_0[quantize_block];
-    MAKE_VECTOR_TYPE(DQ_TYPE, INPUT_LOAD_SIZE) quantized_value[quantize_block];
-    INPUT0_TYPE  max[quantize_block];
-
-    unroll_for (uint i = 0 ; i < quantize_block ; ++i) {
-        input_0[i] = vload4(0, &input[input_offset + i * 4]);
-        max[i] = fmax(fmax(fabs(input_0[i][0]), fabs(input_0[i][1])), fmax(fabs(input_0[i][2]), fabs(input_0[i][3])));
-    }
-
-    INPUT0_TYPE max_value = 0.001;
-    for (uint i = 0 ; i < quantize_block ; i+=8) {
-        INPUT0_TYPE temp = fmax(fmax(fmax(max[i], max[i+1]), fmax(max[i+2], max[i+3])),
-                                fmax(fmax(max[i+4], max[i+5]), fmax(max[i+6], max[i+7])));
-        max_value = fmax(max_value, temp);
-    }
-
-    half quan_scale = (half)max_value / 127;
-    #if COMPRESSED_WEIGHTS_INT8
-        int quantized_sum = 0;
-    #endif
-    for (uint i = 0 ; i < quantize_block ; ++i) {
-        half4 buff = input_0[i] / (half4)quan_scale;
-        quantized_value[i] = CAT(CAT(convert_, MAKE_VECTOR_TYPE(DQ_TYPE, INPUT_LOAD_SIZE)), _rte)(buff);
-        #if COMPRESSED_WEIGHTS_INT8
-            quantized_sum += quantized_value[i][0] + quantized_value[i][1] + quantized_value[i][2] + quantized_value[i][3];
-        #endif
-        vstore4(quantized_value[i], 0, &quantized_input[input_offset + i * 4]);
-    }
-
-    // Pair of quantizing_scale and quantized activation_sum for each group
-    quan_var[offset * 2] = quan_scale;
-    #if COMPRESSED_WEIGHTS_INT8
-        quan_var[(offset * 2) + 1] = CAT(CAT(convert_, INPUT0_TYPE), _rte)(quantized_sum);
-    #endif
-}
 #else  // !FC_KERNEL_DYNAMIC_QUANTIZE
 
 // Verify JIT parameters.
@@ -146,38 +101,6 @@ KERNEL(quantize_input)(
 #endif
 
 #define INPUT_ELEMENTS_COUNT IFM_SIZE
-
-#if IS_DYNAMIC && COMPRESSED_WEIGHTS_INT4
-#pragma disable_includes_optimization
-#define FORCED_TILE_B 1
-#include "include/fully_connected_gpu_bf_tiled_common.cl"
-#undef FORCED_TILE_B
-
-#define FORCED_TILE_B 2
-#include "include/fully_connected_gpu_bf_tiled_common.cl"
-#undef FORCED_TILE_B
-
-#define FORCED_TILE_B 3
-#include "include/fully_connected_gpu_bf_tiled_common.cl"
-#undef FORCED_TILE_B
-
-#define FORCED_TILE_B 4
-#include "include/fully_connected_gpu_bf_tiled_common.cl"
-#undef FORCED_TILE_B
-
-#define FORCED_TILE_B 5
-#include "include/fully_connected_gpu_bf_tiled_common.cl"
-#undef FORCED_TILE_B
-
-#define FORCED_TILE_B 6
-#include "include/fully_connected_gpu_bf_tiled_common.cl"
-#undef FORCED_TILE_B
-
-#define FORCED_TILE_B 7
-#include "include/fully_connected_gpu_bf_tiled_common.cl"
-#undef FORCED_TILE_B
-#pragma enable_includes_optimization
-#endif
 
 inline void FUNC(fc_bf_tiled_kernel_default)(
     OPTIONAL_SHAPE_INFO_ARG
@@ -1357,235 +1280,28 @@ KERNEL(fc)(
         __local ACCUMULATOR_TYPE wei_local_mem[TILE_IFM * SIMD * TILE_OFM * SIMD];
     #endif
 #endif
-#if IS_DYNAMIC && COMPRESSED_WEIGHTS_INT4
     const int batch_size = BATCH_SIZE;
-    if (batch_size == 1) {
-        FUNC_CALL(fc_bf_tiled_kernel_forced_tile_b1)(
-            OPTIONAL_SHAPE_INFO_TENSOR
-            input,
-        #if DECOMPRESSION_SCALE_TERM
-            decompression_scale,
-        #endif
-        #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-            decompression_zp,
-        #endif
-            output,
-            weights
-        #if BIAS_TERM
-            , biases
-        #endif
-        #if HAS_FUSED_OPS_DECLS
-            , FUSED_OPS_ARGS
-        #endif
-        );
-    } else if (batch_size == 2) {
-        FUNC_CALL(fc_bf_tiled_kernel_forced_tile_b2)(
-            OPTIONAL_SHAPE_INFO_TENSOR
-            input,
-        #if DECOMPRESSION_SCALE_TERM
-            decompression_scale,
-        #endif
-        #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-            decompression_zp,
-        #endif
-            output,
-            weights
-        #if BIAS_TERM
-            , biases
-        #endif
-        #if HAS_FUSED_OPS_DECLS
-            , FUSED_OPS_ARGS
-        #endif
-        );
-    } else if (batch_size == 3) {
-        FUNC_CALL(fc_bf_tiled_kernel_forced_tile_b3)(
-            OPTIONAL_SHAPE_INFO_TENSOR
-            input,
-        #if DECOMPRESSION_SCALE_TERM
-            decompression_scale,
-        #endif
-        #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-            decompression_zp,
-        #endif
-            output,
-            weights
-        #if BIAS_TERM
-            , biases
-        #endif
-        #if HAS_FUSED_OPS_DECLS
-            , FUSED_OPS_ARGS
-        #endif
-        );
-    } else if (batch_size == 4) {
-        FUNC_CALL(fc_bf_tiled_kernel_forced_tile_b4)(
-            OPTIONAL_SHAPE_INFO_TENSOR
-            input,
-        #if DECOMPRESSION_SCALE_TERM
-            decompression_scale,
-        #endif
-        #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-            decompression_zp,
-        #endif
-            output,
-            weights
-        #if BIAS_TERM
-            , biases
-        #endif
-        #if HAS_FUSED_OPS_DECLS
-            , FUSED_OPS_ARGS
-        #endif
-        );
-    } else if (batch_size == 5) {
-        FUNC_CALL(fc_bf_tiled_kernel_forced_tile_b5)(
-            OPTIONAL_SHAPE_INFO_TENSOR
-            input,
-        #if DECOMPRESSION_SCALE_TERM
-            decompression_scale,
-        #endif
-        #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-            decompression_zp,
-        #endif
-            output,
-            weights
-        #if BIAS_TERM
-            , biases
-        #endif
-        #if HAS_FUSED_OPS_DECLS
-            , FUSED_OPS_ARGS
-        #endif
-        );
-    } else if (batch_size == 6) {
-        FUNC_CALL(fc_bf_tiled_kernel_forced_tile_b6)(
-            OPTIONAL_SHAPE_INFO_TENSOR
-            input,
-        #if DECOMPRESSION_SCALE_TERM
-            decompression_scale,
-        #endif
-        #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-            decompression_zp,
-        #endif
-            output,
-            weights
-        #if BIAS_TERM
-            , biases
-        #endif
-        #if HAS_FUSED_OPS_DECLS
-            , FUSED_OPS_ARGS
-        #endif
-        );
-    } else if (batch_size == 7) {
-        FUNC_CALL(fc_bf_tiled_kernel_forced_tile_b7)(
-            OPTIONAL_SHAPE_INFO_TENSOR
-            input,
-        #if DECOMPRESSION_SCALE_TERM
-            decompression_scale,
-        #endif
-        #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-            decompression_zp,
-        #endif
-            output,
-            weights
-        #if BIAS_TERM
-            , biases
-        #endif
-        #if HAS_FUSED_OPS_DECLS
-            , FUSED_OPS_ARGS
-        #endif
-        );
-    } else {
-        #if USE_SLM && DYNAMIC_QUANTIZE
-            FUNC_CALL(fc_bf_tiled_kernel_dyn_quan)(
-                OPTIONAL_SHAPE_INFO_TENSOR
-                input,
-                quantized_input,
-                quan_var,
-            #if DECOMPRESSION_SCALE_TERM
-                decompression_scale,
-            #endif
-            #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-                decompression_zp,
-            #endif
-                output,
-                weights
-                , dq_wei_local_mem
-            #if BIAS_TERM
-                , biases
-            #endif
-            #if HAS_FUSED_OPS_DECLS
-                , FUSED_OPS_ARGS
-            #endif
-            );
-        #else
-            FUNC_CALL(fc_bf_tiled_kernel_default)(
-                OPTIONAL_SHAPE_INFO_TENSOR
-                input,
-            #if DECOMPRESSION_SCALE_TERM
-                decompression_scale,
-            #endif
-            #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-                decompression_zp,
-            #endif
-                output,
-                weights
-            #if USE_SLM
-                , wei_local_mem
-            #endif
-            #if BIAS_TERM
-                , biases
-            #endif
-            #if HAS_FUSED_OPS_DECLS
-                , FUSED_OPS_ARGS
-            #endif
-            );
-        #endif
-    }
-#else
-    #if USE_SLM && DYNAMIC_QUANTIZE
-        FUNC_CALL(fc_bf_tiled_kernel_dyn_quan)(
-            OPTIONAL_SHAPE_INFO_TENSOR
-            input,
-            quantized_input,
-            quan_var,
-        #if DECOMPRESSION_SCALE_TERM
-            decompression_scale,
-        #endif
-        #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-            decompression_zp,
-        #endif
-            output,
-            weights
-            , dq_wei_local_mem
-        #if BIAS_TERM
-            , biases
-        #endif
-        #if HAS_FUSED_OPS_DECLS
-            , FUSED_OPS_ARGS
-        #endif
-        );
-    #else
-        FUNC_CALL(fc_bf_tiled_kernel_default)(
-            OPTIONAL_SHAPE_INFO_TENSOR
-            input,
-        #if DECOMPRESSION_SCALE_TERM
-            decompression_scale,
-        #endif
-        #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
-            decompression_zp,
-        #endif
-            output,
-            weights
-        #if USE_SLM
-            , wei_local_mem
-        #endif
-        #if BIAS_TERM
-            , biases
-        #endif
-        #if HAS_FUSED_OPS_DECLS
-            , FUSED_OPS_ARGS
-        #endif
-        );
+    FUNC_CALL(fc_bf_tiled_kernel_default)(
+        OPTIONAL_SHAPE_INFO_TENSOR
+        input,
+    #if DECOMPRESSION_SCALE_TERM
+        decompression_scale,
     #endif
-#endif
+    #if DECOMPRESSION_ZP_TERM && !DECOMPRESSION_ZP_SCALAR
+        decompression_zp,
+    #endif
+        output,
+        weights
+    #if USE_SLM
+        , wei_local_mem
+    #endif
+    #if BIAS_TERM
+        , biases
+    #endif
+    #if HAS_FUSED_OPS_DECLS
+        , FUSED_OPS_ARGS
+    #endif
+    );
 }
 #endif  // !FC_KERNEL_DYNAMIC_QUANTIZE
 
