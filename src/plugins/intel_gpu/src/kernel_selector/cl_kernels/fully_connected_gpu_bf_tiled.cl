@@ -290,7 +290,15 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
         // NOTE: Manually unrolling multiplication loop leads to lower register pressure and allows for bigger block sizes,
         //       but significantly degrades readability and generality of code.
         //       It doesn't also show noticable performance improvement on tested configurations.
+        #ifdef SWIGLU_LENGTH
+        ACCUMULATOR_VEC_TYPE acc_tmp[TILE_B] = {};
+        for (int i = 0; i < TILE_B; ++i) {
+            acc_tmp[i][0] = 0;
+            acc_tmp[i][1] = 0;
+        }
+        #else
         ACCUMULATOR_VEC_TYPE acc_tmp[TILE_B] = { };
+        #endif
 
         #if USE_SLM && COMPRESSED_WEIGHTS_INT4
             #if TILE_OFM != 2
@@ -504,7 +512,7 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
                     acc_tmp[bi][fi] = 0;
                     #else
                     acc[bi] += acc_tmp[bi] * ds;
-                    acc_tmp[bi] = 0;
+                    acc_tmp[bi] = ACCUMULATOR_VAL_ZERO;
                     #endif
                 }
             }
@@ -622,22 +630,52 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
 #endif // MAIN_LOOP_ELEMENTS_COUNT % (TILE_IFM * SIMD) != 0
     // =====================================================================================================================================
     // Post-processing: bias, activation, fused-ops
+//    unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
+//        #ifdef SWIGLU_LENGTH
+//        if (oi == 0) {
+//            // swish
+////            if (out_b == 0 && out_f_init == 0 && sglid == 0 && bi == 0)
+////                printf("gate[0][0] = %f\n", acc[bi][0]);
+//            activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
+//            activated[bi] /= ACCUMULATOR_VAL_ONE + native_exp(-(ACCUMULATOR_VAL_ONE * activated[bi]));
+//        } else {
+////            activated[bi] *= TO_ACTIVATION_VEC_TYPE(acc[bi]);
+//            half2 val = acc[bi];
+//            val *= activated[bi];
+//            activated[bi] = val;
+////            activated[bi][0] = (half)((float)activated[bi][0] * (float)acc[bi][0]);
+////            activated[bi][1] = (half)((float)activated[bi][1] * (float)acc[bi][1]);
+////            if (out_b == 0 && out_f_init == 0 && sglid == 0 && bi == 0)
+////                printf("val[0][0] = %f swiglu[0][0] = %f\n", acc[bi][0], activated[bi][0]);
+//        }
+//        #else
+//        activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
+//        #endif
+//#if OUTER_OFM > 1
+//        acc[bi] = ACCUMULATOR_VAL_ZERO;
+//#endif
+//    }
     unroll_for (uint bi = 0; bi < TILE_B; ++bi) {
         #ifdef SWIGLU_LENGTH
-        if (oi == 0) {
-            // swish
-            activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
-            activated[bi] /= (ACCUMULATOR_VAL_ONE + native_exp(-(ACCUMULATOR_VAL_ONE * activated[bi])));
+        if (oi == 1) {
+            // val
+            //activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
+            activated[bi] *= (acc[bi] / (ACCUMULATOR_VAL_ONE + native_exp(-(ACCUMULATOR_VAL_ONE * acc[bi]))));
+//            if (out_b == 0 && out_f_init == 0 && sglid == 0 && bi == 0)
+//                printf("gate[0][0] = %f swiglu[0][0] = %f\n", acc[bi][0], activated[bi][0]);
         } else {
-            activated[bi] *= TO_ACTIVATION_VEC_TYPE(acc[bi]);
+            // gate
+            activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
+//            activated[bi] *= TO_ACTIVATION_VEC_TYPE(acc[bi]);
         }
         #else
         activated[bi] = TO_ACTIVATION_VEC_TYPE(acc[bi]);
         #endif
 #if OUTER_OFM > 1
-        acc[bi] = 0;
+        acc[bi] = ACCUMULATOR_VAL_ZERO;
 #endif
     }
+
 
 #if OUTER_OFM > 1 && defined(SWIGLU_LENGTH)
     }
@@ -680,7 +718,12 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
     // Write results
     uint output_offset = out_f * TILE_OUT_F_PITCH + out_b * TILE_OUT_B_PITCH + OUTPUT_OFFSET;
 
+#if SWIGLU_LENGTH
+    if (USE_BLOCK_WRITE && (TILE_OUT_F_NUM % (TILE_OFM * SIMD) == 0 || out_f + (TILE_OFM * SIMD) <= TILE_OUT_F_NUM)) {
+//        printf("use block write!\n");
+#else
     if (USE_BLOCK_WRITE && (TILE_OUT_F_NUM % (OUTER_OFM * TILE_OFM * SIMD) == 0 || out_f + (OUTER_OFM * TILE_OFM * SIMD) <= TILE_OUT_F_NUM)) {
+#endif
 #if IS_DYNAMIC
         #define WRITE_OUTPUT(bi) do {                                       \
                 if (bi + out_b < BATCH_SIZE)                                \
@@ -696,6 +739,9 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
         CONST_LOOP(TILE_B, WRITE_OUTPUT);
         #undef WRITE_OUTPUT
     } else {
+
+#if SWIGLU_LENGTH
+#endif
         output_offset += sglid;
         for (uint bi = 0; bi < TILE_B; ++bi) {
             for (uint fi = 0; fi < TILE_OFM; ++fi) {
@@ -703,7 +749,11 @@ inline void FUNC(fc_bf_tiled_kernel_default)(
 #if IS_DYNAMIC
                     bi + out_b < BATCH_SIZE &&
 #endif
+#if SWIGLU_LENGTH
+                    (TILE_OUT_F_NUM % (TILE_OFM * SIMD) == 0 ||
+#else
                     (TILE_OUT_F_NUM % (OUTER_OFM * TILE_OFM * SIMD) == 0 ||
+#endif
                     out_f + fi * SIMD + sglid < TILE_OUT_F_NUM);
                 if (should_write) {
                     output[output_offset] = ((OUTPUT_TYPE*)(&result[bi]))[fi];

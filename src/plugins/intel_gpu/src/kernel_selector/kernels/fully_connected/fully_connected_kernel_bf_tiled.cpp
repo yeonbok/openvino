@@ -582,6 +582,10 @@ FullyConnected_bf_tiled::SetDefault(const fully_connected_params& params, int au
     dispatchData.tile_ms = tparams.dispatch_bsv;
     dispatchData.tile_ns = tparams.dispatch_fsv;
     dispatchData.use_slm = can_use_slm;
+//    if (is_swiglu_fused(params)) {
+//        std::cout << "gws : " << dispatchData.gws[0] << " ,  "  << dispatchData.gws[1] << ", " << dispatchData.gws[2] << std::endl;
+//        std::cout << "lws : " << dispatchData.lws[0] << " ,  "  << dispatchData.lws[1] << ", " << dispatchData.lws[2] << std::endl;
+//    }
 
     return dispatchData;
 }
@@ -618,8 +622,8 @@ JitConstants FullyConnected_bf_tiled::GetJitConstants(const fully_connected_para
         jit.Merge(make_int4_packed_type_jit_constant("INT4_PACKED_TYPE", weights_dt, tile_k_ofm));
         const size_t scale_group_size = params.weights.IFM().v / params.decompression_scale.Feature().v;
         // Do not use SCALE_POST_OP for SLM kernel, since it demonstrates worse performance
-        if (scale_group_size % simd == 0 && !dispatchData.use_slm)
-            add_decompress_scale_post_op = true;
+//        if (scale_group_size % simd == 0 && !dispatchData.use_slm)
+//            add_decompress_scale_post_op = true;
     }
     if (params.weights.GetLayout() == WeightsLayout::os_is_yx_osv32_isv2) {
         jit.AddConstant(MakeJitConstant("W_IDX", "fi * TILE_K + kii"));
@@ -893,15 +897,15 @@ KernelsData FullyConnected_bf_tiled::GetTunedKernelsDataByIndex(const Params &pa
         // 1st kernel : Dynamic quantizing by dynamic_quantize_grp_size
         // 2nd kernel : fully connected kernel with KernelType::DEFAULT. Quantized inputs and scale values could be used.
         // 3rd kernel : (optional) fully connected shape_agnostic kernel with KernelType::SLM. Quantized inputs and scale values would be used.
-        kernels_data = GetMultiKernelsData(params,
-                                                fc_params.inputs[0].GetLayout(),
-                                                weights_layout,
-                                                tparams.exec_options,
-                                                autoTuneIndex);
-        OPENVINO_ASSERT(!kernels_data.empty() && !kernels_data[0].kernels.empty(), "[GPU] Error to create multi kernel for dynamic quantizing.");
-
-        if (params.is_shape_agnostic)
-            GetUpdateDispatchDataFunc(kernels_data[0]);
+//        kernels_data = GetMultiKernelsData(params,
+//                                                fc_params.inputs[0].GetLayout(),
+//                                                weights_layout,
+//                                                tparams.exec_options,
+//                                                autoTuneIndex);
+//        OPENVINO_ASSERT(!kernels_data.empty() && !kernels_data[0].kernels.empty(), "[GPU] Error to create multi kernel for dynamic quantizing.");
+//
+//        if (params.is_shape_agnostic)
+//            GetUpdateDispatchDataFunc(kernels_data[0]);
     } else {
         kernels_data = GetCommonKernelsData(params,
                                                 fc_params.inputs[0].GetLayout(),
@@ -918,20 +922,20 @@ KernelsData FullyConnected_bf_tiled::GetTunedKernelsDataByIndex(const Params &pa
             if (!can_select_slm_kernel)
                 return kernels_data;
 
-            auto slm_kernel = GetCommonKernelsData(params,
-                                                fc_params.inputs[0].GetLayout(),
-                                                weights_layout,
-                                                tparams.exec_options,
-                                                autoTuneIndex,
-                                                1);
-
-            if (slm_kernel.empty() || slm_kernel[0].kernels.empty())
-                return kernels_data;
-
-            kernels_data[0].kernels.push_back(slm_kernel[0].kernels.back());
-
-            // Update default update_dispatch_data_func function
-            GetUpdateDispatchDataFunc(kernels_data[0]);
+//            auto slm_kernel = GetCommonKernelsData(params,
+//                                                fc_params.inputs[0].GetLayout(),
+//                                                weights_layout,
+//                                                tparams.exec_options,
+//                                                autoTuneIndex,
+//                                                1);
+//
+//            if (slm_kernel.empty() || slm_kernel[0].kernels.empty())
+//                return kernels_data;
+//
+//            kernels_data[0].kernels.push_back(slm_kernel[0].kernels.back());
+//
+//            // Update default update_dispatch_data_func function
+//            GetUpdateDispatchDataFunc(kernels_data[0]);
         }
     }
 
