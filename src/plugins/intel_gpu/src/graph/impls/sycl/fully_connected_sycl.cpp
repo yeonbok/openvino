@@ -441,6 +441,7 @@ struct fully_connected_sycl : typed_primitive_sycl_impl<fully_connected> {
         else if (out_t == ov::element::f32){
           return to_ocl_event(stream, run_fc_q4_0_fp32out(sycl_queue, in, wei, ds, out, M, N, K));
         }
+        return nullptr;
     }
 
     static std::shared_ptr<WeightsReorderParams> get_weights_reorder(const kernel_impl_params& impl_params) {
