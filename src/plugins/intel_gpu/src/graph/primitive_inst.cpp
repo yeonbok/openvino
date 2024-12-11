@@ -2839,6 +2839,8 @@ std::shared_ptr<primitive_impl> ImplementationsFactory::get_primitive_impl_for_p
             break;
         }
     }
+    if (inst.get_node().is_type<fully_connected>())
+        dynamic_impl = nullptr;
 
     // 3. Try to create new shape agnostic impl & cache it
     if (!dynamic_impl) {
