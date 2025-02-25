@@ -211,6 +211,10 @@ sdpa_config_t *choose_config_xehpc(int head_size, int seq, bool thin_q, bool qua
             if (seq <= 64) return &xehpc_q_h128_s64;
             return &xehpc_q_h128;
         }
+        if (getenv("CONFIG_OPT") != nullptr) {
+            std::cout << "enforce to use xehpc_h128" << std::endl;
+            return &xehpc_h128;
+        }
         if (thin_q) return &xehpc_h128_2nd;
         if (seq <= 32) return &xehpc_h128_s32;
         if (seq <= 64) return &xehpc_h128_s64;
@@ -510,6 +514,10 @@ JitConstants SDPAKernelMicro::GetJitConstants(const sdpa_params& params, const m
     jit.AddConstant(MakeJitConstant("QRY_DATA_T", toCLType(Q.GetDType())));
     jit.AddConstant(MakeJitConstant("KEY_DATA_T", toCLType(K.GetDType())));
     jit.AddConstant(MakeJitConstant("VAL_DATA_T", toCLType(V.GetDType())));
+    if (getenv("MASK_OPT") != nullptr) {
+        std::cout << "enforce to use braodcast_mask_q" << std::endl;
+        jit.AddConstant(MakeJitConstant("BROADCAST_MASK_Q", 1));
+    }
 
     if (params.conf.is_kv_compressed) {
         jit.AddConstant(MakeJitConstant("KV_COMPRESSED", 1));

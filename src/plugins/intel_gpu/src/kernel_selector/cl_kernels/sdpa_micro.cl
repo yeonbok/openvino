@@ -17,6 +17,7 @@
 #include "include/batch_headers/generic_vector_ops.cl"
 #include "include/batch_headers/sdpa_utils.cl"
 #include "include/batch_headers/tile_ops.cl"
+//#define BROADCAST_MASK_Q 1
 
 /* The quantization parameter may be unique for each token/element */
 #define QUANTIZE_2D 2
@@ -62,9 +63,20 @@ DECLARE_2D_TILE(
 DECLARE_2D_TILE(
         a_scale_tile_type, float, SUBGROUP_SIZE, ugemm_vs_sg_tile_n, 1, 1, 1)
 
+#if BROADCAST_MASK_Q
+#define mask_br ugemm_kq_sg_tile_m
+#define mask_bc 1
+#define mask_nbr 1
+#define mask_nbc 1
+#else
+#define mask_br ugemm_kq_c_type_block0
+#define mask_bc ugemm_kq_c_type_block1
+#define mask_nbr ugemm_kq_c_type_nblock0
+#define mask_nbc ugemm_kq_c_type_nblock1
+#endif
 
-DECLARE_2D_TILE(mask_tile_type, half, SUBGROUP_SIZE, ugemm_kq_c_type_block0, ugemm_kq_c_type_block1, ugemm_kq_c_type_nblock0, ugemm_kq_c_type_nblock1)
-DECLARE_2D_TILE(mask_tile_type_float, float, SUBGROUP_SIZE, ugemm_kq_c_type_block0, ugemm_kq_c_type_block1, ugemm_kq_c_type_nblock0, ugemm_kq_c_type_nblock1)
+DECLARE_2D_TILE(mask_tile_type, half, SUBGROUP_SIZE, mask_br, mask_bc, mask_nbr, mask_nbc)
+DECLARE_2D_TILE(mask_tile_type_float, float, SUBGROUP_SIZE, mask_br, mask_bc, mask_nbr, mask_nbc)
 
 #ifdef BLOCK_A
 DECLARE_2D_TILE_BLOCK_OPS(a_tile_type_half, half, SUBGROUP_SIZE,
@@ -310,7 +322,11 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 
 #if WITH_ATTN_MASK
         mask_tile_type mask_tile;
+        #if BROADCAST_MASK_Q
+        tile_load_block(&mask_tile, msk, 0, k0 + sg_i0_kq, 0);
+        #else
         tile_load_t(&mask_tile, msk, q, k, q, sg_j0_kq + wg_j0, k0 + sg_i0_kq);
+        #endif
 #endif
 
 #if REMAINDER_K
@@ -354,7 +370,11 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
         mask_tile_type_float mask_tile_float;
         tile_copy(mask_tile, mask_tile_float);
         tile_elementwise(mask_tile_float, unscale);
+#if BROADCAST_MASK_Q
+        tile_hbroadcast_add(&S_tile, mask_tile_float);
+#else
         tile_binary(S_tile, mask_tile_float, binary_add);
+#endif
 #endif
 
         /* Apply k mask */
@@ -467,9 +487,16 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 #if WITH_ATTN_MASK && defined(PREFETCH_MASK)
         /* Prefetch next mask tile. */
         if (!last) {
+#if BROADCAST_MASK_Q
+            cooperative_prefetch_2d(msk + k0 + ugemm_kq_wg_tile_m + sg_i0_kq + (sg_j0_kq + wg_j0) * q,
+                    ugemm_kq_sg_tile_m, 1, 0, sg_ij, sg_per_wg, SUBGROUP_SIZE,
+                    LSC_LDCC_L1UC_L3C);
+ 
+#else
             cooperative_prefetch_2d(msk + k0 + ugemm_kq_wg_tile_m + sg_i0_kq + (sg_j0_kq + wg_j0) * q,
                     ugemm_kq_sg_tile_m, ugemm_kq_sg_tile_n, 0, 0, 1, SUBGROUP_SIZE,
                     LSC_LDCC_L1UC_L3C);
+#endif
         }
 #endif
 
