@@ -211,11 +211,12 @@ sdpa_config_t *choose_config_xehpc(int head_size, int seq, bool thin_q, bool qua
             if (seq <= 64) return &xehpc_q_h128_s64;
             return &xehpc_q_h128;
         }
+        if (thin_q) return &xehpc_h128_2nd;
         if (getenv("CONFIG_OPT") != nullptr) {
             std::cout << "enforce to use xehpc_h128" << std::endl;
             return &xehpc_h128;
         }
-        if (thin_q) return &xehpc_h128_2nd;
+
         if (seq <= 32) return &xehpc_h128_s32;
         if (seq <= 64) return &xehpc_h128_s64;
         return &xehpc_h128;
@@ -237,6 +238,7 @@ const bool vs_common_zp = false;
 std::mutex SDPAKernelMicro::m;
 
 void SDPAKernelMicro::init_microkernels(const sdpa_params& params, micro::Package& gemm_kq, micro::Package& gemm_vs, bool is_prefill) const {
+    std::cout << "is_prefil ? " << is_prefill << std::endl;
     // TODO: Remove once micro API is thread safe
     std::lock_guard<std::mutex> l(m);
     const auto& Q = params.inputs[0];
@@ -347,7 +349,12 @@ void SDPAKernelMicro::init_microkernels(const sdpa_params& params, micro::Packag
 
     /* Ask microkernel provider for microkernel */
     try {
+        using us = std::chrono::microseconds;
+//        auto _start = std::chrono::high_resolution_clock::now();
         gemm_kq = micro::select_gemm_microkernel(opts_kq, hw_info, sizes, problem_kq, reqs_kq);
+//        auto _finish = std::chrono::high_resolution_clock::now();
+//        auto _duration = std::chrono::duration_cast<us>(_finish - _start).count();
+//        std::cout << "gemm select for kq: " << _duration << " us" << std::endl;
     } catch (const std::runtime_error &ex) {
         GPU_DEBUG_TRACE_DETAIL << "Can't create KQ sdpa_micro kernel: " << ex.what() << "\n";
         throw;
@@ -835,6 +842,7 @@ void SDPAKernelMicro::GetUpdateDispatchDataFunc(KernelData& kd) const {
 
         // TODO: Currently 2nd token version works slower than prefill version
         const bool is_prefill = true;//n_queries.v > 1;
+//        const bool is_prefill = n_queries.v > 1;
 
         OPENVINO_ASSERT(kernel_data.kernels.size() == 2, "[GPU] Invalid kernels size for update dispatch data func");
 
