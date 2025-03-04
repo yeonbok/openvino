@@ -262,6 +262,7 @@ protected:
             config.head_size = query_shape[query_shape.size() - 1].get_length();
 
         config.is_causal = desc->is_causal;
+//        config.is_causal = 1;
 
         if (desc->is_kv_compressed) {
             const auto& group_sizes = desc->quantization_attributes.group_sizes;
@@ -364,7 +365,8 @@ public:
         }
 
         const auto& gfx_ver = impl_param.get_program().get_engine().get_device_info().gfx_ver;
-        if (gfx_ver.major == 12 && gfx_ver.minor == 74) { // ARL only
+//        if (gfx_ver.major == 12 && gfx_ver.minor == 74) { // ARL only
+        if (1) { // ARL only
             sdpa_kernel_params.should_use_sdpa_opt = true;
             kernels_data.push_back(kernel_selector.get_best_kernel(sdpa_kernel_params));
         }
