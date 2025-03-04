@@ -178,6 +178,11 @@ sdpa_config_t *choose_config_xehpg(int head_size, int seq, bool thin_q, bool qua
             if (seq <= 256) return &xehpg_h128_s256_2nd;
             return &xehpg_h128_2nd;
         }
+        if (getenv("CONFIG_OPT") != nullptr) {
+            std::cout << "enforce to use xehpg_h128 ( seq : " << seq << ")" << std::endl;
+            return &xehpg_h128;
+        }
+
         if (seq <= 32) return &xehpg_h128_s32;
         return &xehpg_h128;
     } else if (head_size <= 256) {
@@ -218,6 +223,11 @@ sdpa_config_t *choose_config_xehpc(int head_size, int seq, bool thin_q, bool qua
             return &xehpc_q_h128;
         }
         if (thin_q) return &xehpc_h128_2nd;
+        if (getenv("CONFIG_OPT") != nullptr) {
+            std::cout << "enforce to use xehpc_h128 ( seq : " << seq << ")" << std::endl;
+            return &xehpc_h128;
+        }
+
         if (seq <= 32) return &xehpc_h128_s32;
         if (seq <= 64) return &xehpc_h128_s64;
         return &xehpc_h128;
@@ -445,41 +455,50 @@ bool SDPAKernelMicro::Validate(const Params& p) const {
 
     const sdpa_params& params = static_cast<const sdpa_params&>(p);
 
-    if (params.should_use_sdpa_opt)
+    if (params.should_use_sdpa_opt) {
         return false;
+    }
 
     if (params.engineInfo.arch < gpu_arch::xe_hpg || !params.engineInfo.supports_microkernels)
         return false;
 
-    if (params.indirect_axis != -1)
+    std::cout << "indirect axis : " << params.indirect_axis << std::endl;
+    if (params.indirect_axis != -1) {
         return false;
+    }
 
     auto Q_num_heads_dim = params.conf.is_paged_attention ? params.conf.heads_num
                                                           : get_num_heads(params, params.inputs[0], params.input0_order);
     auto K_num_heads_dim = get_num_heads(params, params.inputs[1], params.input1_order);
     auto V_num_heads_dim = get_num_heads(params, params.inputs[2], params.input2_order);
 
-    if (params.input0_order[3] != 3 || params.input1_order[3] != 3 || params.input2_order[3] != 3)
+    if (params.input0_order[3] != 3 || params.input1_order[3] != 3 || params.input2_order[3] != 3) {
         return false;
+    }
 
-    if (Q_num_heads_dim.is_dynamic || K_num_heads_dim.is_dynamic || V_num_heads_dim.is_dynamic || K_num_heads_dim.v != V_num_heads_dim.v)
+    if (Q_num_heads_dim.is_dynamic || K_num_heads_dim.is_dynamic || V_num_heads_dim.is_dynamic || K_num_heads_dim.v != V_num_heads_dim.v) {
         return false;
+    }
 
-    if (params.conf.head_size > 256)
+    if (params.conf.head_size > 256) {
         return false;
+    }
 
     // Do not use sdpa_micro kernel with a scalar-value mask
     const auto scale_idx = params.conf.is_paged_attention ? 4lu : 3lu;
-    if (params.inputs.size() > scale_idx && !params.inputs[scale_idx].is_dynamic() && params.inputs[scale_idx].LogicalSize() == 1)
+    if (params.inputs.size() > scale_idx && !params.inputs[scale_idx].is_dynamic() && params.inputs[scale_idx].LogicalSize() == 1) {
         return false;
+    }
 
     // Scores output is not supported
-    if (params.conf.is_paged_attention && params.outputs.size() > 1)
+    if (params.conf.is_paged_attention && params.outputs.size() > 1) {
         return false;
+    }
 
     // Alibi is not supported
-    if (params.conf.is_paged_attention && params.conf.has_alibi_input)
+    if (params.conf.is_paged_attention && params.conf.has_alibi_input) {
         return false;
+    }
 
     return true;
 }
@@ -515,7 +534,7 @@ JitConstants SDPAKernelMicro::GetJitConstants(const sdpa_params& params, const m
     jit.AddConstant(MakeJitConstant("HEAD_SIZE", head_size));
     jit.AddConstant(MakeJitConstant("WITH_CAUSAL_MASK", params.conf.is_causal));
 
-    jit.AddConstant(MakeJitConstant("WITH_ATTN_MASK", data_inputs > 3));
+    jit.AddConstant(MakeJitConstant("WITH_ATTN_MASK", !params.conf.is_causal && data_inputs > 3));
     jit.AddConstant(MakeJitConstant("WITH_SCALE", data_inputs > 4));
     jit.AddConstant(MakeJitConstant("Q_ALIGN", micro::alignment_for_ld(ldq)));
     jit.AddConstant(MakeJitConstant("K_ALIGN", micro::alignment_for_ld(ldk)));
@@ -864,7 +883,8 @@ void SDPAKernelMicro::GetUpdateDispatchDataFunc(KernelData& kd) const {
         s_q.v.s32 = static_cast<uint32_t>(n_queries.v);
 
         // TODO: Currently 2nd token version works slower than prefill version
-        const bool is_prefill = true;//n_queries.v > 1;
+//        const bool is_prefill = true;//n_queries.v > 1;
+        const bool is_prefill = n_queries.v > 1;
 
         OPENVINO_ASSERT(kernel_data.kernels.size() == 2, "[GPU] Invalid kernels size for update dispatch data func");
 

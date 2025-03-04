@@ -146,9 +146,9 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 #if IS_PAGED_ATTENTION
     const __global INPUT3_TYPE* subsequence_begins,
 #endif
-#if WITH_ATTN_MASK
+//#if WITH_ATTN_MASK
         const global half *msk,
-#endif
+//#endif
 #if WITH_SCALE
         global SCALE_DATA_T *scale_ptr,
 #endif
