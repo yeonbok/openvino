@@ -490,21 +490,26 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
 
             // Known limitations:
             // - The data type of SDPA should be fp16
-            if (sdpa->get_output_element_type(0) != ov::element::f16)
+            if (sdpa->get_output_element_type(0) != ov::element::f16) {
+                std::cout << __FILE__ << " : " << __LINE__ << std::endl;
                 return false;
+            }
 
             // - The number of dimensions for each input is expected to be 4
             if (query_ps.size() != 4 || key_ps.size() != 4 || value_ps.size() != 4) {
+                std::cout << __FILE__ << " : " << __LINE__ << std::endl;
                 return false;
             }
 
             // - The head size of all Q, K, and V inputs should be the same static value
             if (query_ps[query_ps.size() - 1].is_dynamic() || key_ps[key_ps.size() - 1].is_dynamic() || value_ps[value_ps.size() - 1].is_dynamic()) {
+                std::cout << __FILE__ << " : " << __LINE__ << std::endl;
                 return false;
             }
 
             if (query_ps[query_ps.size() - 1].get_length() != key_ps[key_ps.size() - 1].get_length() ||
                 query_ps[query_ps.size() - 1].get_length() != value_ps[value_ps.size() - 1].get_length()) {
+                std::cout << __FILE__ << " : " << __LINE__ << std::endl;
                 return false;
             }
 
@@ -518,10 +523,11 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
             const auto optimal_subgroup_size = 16;
             bool valid_head_size = head_size % optimal_subgroup_size == 0;
             valid_head_size &= (head_size >= 64 && head_size <= 256);
+            if (getenv("FUSE_SDPA") != nullptr)
+                valid_head_size = true;
             if (!valid_head_size) {
                 return false;
             }
-
             return true;
         });
 

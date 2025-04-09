@@ -116,7 +116,7 @@ inline uint FUNC(get_bt_index_value)(OPTIONAL_SHAPE_INFO_ARG uint b, uint f, uin
 #define OUTPUT_BLOCK_READ(ptr, offset) BLOCK_READN(OUTPUT_TYPE, 1, ptr, offset)
 #define OUTPUT_BLOCK_WRITE(ptr, offset, val) BLOCK_WRITEN(OUTPUT_TYPE, 1, ptr, offset, val)
 #define VALUE_BLOCK_READ(ptr, offset) BLOCK_READN(INPUT2_TYPE, 1, ptr, offset)
-#define SUBGROUPS_PER_WG (HEAD_SIZE * SG_SCALE_FACTOR / SUBGROUP_SIZE)
+#define SUBGROUPS_PER_WG CEIL_DIV(HEAD_SIZE * SG_SCALE_FACTOR, SUBGROUP_SIZE)
 
 #if IS_KV_COMPRESSED
 #if COMPRESSED_PER_HEAD
@@ -914,6 +914,7 @@ KERNEL(sdpa_opt)(
         uint query_offset = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, target_seq_idx, (head_size_idx));
         uint query_offset_next_seq = FUNC_CALL(get_input0_index)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, target_seq_idx + 1, (head_size_idx));
         const uint query_pitch = query_offset_next_seq - query_offset;
+
 #else
         uint query_offset = INPUT0_GET_INDEX(b0_idx, b1_idx, target_seq_idx, (head_size_idx));
         const uint query_pitch = HEAD_SIZE;
@@ -972,7 +973,21 @@ KERNEL(sdpa_opt)(
                     query_offset += query_pitch;
                     query_local_offset++;
                 }
-            #else
+            #else 
+            // load query => slm_query
+            //      16 (seq_block)
+            // ------------
+            // |   sg0     | 16
+            // |-----------|
+            // |   sg1     | 72(H)
+            // |-----------|
+            // |   sg2     | 16
+            // |-----------|
+            // |   sg3     | 16
+            // |-----------|
+            // |   sg4     | 8
+            // -------------
+            if ((sgid + 1) * TARGET_SEQ_LEN_BLOCK_SIZE <= HEAD_SIZE) {
                 unroll_for (uint seq_idx = 0; seq_idx < TARGET_SEQ_LEN_BLOCK_SIZE; seq_idx++) {
                     INPUT0_TYPE val = BLOCK_READN(INPUT0_TYPE, 1, query_input, query_offset);
 
@@ -980,6 +995,18 @@ KERNEL(sdpa_opt)(
                     query_offset += query_pitch;
                     query_local_offset++;
                 }
+            } else {
+                // sgid : 4 / x >= 64
+                int valid_workers = HEAD_SIZE - sgid * SUBGROUP_SIZE;
+                if (sglid < valid_workers) {
+                    unroll_for (uint seq_idx = 0; seq_idx < TARGET_SEQ_LEN_BLOCK_SIZE; seq_idx++) {
+                        INPUT0_TYPE val = query_input[query_offset];
+                        slm_query[query_local_offset] = val * scale_val;
+                        query_offset += query_pitch;
+                        query_local_offset++;
+                    }
+                }
+            }
             #endif
         }
         barrier(CLK_LOCAL_MEM_FENCE);
@@ -1002,6 +1029,9 @@ KERNEL(sdpa_opt)(
 
     __attribute__((opencl_unroll_hint(1)))
     for (uint start_partition_idx = 0; start_partition_idx < SOURCE_SEQ_LEN; start_partition_idx += SEQ_LEN_PARTITION_SIZE) {
+        // e.g., if K seq len : 1024 && partition is 80 && subgroup size 16
+        // 5 subgroups for a WG
+        // each subgroup calculates 16 K seqs at each iteration
         const uint seq_len = start_partition_idx + sgid * SUBGROUP_SIZE;
 #if IS_CAUSAL
         const uint partition_seq_len = min((uint)SEQ_LEN_PARTITION_SIZE, (uint)max(0, (int)(target_seq_idx + seq_idx_end) - (int)start_partition_idx));
@@ -1034,14 +1064,13 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
     #ifdef INPUT1_DIMS_ORDER
             uint key_offset = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, seq_len, 0);
             uint key_offset_next_seq = FUNC_CALL(get_input1_index)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, seq_len + 1, 0);
-            const uint key_pitch = key_offset_next_seq - key_offset;
+            const uint key_pitch = key_offset_next_seq - key_offset; 
     #else
             uint key_offset = INPUT1_GET_INDEX(b0_idx, b1_idx, seq_len, 0);
             const uint key_pitch = HEAD_SIZE;
     #endif
 #endif
 #endif
-
             int seq_len_calc_size = min((int)(SOURCE_SEQ_LEN) - (int)seq_len, (int)SUBGROUP_SIZE);
 #if !IS_CAUSAL
             qk_acc = FUNC_CALL(load_attn_mask)(OPTIONAL_SHAPE_INFO_TENSOR
@@ -1063,12 +1092,14 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                 KEY_COMPRESSION_SCALE_TYPE comp_zp = key_scale[comp_offset + 1];
 #endif
 #endif
+                uint head_idx_index = 0;
                 __attribute__((opencl_unroll_hint(1)))
-                for (uint head_idx_index = 0; head_idx_index < HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
+                for (head_idx_index = 0; head_idx_index + SUBGROUP_SIZE <= HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
                     #define KEY_BLOCK_READ(ptr, offset) BLOCK_READN(INPUT1_TYPE, 1, ptr, offset);
                     #define QUERY_VEC MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE)
 
                     QUERY_VEC queries_vec;
+                    // load query vector from slm_query
                     uint query_local_offset = (head_idx_index * TARGET_SEQ_LEN_BLOCK_SIZE) + sglid;
                     unroll_for (uint q_row_idx = 0; q_row_idx < TARGET_SEQ_LEN_BLOCK_SIZE; q_row_idx++) {
                         queries_vec[q_row_idx] = slm_query[query_local_offset];

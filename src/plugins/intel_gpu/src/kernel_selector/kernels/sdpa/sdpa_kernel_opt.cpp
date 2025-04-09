@@ -105,6 +105,9 @@ static std::string GetKernelName(std::string base_name, KernelsTypes type, const
 
 size_t SDPAKernelOpt::get_sg_number_scale_factor(const Params& params, size_t head_size, size_t kernel_type) {
     const size_t optimal_scale_factor = 2;
+    // TMP
+    if (head_size == 72)
+        return 1;
     if (kernel_type == KernelsTypes::MULTI_TOKENS) {
         if (head_size * optimal_scale_factor <= params.engineInfo.maxWorkGroupSize) {
             return optimal_scale_factor;
@@ -122,7 +125,7 @@ size_t SDPAKernelOpt::get_sg_number_scale_factor(const Params& params, size_t he
 size_t SDPAKernelOpt::get_seq_len_partition_size(const Params& params, size_t head_size, size_t kernel_type) {
     size_t seq_len = 0;
     if (kernel_type == KernelsTypes::MULTI_TOKENS) {
-        seq_len = head_size * get_sg_number_scale_factor(params, head_size, kernel_type);
+        seq_len = Align(head_size * get_sg_number_scale_factor(params, head_size, kernel_type), 16);
     } else {
         seq_len = 256;
     }
@@ -158,8 +161,8 @@ bool SDPAKernelOpt::Validate(const Params& p) const {
 
     const sdpa_params& params = static_cast<const sdpa_params&>(p);
 
-    if (params.conf.head_size < 1 || params.conf.head_size % subgroup_size != 0)
-        return false;
+//    if (params.conf.head_size < 1 || params.conf.head_size % subgroup_size != 0)
+//        return false;
 
     if (params.conf.use_asymmetric_quantization && !params.conf.combine_scales_and_zp)
         return false;
@@ -257,8 +260,8 @@ CommonDispatchData SDPAKernelOpt::SetDefault(const sdpa_params& params, size_t k
             const size_t sg_num_scale = get_sg_number_scale_factor(params, head_size, kernel_idx);
             dispatch_data.gws = { batch_size * heads_num,
                                   CeilDiv(target_seq_len, target_seq_len_block_size),
-                                  head_size * sg_num_scale };
-            dispatch_data.lws = { 1, 1, head_size * sg_num_scale };
+                                  Align(head_size * sg_num_scale, 16) };
+            dispatch_data.lws = { 1, 1, Align(head_size * sg_num_scale, 16) };
         } else if (kernel_idx == KernelsTypes::FINALIZATION) {
             dispatch_data.gws = { batch_size * heads_num,
                                   target_seq_len,
