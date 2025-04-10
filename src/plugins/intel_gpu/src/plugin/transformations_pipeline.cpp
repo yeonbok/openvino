@@ -490,26 +490,21 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
 
             // Known limitations:
             // - The data type of SDPA should be fp16
-            if (sdpa->get_output_element_type(0) != ov::element::f16) {
-                std::cout << __FILE__ << " : " << __LINE__ << std::endl;
+            if (sdpa->get_output_element_type(0) != ov::element::f16)
                 return false;
-            }
 
             // - The number of dimensions for each input is expected to be 4
             if (query_ps.size() != 4 || key_ps.size() != 4 || value_ps.size() != 4) {
-                std::cout << __FILE__ << " : " << __LINE__ << std::endl;
                 return false;
             }
 
             // - The head size of all Q, K, and V inputs should be the same static value
             if (query_ps[query_ps.size() - 1].is_dynamic() || key_ps[key_ps.size() - 1].is_dynamic() || value_ps[value_ps.size() - 1].is_dynamic()) {
-                std::cout << __FILE__ << " : " << __LINE__ << std::endl;
                 return false;
             }
 
             if (query_ps[query_ps.size() - 1].get_length() != key_ps[key_ps.size() - 1].get_length() ||
                 query_ps[query_ps.size() - 1].get_length() != value_ps[value_ps.size() - 1].get_length()) {
-                std::cout << __FILE__ << " : " << __LINE__ << std::endl;
                 return false;
             }
 
@@ -520,14 +515,11 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
             // - Head size should be 128 for any model type; or should be in the range of 64 to 256 for stateful LLMs because of performance reasons.
             //   This limitations is recommended to prevent performance drop in models with small head size, such as SD,
             //   until the SDPA operation is optimized for these cases
-            const auto optimal_subgroup_size = 16;
-            bool valid_head_size = head_size % optimal_subgroup_size == 0;
-            valid_head_size &= (head_size >= 64 && head_size <= 256);
-            if (getenv("FUSE_SDPA") != nullptr)
-                valid_head_size = true;
+            bool valid_head_size = (head_size >= 64 && head_size <= 256);
             if (!valid_head_size) {
                 return false;
             }
+
             return true;
         });
 

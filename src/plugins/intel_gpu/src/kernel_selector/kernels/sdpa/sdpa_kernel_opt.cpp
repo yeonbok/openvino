@@ -105,11 +105,9 @@ static std::string GetKernelName(std::string base_name, KernelsTypes type, const
 
 size_t SDPAKernelOpt::get_sg_number_scale_factor(const Params& params, size_t head_size, size_t kernel_type) {
     const size_t optimal_scale_factor = 2;
-    // TMP
-    if (head_size == 72)
-        return 1;
     if (kernel_type == KernelsTypes::MULTI_TOKENS) {
-        if (head_size * optimal_scale_factor <= params.engineInfo.maxWorkGroupSize) {
+        size_t group_size = head_size * optimal_scale_factor;
+        if (head_size % subgroup_size == 0 && group_size <= params.engineInfo.maxWorkGroupSize) {
             return optimal_scale_factor;
         }
     } else if (kernel_type == KernelsTypes::SINGLE_TOKEN) {
@@ -161,8 +159,8 @@ bool SDPAKernelOpt::Validate(const Params& p) const {
 
     const sdpa_params& params = static_cast<const sdpa_params&>(p);
 
-//    if (params.conf.head_size < 1 || params.conf.head_size % subgroup_size != 0)
-//        return false;
+    if (params.conf.head_size < 1)
+        return false;
 
     if (params.conf.use_asymmetric_quantization && !params.conf.combine_scales_and_zp)
         return false;
