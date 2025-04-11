@@ -997,11 +997,14 @@ KERNEL(sdpa_opt)(
                 }
             } else {
                 // remainder
-                unroll_for (uint head_idx = 0; head_idx < (HEAD_SIZE - sgid * SUBGROUP_SIZE); head_idx++) {
-                    INPUT0_TYPE val = query_input[query_offset + sglid * query_pitch];
-                    slm_query[query_local_offset] = val * scale_val;
-                    query_offset++;
-                    query_local_offset += TARGET_SEQ_LEN_BLOCK_SIZE;
+                int valid_workers = HEAD_SIZE - sgid * SUBGROUP_SIZE;
+                if (sglid < valid_workers) {
+                    unroll_for (uint seq_idx = 0; seq_idx < TARGET_SEQ_LEN_BLOCK_SIZE; seq_idx++) {
+                        INPUT0_TYPE val = query_input[query_offset];
+                        slm_query[query_local_offset] = val * scale_val;
+                        query_offset += query_pitch;
+                        query_local_offset++;
+                    }
                 }
             }
             #endif
