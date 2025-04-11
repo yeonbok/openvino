@@ -178,6 +178,8 @@ JitConstants SDPAKernelOpt::GetJitConstants(const sdpa_params& params, size_t ke
     jit.AddConstant(MakeJitConstant("SUBGROUP_SIZE", subgroup_size));
     jit.AddConstant(MakeJitConstant("HEAD_SIZE", config.head_size));
     jit.AddConstant(MakeJitConstant("SEQ_LEN_PARTITION_SIZE", get_seq_len_partition_size(params, config.head_size, kernel_idx)));
+    if (config.head_size % subgroup_size > 0)
+        jit.AddConstant(MakeJitConstant("HEAD_SIZE_REMAINDER", config.head_size % subgroup_size));
 
     auto target_seq_len_block_size = kernel_idx == KernelsTypes::SINGLE_TOKEN ? 1 : get_target_seq_len_block_size();
     jit.AddConstant(MakeJitConstant("TARGET_SEQ_LEN_BLOCK_SIZE", target_seq_len_block_size));

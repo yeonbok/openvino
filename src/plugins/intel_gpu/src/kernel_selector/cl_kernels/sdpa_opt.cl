@@ -1089,8 +1089,10 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                 KEY_COMPRESSION_SCALE_TYPE comp_zp = key_scale[comp_offset + 1];
 #endif
 #endif
+                uint head_idx_index = 0;
                 __attribute__((opencl_unroll_hint(1)))
-                for (uint head_idx_index = 0; head_idx_index + SUBGROUP_SIZE <= HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
+                for (; head_idx_index + SUBGROUP_SIZE <= HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
+//                for (uint head_idx_index = 0; head_idx_index <= HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
                     #define KEY_BLOCK_READ(ptr, offset) BLOCK_READN(INPUT1_TYPE, 1, ptr, offset);
                     #define QUERY_VEC MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE)
 
@@ -1106,6 +1108,10 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                         const INPUT1_TYPE key_packed = KEY_BLOCK_READ(key_input, sub_group_broadcast(key_offset, key_row_idx) + head_idx_index);
 #else
                         const INPUT1_TYPE key_packed = KEY_BLOCK_READ(key_input, key_offset + key_row_idx * key_pitch + head_idx_index);
+//                        if (get_global_id(0) == 0 && get_global_id(1) == 0 && get_global_id(2) == 1) {
+//                            printf("load key from  %d = key_offset(%d) head_idx_index(%d) + key_row_idx(%d) * key_pitch(%d)\n", 
+//                            key_offset + key_row_idx * key_pitch + head_idx_index, key_offset, head_idx_index, key_row_idx, key_pitch);
+//                        }
 #endif
 
 #if IS_KV_COMPRESSED && USE_ASYMMETRIC_QUANTIZATION
@@ -1121,6 +1127,36 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                         }
                     }
                 }
+                #ifdef HEAD_SIZE_REMAINDER
+                for (; head_idx_index < HEAD_SIZE; ++head_idx_index) {
+                    QUERY_VEC queries_vec;
+                    uint query_local_offset = (head_idx_index * TARGET_SEQ_LEN_BLOCK_SIZE) * sglid;
+                    unroll_for (uint q_row_idx = 0; q_row_idx < HEAD_SIZE_REMAINDER; q_row_idx++) {
+                        queries_vec[q_row_idx] = slm_query[query_local_offset];
+                        query_local_offset += TARGET_SEQ_LEN_BLOCK_SIZE;
+                    }
+                    unroll_for (uint key_row_idx = 0; key_row_idx < TARGET_SEQ_LEN_BLOCK_SIZE; ++key_row_idx) {
+#ifdef BEAM_TABLE_TYPE
+// TODO!!!!
+#else
+                        const INPUT1_TYPE key_packed = (sglid < HEAD_SIZE_REMAINDER) ? key_input[key_offset + key_row_idx * key_pitch + head_idx_index + sglid] : INPUT1_VAL_ZERO;
+#endif
+#if IS_KV_COMPRESSED && USE_ASYMMETRIC_QUANTIZATION
+// TODO!!!!
+//                        KEY_COMPRESSION_SCALE_TYPE key_vals = (TO_KEY_COMPRESSION_SCALE_TYPE(key_packed) - sub_group_broadcast(comp_zp, key_row_idx)) * sub_group_broadcast(comp_scale, key_row_idx);j
+#elif IS_KV_COMPRESSED
+// TODO!!!!
+//                        KEY_COMPRESSION_SCALE_TYPE key_vals = (TO_KEY_COMPRESSION_SCALE_TYPE(key_packed) * sub_group_broadcast(comp_scale, key_row_idx));
+#else
+                        INPUT1_TYPE key_vals = key_packed;
+#endif
+
+                        unroll_for (uint i = 0; i < HEAD_SIZE_REMAINDER; i++) {
+                            qk_acc[key_row_idx] = mad(sub_group_broadcast(key_vals, i), queries_vec[i], qk_acc[key_row_idx]);
+                        }
+                    }
+                }
+                #endif
             } else if (seq_len_calc_size > 0) {
 #if IS_KV_COMPRESSED
                 const uint comp_offset = GET_COMPRESSION_INDEX(KEY_COMPRESSION_SCALE, b_idx, b1_idx / BROADCAST_GROUP_SIZE, seq_len + min(sglid, (uint)seq_len_calc_size - 1), 0);
