@@ -880,6 +880,9 @@ KERNEL(sdpa_opt)(
     #define head_size_idx ((uint)get_local_id(2) % HEAD_SIZE)
     #define sglid (uint)get_sub_group_local_id()
     #define sgid (uint)get_sub_group_id()
+    uint gid0 = get_global_id(0);
+    uint gid1 = get_global_id(1);
+    uint gid2 = get_global_id(2);
 
     // SLM buffer for query inputs
     __local INPUT0_TYPE slm_query[HEAD_SIZE * TARGET_SEQ_LEN_BLOCK_SIZE];
@@ -901,6 +904,10 @@ KERNEL(sdpa_opt)(
     const uint seq_idx_end = block_end_pos - block_start_pos;
 #else
     const uint seq_idx_end = min(TARGET_SEQ_LEN - target_seq_idx, (uint)TARGET_SEQ_LEN_BLOCK_SIZE);
+//    if (gid0 == 0 && gid1 == 0 && gid2 == 0)
+//        printf("gid[%d,%d,%d]target_seq_idx : %d, seq_idx_end : %d\n", gid0, gid1, gid2, target_seq_idx, seq_idx_end);
+//    if (gid0 == 0 && gid1 == 1 && gid2 == 0)
+//        printf("gid[%d,%d,%d]target_seq_idx : %d, seq_idx_end : %d\n", gid0, gid1, gid2, target_seq_idx, seq_idx_end);
 #endif
     {
         // Load Q input to SLM and transpose it
@@ -1011,7 +1018,14 @@ KERNEL(sdpa_opt)(
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
-
+//    if (get_global_id(0) == 0 && get_global_id(1) == 1 && get_global_id(2) == 0) {
+//        for (int i = 0 ;i < 72; ++i) {
+//            for (int j = 0; j < 16; ++j) {
+//                printf("%f ", slm_query[i*16 + j]);
+//            }
+//            printf("\n");
+//        }
+//    }
     {
         #if TARGET_SEQ_LEN_BLOCK_SIZE <= SUBGROUP_SIZE
             // Initialize slm buffers with MIN and ZERO values
@@ -1092,7 +1106,6 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                 uint head_idx_index = 0;
                 __attribute__((opencl_unroll_hint(1)))
                 for (; head_idx_index + SUBGROUP_SIZE <= HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
-//                for (uint head_idx_index = 0; head_idx_index <= HEAD_SIZE; head_idx_index += SUBGROUP_SIZE) {
                     #define KEY_BLOCK_READ(ptr, offset) BLOCK_READN(INPUT1_TYPE, 1, ptr, offset);
                     #define QUERY_VEC MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE)
 
@@ -1108,10 +1121,6 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                         const INPUT1_TYPE key_packed = KEY_BLOCK_READ(key_input, sub_group_broadcast(key_offset, key_row_idx) + head_idx_index);
 #else
                         const INPUT1_TYPE key_packed = KEY_BLOCK_READ(key_input, key_offset + key_row_idx * key_pitch + head_idx_index);
-//                        if (get_global_id(0) == 0 && get_global_id(1) == 0 && get_global_id(2) == 1) {
-//                            printf("load key from  %d = key_offset(%d) head_idx_index(%d) + key_row_idx(%d) * key_pitch(%d)\n", 
-//                            key_offset + key_row_idx * key_pitch + head_idx_index, key_offset, head_idx_index, key_row_idx, key_pitch);
-//                        }
 #endif
 
 #if IS_KV_COMPRESSED && USE_ASYMMETRIC_QUANTIZATION
@@ -1128,34 +1137,41 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                     }
                 }
                 #ifdef HEAD_SIZE_REMAINDER
-                for (; head_idx_index < HEAD_SIZE; ++head_idx_index) {
                     QUERY_VEC queries_vec;
-                    uint query_local_offset = (head_idx_index * TARGET_SEQ_LEN_BLOCK_SIZE) * sglid;
+                    uint query_local_offset = (head_idx_index * TARGET_SEQ_LEN_BLOCK_SIZE) + sglid;
                     unroll_for (uint q_row_idx = 0; q_row_idx < HEAD_SIZE_REMAINDER; q_row_idx++) {
                         queries_vec[q_row_idx] = slm_query[query_local_offset];
                         query_local_offset += TARGET_SEQ_LEN_BLOCK_SIZE;
                     }
                     unroll_for (uint key_row_idx = 0; key_row_idx < TARGET_SEQ_LEN_BLOCK_SIZE; ++key_row_idx) {
+                        if (get_global_id(0) == 0 && get_global_id(1) == 0 && get_global_id(2) == 0) {
+                            printf("key_row_idx = %d\n", key_row_idx);
+                        }
 #ifdef BEAM_TABLE_TYPE
 // TODO!!!!
 #else
-                        const INPUT1_TYPE key_packed = (sglid < HEAD_SIZE_REMAINDER) ? key_input[key_offset + key_row_idx * key_pitch + head_idx_index + sglid] : INPUT1_VAL_ZERO;
+                    const INPUT1_TYPE key_packed = (sglid < HEAD_SIZE_REMAINDER) ? key_input[key_offset + key_row_idx * key_pitch + head_idx_index + sglid] : INPUT1_VAL_ZERO;
 #endif
 #if IS_KV_COMPRESSED && USE_ASYMMETRIC_QUANTIZATION
 // TODO!!!!
-//                        KEY_COMPRESSION_SCALE_TYPE key_vals = (TO_KEY_COMPRESSION_SCALE_TYPE(key_packed) - sub_group_broadcast(comp_zp, key_row_idx)) * sub_group_broadcast(comp_scale, key_row_idx);j
+//                   KEY_COMPRESSION_SCALE_TYPE key_vals = (TO_KEY_COMPRESSION_SCALE_TYPE(key_packed) - sub_group_broadcast(comp_zp, key_row_idx)) * sub_group_broadcast(comp_scale, key_row_idx);j
 #elif IS_KV_COMPRESSED
 // TODO!!!!
-//                        KEY_COMPRESSION_SCALE_TYPE key_vals = (TO_KEY_COMPRESSION_SCALE_TYPE(key_packed) * sub_group_broadcast(comp_scale, key_row_idx));
+//                   KEY_COMPRESSION_SCALE_TYPE key_vals = (TO_KEY_COMPRESSION_SCALE_TYPE(key_packed) * sub_group_broadcast(comp_scale, key_row_idx));
 #else
-                        INPUT1_TYPE key_vals = key_packed;
+                    INPUT1_TYPE key_vals = key_packed;
 #endif
-
-                        unroll_for (uint i = 0; i < HEAD_SIZE_REMAINDER; i++) {
-                            qk_acc[key_row_idx] = mad(sub_group_broadcast(key_vals, i), queries_vec[i], qk_acc[key_row_idx]);
-                        }
+                    unroll_for (uint i = 0; i < HEAD_SIZE_REMAINDER; i++) {
+                        qk_acc[key_row_idx] = mad(sub_group_broadcast(key_vals, i), queries_vec[i], qk_acc[key_row_idx]);
                     }
                 }
+                // 0, 0, 32 is not coming to this 
+//                if (get_global_id(0) == 0 && get_global_id(1) == 0 && get_global_id(2) == 31) {
+//                    for (int key_row_idx = 0; key_row_idx < 16; ++key_row_idx) {
+//                        printf("qk_acc[%d] = %f \n", key_row_idx, qk_acc[key_row_idx]);
+//                    }
+//                }
+                // until here, value seems okay
                 #endif
             } else if (seq_len_calc_size > 0) {
 #if IS_KV_COMPRESSED
@@ -1194,6 +1210,8 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                         key_vec[key_row_idx] = TO_KEY_UNPACKED_TYPE(KEY_BLOCK_READ(key_input, sub_group_broadcast(key_offset, key_row_idx) + head_idx_index));
 #else
                         key_vec[key_row_idx] = TO_KEY_UNPACKED_TYPE(KEY_BLOCK_READ(key_input, key_offset + key_row_idx * key_pitch + head_idx_index));
+
+
 #endif
 
 #if IS_KV_COMPRESSED && USE_ASYMMETRIC_QUANTIZATION
@@ -1246,6 +1264,13 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
 #else
                     const OUTPUT_TYPE scale_val = TO_OUTPUT_TYPE(STATIC_SCALE_VALUE);
 #endif
+//                    if (get_global_id(0) == 0 && get_global_id(1) == 0 && sgid == 1 && sglid == 0) {
+//                        printf("seq_len + i = %d wi: %d %d %d scale_Val : %f\n", seq_len + i, get_global_id(0), get_global_id(1), get_global_id(2), scale_val);
+//                        for (int i = 0; i < 16; ++i) {
+//                            printf("%f ", qk_acc[i]);
+//                        }
+//                        printf("\n");
+//                    }
                     qk_acc[i] *= scale_val;
 #endif
 
@@ -1262,6 +1287,7 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
 #endif  // IS_CAUSAL
                     qk_max = SOFTMAX_ACCUMULATOR_MAX_FUNC(qk_max, TO_SOFTMAX_ACCUMULATOR_TYPE(qk_acc[i]));
                     slm_qk_vals[sglid][sgid * TARGET_SEQ_LEN_BLOCK_SIZE + i] = qk_acc[i];
+
                 }
                 slm_qk_max_vals[sglid][sgid] = qk_max;
             }
