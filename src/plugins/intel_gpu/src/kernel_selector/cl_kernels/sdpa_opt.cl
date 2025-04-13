@@ -1265,8 +1265,6 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                     qk_max = SOFTMAX_ACCUMULATOR_MAX_FUNC(qk_max, TO_SOFTMAX_ACCUMULATOR_TYPE(qk_acc[i]));
                     slm_qk_vals[sglid][sgid * TARGET_SEQ_LEN_BLOCK_SIZE + i] = qk_acc[i];
                 }
-
-
                 slm_qk_max_vals[sglid][sgid] = qk_max;
             }
 #if IS_CAUSAL
@@ -1381,7 +1379,6 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                                         value_seq_offset * value_pitch +
                                         heads_dim * HEAD_SIZE +
                                         (start_partition_idx + (seq_len)) * value_pitch + head_size_idx;
-
 #else
 #ifdef BEAM_TABLE_TYPE
                     const uint b_idx = beam_table[FUNC_CALL(get_bt_index_value)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, start_partition_idx + (seq_len) + sglid, sgid * SUBGROUP_SIZE)];
@@ -1449,7 +1446,7 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                                         value_seq_offset * value_pitch +
                                         heads_dim * HEAD_SIZE +
                                         (start_partition_idx + (seq_len * SUBGROUP_SIZE)) * value_pitch + head_size_idx;
-#else // Not IS_PAGED_ATTENTION
+#else // !IS_PAGED_ATTENTION
 #ifdef BEAM_TABLE_TYPE
                     const uint b_idx = beam_table[FUNC_CALL(get_bt_index_value)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, start_partition_idx + (seq_len * SUBGROUP_SIZE) + sglid, sgid * SUBGROUP_SIZE)];
                     uint value_offset = FUNC_CALL(get_input2_index)(OPTIONAL_SHAPE_INFO_TENSOR b_idx, b1_idx, 0, 0, start_partition_idx + (seq_len * SUBGROUP_SIZE) + sglid, sgid * SUBGROUP_SIZE);
