@@ -883,7 +883,13 @@ KERNEL(sdpa_opt)(
 #else
     #define target_seq_idx ((uint)get_global_id(1) * TARGET_SEQ_LEN_BLOCK_SIZE)
 #endif
+#if SG_SCALE_FACTOR > 1
     #define head_size_idx ((uint)get_local_id(2) % HEAD_SIZE)
+#elif SG_SCALE_FACTOR == 1
+    #define head_size_idx ((uint)get_local_id(2))
+#else
+    #error "sdpa_opt.cl: Unsupported scale factor"
+#endif
     #define sglid (uint)get_sub_group_local_id()
     #define sgid (uint)get_sub_group_id()
     uint gid0 = get_global_id(0);
@@ -1469,6 +1475,7 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
             } else {
                 const uint seq_len_start = (sgid / (SUBGROUPS_PER_WG / SG_SCALE_FACTOR)) * (SEQ_LEN_PARTITION_SIZE / SG_SCALE_FACTOR);
                 uint seq_len_end = 0;
+
                 if (seq_len_start < partition_seq_len)
                     seq_len_end = seq_len_start + min(partition_seq_len - seq_len_start, (uint)(SEQ_LEN_PARTITION_SIZE / SG_SCALE_FACTOR));;
                 for (uint seq_len = seq_len_start / SUBGROUP_SIZE; seq_len < seq_len_end / SUBGROUP_SIZE; seq_len++) {
@@ -1491,6 +1498,8 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                     const uint b_idx = b0_idx;
     #ifdef INPUT2_DIMS_ORDER
                     uint value_offset = FUNC_CALL(get_input2_index)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, start_partition_idx + (seq_len * SUBGROUP_SIZE), head_size_idx);
+
+
     #else
                     uint value_offset = INPUT2_GET_INDEX(b0_idx, b1_idx, start_partition_idx + (seq_len * SUBGROUP_SIZE), head_size_idx);
     #endif
@@ -1503,7 +1512,7 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
 #if USE_ASYMMETRIC_QUANTIZATION
                     VALUE_COMPRESSION_SCALE_TYPE comp_zp = val_scale[comp_offset + 1];
 #endif
-#endif
+#endif // IS_KV_COMPRESSED
 
                     MAKE_VECTOR_TYPE(OUTPUT_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_val;
                     unroll_for (uint seq_idx = 0; seq_idx < TARGET_SEQ_LEN_BLOCK_SIZE; seq_idx++) {
@@ -1553,7 +1562,7 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
                                         value_seq_offset * value_pitch +
                                         heads_dim * HEAD_SIZE +
                                         (start_partition_idx + seq_len_leftovers_start) * value_pitch + head_size_idx;
-#else
+#else // !IS_PAGED_ATTENTION
 #ifdef BEAM_TABLE_TYPE
                     const uint b_idx = beam_table[FUNC_CALL(get_bt_index_value)(OPTIONAL_SHAPE_INFO_TENSOR b0_idx, b1_idx, 0, 0, start_partition_idx + seq_len_leftovers_start + sglid, sgid * SUBGROUP_SIZE)];
                     const uint value_offset = FUNC_CALL(get_input2_index)(OPTIONAL_SHAPE_INFO_TENSOR b_idx, b1_idx, 0, 0, start_partition_idx + seq_len_leftovers_start + sglid, sgid * SUBGROUP_SIZE);
@@ -1645,33 +1654,49 @@ MAKE_VECTOR_TYPE(INPUT0_TYPE, TARGET_SEQ_LEN_BLOCK_SIZE) qk_acc = INPUT0_VAL_ZER
 #endif
 
         if (TARGET_SEQ_LEN_BLOCK_SIZE > seq_idx_end) {
+            #ifdef HEAD_SIZE_REMAINDER
+            if (sgid < SUBGROUPS_PER_WG - 1) {
+                for (uint seq_idx = 0; seq_idx < seq_idx_end; seq_idx++) {
+                    output_acc[seq_idx] /= slm_exp_sum_prev[seq_idx];
+                    OUTPUT_BLOCK_WRITE(output, output_offset, output_acc[seq_idx]);
+                    output_offset += output_pitch;
+                }
+            } else if (sglid < HEAD_SIZE_REMAINDER) {
+                for (uint seq_idx = 0; seq_idx < seq_idx_end; seq_idx++) {
+                    output_acc[seq_idx] /= slm_exp_sum_prev[seq_idx];
+                    output[output_offset + sglid] = output_acc[seq_idx];
+                    output_offset += output_pitch;
+                }
+            }
+            #else
             for (uint seq_idx = 0; seq_idx < seq_idx_end; seq_idx++) {
                 output_acc[seq_idx] /= slm_exp_sum_prev[seq_idx];
                 OUTPUT_BLOCK_WRITE(output, output_offset, output_acc[seq_idx]);
                 output_offset += output_pitch;
             }
+            #endif
         } else {
-            #ifdef HEAD_SIZE_REMAINDER
-                if (sgid < SUBGROUPS_PER_WG - 1) {
-                    unroll_for (uint seq_idx = 0; seq_idx < TARGET_SEQ_LEN_BLOCK_SIZE; seq_idx++) {
-                        output_acc[seq_idx] /= slm_exp_sum_prev[seq_idx];
-                        OUTPUT_BLOCK_WRITE(output, output_offset, output_acc[seq_idx]);
-                        output_offset += output_pitch;
-                    }
-                } else if (sglid < HEAD_SIZE_REMAINDER) {
-                    unroll_for (uint seq_idx = 0; seq_idx < TARGET_SEQ_LEN_BLOCK_SIZE; seq_idx++) {
-                        output_acc[seq_idx] /= slm_exp_sum_prev[seq_idx];
-                        output[output_offset + sglid] = output_acc[seq_idx];
-                        output_offset += output_pitch;
-                    }
-                }
-            #else
+        #ifdef HEAD_SIZE_REMAINDER
+            if (sgid < SUBGROUPS_PER_WG - 1) {
                 unroll_for (uint seq_idx = 0; seq_idx < TARGET_SEQ_LEN_BLOCK_SIZE; seq_idx++) {
                     output_acc[seq_idx] /= slm_exp_sum_prev[seq_idx];
                     OUTPUT_BLOCK_WRITE(output, output_offset, output_acc[seq_idx]);
                     output_offset += output_pitch;
                 }
-            #endif
+            } else if (sglid < HEAD_SIZE_REMAINDER) {
+                unroll_for (uint seq_idx = 0; seq_idx < TARGET_SEQ_LEN_BLOCK_SIZE; seq_idx++) {
+                    output_acc[seq_idx] /= slm_exp_sum_prev[seq_idx];
+                    output[output_offset + sglid] = output_acc[seq_idx];
+                    output_offset += output_pitch;
+                }
+            }
+        #else
+            unroll_for (uint seq_idx = 0; seq_idx < TARGET_SEQ_LEN_BLOCK_SIZE; seq_idx++) {
+                output_acc[seq_idx] /= slm_exp_sum_prev[seq_idx];
+                OUTPUT_BLOCK_WRITE(output, output_offset, output_acc[seq_idx]);
+                output_offset += output_pitch;
+            }
+        #endif
         }
     }
 }
