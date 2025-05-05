@@ -118,6 +118,7 @@ std::string toCLType(WeightsType wType) {
             return GetTypeName<int8_t>();
         case WeightsType::UINT4:
         case WeightsType::UINT8:
+        case WeightsType::NF4:
             return GetTypeName<uint8_t>();
         case WeightsType::F16:
             return "half";
@@ -1490,6 +1491,11 @@ JitConstants MakeTypeJitConstants(Datatype dataType, const std::string& macroNam
             abs_func = "abs";
             type_size = "8";
             is_fp = false;
+            break;
+        case Datatype::NF4:
+            type = "char";
+            type_size = "0.5f";
+            is_fp = true;
             break;
         case Datatype::F16:
             type = "half";

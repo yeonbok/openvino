@@ -5,6 +5,7 @@
 #include "include/batch_headers/fetch_data.cl"
 #include "include/batch_headers/fetch_weights.cl"
 #include "include/batch_headers/int4_utils.cl"
+#include "include/batch_headers/nf4.cl"
 
 KERNEL(fc)(
     OPTIONAL_SHAPE_INFO_ARG
