@@ -29,9 +29,12 @@ ConvertFullyConnectedToFullyConnectedCompressed::ConvertFullyConnectedToFullyCon
     using namespace ov::pass::pattern;
 
     auto compressed_constant = [](const ov::Output<ov::Node>& output) {
+        if (output.get_element_type() == ov::element::nf4)
+            std::cout << "It is nf4!" << std::endl;
         return (output.get_element_type() == ov::element::u8 ||
                 output.get_element_type() == ov::element::i8 ||
                 output.get_element_type() == ov::element::u4 ||
+                output.get_element_type() == ov::element::nf4 ||
                 output.get_element_type() == ov::element::i4);
     };
 

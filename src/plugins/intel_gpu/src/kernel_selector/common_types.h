@@ -125,6 +125,7 @@ enum class Datatype {
     INT32,
     UINT32,
     INT64,
+    NF4,
     F16,
     F32,
     BF16,
@@ -135,6 +136,7 @@ enum class Datatype {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 enum class WeightsType {
     UNSUPPORTED,
+    NF4,
     F16,
     F32,
     INT8,

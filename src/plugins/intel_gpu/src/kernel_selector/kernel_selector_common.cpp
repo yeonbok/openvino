@@ -154,6 +154,7 @@ std::string toString(Datatype dType) {
         case Datatype::INT32:  return "INT32";
         case Datatype::UINT32: return "UINT32";
         case Datatype::INT64:  return "INT64";
+        case Datatype::NF4:    return "NF4";
         case Datatype::F16:    return "F16";
         case Datatype::F32:    return "F32";
         default: return "";
@@ -164,6 +165,7 @@ std::string toString(WeightsType wType) {
     switch (wType) {
         case WeightsType::F16:    return "F16";
         case WeightsType::F32:    return "F32";
+        case WeightsType::NF4:    return "NF4";
         case WeightsType::UINT4:  return "UINT4";
         case WeightsType::INT4:   return "INT4";
         case WeightsType::INT8:   return "INT8";

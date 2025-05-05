@@ -137,6 +137,9 @@ void ParamsKey::EnableAllOutputDataType() { key.outputType.raw = 0xffffffff; }
 
 void ParamsKey::EnableInputWeightsType(WeightsType wt) {
     switch (wt) {
+        case WeightsType::NF4:
+            key.inputWeightsType.val.nf4 = 1;
+            break;
         case WeightsType::F16:
             key.inputWeightsType.val.F16 = 1;
             break;
@@ -167,6 +170,9 @@ void ParamsKey::EnableAllInputWeightsType() { key.inputWeightsType.raw = 0xfffff
 
 void ParamsKey::EnableOutputWeightsType(WeightsType wt) {
     switch (wt) {
+        case WeightsType::NF4:
+            key.inputWeightsType.val.nf4 = 1;
+            break;
         case WeightsType::F16:
             key.outputWeightsType.val.F16 = 1;
             break;

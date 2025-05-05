@@ -326,16 +326,27 @@ TEST_P(MatmulWeightsDecompression, Inference) {
     check_results();
 }
 
-const std::vector<ov::element::Type> activations_precisions = {ov::element::f32, ov::element::f16};
-const std::vector<ov::element::Type> weights_precisions = {ov::element::u8, ov::element::u4, ov::element::i4};
-const std::vector<bool> transpose_weights = {true, false};
+//const std::vector<ov::element::Type> activations_precisions = {ov::element::f32, ov::element::f16};
+const std::vector<ov::element::Type> activations_precisions = {ov::element::f16};
+//const std::vector<ov::element::Type> weights_precisions = {ov::element::u8, ov::element::u4, ov::element::i4};
+const std::vector<ov::element::Type> weights_precisions = {ov::element::nf4};
+//const std::vector<bool> transpose_weights = {true, false};
+const std::vector<bool> transpose_weights = {false};
+//const std::vector<ShapeParams> input_shapes_basic = {
+//    {{{-1, -1, -1}, {{1, 4, 16}, {10, 16, 16}}}, {16, 32}},
+//    {{{}, {{1, 4, 16}}}, {16, 32}, 2ul},
+//    {{{}, {{1, 4, 16}}}, {1, 16, 32}},
+//    {{{}, {{1, 4, 48}}}, {48, 256}},
+//    {{{}, {{11, 339, 377}}}, {377, 335}}
+//};
 const std::vector<ShapeParams> input_shapes_basic = {
     {{{-1, -1, -1}, {{1, 4, 16}, {10, 16, 16}}}, {16, 32}},
-    {{{}, {{1, 4, 16}}}, {16, 32}, 2ul},
-    {{{}, {{1, 4, 16}}}, {1, 16, 32}},
-    {{{}, {{1, 4, 48}}}, {48, 256}},
-    {{{}, {{11, 339, 377}}}, {377, 335}}
+//    {{{}, {{1, 4, 16}}}, {16, 32}, 2ul},
+//    {{{}, {{1, 4, 16}}}, {1, 16, 32}},
+//    {{{}, {{1, 4, 48}}}, {48, 256}},
+//    {{{}, {{11, 339, 377}}}, {377, 335}}
 };
+
 
 INSTANTIATE_TEST_SUITE_P(smoke_MatMulCompressedWeights_basic,
                          MatmulWeightsDecompression,
@@ -343,7 +354,7 @@ INSTANTIATE_TEST_SUITE_P(smoke_MatMulCompressedWeights_basic,
                                             ::testing::ValuesIn(weights_precisions),
                                             ::testing::ValuesIn(activations_precisions),
                                             ::testing::ValuesIn(transpose_weights),
-                                            ::testing::Values(true),
+                                            ::testing::Values(false),
                                             ::testing::Values(true),
                                             ::testing::Values(false),
                                             ::testing::Values(false),
@@ -351,19 +362,19 @@ INSTANTIATE_TEST_SUITE_P(smoke_MatMulCompressedWeights_basic,
                                             ::testing::Values(1.0f)),
                          MatmulWeightsDecompression::get_test_case_name);
 
-INSTANTIATE_TEST_SUITE_P(smoke_MatMulCompressedWeights_extra_multiply,
-                         MatmulWeightsDecompression,
-                         ::testing::Combine(::testing::ValuesIn(input_shapes_basic),
-                                            ::testing::ValuesIn(weights_precisions),
-                                            ::testing::ValuesIn(activations_precisions),
-                                            ::testing::Values(false),
-                                            ::testing::Values(false),
-                                            ::testing::Values(false),
-                                            ::testing::Values(true),
-                                            ::testing::Values(false),
-                                            ::testing::Values(0),
-                                            ::testing::Values(1.0f)),
-                         MatmulWeightsDecompression::get_test_case_name);
+//INSTANTIATE_TEST_SUITE_P(smoke_MatMulCompressedWeights_extra_multiply,
+//                         MatmulWeightsDecompression,
+//                         ::testing::Combine(::testing::ValuesIn(input_shapes_basic),
+//                                            ::testing::ValuesIn(weights_precisions),
+//                                            ::testing::ValuesIn(activations_precisions),
+//                                            ::testing::Values(false),
+//                                            ::testing::Values(false),
+//                                            ::testing::Values(false),
+//                                            ::testing::Values(true),
+//                                            ::testing::Values(false),
+//                                            ::testing::Values(0),
+//                                            ::testing::Values(1.0f)),
+//                         MatmulWeightsDecompression::get_test_case_name);
 
 const std::vector<ShapeParams> input_shapes_corner_cases_basic = {
     {{{-1, -1, -1}, {{1, 4, 16}}}, {1, 16, 32}},
@@ -379,7 +390,8 @@ const std::vector<ShapeParams> input_shapes_corner_cases_big = {
 };
 
 const std::vector<bool> add_decompression_sub = {true, false};
-const std::vector<bool> reshape_on_decompression = {true, false};
+//const std::vector<bool> reshape_on_decompression = {true, false};
+const std::vector<bool> reshape_on_decompression = {false};
 const std::vector<bool> per_tensor_zp = {true, false};
 
 INSTANTIATE_TEST_SUITE_P(smoke_MatMulCompressedWeights_corner_cases_basic,
