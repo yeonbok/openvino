@@ -158,6 +158,8 @@ bool query_microkernels_supported(cldnn::engine& e, const cldnn::ExecutionConfig
 
 kernel_selector::data_type to_data_type(data_types dt) {
     switch (dt) {
+        case cldnn::data_types::nf4:
+            return kernel_selector::data_type::NF4;
         case cldnn::data_types::i4:
             return kernel_selector::data_type::INT4;
         case cldnn::data_types::u4:
@@ -189,6 +191,8 @@ kernel_selector::data_type to_data_type(data_types dt) {
 
 data_types from_data_type(kernel_selector::data_type dt) {
     switch (dt) {
+        case kernel_selector::data_type::NF4:
+            return cldnn::data_types::nf4;
         case kernel_selector::data_type::INT4:
             return cldnn::data_types::i4;
         case kernel_selector::data_type::UINT4:
@@ -218,6 +222,8 @@ data_types from_data_type(kernel_selector::data_type dt) {
 
 kernel_selector::weights_type to_weights_type(data_types dt) {
     switch (dt) {
+        case cldnn::data_types::nf4:
+            return kernel_selector::weights_type::NF4;
         case cldnn::data_types::u4:
             return kernel_selector::weights_type::UINT4;
         case cldnn::data_types::i4:

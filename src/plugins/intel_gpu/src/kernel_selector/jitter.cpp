@@ -1562,6 +1562,8 @@ JitConstants MakeTypeJitConstants(WeightsType weightsType, const std::string& ma
     switch (weightsType) {
         case WeightsType::UNSUPPORTED:
             return MakeTypeJitConstants(Datatype::UNSUPPORTED, macroName);
+        case WeightsType::NF4:
+            return MakeTypeJitConstants(Datatype::NF4, macroName);
         case WeightsType::F16:
             return MakeTypeJitConstants(Datatype::F16, macroName);
         case WeightsType::F32:
