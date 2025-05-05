@@ -14,7 +14,9 @@ ParamsKey ReorderWeightsKernelNF4::GetSupportedKey() const {
     k.EnableInputWeightsType(WeightsType::NF4);
     k.EnableOutputWeightsType(WeightsType::NF4);
     k.EnableInputWeightsLayout(WeightsLayout::oiyx);
+    k.EnableInputWeightsLayout(WeightsLayout::ioyx);
     k.EnableOutputWeightsLayout(WeightsLayout::os_iyx_osv32);
+    k.EnableOutputWeightsLayout(WeightsLayout::oiyx);
     k.EnableTensorOffset();
     k.EnableTensorPitches();
     return k;
@@ -47,7 +49,7 @@ bool ReorderWeightsKernelNF4::Validate(const Params& params) const {
         std::cerr << " Logical size issue!\n";
         return false;
     }
-
+    std::cout << "nf4 reorder could be selected!" << std::endl;
     return true;
 }
 
