@@ -30,7 +30,6 @@ KERNEL(fc)(
     const uint ofm = get_global_id(0);
     const uint oym = get_global_id(1);
     const uint b = get_global_id(2);
-
     ACCUMULATOR_TYPE dotProd = ACCUMULATOR_VAL_ZERO;
 
     for (uint y = 0; y < INPUT0_SIZE_Y; ++y)
@@ -53,7 +52,7 @@ KERNEL(fc)(
                 DECOMPRESSION_SCALE_TYPE scale = decompression_scale[decomp_offset];
             #endif
 
-                const uint filter_idx = GET_FILTER_INDEX(FILTER, 0, oym, y, 0, 0);
+                uint filter_idx = GET_FILTER_INDEX(FILTER, 0, oym, y, 0, 0);
             #if COMPRESSED_WEIGHTS_INT8
                 ACCUMULATOR_TYPE filter_compressed = TO_ACCUMULATOR_TYPE(weights[filter_idx]);
                 ACCUMULATOR_TYPE filter_val = (filter_compressed - zp) * scale;
@@ -65,6 +64,13 @@ KERNEL(fc)(
                 ACCUMULATOR_TYPE filter_compressed = ((ACCUMULATOR_TYPE*)(&filter_unpacked))[filter_idx % 2];
                 ACCUMULATOR_TYPE filter_val = (filter_compressed - zp) * scale;
                 dotProd += (ACCUMULATOR_TYPE)(input[input0_idx]) * filter_val;
+            #elif COMPRESSED_WEIGHTS_NF4
+                filter_idx = oym * (FILTER_IFM_NUM / 2) + (y / 2);
+                const uint f_idx = (y) % 2;
+                float2 filter_nf4_unpacked = unpack_nf4_to_float(weights[filter_idx]);
+                float filter_compressed = ((float*)(&filter_nf4_unpacked))[f_idx];
+                ACCUMULATOR_TYPE filter_val = (TO_ACCUMULATOR_TYPE(filter_compressed) - TO_ACCUMULATOR_TYPE(zp)) * scale;
+                dotProd += (ACCUMULATOR_TYPE)(input[input0_idx]) * (ACCUMULATOR_TYPE)(filter_val);
             #else
                 dotProd += (ACCUMULATOR_TYPE)(input[input0_idx]) * (ACCUMULATOR_TYPE)(weights[filter_idx]);
             #endif
@@ -112,6 +118,9 @@ KERNEL(fc)(
                     ACCUMULATOR_TYPE filter_compressed = ((ACCUMULATOR_TYPE*)(&filter_unpacked))[filter_idx % 2];
                     ACCUMULATOR_TYPE filter_val = (filter_compressed - zp) * scale;
                     dotProd += (ACCUMULATOR_TYPE)(input[input0_idx]) * filter_val;
+                #elif COMPRESSED_WEIGHTS_NF4
+                    // TODO!!!
+                    dotProd += (ACCUMULATOR_TYPE)(input[input0_idx]) * (ACCUMULATOR_TYPE)(weights[filter_idx]);
                 #else
                     dotProd += (ACCUMULATOR_TYPE)(input[input0_idx]) * (ACCUMULATOR_TYPE)(weights[filter_idx]);
                 #endif
