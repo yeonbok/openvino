@@ -14,7 +14,7 @@ ParamsKey ReorderWeightsKernelNF4::GetSupportedKey() const {
     k.EnableInputWeightsType(WeightsType::NF4);
     k.EnableOutputWeightsType(WeightsType::NF4);
     k.EnableInputWeightsLayout(WeightsLayout::oiyx);
-    k.EnableInputWeightsLayout(WeightsLayout::ioyx);
+    k.EnableInputWeightsLayout(WeightsLayout::ioyx);// transpose is done by transform // transposed fc is not matched yet
     k.EnableOutputWeightsLayout(WeightsLayout::os_iyx_osv32);
     k.EnableOutputWeightsLayout(WeightsLayout::oiyx);
     k.EnableTensorOffset();
@@ -32,10 +32,22 @@ ReorderWeightsKernelNF4::DispatchData ReorderWeightsKernelNF4::SetDefault(const 
 
     const auto& output = params.output;
 
-    // Divide OFM by 2 to save with byte granularity
-    dispatchData.gws = { CeilDiv(output.OFM().v, 2), output.IFM().v, 1 };
-    dispatchData.lws = { 1, 1, 1 };
-
+    if (output.GetLayout() == WeightsLayout::oiyx) {
+        auto dims = output.GetDims();
+        bool has_pads = std::any_of(dims.begin(), dims.end(), [](const kernel_selector::Tensor::Dim& d) {
+            return d.pad.Total() != 0;
+        });
+        if (has_pads) {
+            dispatchData.gws = { CeilDiv(output.PhysicalSize(), 2), 1, 1 };
+        } else {
+            dispatchData.gws = { CeilDiv(output.LogicalSize(), 2), 1, 1 };
+        }
+        dispatchData.lws = GetOptimalLocalWorkGroupSizes(dispatchData.gws, params.engineInfo);
+    } else {
+        // Divide OFM by 2 to save with byte granularity
+        dispatchData.gws = {CeilDiv(output.OFM().v, 2), output.IFM().v, 1};
+        dispatchData.lws = {1, 1, 1};
+    }
     return dispatchData;
 }
 
