@@ -3,16 +3,16 @@
 //
 
 inline half convert_nf4_to_half_approx(uchar x) {
-    half c0 = convert_half(0x6C00);
-    half c1 = convert_half(0x9700);
-    half c2 = convert_half(0x6000);
-    half c3 = convert_half(0x6092);
-    half c4 = convert_half(0x8BFF);
-    half c5 = convert_half(0x3BFF);
-    half c6 = convert_half(0x3912);
-    half c7 = convert_half(0x2EA3);
-    half c8 = convert_half(0x1DA1);
-    half y = convert_half(x);
+    half c0 = as_half((ushort)0x6C00);
+    half c1 = as_half((ushort)0x9700);
+    half c2 = as_half((ushort)0x6000);
+    half c3 = as_half((ushort)0x6092);
+    half c4 = as_half((ushort)0x8BFF);
+    half c5 = as_half((ushort)0x3BFF);
+    half c6 = as_half((ushort)0x3912);
+    half c7 = as_half((ushort)0x2EA3);
+    half c8 = as_half((ushort)0x1DA1);
+    half y = as_half((ushort)x);
     half t = y * c0 + c1;
     y = t * c2;
     if (t < 0)
@@ -26,15 +26,15 @@ inline half convert_nf4_to_half_approx(uchar x) {
 }
 
 inline float convert_nf4_to_float_approx(uchar x) {
-    float c0 = convert_float(0x6C00);
-    float c1 = convert_float(0x9700);
-    float c2 = convert_float(0x6000);
-    float c3 = convert_float(0x6092);
-    float c4 = convert_float(0x8BFF);
-    float c5 = convert_float(0x3BFF);
-    float c6 = convert_float(0x3912);
-    float c7 = convert_float(0x2EA3);
-    float c8 = convert_float(0x1DA1);
+    half c0 = as_half((ushort)0x6C00);
+    half c1 = as_half((ushort)0x9700);
+    half c2 = as_half((ushort)0x6000);
+    half c3 = as_half((ushort)0x6092);
+    half c4 = as_half((ushort)0x8BFF);
+    half c5 = as_half((ushort)0x3BFF);
+    half c6 = as_half((ushort)0x3912);
+    half c7 = as_half((ushort)0x2EA3);
+    half c8 = as_half((ushort)0x1DA1);
     float y = convert_float(x);
     float t = y * c0 + c1;
     y = t * c2;
