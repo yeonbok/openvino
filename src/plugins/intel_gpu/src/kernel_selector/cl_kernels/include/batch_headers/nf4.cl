@@ -19,7 +19,7 @@ inline half convert_nf4_to_half_approx(uchar x) {
         y = t * c3 + c4;
     half v = c5 - y * y;
     half w = native_log2(v);
-    t = c6 + w * (c7 + c8 * w);
+    t = c6 - w * (c7 + c8 * w);
     if (v > 0)
         y *= t;
     return y;
@@ -42,7 +42,7 @@ inline float convert_nf4_to_float_approx(uchar x) {
         y = t * c3 + c4;
     float v = c5 - y * y;
     float w = native_log2(v);
-    t = c6 + w * (c7 + c8 * w);
+    t = c6 - w * (c7 + c8 * w);
     if (v > 0)
         y *= t;
     return y;
