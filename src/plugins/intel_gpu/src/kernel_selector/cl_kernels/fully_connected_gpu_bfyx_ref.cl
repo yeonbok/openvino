@@ -7,6 +7,7 @@
 #include "include/batch_headers/int4_utils.cl"
 #include "include/batch_headers/nf4.cl"
 
+#define NF4_APPROX 1
 KERNEL(fc)(
     OPTIONAL_SHAPE_INFO_ARG
     const __global INPUT0_TYPE* input,
@@ -67,7 +68,12 @@ KERNEL(fc)(
             #elif COMPRESSED_WEIGHTS_NF4
                 filter_idx = oym * (FILTER_IFM_NUM / 2) + (y / 2);
                 const uint f_idx = (y) % 2;
+                #if NF4_APPROX
+                //float2 filter_nf4_unpacked = unpack_nf4_to_float_approx(weights[filter_idx]);
+                half2 filter_nf4_unpacked = unpack_nf4_to_half_approx(weights[filter_idx]);
+                #else
                 float2 filter_nf4_unpacked = unpack_nf4_to_float(weights[filter_idx]);
+                #endif
                 float filter_compressed = ((float*)(&filter_nf4_unpacked))[f_idx];
                 ACCUMULATOR_TYPE filter_val = (TO_ACCUMULATOR_TYPE(filter_compressed) - TO_ACCUMULATOR_TYPE(zp)) * scale;
                 dotProd += (ACCUMULATOR_TYPE)(input[input0_idx]) * (ACCUMULATOR_TYPE)(filter_val);
