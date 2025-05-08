@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
-#if 0
+#if 1
 inline half convert_nf4_to_half_approx(uchar x) {
     half c0 = as_half((ushort)0x6C00);
     half c1 = as_half((ushort)0x9700);
@@ -24,7 +24,7 @@ inline half convert_nf4_to_half_approx(uchar x) {
         y *= t;
     return y;
 }
-#endif
+#else
 
 inline half convert_nf4_to_half_approx(uchar x) {
     half c0 = as_half((ushort)0x6C00);
@@ -51,7 +51,7 @@ inline half convert_nf4_to_half_approx(uchar x) {
 
     return as_half((ushort) (as_ushort(y) + corrections[x]));
 }
-
+#endif
 inline float convert_nf4_to_float_approx(uchar x) {
     half c0 = as_half((ushort)0x6C00);
     half c1 = as_half((ushort)0x9700);
