@@ -190,7 +190,7 @@ protected:
 
         bool use_strides_for_weight_md = weights_layout.data_padding
                                         && format::is_default_format(weights_layout.format)
-                                        && (weights_layout.data_type == data_types::i4 || weights_layout.data_type == data_types::u4);
+                                        && (weights_layout.data_type == data_types::i4 || weights_layout.data_type == data_types::u4 || weights_layout.data_type == data_types::nf4);
 
         dnnl::memory::desc input_md = onednn::layout_to_memory_desc(input_layout, target_fmt, false);
         dnnl::memory::desc weights_md = onednn::layout_to_memory_desc(weights_layout, weights_fmt, false, use_strides_for_weight_md);
@@ -222,14 +222,15 @@ protected:
                 output_md,
                 attr);
         } else {
-            return std::make_shared<dnnl::matmul::primitive_desc>(
-                engine.get_onednn_engine(),
-                input_md,
-                weights_md,
-                output_md,
-                attr);
+            auto desc = std::make_shared<dnnl::matmul::primitive_desc>(
+                    engine.get_onednn_engine(),
+                    input_md,
+                    weights_md,
+                    output_md,
+                    attr);
+            return desc;
         }
-    }
+        }
 
 public:
     void save(BinaryOutputBuffer& ob) const override {
@@ -286,7 +287,7 @@ public:
         const kernel_impl_params* impl_params = reinterpret_cast<kernel_impl_params*>(ib.getKernelImplParams());
         auto prim = impl_params->typed_desc<fully_connected>();
         auto weights_layout = impl_params->get_input_layout(1);
-        bool is_four_bit_weight = weights_layout.data_type == data_types::u4 || weights_layout.data_type == data_types::i4;
+        bool is_four_bit_weight = weights_layout.data_type == data_types::u4 || weights_layout.data_type == data_types::i4 || weights_layout.data_type == data_types::nf4;
         auto shift_size = std::max<size_t>(prim->input_size - 2, 0);
         auto& arg = impl_params->get_program().get_node(impl_params->desc->id).as<fully_connected>();
         int idx = !arg.bias_term() ? 1 : 2;
@@ -374,11 +375,10 @@ public:
                 attr->set_fpmath_mode(dnnl::fpmath_mode::f16, true);
 
             auto weights_layout = impl_params.get_input_layout(1);
-            is_four_bit_weight = weights_layout.data_type == data_types::u4 || weights_layout.data_type == data_types::i4;
+            is_four_bit_weight = weights_layout.data_type == data_types::u4 || weights_layout.data_type == data_types::i4 || weights_layout.data_type == data_types::nf4;
             auto shift_size = std::max<size_t>(prim->input_size - 2, 0);
             int per_oc = PER_OC << shift_size;
             int grouped = GROUPED << shift_size;
-
             if (prim->decompression_scale.is_valid()) {
                 auto decompression_scale_idx = ++idx;
                 auto scale_layout = arg.get_dependency(decompression_scale_idx).get_output_layout();
