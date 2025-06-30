@@ -188,8 +188,10 @@ void ExecutionConfig::apply_model_specific_options(const IRemoteContext* context
             // Enable KV-cache compression by default for:
             // 1) Non-systolic platforms in case of SDPA-based models
             // 2) For any platforms in case of PagedAttention-based model
+            std::cout << "!!!!!!!!!!!!!!!!!!kv cache precision : i8" << std::endl;
             m_kv_cache_precision = ov::element::i8;
         } else {
+            std::cout << "!!!!!!!!!!!!!!!!!!kv cache precision : f16" << std::endl;
             m_kv_cache_precision = get_inference_precision();
         }
     }
@@ -231,9 +233,16 @@ void ExecutionConfig::finalize_impl(const IRemoteContext* context) {
         m_optimize_data = true;
     }
 
+    if (!is_set_by_user(ov::intel_gpu::key_cache_quant_mode)) {
+        m_key_cache_quant_mode = ov::intel_gpu::CacheQuantMode::BY_HIDDEN;
+    }
+
     // Replace UINT8 KV-cache compression data type with INT8, as plugin is supposed to work with INT8 internally
     if (get_kv_cache_precision() == ov::element::u8) {
+        std::cout << "############ kv_cache_precision u8" << std::endl;
         m_kv_cache_precision = ov::element::i8;
+    } else {
+        std::cout << "############ kv_cache_precision f16" << std::endl;
     }
 
 #ifdef ENABLE_DEBUG_CAPS
