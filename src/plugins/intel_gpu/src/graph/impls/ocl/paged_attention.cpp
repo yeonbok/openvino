@@ -740,6 +740,8 @@ struct paged_attention_impl : multi_stage_primitive<paged_attention> {
 
         if (data_type_traits::is_i8_u8(impl_param.get_input_layout(PagedAttentionInputIdx::KEY_CACHE).data_type)) {
             config.is_kv_compressed = true;
+            config.is_key_by_channel = impl_param.get_program().get_config().get_key_cache_quant_mode() == ov::intel_gpu::CacheQuantMode::BY_CHANNEL;
+            config.is_key_comp_group_size = 16; // TODO : handle group size != block size
             config.use_asymmetric_quantization = true;
         }
 

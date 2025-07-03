@@ -256,18 +256,29 @@ JitConstants PagedAttentionSDPAKernelOpt::GetJitConstants(const pa_sdpa_params& 
     jit.AddConstant(MakeJitConstant("PAGED_ATTENTION_BLOCK_SIZE", paged_attention_block_size));
     jit.AddConstant(MakeJitConstant("SUBGROUP_SIZE", subgroup_size));
     jit.AddConstant(MakeJitConstant("SLIDING_WINDOW_SIZE", config.paged_attention_sliding_window));
+
     jit.AddConstant(MakeJitConstant("IS_KV_COMPRESSED", params.conf.is_kv_compressed));
     jit.AddConstant(MakeJitConstant("SG_SCALE_FACTOR", get_sg_number_scale_factor(params, config.v_head_size, kernel_idx)));
     jit.AddConstant(MakeJitConstant("XE2_QK_MULTIPLICATION", params.engineInfo.arch == gpu_arch::xe2));
 
     if (params.conf.is_kv_compressed) {
         auto scales_zp_size = params.inputs[0].ElementSize() * 2; // scale + zp
-        jit.AddConstant(MakeJitConstant("SCALE_ZP_SIZE_PER_TOKEN", scales_zp_size));
-        jit.AddConstant(MakeJitConstant("ADJUSTED_K_HEAD_SIZE", params.conf.k_head_size + scales_zp_size));
+        if (params.conf.is_key_by_channel) {
+//            jit.AddConstant(MakeJitConstant("SCALE_ZP_SIZE_PER_TOKEN", scales_zp_size));
+            jit.AddConstant(MakeJitConstant("IS_KEY_BY_CHANNEL", 1));
+            jit.AddConstant(MakeJitConstant("ADJUSTED_K_HEAD_SIZE", params.conf.k_head_size));
+            jit.AddConstant(MakeJitConstant("ADJUSTED_PAGED_ATTENTION_BLOCK_SIZE", paged_attention_block_size + scales_zp_size));
+        } else {
+//            jit.AddConstant(MakeJitConstant("SCALE_ZP_SIZE_PER_TOKEN", scales_zp_size));
+            jit.AddConstant(MakeJitConstant("ADJUSTED_K_HEAD_SIZE", params.conf.k_head_size + scales_zp_size));
+            jit.AddConstant(MakeJitConstant("ADJUSTED_PAGED_ATTENTION_BLOCK_SIZE", paged_attention_block_size));
+        }
         jit.AddConstant(MakeJitConstant("ADJUSTED_V_HEAD_SIZE", params.conf.v_head_size + scales_zp_size));
+
     } else {
         jit.AddConstant(MakeJitConstant("ADJUSTED_K_HEAD_SIZE", params.conf.k_head_size));
         jit.AddConstant(MakeJitConstant("ADJUSTED_V_HEAD_SIZE", params.conf.v_head_size));
+        jit.AddConstant(MakeJitConstant("ADJUSTED_PAGED_ATTENTION_BLOCK_SIZE", paged_attention_block_size));
     }
 
     if (kernel_idx == KernelsTypes::SINGLE_TOKEN_GQA) {
