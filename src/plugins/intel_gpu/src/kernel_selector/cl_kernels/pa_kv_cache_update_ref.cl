@@ -157,6 +157,7 @@ KERNEL(pa_kv_cache_update)(
                 max_value = fmax(max_value, decompressed_key_cache_val);
                 min_value = fmin(min_value, decompressed_key_cache_val);
             }
+            key_cache_data_vec_half16[current_token_pos_in_block] = new_token;
 
             // requantize and store
             {
