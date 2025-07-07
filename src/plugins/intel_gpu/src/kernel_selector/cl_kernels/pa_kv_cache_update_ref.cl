@@ -17,7 +17,6 @@ inline void FUNC(quantize_and_save_per_token)(__global const INPUT0_TYPE* in_dat
     INPUT0_TYPE grp_max = 0.001;
     INPUT0_TYPE max_value = INPUT0_VAL_MIN;
     INPUT0_TYPE min_value = INPUT0_VAL_MAX;
-
     unroll_for (uint i = 0; i < num_groups; i++) {
         input_data[i] = BLOCK_READN(INPUT0_TYPE, 1, in_data, in_data_offset + i * SUBGROUP_SIZE);
         max_value = fmax(max_value, input_data[i]);
@@ -82,7 +81,7 @@ KERNEL(pa_kv_cache_update)(
         const uint current_token_pos_in_block = past_seq_len % PAGED_ATTENTION_BLOCK_SIZE;
         const uint seq_block_idx = block_indices_begins[seq_idx] + past_seq_len / PAGED_ATTENTION_BLOCK_SIZE;
         const uint block_idx = block_indices[seq_block_idx];
-        printf("seq_idx : %d, past_seq_len : %d, current_token_pos_in_block %d\n", seq_idx, past_seq_len, current_token_pos_in_block);
+        // printf("seq_idx : %d, past_seq_len : %d, current_token_pos_in_block %d\n", seq_idx, past_seq_len, current_token_pos_in_block);
         uint key_in_offset = INPUT0_OFFSET + seq_idx * KEY_IN_STRIDE + head_idx * K_HEAD_SIZE;
         uint value_in_offset = INPUT1_OFFSET + seq_idx * VAL_IN_STRIDE + head_idx * V_HEAD_SIZE;
 
@@ -149,12 +148,12 @@ KERNEL(pa_kv_cache_update)(
             char16 key_cache_data_vec = vload16(0, key_cache_data + key_out_offset_per_wi);
 //            if (get_global_id(0) == 0 && get_global_id(1) == 0)
 //                printf("gid: %d %d %d sglid : %d, hidden_idx : %d, key_in_offset : %d, key_cache_data[%d], orig_scale : %f, orig_zp : %f\n", get_global_id(0), get_global_id(1), get_global_id(2), sglid, hidden_idx, key_in_offset, comp_k_offset, orig_scale, orig_zp);
-            half8 key_cache_data_vec_half8[2];
+            half16 key_cache_data_vec_half16;
             INPUT0_TYPE max_value = new_token;
             INPUT0_TYPE min_value = new_token;
             for (int j = 0; j < current_token_pos_in_block; ++j) {
                 INPUT0_TYPE decompressed_key_cache_val = ((INPUT0_TYPE)key_cache_data_vec[j] - orig_zp) * orig_scale;
-                key_cache_data_vec_half8[j/8][j%8] = decompressed_key_cache_val;
+                key_cache_data_vec_half16[j] = decompressed_key_cache_val;
                 max_value = fmax(max_value, decompressed_key_cache_val);
                 min_value = fmin(min_value, decompressed_key_cache_val);
             }
@@ -170,11 +169,13 @@ KERNEL(pa_kv_cache_update)(
                 INPUT0_TYPE zp = (INPUT1_TYPE)(zp_tmp);
                 #undef ACCUMULATOR_TYPE
                 for (uint token = 0; token <= current_token_pos_in_block; ++token) {
-                    OUTPUT_TYPE quantized_key = convert_char_rte(key_cache_data_vec_half8[token / 8][token % 8] * scale + zp);
+                    OUTPUT_TYPE quantized_key = convert_char_rte(key_cache_data_vec_half16[token] * scale + zp);
                     key_cache_data[key_out_offset_per_wi + token] = quantized_key;
                 }
-                comp_ptr[0] = scale;
+                comp_ptr[0] = 1.0/scale;
                 comp_ptr[1] = zp;
+//                printf("requantize result) gid %d %d %d head %d hidden %d cur_token_pos : %d key_out_offset: %d comp_k_offset : %d original scale : %f orig zp %f => req_scale = %f req_zp = %f\n", \
+//                    get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(1), hidden_idx, current_token_pos_in_block, key_out_offset_per_wi, comp_k_offset, orig_scale, orig_zp, comp_ptr[0], comp_ptr[1]);
             }
         } 
 
@@ -209,7 +210,8 @@ KERNEL(pa_kv_cache_update)(
         const uint block_end_pos = blocked_indexes_end[block_idx];
         const uint tokens_num = block_end_pos - block_start_pos;
         const uint past_len = past_lens[subsequence_idx];
-        const uint token_start_pos = (past_len + block_start_pos - subsequence_begin_idx) % ADJUSTED_PAGED_ATTENTION_BLOCK_SIZE;
+        const uint token_start_pos_key = (past_len + block_start_pos - subsequence_begin_idx) % ADJUSTED_PAGED_ATTENTION_BLOCK_SIZE;
+        const uint token_start_pos_val = (past_len + block_start_pos - subsequence_begin_idx) % PAGED_ATTENTION_BLOCK_SIZE;
 
         uint key_in_offset = INPUT0_OFFSET + block_start_pos * KEY_IN_STRIDE + head_idx * K_HEAD_SIZE;
 
@@ -229,17 +231,17 @@ KERNEL(pa_kv_cache_update)(
                                  head_idx * ADJUSTED_K_HEAD_SIZE * PAGED_ATTENTION_BLOCK_SIZE;
         uint key_out_offset = block_k_base_offset;
         const uint comp_k_offset = block_k_base_offset + K_HEAD_SIZE * PAGED_ATTENTION_BLOCK_SIZE;
-        key_out_offset += token_start_pos;
+        key_out_offset += token_start_pos_key;
         #endif
 
         uint block_v_base_offset = block_indices[block_offset] * KV_HEADS_NUM * ADJUSTED_V_HEAD_SIZE * PAGED_ATTENTION_BLOCK_SIZE +
                                  head_idx * ADJUSTED_V_HEAD_SIZE * PAGED_ATTENTION_BLOCK_SIZE;
         const uint comp_v_offset = block_v_base_offset + V_HEAD_SIZE * PAGED_ATTENTION_BLOCK_SIZE;
         uint value_out_offset = block_v_base_offset;
-        value_out_offset += token_start_pos * V_HEAD_SIZE;
+        value_out_offset += token_start_pos_val * V_HEAD_SIZE;
 
         if (tokens_num == PAGED_ATTENTION_BLOCK_SIZE) {
-
+        // block is full
         #if defined(IS_KV_COMPRESSED) && defined(IS_KEY_BY_CHANNEL)
             // key by channel
             for (uint i = 0; i < K_HEAD_SIZE / SUBGROUP_SIZE; i++) {
@@ -458,9 +460,10 @@ KERNEL(pa_kv_cache_update)(
                 INPUT0_TYPE* comp_ptr = (INPUT0_TYPE*) (&key_cache_data[comp_k_offset]);
                 comp_ptr[0] = 1.0 / scale;
                 comp_ptr[1] = zp;
-                if (get_global_id(1) == 0)
-                    printf("gid: %d %d %d) wrote scale to key_cache_data[%d] block_k_base_offset : %d key_out_offset : %d diff : %f scale_tmp : %f scale = %f %f, zp = %f\n", \
-                        get_global_id(0), get_global_id(1), get_global_id(2), comp_k_offset, block_k_base_offset, key_out_offset, diff_value, scale_tmp, scale, comp_ptr[0], comp_ptr[1]);
+//                if (get_global_id(1) == 0)
+//                    printf("gid: %d %d %d) wrote scale to key_cache_data[%d] block_k_base_offset : %d key_out_offset : %d diff : %f scale_tmp : %f scale = %f %f, zp = %f min_val :%f max_Val : %f diff : %f CHAR_MIN: %d\n", \
+//                        get_global_id(0), get_global_id(1), get_global_id(2), \
+//                        comp_k_offset, block_k_base_offset, key_out_offset, diff_value, scale_tmp, scale, comp_ptr[0], comp_ptr[1], min_value, max_value, diff_value,  CHAR_MIN);
 
                 unroll_for (uint token_num = 0; token_num < tokens_num; token_num++) {
                     OUTPUT_TYPE res = convert_char_rte(input_data[token_num] * scale + zp);
@@ -472,8 +475,9 @@ KERNEL(pa_kv_cache_update)(
             // value processing per token
             for (uint token_num = 0; token_num < tokens_num; token_num++) {
                 INPUT0_TYPE input_data[V_HEAD_SIZE / SUBGROUP_SIZE];
+//                printf("Processing value: gid (%d %d %d) value_in_offset : %d value_out_offset : %d\n", get_global_id(0), get_global_id(1), get_global_id(2), value_in_offset, value_out_offset);
                 FUNC_CALL(quantize_and_save_per_token)(value_data, value_in_offset, value_cache_data, value_out_offset, 1,
-                    comp_v_offset, token_start_pos + token_num, sglid, V_HEAD_SIZE / SUBGROUP_SIZE, &input_data[0]);
+                    comp_v_offset, token_start_pos_val + token_num, sglid, V_HEAD_SIZE / SUBGROUP_SIZE, &input_data[0]);
                 value_in_offset += (KV_HEADS_NUM * V_HEAD_SIZE + INPUT1_PAD_AFTER_FEATURE_NUM + INPUT1_PAD_BEFORE_FEATURE_NUM);
                 value_out_offset += V_HEAD_SIZE;
             }
@@ -506,20 +510,20 @@ KERNEL(pa_kv_cache_update)(
 #else // IS_KV_COMPRESSED
                 {
                     // key processing
-                    if (get_global_id(0) == 1 && get_global_id(1) == 0 && get_global_id(2) == 4) {
-                        printf("gid:%d,%d,%d current_block_idx: %d, block_offset : %d, subsequence_idx : %d, subsequence_begin_idx : %d, block_start_pos : %d, \
-                        block_end_pos = %d,  token_start_pos = %d, token_num (sub): %d, cur_token: %d key_in_offset : %d, group_num : %d\n", get_global_id(0), get_global_id(1), \
-                        get_global_id(2), current_block_idx, block_offset, subsequence_idx, subsequence_begin_idx, block_start_pos, block_end_pos, token_start_pos, tokens_num, token_num, key_in_offset, K_HEAD_SIZE/SUBGROUP_SIZE);
-                    }
+//                    if (get_global_id(0) == 1 && get_global_id(1) == 0 && get_global_id(2) == 4) {
+//                        printf("gid:%d,%d,%d current_block_idx: %d, block_offset : %d, subsequence_idx : %d, subsequence_begin_idx : %d, block_start_pos : %d, \
+//                        block_end_pos = %d,  token_start_pos = %d, token_num (sub): %d, cur_token: %d key_in_offset : %d, group_num : %d\n", get_global_id(0), get_global_id(1), \
+//                        get_global_id(2), current_block_idx, block_offset, subsequence_idx, subsequence_begin_idx, block_start_pos, block_end_pos, token_start_pos_key, tokens_num, token_num, key_in_offset, K_HEAD_SIZE/SUBGROUP_SIZE);
+//                    }
                     INPUT0_TYPE input_data[K_HEAD_SIZE / SUBGROUP_SIZE];
                     FUNC_CALL(quantize_and_save_per_token)(key_data, key_in_offset, key_cache_data, key_out_offset, PAGED_ATTENTION_BLOCK_SIZE,
-                        comp_k_offset, token_start_pos + token_num, sglid, K_HEAD_SIZE / SUBGROUP_SIZE, &input_data[0]);
+                        comp_k_offset, token_start_pos_key + token_num, sglid, K_HEAD_SIZE / SUBGROUP_SIZE, &input_data[0]);
                 }
                 {
                     // value processing
                     INPUT0_TYPE input_data[V_HEAD_SIZE / SUBGROUP_SIZE];
                     FUNC_CALL(quantize_and_save_per_token)(value_data, value_in_offset, value_cache_data, value_out_offset, 1,
-                        comp_v_offset, token_start_pos + token_num, sglid, V_HEAD_SIZE / SUBGROUP_SIZE, &input_data[0]);
+                        comp_v_offset, token_start_pos_val + token_num, sglid, V_HEAD_SIZE / SUBGROUP_SIZE, &input_data[0]);
                 }
 #endif // IS_KV_COMPRESSED
 
