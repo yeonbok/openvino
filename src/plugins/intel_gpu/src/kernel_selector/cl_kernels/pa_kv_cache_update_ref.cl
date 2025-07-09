@@ -133,9 +133,8 @@ KERNEL(pa_kv_cache_update)(
         #ifdef IS_KEY_BY_CHANNEL
         const int hidden_stride = ADJUSTED_PAGED_ATTENTION_BLOCK_SIZE;
         const int comp_offset = PAGED_ATTENTION_BLOCK_SIZE;
-        for (int i = 0; i < K_HEAD_SIZE / SUBGROUP_SIZE; i++) {
-            // read new k input
-            const int hidden_idx = i * SUBGROUP_SIZE + sglid;
+        for (int hidden_sub = 0; hidden_sub < K_HEAD_SIZE / SUBGROUP_SIZE; hidden_sub++) {
+            const int hidden_idx = hidden_sub * SUBGROUP_SIZE + sglid;
             const uint key_out_offset_per_wi = block_k_base_offset + hidden_idx * hidden_stride;
             const uint comp_k_offset = key_out_offset_per_wi + comp_offset;
             // read original scale and zp
@@ -143,12 +142,15 @@ KERNEL(pa_kv_cache_update)(
            // INPUT0_TYPE* comp_ptr = key_cache_data + comp_k_offset;
             const INPUT0_TYPE orig_scale = comp_ptr[0];
             const INPUT0_TYPE orig_zp = comp_ptr[1];
-            INPUT0_TYPE new_token = BLOCK_READN(INPUT0_TYPE, 1, key_data, key_in_offset + i * SUBGROUP_SIZE);
+            // read new k input
+            INPUT0_TYPE new_token = BLOCK_READN(INPUT0_TYPE, 1, key_data, key_in_offset + hidden_sub * SUBGROUP_SIZE);
+            // ----------------------------------------------------------------------
             // read a hidden dim of the previously quantized key cache => decompress
             // TODO : current block size is 16, but when the block size becomes different, this should be updated as well
             char16 key_cache_data_vec = vload16(0, key_cache_data + key_out_offset_per_wi);
 //            if (get_global_id(0) == 0 && get_global_id(1) == 0)
 //                printf("gid: %d %d %d sglid : %d, hidden_idx : %d, key_in_offset : %d, key_cache_data[%d], orig_scale : %f, orig_zp : %f\n", get_global_id(0), get_global_id(1), get_global_id(2), sglid, hidden_idx, key_in_offset, comp_k_offset, orig_scale, orig_zp);
+            // ----------------------------------------------------------------------
             half16 key_cache_data_vec_half16;
             INPUT0_TYPE max_value = INPUT0_VAL_MIN;
             INPUT0_TYPE min_value = INPUT0_VAL_MAX;
@@ -162,13 +164,15 @@ KERNEL(pa_kv_cache_update)(
                 min_value = fmin(min_value, key_cache_data_vec_half16[j]);
             }
 //            if (head_idx == 1 && i == 1 && sglid == 0) {
-//            if (head_idx == 0 && i == 1 && sglid == 0) {
-//                const int tmp_token = 0;
-//                for (int tmp_token = 0; tmp_token < current_token_pos_in_block; ++tmp_token) {
-//                    printf("gid %d %d %d, qk_idx %d [head %d hidden %d token %d] original decompressed value : %f key_out_offset_per_wi %d\n", get_global_id(0), get_global_id(1), get_global_id(2), i, head_idx, hidden_idx, tmp_token, \
-//                        key_cache_data_vec_half16[tmp_token], key_out_offset_per_wi);
-//                }
-//            }
+            if (head_idx == 0 && hidden_sub == 1 && sglid == 0) {
+                const int tmp_token = 0;
+                for (int tmp_token = 0; tmp_token < current_token_pos_in_block; ++tmp_token) {
+                    printf("gid %d %d %d, qk_idx %d [head %d hidden %d token %d] original decompressed value : %f key_out_offset_per_wi %d block_idx %d\n", get_global_id(0), get_global_id(1), get_global_id(2), \
+                        hidden_sub, head_idx, hidden_idx, tmp_token, \
+                        key_cache_data_vec_half16[tmp_token], key_out_offset_per_wi, block_idx);
+                }
+            }
+            // ----------------------------------------------------------------------
             // requantize and store
             {
                 #define ACCUMULATOR_TYPE float
@@ -182,17 +186,23 @@ KERNEL(pa_kv_cache_update)(
                 for (uint token = 0; token <= current_token_pos_in_block; ++token) {
                     OUTPUT_TYPE quantized_key = convert_char_rte(key_cache_data_vec_half16[token] * scale + zp);
                     key_cache_data[key_out_offset_per_wi + token] = quantized_key;
-
                 }
  //               if (head_idx == 1 && i == 1 && sglid == 0) {
 //                if (head_idx == 0 && i == 1 && sglid == 0) {
+//                if (head_idx == 0 && hidden_sub == 1 && sglid == 0) {
 //                    for (int tmp_token = 0; tmp_token < current_token_pos_in_block; ++tmp_token) {
-//                        printf("gid %d %d %d, qk_idx %d newly decompressed of [head %d hidden %d token %d] %f quantized as %d scale %f zp %f\n", get_global_id(0), get_global_id(1), get_global_id(2), i,\
+//                        printf("gid %d %d %d, qk_idx %d newly decompressed of [head %d hidden %d token %d] %f quantized as %d scale %f zp %f\n", get_global_id(0), get_global_id(1), get_global_id(2), hidden_sub,\
 //                            head_idx, hidden_idx, tmp_token, ((INPUT0_TYPE)key_cache_data[key_out_offset_per_wi + tmp_token] - zp) * (1.0/ scale), key_cache_data[key_out_offset_per_wi + tmp_token], 1.0/scale, zp);
 //                    }
 //                }
                 comp_ptr[0] = 1.0/scale;
                 comp_ptr[1] = zp;
+//                if (head_idx == 0 && hidden_sub == 1 && sglid == 0) {
+//                    for (int tmp_token = 0; tmp_token < current_token_pos_in_block; ++tmp_token) {
+//                        printf("gid %d %d %d, qk_idx %d newly decompressed of [head %d hidden %d token %d] %f quantized as %d scale %f zp %f\n", get_global_id(0), get_global_id(1), get_global_id(2), hidden_sub,\
+//                            head_idx, hidden_idx, tmp_token, ((INPUT0_TYPE)key_cache_data[key_out_offset_per_wi + tmp_token] - comp_ptr[1]) * comp_ptr[0], key_cache_data[key_out_offset_per_wi + tmp_token], comp_ptr[0], comp_ptr[1]);
+//                    }
+//                }
 //                printf("requantize result) gid %d %d %d head %d hidden %d cur_token_pos : %d key_out_offset: %d comp_k_offset : %d original scale : %f orig zp %f => req_scale = %f req_zp = %f\n", \
 //                    get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(1), hidden_idx, current_token_pos_in_block, key_out_offset_per_wi, comp_k_offset, orig_scale, orig_zp, comp_ptr[0], comp_ptr[1]);
             }
@@ -300,7 +310,7 @@ KERNEL(pa_kv_cache_update)(
                     key_cache_data[key_out_offset_per_wi] = res;
                     key_out_offset_per_wi++;
                 }
-                key_in_offset += SUBGROUP_SIZE;
+//                key_in_offset += SUBGROUP_SIZE;
                 key_out_offset += ADJUSTED_PAGED_ATTENTION_BLOCK_SIZE * SUBGROUP_SIZE;
             }
             // value per token
