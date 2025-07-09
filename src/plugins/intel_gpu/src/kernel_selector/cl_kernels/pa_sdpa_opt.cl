@@ -6,7 +6,7 @@
 #include "include/batch_headers/sub_group_block_read.cl"
 #include "include/batch_headers/sub_group_block_write.cl"
 #include "include/batch_headers/sub_group_shuffle.cl"
-
+//#define DUMP_KEY 1 
 #define SUBGROUPS_PER_WG ((V_HEAD_SIZE / SUBGROUP_SIZE) * SG_SCALE_FACTOR)
 #define PAGED_ATTENTION_BLOCKS_PER_PARTITION (SEQ_LEN_PARTITION_SIZE / PAGED_ATTENTION_BLOCK_SIZE)
 
@@ -157,9 +157,6 @@ KERNEL(pa_sdpa_opt)(
 
     {
 #if STORE_QUERY_TO_SLM
-        printf("gid(%d, %d, %d) sgid * SUBGROUP_SIZE = %d, HEADS_PER_WI * K_HEAD_SIZE = %d * %d\n",
-               get_global_id(0), get_global_id(1), get_global_id(2),
-               sgid * SUBGROUP_SIZE, HEADS_PER_WI, K_HEAD_SIZE);
         for (uint i = sgid * SUBGROUP_SIZE; i < HEADS_PER_WI * K_HEAD_SIZE; i += SUBGROUP_SIZE) {
             const uint query_idx_local = i % K_HEAD_SIZE + sglid;
             const uint head_idx = i / K_HEAD_SIZE;
@@ -195,6 +192,7 @@ KERNEL(pa_sdpa_opt)(
                                    head_num_idx * K_HEAD_SIZE +
                                    i * SUBGROUP_SIZE;
             q_val[i] = BLOCK_READN(INPUT0_TYPE, 1, query, query_idx);
+//            printf("gid %d %d %d, query_idx : %d q_val[%d] = %f\n", get_global_id(0), get_global_id(1), get_global_id(2), query_idx, i, q_val[i]);
 
             // Apply scale value directly to the query input to improve accuracy in case of a high range of input data
 #ifdef SCALE_VAL
@@ -209,12 +207,9 @@ KERNEL(pa_sdpa_opt)(
         const uint blocks_num_per_partition = min(total_blocks_num - partition_idx * PAGED_ATTENTION_BLOCKS_PER_PARTITION, (uint)PAGED_ATTENTION_BLOCKS_PER_PARTITION);
         uint blocks_num = blocks_num_per_partition / SUBGROUPS_PER_WG;
         if (sgid < blocks_num_per_partition % SUBGROUPS_PER_WG) {
-            uint blocks_num_tmp = blocks_num;
             blocks_num++;
-            printf("gid(%d, %d, %d) blocks_num_per_partitioon %d  sgid :%d => blocks_num : %d => %d \n", get_global_id(0), get_global_id(1), get_global_id(2), blocks_num_per_partition, sgid, blocks_num_tmp, blocks_num);
-        } else {
-            printf("gid(%d, %d, %d) sgid :%d => blocks_num :  %d \n", get_global_id(0), get_global_id(1), get_global_id(2), sgid, blocks_num);
         }
+//        printf("gid(%d, %d, %d) sgid %d blocks_num_per_partition %d blocks_num %d \n", get_global_id(0), get_global_id(1), get_global_id(2), sgid, blocks_num_per_partition, blocks_num);
 
         const uint start_block_idx = block_indices_begins[subsequence_idx] + partition_idx * PAGED_ATTENTION_BLOCKS_PER_PARTITION + sgid;
         for (uint block_num = 0; block_num < blocks_num; block_num++) {
@@ -230,14 +225,16 @@ KERNEL(pa_sdpa_opt)(
     #ifdef IS_KEY_BY_CHANNEL
             const uint head_stride = ADJUSTED_K_HEAD_SIZE * ADJUSTED_PAGED_ATTENTION_BLOCK_SIZE;
             const uint block_stride = KV_HEADS_NUM * head_stride;
-            const uint key_block_offset = block_indices[start_block_idx + block_num * SUBGROUPS_PER_WG] * block_stride + head_idx * head_stride;
+            const uint key_block_offset = block_indice * block_stride + head_idx * head_stride;
             const uint hidden_stride = ADJUSTED_PAGED_ATTENTION_BLOCK_SIZE;
-            const uint key_comp_offset = key_block_offset + sglid * hidden_stride + PAGED_ATTENTION_BLOCK_SIZE;
-            INPUT0_TYPE* key_comp_ptr = key_cache + key_comp_offset;
-            INPUT0_TYPE comp_scale = key_comp_ptr[0];
-            INPUT0_TYPE comp_zp = key_comp_ptr[1];
-            printf("gid %d %d %d scale : %f zp : %f\n", get_global_id(0), get_global_id(1), get_global_id(2), comp_scale, comp_zp);
+//            const uint key_comp_offset = key_block_offset + sglid * hidden_stride + PAGED_ATTENTION_BLOCK_SIZE;
+//            INPUT0_TYPE* key_comp_ptr = key_cache + key_comp_offset;
+//            INPUT0_TYPE comp_scale = key_comp_ptr[0];
+//            INPUT0_TYPE comp_zp = key_comp_ptr[1];
+//            printf("sdpa gid %d %d %d block_indice : %d head_idx : %d hidden_idx : %d key_comp_offset: %d scale : %f zp : %f\n", \
+//                get_global_id(0), get_global_id(1), get_global_id(2), block_indice, head_idx, sglid, key_comp_offset, comp_scale, comp_zp);
     #else
+//            printf("sdpa block_indice :%d \n", block_indice);
             const uint block_offset = block_indice * ADJUSTED_K_HEAD_SIZE * KV_HEADS_NUM * SUBGROUP_SIZE + head_idx * ADJUSTED_K_HEAD_SIZE * SUBGROUP_SIZE;
             const key_block_offset = block_offset;
             const hidden_stride = SUBGROUP_SIZE;
@@ -255,19 +252,71 @@ KERNEL(pa_sdpa_opt)(
                 #define TO_KEY_BLOCK_UNCOMPRESSED_TYPE(val) CAT(convert_, KEY_BLOCK_UNCOMPRESSED)(val)
 
 #if IS_KV_COMPRESSED
+                 #ifdef IS_KEY_BY_CHANNEL
+                const uint key_comp_offset = key_block_offset + qk_idx * SUBGROUP_SIZE * hidden_stride + sglid * hidden_stride + PAGED_ATTENTION_BLOCK_SIZE;
+                INPUT0_TYPE* key_comp_ptr = key_cache + key_comp_offset;
+                INPUT0_TYPE comp_scale = key_comp_ptr[0];
+                INPUT0_TYPE comp_zp = key_comp_ptr[1];
+                #endif
+
                 KEY_BLOCK_UNCOMPRESSED k_vals;
                 unroll_for (uint i = 0; i < KEY_VEC_SIZE; i++) {
                     k_vals[i] = BLOCK_READN(INPUT1_TYPE, 1, key_cache, key_block_offset + qk_idx * hidden_stride * KEY_VEC_SIZE + i * hidden_stride);
-                    #ifdef IS_KEY_BY_CHANNEL
+                 #ifdef IS_KEY_BY_CHANNEL
+                    half key_orig = k_vals[i];
                     k_vals[i] = (k_vals[i] - _sub_group_shuffle(comp_zp, i)) * _sub_group_shuffle(comp_scale, i);
-                    #else
+//                    if (sglid >= (seq_len - block_num * PAGED_ATTENTION_BLOCK_SIZE)) {
+//                        k_vals[i] = 0;
+//                    }
+//                    if (head_idx == 1) {
+//                        printf("sdpa decompress key:  qk_idx %d gid %d %d %d [head_idx %d, hidden_idx %d, token_idx %d] key_vals[%d] = %f  => decompressed %f (zp: %f scale : %f \n", \
+//                            qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
+//                            i, key_orig,  k_vals[i], _sub_group_shuffle(comp_zp, i), _sub_group_shuffle(comp_scale, i));
+//                }
+#ifdef DUMP_KEY
+                    if (head_idx == 0 && get_global_id(1) == 3) {
+                        // qk_idx, gid0, gid1, gid2, head_idx, hidden_idx, token_idx, k_vals_idx, decompressed_val
+                        printf("%d, %d, %d, %d, %d, %d, %d, %d = %f\n", \
+                            qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
+                            i, k_vals[i]);
+                    }
+#endif
+                #else
+                    half key_orig = k_vals[i];
                     k_vals[i] = (k_vals[i] - comp_zp) * comp_scale;
-                    #endif
+//                    if (head_idx == 1) {
+//                        printf("sdpa decompress key: qk_idx %d gid %d %d %d [head_idx %d, hidden_idx %d, token_idx %d] key_vals[%d] = %f  => decompressed %f (zp: %f scale : %f \n", \
+//                            qk_idx, get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
+//                            i, key_orig, k_vals[i], comp_zp, comp_scale);
+//
+//                    }
+#ifdef DUMP_KEY
+                   if (head_idx == 0 && get_global_id(1) == 3) {
+                        // qk_idx, gid0, gid1, gid2, head_idx, hidden_idx, token_idx, k_vals_idx, decompressed_val
+                        printf("%d, %d, %d, %d, %d, %d, %d, %d = %f\n", \
+                            qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
+                            i, k_vals[i]);
+                    }
+#endif
+                #endif
                 }
 #else
                 KEY_BLOCK k_vals = 0;
                 unroll_for (uint i = 0; i < KEY_VEC_SIZE; i++) {
                     k_vals[i] = BLOCK_READN(INPUT1_TYPE, 1, key_cache, block_offset + qk_idx * SUBGROUP_SIZE * KEY_VEC_SIZE + i * SUBGROUP_SIZE);
+//                    if (head_idx == 1) {
+//                        printf("sdpa original key, qk_idx %d gid %d %d %d [head_idx %d, hidden_idx %d, token_idx %d] key_vals[%d] = %f  \n", \
+//                            qk_idx, get_global_id(0), get_global_id(1), get_global_id(2),\
+//                            head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, i, k_vals[i]);
+//                    }
+#ifdef DUMP_KEY
+                   if (head_idx == 0 && get_global_id(1) == 3) {
+                        // qk_idx, gid0, gid1, gid2, head_idx, hidden_idx, token_idx, k_vals_idx, decompressed_val
+                        printf("%d, %d, %d, %d, %d, %d, %d, %d = %f\n", \
+                            qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
+                            i, k_vals[i]);
+                   }
+#endif
                 }
 #endif
 
@@ -295,7 +344,9 @@ KERNEL(pa_sdpa_opt)(
 #if STORE_QUERY_TO_SLM
                         GET_VECTOR_ELEMENT(qk_acc, q_idx) = mad(sub_group_broadcast(q_val, i), TO_SOFTMAX_ACCUMULATOR_TYPE(k_vals[i]), GET_VECTOR_ELEMENT(qk_acc, q_idx));
 #else
+                        half q_tmp = sub_group_broadcast(q_val[qk_idx], i);
                         qk_acc = mad(TO_SOFTMAX_ACCUMULATOR_TYPE(sub_group_broadcast(q_val[qk_idx], i)), TO_SOFTMAX_ACCUMULATOR_TYPE(k_vals[i]), qk_acc);
+//                        printf("sdpa compute qk_acc gid %d %d %d q: %f key[%d] %f qk_acc : %f\n", get_global_id(0), get_global_id(1), get_global_id(2), q_tmp, i, k_vals[i], qk_acc);
 #endif
                     }
                 }
@@ -368,6 +419,10 @@ KERNEL(pa_sdpa_opt)(
                     const uint slm_idx = q_idx * SEQ_LEN_PARTITION_SIZE + local_data_idx;
                     SOFTMAX_ACCUMULATOR_TYPE qk_new = native_exp(TO_SOFTMAX_ACCUMULATOR_TYPE(slm_qk_vals[slm_idx]) - GET_VECTOR_ELEMENT(qk_max, q_idx));
                     slm_qk_vals[slm_idx] = qk_new;
+                    // not hit below
+//                    if (qk_new == INFINITY || qk_new == -INFINITY || qk_new == NAN || qk_new == -NAN)
+//                        printf("INFINITY!!!!! gid(%d, %d, %d) qk_new = %f, qk_max = %f \n", \
+//                               get_global_id(0), get_global_id(1), get_global_id(2), qk_new, GET_VECTOR_ELEMENT(qk_max, q_idx));
                     GET_VECTOR_ELEMENT(exp_sum, q_idx) += qk_new;
                 }
             }
@@ -502,6 +557,7 @@ KERNEL(pa_sdpa_opt)(
             leftovers = PAGED_ATTENTION_BLOCK_SIZE - leftovers;
             blocks_num_per_partition = blocks_num_per_partition - 1;
         }
+        // 2nd token seq len : 25 => leftover : 9 
 
         const uint start_block_idx = block_indices_begins[subsequence_idx] + partition_idx * PAGED_ATTENTION_BLOCKS_PER_PARTITION;
 
@@ -542,6 +598,9 @@ KERNEL(pa_sdpa_opt)(
 
                 unroll_for (uint i = 0; i < VALUE_VEC_SIZE; i++) {
                     GET_VECTOR_ELEMENT(acc, q_idx) = mad(sub_group_broadcast(qk_val, i), value_vals[i], GET_VECTOR_ELEMENT(acc, q_idx));
+//                    if (GET_VECTOR_ELEMENT(acc, q_idx) == INFINITY || GET_VECTOR_ELEMENT(acc, q_idx) == -INFINITY || GET_VECTOR_ELEMENT(acc, q_idx) == NAN || GET_VECTOR_ELEMENT(acc, q_idx) == -NAN)
+//                        printf("000 INFINITY!!!!! gid(%d, %d, %d) qk_val = %f, value_vals[%d] = %f, acc = %f \n",
+//                               get_global_id(0), get_global_id(1), get_global_id(2), qk_val, i, value_vals[i], GET_VECTOR_ELEMENT(acc, q_idx));
                 }
             }
         }
@@ -574,9 +633,16 @@ KERNEL(pa_sdpa_opt)(
                 VALUE_UNCOMPRESSED value_val = (TO_VALUE_UNCOMPRESSED_TYPE(value_packed) - sub_group_broadcast(comp_zp, i)) * sub_group_broadcast(comp_scale, i);
 #else
                 VALUE_UNCOMPRESSED value_val = value_packed;
+                int value_comp_offset  = -1; // TODO : remove
 #endif
                 unroll_for (uint q_idx = 0; q_idx < QUERIES_PER_WI; q_idx++) {
                     GET_VECTOR_ELEMENT(acc, q_idx) = mad(sub_group_broadcast(GET_VECTOR_ELEMENT(qk_val, q_idx), i), value_val, GET_VECTOR_ELEMENT(acc, q_idx));
+//                    printf("111 OK!!!!! queries_per_Wi : %d gid(%d, %d, %d) head_idx : %d value_block_offset: %d value_offset: %d value_comp_offset : %d qk_val = %f, value_packed: %d value_val = %f, acc = %f \n",
+//                        QUERIES_PER_WI, get_global_id(0), get_global_id(1), get_global_id(2), head_idx, block_offset, value_offset, value_comp_offset,  qk_val, value_packed, value_val, GET_VECTOR_ELEMENT(acc, q_idx));
+                    if (GET_VECTOR_ELEMENT(acc, q_idx) == INFINITY || GET_VECTOR_ELEMENT(acc, q_idx) == -INFINITY || GET_VECTOR_ELEMENT(acc, q_idx) == NAN || GET_VECTOR_ELEMENT(acc, q_idx) == -NAN)
+                            printf("111 INFINITY!!!!! queries_per_Wi : %d gid(%d, %d, %d) head_idx : %d value_block_offset: %d value_offset:%d value_comp_offset : %d qk_val = %f, value_packed: %d value_val = %f, acc = %f \n",
+                               QUERIES_PER_WI, get_global_id(0), get_global_id(1), get_global_id(2), head_idx, block_offset, value_offset, value_comp_offset,  qk_val, value_packed, value_val, GET_VECTOR_ELEMENT(acc, q_idx));
+
                 }
             }
         }
@@ -638,6 +704,7 @@ KERNEL(pa_sdpa_opt)(
                                            sglid;
 
                 output[output_offset] = GET_VECTOR_ELEMENT(acc, q_idx);
+
             }
         }
 
