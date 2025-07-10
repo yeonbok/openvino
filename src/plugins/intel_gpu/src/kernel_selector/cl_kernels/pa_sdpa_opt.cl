@@ -274,12 +274,17 @@ KERNEL(pa_sdpa_opt)(
 //                            i, key_orig,  k_vals[i], _sub_group_shuffle(comp_zp, i), _sub_group_shuffle(comp_scale, i));
 //                }
 #ifdef DUMP_KEY
-                    if (head_idx == 0 && get_global_id(1) == 3) {
-                        // qk_idx, gid0, gid1, gid2, head_idx, hidden_idx, token_idx, k_vals_idx, decompressed_val
-                        printf("%d, %d, %d, %d, %d, %d, %d, %d = %f\n", \
-                            qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
-                            i, k_vals[i]);
-                    }
+                if (block_indice == 1)
+                    printf("sdpa decompress key: block_idx %d qk_idx %d gid %d %d %d [head_idx %d, hidden_idx %d, token_idx %d] key_vals[%d] = %f  => decompressed %f (zp: %f scale : %f \n", \
+                        block_indice, qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
+                        i, key_orig,  k_vals[i], _sub_group_shuffle(comp_zp, i), _sub_group_shuffle(comp_scale, i));
+
+//                    if (head_idx == 0 && get_global_id(1) == 5) {
+//                        // block_indice, qk_idx, gid0, gid1, gid2, head_idx, hidden_idx, token_idx, k_vals_idx, decompressed_val
+//                        printf("%d, %d, %d, %d, %d, %d, %d, %d, %d = %f\n", \
+//                            block_indice, qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
+//                            i, k_vals[i]);
+//                    }
 #endif
                 #else
                     half key_orig = k_vals[i];
@@ -291,10 +296,10 @@ KERNEL(pa_sdpa_opt)(
 //
 //                    }
 #ifdef DUMP_KEY
-                   if (head_idx == 0 && get_global_id(1) == 3) {
-                        // qk_idx, gid0, gid1, gid2, head_idx, hidden_idx, token_idx, k_vals_idx, decompressed_val
-                        printf("%d, %d, %d, %d, %d, %d, %d, %d = %f\n", \
-                            qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
+                   if (head_idx == 0 && get_global_id(1) == 5) {
+                        // block_indice, qk_idx, gid0, gid1, gid2, head_idx, hidden_idx, token_idx, k_vals_idx, decompressed_val
+                        printf("%d %d, %d, %d, %d, %d, %d, %d, %d = %f\n", \
+                            block_indice, qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
                             i, k_vals[i]);
                     }
 #endif
@@ -310,10 +315,10 @@ KERNEL(pa_sdpa_opt)(
 //                            head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, i, k_vals[i]);
 //                    }
 #ifdef DUMP_KEY
-                   if (head_idx == 0 && get_global_id(1) == 3) {
-                        // qk_idx, gid0, gid1, gid2, head_idx, hidden_idx, token_idx, k_vals_idx, decompressed_val
-                        printf("%d, %d, %d, %d, %d, %d, %d, %d = %f\n", \
-                            qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
+                   if (head_idx == 0 && get_global_id(1) == 5) {
+                        // block_indice, qk_idx, gid0, gid1, gid2, head_idx, hidden_idx, token_idx, k_vals_idx, decompressed_val
+                        printf("%d, %d, %d, %d, %d, %d, %d, %d, %d = %f\n", \
+                            block_indice, qk_idx,  get_global_id(0), get_global_id(1), get_global_id(2), head_idx, qk_idx * KEY_VEC_SIZE + i, sglid + block_num * PAGED_ATTENTION_BLOCK_SIZE, \
                             i, k_vals[i]);
                    }
 #endif
