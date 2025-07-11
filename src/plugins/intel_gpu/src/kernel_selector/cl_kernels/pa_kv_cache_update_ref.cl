@@ -81,7 +81,6 @@ KERNEL(pa_kv_cache_update)(
         const uint current_token_pos_in_block = past_seq_len % PAGED_ATTENTION_BLOCK_SIZE;
         const uint seq_block_idx = block_indices_begins[seq_idx] + past_seq_len / PAGED_ATTENTION_BLOCK_SIZE;
         const uint block_idx = block_indices[seq_block_idx];
-        // printf("seq_idx : %d, past_seq_len : %d, current_token_pos_in_block %d\n", seq_idx, past_seq_len, current_token_pos_in_block);
         uint key_in_offset = INPUT0_OFFSET + seq_idx * KEY_IN_STRIDE + head_idx * K_HEAD_SIZE;
         uint value_in_offset = INPUT1_OFFSET + seq_idx * VAL_IN_STRIDE + head_idx * V_HEAD_SIZE;
 
@@ -152,31 +151,32 @@ KERNEL(pa_kv_cache_update)(
 //                printf("gid: %d %d %d sglid : %d, hidden_idx : %d, key_in_offset : %d, key_cache_data[%d], orig_scale : %f, orig_zp : %f\n", get_global_id(0), get_global_id(1), get_global_id(2), sglid, hidden_idx, key_in_offset, comp_k_offset, orig_scale, orig_zp);
             // ----------------------------------------------------------------------
             half16 key_cache_data_vec_half16;
-            INPUT0_TYPE max_value = INPUT0_VAL_MIN;
-            INPUT0_TYPE min_value = INPUT0_VAL_MAX;
+
             key_cache_data_vec_half16[current_token_pos_in_block] = new_token;
-            if (current_token_pos_in_block == 0) {
-                max_value = new_token * 1.1;
-                min_value = new_token;
+            INPUT0_TYPE max_value = fmax(INPUT0_VAL_MIN, new_token);
+            INPUT0_TYPE min_value = fmin(INPUT0_VAL_MAX, new_token);
+//            if (current_token_pos_in_block == 0) {
+//                max_value = new_token * 1.1;
+//                min_value = new_token;
 //                printf("min_val: %f max_Val :%f, new_token : %f\n", min_value, max_value, new_token);
-            } else {
-                for (int j = 0; j <= current_token_pos_in_block; ++j) {
-                    if (j < current_token_pos_in_block) {
-                        INPUT0_TYPE decompressed_key_cache_val = ((INPUT0_TYPE)key_cache_data_vec[j] - orig_zp) * orig_scale;
-                        key_cache_data_vec_half16[j] = decompressed_key_cache_val;
-                    }
-                    max_value = fmax(max_value, key_cache_data_vec_half16[j]);
-                    min_value = fmin(min_value, key_cache_data_vec_half16[j]);
-                }
-            }
-            float max_abs = max_value < 0 ? -max_value : max_value;
-            if (max_value - min_value < max_abs * 0.09) {
-                if (max_value < 0)
-                    max_value = 0;
-                else
-                    max_value = max_value * 1.1;
+//            } else {
+              for (int j = 0; j <= current_token_pos_in_block; ++j) {
+                  if (j < current_token_pos_in_block) {
+                      INPUT0_TYPE decompressed_key_cache_val = ((INPUT0_TYPE)key_cache_data_vec[j] - orig_zp) * orig_scale;
+                      key_cache_data_vec_half16[j] = decompressed_key_cache_val;
+                  }
+                  max_value = fmax(max_value, key_cache_data_vec_half16[j]);
+                  min_value = fmin(min_value, key_cache_data_vec_half16[j]);
+              }
+//            }
+//            float max_abs = max_value < 0 ? -max_value : max_value;
+//            if (max_value - min_value < max_abs * 0.09) {
+//                if (max_value < 0)
+//                    max_value = 0;
+//                else
+//                    max_value = max_value * 1.1;
 //                printf("gid %d %d %d seq_idx %d head_idx %d hidden %d adjusted max %f min %f\n", get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(0), head_idx, hidden_idx, max_value, min_value);
-            }
+//            }
 //            if (head_idx == 1 && i == 1 && sglid == 0) {
 //            if (head_idx == 0 && hidden_sub == 1 && sglid == 0) {
 //            if (current_token_pos_in_block == 1) {
@@ -191,41 +191,28 @@ KERNEL(pa_kv_cache_update)(
             // requantize and store
             {
                 #define ACCUMULATOR_TYPE float
-                INPUT0_TYPE grp_max = 0.1;
-                ACCUMULATOR_TYPE diff_value = (max_value == min_value) ? grp_max : (max_value - min_value);
-                ACCUMULATOR_TYPE scale_tmp = (ACCUMULATOR_TYPE)((CHAR_MAX - CHAR_MIN) / diff_value);
+
+                ACCUMULATOR_TYPE range = max_value - min_value;
+                if (range < fabs(max_value * 0.1)) {
+                    // When the range is very small, expand the range to avoid zp overflow
+                    range += fmax(1.0f, fabs(max_value*0.1f));
+                }
+                ACCUMULATOR_TYPE scale_tmp = (ACCUMULATOR_TYPE)((CHAR_MAX - CHAR_MIN) / range);
                 ACCUMULATOR_TYPE zp_tmp = (ACCUMULATOR_TYPE)(-min_value * scale_tmp) + CHAR_MIN;
                 INPUT0_TYPE scale = (INPUT1_TYPE)(scale_tmp);
                 INPUT0_TYPE zp = (INPUT1_TYPE)(zp_tmp);
+                if (zp == INFINITY || zp == -INFINITY)
+                    printf("gid %d %d %d cur_token_pos %d zp is infinity!%f min:%f max :%f range: %f\n", get_global_id(0), get_global_id(1), get_global_id(2), current_token_pos_in_block, zp, min_value, max_value, range);
                 #undef ACCUMULATOR_TYPE
                 for (uint token = 0; token <= current_token_pos_in_block; ++token) {
                     OUTPUT_TYPE quantized_key = convert_char_rte(key_cache_data_vec_half16[token] * scale + zp);
                     key_cache_data[key_out_offset_per_wi + token] = quantized_key;
                 }
- //               if (head_idx == 1 && i == 1 && sglid == 0) {
-//                if (head_idx == 0 && i == 1 && sglid == 0) {
-//                if (head_idx == 0 && hidden_sub == 1 && sglid == 0) {
-//                    for (int tmp_token = 0; tmp_token < current_token_pos_in_block; ++tmp_token) {
-//                        printf("gid %d %d %d, qk_idx %d newly decompressed of [head %d hidden %d token %d] %f quantized as %d scale %f zp %f\n", get_global_id(0), get_global_id(1), get_global_id(2), hidden_sub,\
-//                            head_idx, hidden_idx, tmp_token, ((INPUT0_TYPE)key_cache_data[key_out_offset_per_wi + tmp_token] - zp) * (1.0/ scale), key_cache_data[key_out_offset_per_wi + tmp_token], 1.0/scale, zp);
-//                    }
-//                }
-//                if (current_token_pos_in_block == 1) {
-//                    printf("gid %d %d %d, qk_idx %d newly decompressed of [head %d hidden %d token 0] %f quantized as %d scale %f zp %f max_val %f min_val %f diff_Val %f\n", \
-//                        get_global_id(0), get_global_id(1), get_global_id(2), hidden_sub,\
-////                        head_idx, hidden_idx, ((INPUT0_TYPE)key_cache_data[key_out_offset_per_wi + 0] - zp) * (1.0/ scale), key_cache_data[key_out_offset_per_wi + 0], 1.0/scale, zp, max_value, min_value, diff_value);
-//                        head_idx, hidden_idx, ((float)key_cache_data[key_out_offset_per_wi + 0] - zp) * (1.0/ scale), key_cache_data[key_out_offset_per_wi + 0], 1.0/scale, zp, max_value, min_value, diff_value);
-//                        // TODO : (float) casting for w/a
-//                    printf("gid %d %d %d, qk_idx %d newly decompressed of [head %d hidden %d token 1] %f quantized as %d scale %f zp %f max_val %f min_val %f diff_Val %f\n", \
-//                        get_global_id(0), get_global_id(1), get_global_id(2), hidden_sub,\
-////                        head_idx, hidden_idx, ((INPUT0_TYPE)key_cache_data[key_out_offset_per_wi + 0] - zp) * (1.0/ scale), key_cache_data[key_out_offset_per_wi + 0], 1.0/scale, zp, max_value, min_value, diff_value);
-//                        head_idx, hidden_idx, ((float)key_cache_data[key_out_offset_per_wi + 1] - zp) * (1.0/ scale), key_cache_data[key_out_offset_per_wi + 1], 1.0/scale, zp, max_value, min_value, diff_value);
-//                        // TODO : (float) casting for w/a
-//                }
                 comp_ptr[0] = 1.0/scale;
                 comp_ptr[1] = zp;
-//                if (head_idx == 0 && hidden_sub == 1 && sglid == 0) {
-//                    for (int tmp_token = 0; tmp_token < current_token_pos_in_block; ++tmp_token) {
+//                if (head_idx == 1 && hidden_sub == 1 && sglid == 0) {
+//                if (head_idx == 1) {
+//                    for (int tmp_token = 0; tmp_token <= current_token_pos_in_block; ++tmp_token) {
 //                        printf("gid %d %d %d, qk_idx %d newly decompressed of [head %d hidden %d token %d] %f quantized as %d scale %f zp %f\n", get_global_id(0), get_global_id(1), get_global_id(2), hidden_sub,\
 //                            head_idx, hidden_idx, tmp_token, ((INPUT0_TYPE)key_cache_data[key_out_offset_per_wi + tmp_token] - comp_ptr[1]) * comp_ptr[0], key_cache_data[key_out_offset_per_wi + tmp_token], comp_ptr[0], comp_ptr[1]);
 //                    }
@@ -313,12 +300,22 @@ KERNEL(pa_kv_cache_update)(
                     key_in_offset_tmp += KEY_IN_STRIDE;
                 }
                 #define ACCUMULATOR_TYPE float
-                INPUT0_TYPE grp_max = 0.001;
-                ACCUMULATOR_TYPE diff_value = max_value == min_value ? (grp_max) : (max_value - min_value);
-                ACCUMULATOR_TYPE scale_tmp = (ACCUMULATOR_TYPE)((CHAR_MAX - CHAR_MIN) / diff_value);
+//                INPUT0_TYPE grp_max = 0.001;
+//                ACCUMULATOR_TYPE diff_value = max_value == min_value ? (grp_max) : (max_value - min_value);
+//                ACCUMULATOR_TYPE scale_tmp = (ACCUMULATOR_TYPE)((CHAR_MAX - CHAR_MIN) / diff_value);
+//                ACCUMULATOR_TYPE zp_tmp = (ACCUMULATOR_TYPE)(-min_value * scale_tmp) + CHAR_MIN;
+//                INPUT0_TYPE scale = (INPUT1_TYPE)(scale_tmp);
+//                INPUT0_TYPE zp = (INPUT1_TYPE)(zp_tmp);
+                ACCUMULATOR_TYPE range = max_value - min_value;
+                if (range < fabs(max_value * 0.1)) {
+                    // When the range is very small, expand the range to avoid zp overflow
+                    range += fmax(1.0f, fabs(max_value*0.1f));
+                }
+                ACCUMULATOR_TYPE scale_tmp = (ACCUMULATOR_TYPE)((CHAR_MAX - CHAR_MIN) / range);
                 ACCUMULATOR_TYPE zp_tmp = (ACCUMULATOR_TYPE)(-min_value * scale_tmp) + CHAR_MIN;
                 INPUT0_TYPE scale = (INPUT1_TYPE)(scale_tmp);
                 INPUT0_TYPE zp = (INPUT1_TYPE)(zp_tmp);
+
                 #undef ACCUMULATOR_TYPE
                 // quantize and save each hidden dim
                 // TODO to store as vector write 
@@ -328,8 +325,10 @@ KERNEL(pa_kv_cache_update)(
                 INPUT0_TYPE* comp_ptr = (INPUT0_TYPE*) (&key_cache_data[comp_k_offset]);
                 comp_ptr[0] = 1.0 / scale;
                 comp_ptr[1] = zp;
-//                if (get_global_id(1) == 0)
-//                    printf("wrote scale to key_cache_data[%d] diff : %f scale_tmp : %f scale = %f %f, zp = %f\n", comp_k_offset, diff_value, scale_tmp, scale, comp_ptr[0], comp_ptr[1]);
+                if (zp == INFINITY || zp == -INFINITY)
+                    printf("first token, block %d gid %d %d %d cur_token_num %d zp is infinity!%f min:%f max :%f range: %f\n", \
+                        current_block_idx, get_global_id(0), get_global_id(1), get_global_id(2), tokens_num,  zp, min_value, max_value, max_value - min_value);
+
 
                 // store quantized key
                 unroll_for (uint token_num = 0; token_num < tokens_num; token_num++) {
@@ -500,12 +499,26 @@ KERNEL(pa_kv_cache_update)(
                     key_in_offset_tmp += KEY_IN_STRIDE;
                 }
                 #define ACCUMULATOR_TYPE float
-                INPUT0_TYPE grp_max = 0.001;
-                ACCUMULATOR_TYPE diff_value = max_value == min_value ? (grp_max) : (max_value - min_value);
-                ACCUMULATOR_TYPE scale_tmp = (ACCUMULATOR_TYPE)((CHAR_MAX - CHAR_MIN) / diff_value);
+//                INPUT0_TYPE grp_max = 0.001;
+//                ACCUMULATOR_TYPE diff_value = max_value == min_value ? (grp_max) : (max_value - min_value);
+//                ACCUMULATOR_TYPE scale_tmp = (ACCUMULATOR_TYPE)((CHAR_MAX - CHAR_MIN) / diff_value);
+//                ACCUMULATOR_TYPE zp_tmp = (ACCUMULATOR_TYPE)(-min_value * scale_tmp) + CHAR_MIN;
+//                INPUT0_TYPE scale = (INPUT1_TYPE)(scale_tmp);
+//                INPUT0_TYPE zp = (INPUT1_TYPE)(zp_tmp);
+                ACCUMULATOR_TYPE range = max_value - min_value;
+                if (range < fabs(max_value * 0.1)) {
+                    // When the range is very small, expand the range to avoid zp overflow
+                    range += fmax(1.0f, fabs(max_value*0.1f));
+                }
+                ACCUMULATOR_TYPE scale_tmp = (ACCUMULATOR_TYPE)((CHAR_MAX - CHAR_MIN) / range);
                 ACCUMULATOR_TYPE zp_tmp = (ACCUMULATOR_TYPE)(-min_value * scale_tmp) + CHAR_MIN;
                 INPUT0_TYPE scale = (INPUT1_TYPE)(scale_tmp);
                 INPUT0_TYPE zp = (INPUT1_TYPE)(zp_tmp);
+
+                if (zp == INFINITY || zp == -INFINITY)
+                    printf("first token, block %d gid %d %d %d cur_token_num %d zp is infinity!%f min:%f max :%f range: %f\n", \
+                        current_block_idx, get_global_id(0), get_global_id(1), get_global_id(2), tokens_num,  zp, min_value, max_value, max_value - min_value);
+
                 #undef ACCUMULATOR_TYPE
                 // quantize and save each hidden dim
                 // TODO to store as vector write 
@@ -566,11 +579,6 @@ KERNEL(pa_kv_cache_update)(
 #else // IS_KV_COMPRESSED
                 {
                     // key processing
-//                    if (get_global_id(0) == 1 && get_global_id(1) == 0 && get_global_id(2) == 4) {
-//                        printf("gid:%d,%d,%d current_block_idx: %d, block_offset : %d, subsequence_idx : %d, subsequence_begin_idx : %d, block_start_pos : %d, \
-//                        block_end_pos = %d,  token_start_pos = %d, token_num (sub): %d, cur_token: %d key_in_offset : %d, group_num : %d\n", get_global_id(0), get_global_id(1), \
-//                        get_global_id(2), current_block_idx, block_offset, subsequence_idx, subsequence_begin_idx, block_start_pos, block_end_pos, token_start_pos_key, tokens_num, token_num, key_in_offset, K_HEAD_SIZE/SUBGROUP_SIZE);
-//                    }
                     INPUT0_TYPE input_data[K_HEAD_SIZE / SUBGROUP_SIZE];
                     FUNC_CALL(quantize_and_save_per_token)(key_data, key_in_offset, key_cache_data, key_out_offset, PAGED_ATTENTION_BLOCK_SIZE,
                         comp_k_offset, token_start_pos_key + token_num, sglid, K_HEAD_SIZE / SUBGROUP_SIZE, &input_data[0]);
