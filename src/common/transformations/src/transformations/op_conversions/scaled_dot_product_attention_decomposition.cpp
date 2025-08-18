@@ -192,32 +192,33 @@ std::shared_ptr<ov::Node> ov::pass::ScaledDotProductAttentionDecomposition::deco
         }
         scaled_atten = register_new_node<v1::Add>(scaled_atten, atten_mask);
     }
-    // Q[q_n_heads, seq, head_size]
-    // K[k_n_heads, seq, head_size]
-    // QK[q_n_heads, seq, seq] 
-    // Sink[q_n_heads, 1, 1]
+    // Q[1, q_n_heads, seq, head_size]
+    // K[1, k_n_heads, seq, head_size]
+    // QK[1, q_n_heads, seq, seq] 
+    // Sink[1, q_n_heads, 1, 1]
     // Sink_broadcast[n_heads, seq, 1];
-    // QK_Sink = Concat(QK[q_n_heads, seq, seq], Sink_broadcast[n_heads, seq, 1], axis = -1) => [q_n_heads, seq, seq + 1]
-    // Softmax(QK_Sink) : [q_n_heads, seq, seq + 1]
-    // Slice(Softmax) => [q_n_heads, seq, seq)
+    // QK_Sink = Concat(QK[1, q_n_heads, seq, seq], Sink_broadcast[1, n_heads, seq, 1], axis = -1) => [1, q_n_heads, seq, seq + 1]
+    // Softmax(QK_Sink) : [1, q_n_heads, seq, seq + 1]
+    // Slice(Softmax) => [1, q_n_heads, seq, seq)
     // ATTN_O = MatMul(Slice, V)
     if (has_sink) {
         auto zero_i = register_new_node(v0::Constant::create(element::i32, Shape{1}, {0}));
         auto one_i = register_new_node(v0::Constant::create(element::i32, Shape{1}, {1}));
         auto two_i = register_new_node(v0::Constant::create(element::i32, Shape{1}, {2}));
+        auto three_i = register_new_node(v0::Constant::create(element::i32, Shape{1}, {3}));
         auto max_i = register_new_node(v0::Constant::create(element::i32, Shape{1}, {INT_MAX}));
         auto minus_one = register_new_node(v0::Constant::create(element::i32, Shape{1}, {-1}));
-        auto sink_shape_1 = register_new_node<ov::op::v8::Slice>(q_shape, zero_i, two_i, one_i);
-        sink_shape_1->set_friendly_name("sink_shape_1");
-        auto sink_shape = register_new_node<v0::Concat>(OutputVector{sink_shape_1, one_i}, 0);
-        sink_shape->set_friendly_name("sink_shape");
-        auto sink_broadcast = register_new_node<v1::Broadcast>(sink, sink_shape);
+        auto sink_target_shape_1 = register_new_node<ov::op::v8::Slice>(q_shape, zero_i, three_i, one_i);
+        sink_target_shape_1->set_friendly_name("sink_shape_1");
+        auto sink_target_shape = register_new_node<v0::Concat>(OutputVector{sink_target_shape_1, one_i}, 0);
+        sink_target_shape->set_friendly_name("sink_shape");
+        auto sink_broadcast = register_new_node<v1::Broadcast>(sink, sink_target_shape);
         sink_broadcast->set_friendly_name("sink_broadcast");
         auto scaled_attn_sink = register_new_node<v0::Concat>(OutputVector{scaled_atten, sink_broadcast}, -1);
         scaled_attn_sink->set_friendly_name("scaled_attn_sink");
 //        auto head_size = register_new_node<ov::op::v8::Slice>(q_shape, two_i, max_i, one_i);
 //        head_size->set_friendly_name("head_size");
-        auto seq_len = register_new_node<ov::op::v8::Slice>(q_shape, one_i, two_i, one_i);
+        auto seq_len = register_new_node<ov::op::v8::Slice>(q_shape, two_i, three_i, one_i);
         seq_len->set_friendly_name("seq_len");
         scaled_atten = register_new_node<v8::Softmax>(scaled_attn_sink, -1);
 //        scaled_atten = register_new_node<ov::op::v8::Slice>(scaled_atten, zero_i, head_size, one_i, minus_one);

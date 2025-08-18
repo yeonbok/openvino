@@ -174,8 +174,8 @@ void ScaledAttnLayerGPUTest::SetUp() {
         inputs.push_back(inputParams_transpose[i]);
     }
     if (has_sink) {
-        size_t num_heads = inputDynamicShapes[0][0].get_length();
-        auto sink_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, ov::Shape{num_heads, 1, 1});
+        size_t num_heads = inputDynamicShapes[0][1].get_length();
+        auto sink_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, ov::Shape{1, num_heads, 1, 1}, 10.f, 1000.f, 1);
         auto sink_const = std::make_shared<ov::op::v0::Constant>(sink_tensor);
         sink_const->set_friendly_name("sink");
         inputs.push_back(sink_const);
@@ -398,16 +398,16 @@ const std::vector<std::vector<InputShape>> static_shapes_3D{
     // static shapes
     {
         // q shape
-        {ov::test::InputShape{ov::PartialShape{16, 128, 80},
-            {ov::Shape{16, 128, 80}}}
+        {ov::test::InputShape{ov::PartialShape{1, 16, 128, 80},
+            {ov::Shape{1, 16, 128, 80}}}
         },
         // k shape
-        {ov::test::InputShape{ov::PartialShape{16, 128, 80},
-            {ov::Shape{16, 128, 80}}}
+        {ov::test::InputShape{ov::PartialShape{1, 16, 128, 80},
+            {ov::Shape{1, 16, 128, 80}}}
         },
         // v shape
-        {ov::test::InputShape{ov::PartialShape{16, 128, 80},
-            {ov::Shape{16, 128, 80}}}
+        {ov::test::InputShape{ov::PartialShape{1, 16, 128, 80},
+            {ov::Shape{1, 16, 128, 80}}}
         },
         // attn shape: [B, 128, -128, L0+L1]
         {ov::test::InputShape{ov::PartialShape{128, 128},

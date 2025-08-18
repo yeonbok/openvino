@@ -152,6 +152,9 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 #if WITH_SCALE
         global SCALE_DATA_T *scale_ptr,
 #endif
+#if WITH_SINK
+        global SINK_DATA_T_T *sink_ptr,
+#endif
 #if IS_PAGED_ATTENTION
         const __global int* blocked_indexes_start_and_gws_mapping
 #else
