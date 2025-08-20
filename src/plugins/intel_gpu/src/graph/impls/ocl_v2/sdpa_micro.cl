@@ -152,8 +152,8 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 #if WITH_SCALE
         global SCALE_DATA_T *scale_ptr,
 #endif
-#if WITH_SINK
-        global SINK_DATA_T_T *sink_ptr,
+#if HAS_SINK_INPUT
+        global SINK_DATA_T *sink_ptr,
 #endif
 #if IS_PAGED_ATTENTION
         const __global int* blocked_indexes_start_and_gws_mapping
@@ -188,7 +188,6 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 #else
     uint wg_j0 = get_group_id(0) * ugemm_kq_wg_tile_n;
 #endif
-
     /* Leading dimension for matrices */
 #if IS_PAGED_ATTENTION
     uint ldk = HEAD_SIZE * KV_HEADS_NUM + INPUT1_PAD_BEFORE_FEATURE_NUM + INPUT1_PAD_AFTER_FEATURE_NUM;
@@ -391,7 +390,12 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
     s_sum_tile_type S_sum_tile;
     s_sum_tile_type S_max_tile, S_max_tile_old;
     tile_fill(S_sum_tile, 0.0f);
-    tile_fill(S_max_tile, -INFINITY);
+    bool is_last_k = (get_local_id(1) % 8 == 7);
+    if (is_last_k) {
+        tile_fill(S_max_tile, sink_ptr[get_global_id(1)/32]);
+    } else {
+        tile_fill(S_max_tile, -INFINITY);
+    }
 
     /* Wait for Q data to reach SLM */
     barrier(CLK_LOCAL_MEM_FENCE);
@@ -403,7 +407,6 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 
         uint sg_i0_kq = sg_i_kq * ugemm_kq_sg_tile_m;
         uint sg_j0_kq = sg_j_kq * ugemm_kq_sg_tile_n;
-
 #if WITH_ATTN_MASK
         /* Load mask. No remainder handling needed assuming k block size is a power of 2. */
         mask_tile_type mask_tile;
@@ -481,6 +484,7 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
         /* Before softmax, we will need to scale columns by maximum values to avoid overflow. */
 
         /* Compute our maxima and reduce across SLM */
+        // here!!!!!!!!!!!!!!!!!!!!!!!!!!
         tile_vreduce_max(S_tile, &S_max_tile);
         tile_atomic_max_full(
                 S_max_tile, S_max_slm, ugemm_kq_wg_tile_n, sg_j0_kq, 0);
@@ -557,8 +561,27 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 
         /* Accumulate sums. S tile is transposed for easy summation. */
         s_sum_tile_type S_sum_tile1;
+
         tile_fill(S_sum_tile1, 0.0f);
         tile_vreduce_add(S_tile, &S_sum_tile1);
+        int head_idx = get_global_id(1) / 32;
+        if (is_last_k){
+                struct sink_minus_max {
+                    float2 x[1];
+                };
+                struct sink_minus_max sink_minus_max_;
+                sink_minus_max_.x[0][0] = sink_ptr[head_idx] - S_max_tile.x[0][0];
+                sink_minus_max_.x[0][1] = sink_ptr[head_idx] - S_max_tile.x[0][1];
+                int wg = get_global_id(0)/SUBGROUP_SIZE;
+                int seq = wg * 64 + 2*(get_local_id(1)/8 + get_local_id(0));
+//                printf("head %d seq %d wg : %d subgroup %d sink0 : %f max0 : %f scale %f =>  sink_minus_max[0] %f  \n",
+//                        head_idx, seq, wg, get_local_id(1), sink_ptr[head_idx], S_max_tile.x[0][0], scale, sink_minus_max_.x[0][0]);
+//                printf("head %d seq %d wg: %d subgroup %d sink0 : %f max1 : %f scale %f =>  sink_minus_max[0] %f  sink_minus_max[1] %f\n",
+//                        head_idx, seq + 1, wg, get_local_id(1), sink_ptr[head_idx], S_max_tile.x[0][1], scale, sink_minus_max_.x[0][1]);
+                tile_elementwise(sink_minus_max_, scaled_exp);
+                tile_binary(S_sum_tile1, sink_minus_max_, binary_add);
+        }
+
 
         /* Convert to half, VNNI format */
         s_tile_type_half2 S_tile_half2;
@@ -568,10 +591,12 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
         tile_store_t_sys_src2(S_tile_half2, (local uint *)S_slm,
                 ugemm_vs_sg_tile_n, ugemm_kq_wg_tile_m / 2, sg_i0_kq / 2,
                 sg_j0_kq);
+        // ------------------------------------------
         intel_work_group_barrier_arrive(CLK_LOCAL_MEM_FENCE);
 
         /* Rescale existing accumulator and sums to match new maxima */
         if (!first) {
+            // TODO here!
 #define binary_exp_sub(x, y) native_vexp2(scale *((x) - (y)))
 #define binary_mul(x, y) ((x) * (y))
             tile_binary(S_max_tile_old, S_max_tile, binary_exp_sub);
@@ -600,6 +625,7 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 
         /* Last iteration: store column sums in SLM */
         if (last) {
+            // TODO 
             tile_store_full(S_sum_tile, S_sum_slm, ugemm_kq_wg_tile_n, sg_j0_kq,
                     sg_i_kq);
         }

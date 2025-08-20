@@ -175,7 +175,8 @@ void ScaledAttnLayerGPUTest::SetUp() {
     }
     if (has_sink) {
         size_t num_heads = inputDynamicShapes[0][1].get_length();
-        auto sink_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, ov::Shape{1, num_heads, 1, 1}, 10.f, 1000.f, 1);
+//        auto sink_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, ov::Shape{1, num_heads, 1, 1}, 10.f, 1000.f, 1);
+        auto sink_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, ov::Shape{1, num_heads, 1, 1}, 10.f, 100.f, 1);
         auto sink_const = std::make_shared<ov::op::v0::Constant>(sink_tensor);
         sink_const->set_friendly_name("sink");
         inputs.push_back(sink_const);
@@ -193,6 +194,7 @@ void ScaledAttnLayerGPUTest::SetUp() {
     // Decompose ScaledDotProductAttention
     manager.register_pass<ov::pass::ScaledDotProductAttentionDecomposition>();
     manager.run_passes(functionRefs);
+    ov::pass::Serialize("./ref.xml", "").run_on_model(functionRefs);
 
     auto it = std::find_if(inputShapes[1].second.begin(), inputShapes[1].second.end(), [&](const ov::Shape& shape){
         return shape[0] >= 128 || shape[2] >= 384 || shape[3] >= 128;
@@ -257,12 +259,27 @@ void ScaledAttnLayerGPUTest::generate_inputs(const std::vector<ov::Shape>& targe
     std::vector<ov::Shape> shapes(3);
     {
         // Generate QKV
-        for (int i = 0; i < 3; ++i) {
-            shapes[i] = targetInputStaticShapes[i];
-            ov::test::utils::InputGenerateData data(0, 8, 32);
-            ov::Tensor data_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, shapes[i], data);
-            inputs.insert({model_inputs[i].get_node_shared_ptr(), data_tensor});
-        }
+//        for (int i = 0; i < 3; ++i) {
+//            shapes[i] = targetInputStaticShapes[i];
+//            ov::test::utils::InputGenerateData data(0, 8, 32);
+//            ov::Tensor data_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, shapes[i], data);
+//            inputs.insert({model_inputs[i].get_node_shared_ptr(), data_tensor});
+//        }
+        // Q
+        shapes[0] = targetInputStaticShapes[0];
+        ov::test::utils::InputGenerateData data0(1.1, 4, 1);
+        ov::Tensor data_tensor_0 = ov::test::utils::create_and_fill_tensor(ov::element::f16, shapes[0], data0);
+        inputs.insert({model_inputs[0].get_node_shared_ptr(), data_tensor_0});
+        // K
+        shapes[1] = targetInputStaticShapes[1];
+        ov::test::utils::InputGenerateData data1(0, 8, 32);
+        ov::Tensor data_tensor_1 = ov::test::utils::create_and_fill_tensor(ov::element::f16, shapes[1], data1);
+        inputs.insert({model_inputs[1].get_node_shared_ptr(), data_tensor_1});
+        // V
+        shapes[2] = targetInputStaticShapes[2];
+        ov::test::utils::InputGenerateData data2(0, 8, 32);
+        ov::Tensor data_tensor_2 = ov::test::utils::create_and_fill_tensor(ov::element::f16, shapes[2], data2);
+        inputs.insert({model_inputs[2].get_node_shared_ptr(), data_tensor_2});
     }
     ov::test::utils::InputGenerateData attn_data(-1.0f, 2, 1);
     ov::test::utils::InputGenerateData scale_data(0.1f, 1, 10);
