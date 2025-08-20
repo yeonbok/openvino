@@ -390,13 +390,7 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
     s_sum_tile_type S_sum_tile;
     s_sum_tile_type S_max_tile, S_max_tile_old;
     tile_fill(S_sum_tile, 0.0f);
-    bool is_last_k = (get_local_id(1) % 8 == 7);
-    if (is_last_k) {
-        tile_fill(S_max_tile, sink_ptr[get_global_id(1)/32]);
-    } else {
-        tile_fill(S_max_tile, -INFINITY);
-    }
-
+    tile_fill(S_max_tile, -INFINITY);
     /* Wait for Q data to reach SLM */
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -486,6 +480,19 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
         /* Compute our maxima and reduce across SLM */
         // here!!!!!!!!!!!!!!!!!!!!!!!!!!
         tile_vreduce_max(S_tile, &S_max_tile);
+        #if HAS_SINK_INPUT
+        const int head_idx = get_global_id(1) / sg_per_wg;
+        const SINK_DATA_T sink_val = sink_ptr[head_idx];
+        const bool is_last_m_sg = last && (get_local_id(1) % ugemm_kq_sg_per_wg_m == (ugemm_kq_sg_per_wg_m - 1));
+        if (is_last_m_sg) {
+            // update max with sink_val
+            #define MAX(x,y) (x > y ? x : y)
+            #define max_sink(x) ((MAX(x, sink_val)))
+            tile_elementwise_s(S_max_tile, max_sink);
+            #undef MAX
+            #undef max_sink
+        }
+        #endif
         tile_atomic_max_full(
                 S_max_tile, S_max_slm, ugemm_kq_wg_tile_n, sg_j0_kq, 0);
         intel_work_group_barrier_arrive(CLK_LOCAL_MEM_FENCE);
@@ -564,24 +571,16 @@ KERNEL(micro_sdpa)(OPTIONAL_SHAPE_INFO_ARG
 
         tile_fill(S_sum_tile1, 0.0f);
         tile_vreduce_add(S_tile, &S_sum_tile1);
-        int head_idx = get_global_id(1) / 32;
-        if (is_last_k){
-                struct sink_minus_max {
-                    float2 x[1];
-                };
-                struct sink_minus_max sink_minus_max_;
-                sink_minus_max_.x[0][0] = sink_ptr[head_idx] - S_max_tile.x[0][0];
-                sink_minus_max_.x[0][1] = sink_ptr[head_idx] - S_max_tile.x[0][1];
-                int wg = get_global_id(0)/SUBGROUP_SIZE;
-                int seq = wg * 64 + 2*(get_local_id(1)/8 + get_local_id(0));
-//                printf("head %d seq %d wg : %d subgroup %d sink0 : %f max0 : %f scale %f =>  sink_minus_max[0] %f  \n",
-//                        head_idx, seq, wg, get_local_id(1), sink_ptr[head_idx], S_max_tile.x[0][0], scale, sink_minus_max_.x[0][0]);
-//                printf("head %d seq %d wg: %d subgroup %d sink0 : %f max1 : %f scale %f =>  sink_minus_max[0] %f  sink_minus_max[1] %f\n",
-//                        head_idx, seq + 1, wg, get_local_id(1), sink_ptr[head_idx], S_max_tile.x[0][1], scale, sink_minus_max_.x[0][1]);
-                tile_elementwise(sink_minus_max_, scaled_exp);
-                tile_binary(S_sum_tile1, sink_minus_max_, binary_add);
+#ifdef HAS_SINK_INPUT
+        if (is_last_m_sg){
+                s_sum_tile_type sink_minus_max_exp_scale;
+                tile_fill(sink_minus_max_exp_scale, convert_float(sink_val));
+                #define binary_exp_neg(x, y) native_vexp2(scale *((x) - (y)))
+                tile_binary(sink_minus_max_exp_scale, S_max_tile, binary_exp_neg);
+                tile_binary(S_sum_tile1, sink_minus_max_exp_scale, binary_add);
+                #undef binary_exp_neg
         }
-
+#endif
 
         /* Convert to half, VNNI format */
         s_tile_type_half2 S_tile_half2;
