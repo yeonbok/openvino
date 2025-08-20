@@ -176,7 +176,7 @@ void ScaledAttnLayerGPUTest::SetUp() {
     if (has_sink) {
         size_t num_heads = inputDynamicShapes[0][1].get_length();
 //        auto sink_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, ov::Shape{1, num_heads, 1, 1}, 10.f, 1000.f, 1);
-        auto sink_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, ov::Shape{1, num_heads, 1, 1}, 10.f, 100.f, 1);
+        auto sink_tensor = ov::test::utils::create_and_fill_tensor(ov::element::f16, ov::Shape{1, num_heads, 1, 1}, 0.f, 200.f, 1);
         auto sink_const = std::make_shared<ov::op::v0::Constant>(sink_tensor);
         sink_const->set_friendly_name("sink");
         inputs.push_back(sink_const);
@@ -267,21 +267,21 @@ void ScaledAttnLayerGPUTest::generate_inputs(const std::vector<ov::Shape>& targe
 //        }
         // Q
         shapes[0] = targetInputStaticShapes[0];
-        ov::test::utils::InputGenerateData data0(1.1, 4, 1);
+        ov::test::utils::InputGenerateData data0(0, 2, 32);
         ov::Tensor data_tensor_0 = ov::test::utils::create_and_fill_tensor(ov::element::f16, shapes[0], data0);
         inputs.insert({model_inputs[0].get_node_shared_ptr(), data_tensor_0});
         // K
         shapes[1] = targetInputStaticShapes[1];
-        ov::test::utils::InputGenerateData data1(0, 8, 32);
+        ov::test::utils::InputGenerateData data1(0, 2, 32);
         ov::Tensor data_tensor_1 = ov::test::utils::create_and_fill_tensor(ov::element::f16, shapes[1], data1);
         inputs.insert({model_inputs[1].get_node_shared_ptr(), data_tensor_1});
         // V
         shapes[2] = targetInputStaticShapes[2];
-        ov::test::utils::InputGenerateData data2(0, 8, 32);
+        ov::test::utils::InputGenerateData data2(0, 2, 32);
         ov::Tensor data_tensor_2 = ov::test::utils::create_and_fill_tensor(ov::element::f16, shapes[2], data2);
         inputs.insert({model_inputs[2].get_node_shared_ptr(), data_tensor_2});
     }
-    ov::test::utils::InputGenerateData attn_data(-1.0f, 2, 1);
+    ov::test::utils::InputGenerateData attn_data(-1.0f, 0, 1);
     ov::test::utils::InputGenerateData scale_data(0.1f, 1, 10);
     if (!has_attn && has_scale) {
         shapes.push_back(ov::Shape{});
@@ -441,7 +441,7 @@ const auto static_shape_params_3D_sink = testing::Combine(testing::Values(ov::el
                                                   testing::Values(true),
                                                   testing::Values(false),
                                                   testing::ValuesIn({disable_transpose}),
-                                                  testing::Values(true));
+                                                  testing::Values(true)); // has_Sink
 
 INSTANTIATE_TEST_SUITE_P(smoke_ScaledAttnStatic3DSink_GPU_taylor,
                          ScaledAttnLayerGPUTest,
