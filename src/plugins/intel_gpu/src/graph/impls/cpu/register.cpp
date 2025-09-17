@@ -33,6 +33,7 @@ void register_implementations() {
     REGISTER_CPU(reduce);
     REGISTER_CPU(fake_convert);
     REGISTER_CPU(moe_gather);
+    REGISTER_CPU(moe_mask_gen);
 }
 
 }  // namespace cpu
