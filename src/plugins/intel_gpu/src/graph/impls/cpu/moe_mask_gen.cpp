@@ -58,23 +58,56 @@ struct moe_mask_gen_impl : public typed_primitive_impl<moe_mask_gen> {
         for (size_t i = 0; i < instance.dependencies().size(); i++)
             input_mem_ptrs.push_back(instance.dep_memory_ptr(i));
 
+        // [seqlen:30, active_expert:2]
+        std::cout << "topk layout " << instance.get_input_layout(0).to_short_string() << std::endl;
+        auto num_tokens = instance.get_input_layout(0).get_shape()[0];
+        auto num_active_experts = instance.get_node().as<moe_mask_gen>().get_primitive()->num_active_experts;
+        auto num_total_experts = instance.get_node().as<moe_mask_gen>().get_primitive()->num_total_experts;
+
         auto topk_idx_mem_ptr = instance.dep_memory_ptr(0);
 //        auto topk_weight_mem_ptr = instance.dep_memory_ptr(1);
         auto gather_info_mem_ptr = instance.output_memory_ptr(0);
-        auto gemm_info_mem_ptr = instance.output_memory_ptr(1);
+//        auto gemm_info_mem_ptr = instance.output_memory_ptr(1);
 
-        cldnn::mem_lock<uint8_t, mem_lock_type::read> topk_idx_lock(topk_idx_mem_ptr, stream);
-        cldnn::mem_lock<uint8_t, mem_lock_type::read_write> gather_info_lock(gather_info_mem_ptr, stream);
-        cldnn::mem_lock<uint8_t, mem_lock_type::read_write> gemm_info_lock(gemm_info_mem_ptr, stream);
+        cldnn::mem_lock<int32_t, mem_lock_type::read> topk_idx_lock(topk_idx_mem_ptr, stream);
+        cldnn::mem_lock<int32_t, mem_lock_type::read_write> gather_info_lock(gather_info_mem_ptr, stream);
+//        cldnn::mem_lock<uint8_t, mem_lock_type::read_write> gemm_info_lock(gemm_info_mem_ptr, stream);
 
-        auto topk_idx_ptr = topk_idx_lock.begin();
-        auto gather_info_ptr = gather_info_lock.begin();
-        auto gemm_info_ptr = gemm_info_lock.begin();
+        auto topk_idx_ptr = topk_idx_lock.data();
+        auto gather_info_ptr = gather_info_lock.data();
+//        auto gemm_info_ptr = reinterpret_cast<int32_t*>(gemm_info_lock.data());
         // make mask for gather
-        gather_info_ptr[0] = topk_idx_ptr[0];
+        std::vector<std::vector<int32_t>> tokens_per_expert(num_total_experts, std::vector<int32_t>());
+        for (size_t token = 0; token < num_tokens; ++token) {
+            for (int j = 0; j < num_active_experts; ++j) {
+                auto expert_id = topk_idx_ptr[token * num_active_experts + j];
+                tokens_per_expert[expert_id].push_back(token);
+            }
+        }
+       
+        int expert_offset = 0;
+        int expert_data_start = num_total_experts;
+        // gather_info_ptr : pack two information 
+        // 1st half : offset of each expert experts_offset{num_total_experts}
+        // 2nd half : tokens per each expert
+        // e.g., 4 total experts / 2 active experts tokens_per_experts{num_total_tokens * num_active_experts}
+        // where
+        //    - token 0  : uses exp0, exp1
+        //    - token 1  : uses exp1, exp2 
+        // first half : experts_offset : [0, 1, 3, -1]
+        // second half : tokens_per_expert : [[0], [0, 1], [1], []]
+        for (int expert = 0; expert < num_total_experts; expert++) {
+            if (tokens_per_expert[expert].empty())
+                gather_info_ptr[expert] = -1;
+            else
+                gather_info_ptr[expert] = expert_offset;
+            for (int token : tokens_per_expert[expert]) {
+                gather_info_ptr[expert_data_start + expert_offset++] = token;
+            }
+        }
         // make mask for gemm
         // TODO
-        gemm_info_ptr[0] = topk_idx_ptr[0];
+//        gemm_info_ptr[0] = topk_idx_ptr[0];
 
         for (size_t i = 0; i < input_mem_ptrs.size(); i++)
             input_mem_ptrs[i]->unlock(stream);
@@ -102,17 +135,12 @@ namespace detail {
 attach_moe_mask_gen_impl::attach_moe_mask_gen_impl() {
     auto formats = {
         format::bfyx,
-        format::bfzyx,
-        format::bfwzyx,
     };
 
     auto types = {
-        data_types::f32,
-        data_types::f16,
         data_types::i32,
         data_types::i64,
-        data_types::i8,
-        data_types::u8,
+        data_types::f32,
     };
 
     implementation_map<moe_mask_gen>::add(impl_types::cpu, shape_types::static_shape, moe_mask_gen_impl::create, types, formats);
@@ -124,3 +152,4 @@ attach_moe_mask_gen_impl::attach_moe_mask_gen_impl() {
 }  // namespace cldnn
 
 BIND_BINARY_BUFFER_WITH_TYPE(cldnn::cpu::moe_mask_gen_impl)
+BIND_BINARY_BUFFER_WITH_TYPE(cldnn::moe_mask_gen)

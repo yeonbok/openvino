@@ -14,7 +14,13 @@ GPU_DEFINE_PRIMITIVE_TYPE_ID(moe_mask_gen)
 
 layout moe_mask_gen_inst::calc_output_layout(moe_mask_gen_node const& node, kernel_impl_params const& impl_param) {
     // TODO
-    return impl_param.input_layouts[0];
+    const auto& num_total_experts = impl_param.typed_desc<moe_mask_gen>()->num_total_experts;
+    const auto& num_active_experts = impl_param.typed_desc<moe_mask_gen>()->num_active_experts;
+    const auto num_tokens = impl_param.get_input_layout(0).get_shape()[0];
+    std::vector<layout> output_layouts;
+    auto gather_info_shape = ov::Shape{static_cast<size_t>(num_total_experts + num_tokens * num_active_experts)};
+    return layout{gather_info_shape, data_types::i32, format::bfyx};
+
 }
 
 template<typename ShapeType>

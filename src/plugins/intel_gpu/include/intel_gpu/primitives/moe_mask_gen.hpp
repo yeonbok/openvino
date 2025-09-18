@@ -19,12 +19,22 @@ struct moe_mask_gen : public primitive_base<moe_mask_gen> {
     /// @param id                   This primitive id.
     /// @param input                Input data primitive id.
     /// @param experts_map          experts map per input token
+//    moe_mask_gen(const primitive_id& id,
+//              const input_info& router_idx,
+//              const int32_t num_total_experts,
+//              const int32_t num_active_experts)
+//        : primitive_base(id, {router_idx}, 2),
+//          num_total_experts(num_total_experts),
+//          num_active_experts(num_active_experts) {}
+
+
     moe_mask_gen(const primitive_id& id,
               const input_info& router_idx,
               const input_info& router_weight,
               const int32_t num_total_experts,
               const int32_t num_active_experts)
-        : primitive_base(id, {router_idx, router_weight}, 2),
+//        : primitive_base(id, {router_idx, router_weight}, 2),
+        : primitive_base(id, {router_idx, router_weight}),
           num_total_experts(num_total_experts),
           num_active_experts(num_active_experts) {}
 

@@ -105,8 +105,6 @@ namespace detail {
 attach_moe_gather_impl::attach_moe_gather_impl() {
     auto formats = {
         format::bfyx,
-        format::bfzyx,
-        format::bfwzyx,
     };
 
     auto types = {
