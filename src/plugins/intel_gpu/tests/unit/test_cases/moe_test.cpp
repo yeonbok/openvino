@@ -16,7 +16,7 @@ using namespace ::tests;
 TEST(moe_unit, moe_mask_gen_test) {
     auto& engine = get_test_engine();
 
-    // num experts 32
+    // num total experts 32
     // num active experts 2
     // input activation [30, 64]
     // topk [30, 2]
@@ -34,7 +34,35 @@ TEST(moe_unit, moe_mask_gen_test) {
         4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4 ,8,
         4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4 ,8
     };
- 
+
+//    std::vector<int32_t> gather_info_data = {
+//            // expert offsets
+//            -1, -1, -1, -1, 0,  -1, -1, -1,
+//            30, -1, -1, -1, -1, -1, -1, -1,
+//            -1, -1, -1, -1, -1, -1, -1, -1,
+//            -1, -1, -1, -1, -1, -1, -1, -1,
+//            // tokens per experts 
+//            0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
+//            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+//            0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
+//            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+//    };
+
+    std::vector<int32_t> gather_info_data =
+    {
+        -1, -1, -1, -1, 0, -1, -1, -1,
+        30, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1,
+        0,   0,  0,  0, 30,  0,  0,  0, 30,  0,  0,  0,
+        0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+        0,   0,  0,  0,  0,  0,  0,  0,
+        0,   1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
+       16,  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+        0,   1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
+       16,  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+    };
+
     auto topk_shape = ov::PartialShape{ov::Dimension(30), ov::Dimension(2)};
     auto topk_idx_layout = layout{topk_shape, data_types::i32, format::bfyx};
     auto topk_idx_mem = engine.allocate_memory(topk_idx_layout);
@@ -56,6 +84,77 @@ TEST(moe_unit, moe_mask_gen_test) {
     auto output = outputs.begin()->second.get_memory();
 
     cldnn::mem_lock<int32_t, mem_lock_type::read> output_ptr(output, get_test_stream());
-    for (size_t i = 0; i < output->get_layout().count(); i++)
-        std::cout << "[" << i << "] " << output_ptr[i] << std::endl;
+    for (size_t i = 0; i < output->get_layout().count(); i++) {
+//        std::cout << output_ptr[i] << ", ";
+        ASSERT_EQ(output_ptr[i], gather_info_data[i]);
+    }
+    std::cout << std::endl;
+}
+
+TEST(moe_unit, moe_gather_test) {
+    auto& engine = get_test_engine();
+    tests::random_generator rg(GET_SUITE_NAME);
+    // num total experts 32
+    // num active experts 2
+    // input activation [30, 64]
+    // mask_gather_info
+    //    expert_info_offsets [32]
+    //    tokens_indices_per_expert [30*2]
+    size_t num_tokens = 30;
+    size_t hidden_size = 64;
+    size_t num_total_experts = 32;
+    size_t num_active_experts = 2;
+
+    auto input_activation_shape = ov::PartialShape{ov::Dimension::dynamic(), ov::Dimension::dynamic()};
+    auto input_activation_layout = layout{input_activation_shape, data_types::f16, format::bfyx};
+
+    auto gather_info_shape = ov::PartialShape{ov::Dimension::dynamic()};
+    auto gather_info_layout = layout{gather_info_shape, data_types::i32, format::bfyx};
+
+    topology topology(
+        input_layout("input", input_activation_layout),
+        input_layout("gather_info", gather_info_layout),
+        moe_gather("moe_gather", input_info("input"), input_info("gather_info"), num_total_experts, num_active_experts)
+    );
+
+    auto input_data = rg.generate_random_1d<ov::float16>(num_tokens * hidden_size, -1, 1);
+    auto input_data_shape = ov::PartialShape{ov::Dimension(num_tokens), ov::Dimension(hidden_size)};
+    auto input_data_layout = layout{input_data_shape, data_types::f16, format::bfyx};
+    auto input_mem = engine.allocate_memory(input_data_layout);
+    set_values(input_mem, input_data);
+
+    std::vector<int32_t> gather_info_data =
+    {
+        // experts offset
+        -1, -1, -1, -1, 0, -1, -1, -1,
+        30, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1,
+        // experts number
+        0,   0,  0,  0, 30,  0,  0,  0, 30,  0,  0,  0,
+        0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+        0,   0,  0,  0,  0,  0,  0,  0,
+        // tokens per expert
+        0,   1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
+       16,  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+        0,   1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
+       16,  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+    };
+
+    size_t gather_info_data_size = num_total_experts + num_tokens * num_active_experts;
+    auto gather_info_data_shape = ov::PartialShape{ov::Dimension(gather_info_data_size)};
+    auto gather_info_data_layout = layout{gather_info_data_shape, data_types::f16, format::bfyx};
+    auto gather_info_mem = engine.allocate_memory(gather_info_data_layout);
+    set_values(gather_info_mem, gather_info_data);
+
+    network network(engine, topology, get_test_default_config(engine));
+    network.set_input_data("input", input_mem);
+    network.set_input_data("gather_info", gather_info_mem);
+    auto outputs = network.execute();
+
+    auto output = outputs.begin()->second.get_memory();
+    cldnn::mem_lock<ov::float16, mem_lock_type::read> output_ptr(output, get_test_stream());
+    for (size_t i = 0; i < num_tokens * hidden_size; i++) {
+        ASSERT_EQ(input_data[i], output_ptr[i]);
+    }
 }

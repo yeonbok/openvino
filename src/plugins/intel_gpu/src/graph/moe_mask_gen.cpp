@@ -18,7 +18,7 @@ layout moe_mask_gen_inst::calc_output_layout(moe_mask_gen_node const& node, kern
     const auto& num_active_experts = impl_param.typed_desc<moe_mask_gen>()->num_active_experts;
     const auto num_tokens = impl_param.get_input_layout(0).get_shape()[0];
     std::vector<layout> output_layouts;
-    auto gather_info_shape = ov::Shape{static_cast<size_t>(num_total_experts + num_tokens * num_active_experts)};
+    auto gather_info_shape = ov::Shape{static_cast<size_t>(num_total_experts * 2 + num_tokens * num_active_experts)};
     return layout{gather_info_shape, data_types::i32, format::bfyx};
 
 }
@@ -51,5 +51,5 @@ std::string moe_mask_gen_inst::to_string(moe_mask_gen_node const& node) {
     return primitive_description.str();
 }
 
-moe_mask_gen_inst::typed_primitive_inst(network& network, moe_mask_gen_node const& node) : parent(network, node, true) { }
+moe_mask_gen_inst::typed_primitive_inst(network& network, moe_mask_gen_node const& node) : parent(network, node) { }
 }  // namespace cldnn

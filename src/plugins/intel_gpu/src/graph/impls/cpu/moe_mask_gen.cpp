@@ -59,7 +59,7 @@ struct moe_mask_gen_impl : public typed_primitive_impl<moe_mask_gen> {
             input_mem_ptrs.push_back(instance.dep_memory_ptr(i));
 
         // [seqlen:30, active_expert:2]
-        std::cout << "topk layout " << instance.get_input_layout(0).to_short_string() << std::endl;
+//        std::cout << "topk layout " << instance.get_input_layout(0).to_short_string() << std::endl;
         auto num_tokens = instance.get_input_layout(0).get_shape()[0];
         auto num_active_experts = instance.get_node().as<moe_mask_gen>().get_primitive()->num_active_experts;
         auto num_total_experts = instance.get_node().as<moe_mask_gen>().get_primitive()->num_total_experts;
@@ -75,6 +75,10 @@ struct moe_mask_gen_impl : public typed_primitive_impl<moe_mask_gen> {
 
         auto topk_idx_ptr = topk_idx_lock.data();
         auto gather_info_ptr = gather_info_lock.data();
+
+        auto expert_data_offset_ptr = &gather_info_ptr[0];
+        auto expert_data_num_ptr = expert_data_offset_ptr + num_total_experts;
+        auto tokens_per_expert_ptr = expert_data_num_ptr + num_total_experts;
 //        auto gemm_info_ptr = reinterpret_cast<int32_t*>(gemm_info_lock.data());
         // make mask for gather
         std::vector<std::vector<int32_t>> tokens_per_expert(num_total_experts, std::vector<int32_t>());
@@ -84,9 +88,7 @@ struct moe_mask_gen_impl : public typed_primitive_impl<moe_mask_gen> {
                 tokens_per_expert[expert_id].push_back(token);
             }
         }
-       
-        int expert_offset = 0;
-        int expert_data_start = num_total_experts;
+
         // gather_info_ptr : pack two information 
         // 1st half : offset of each expert experts_offset{num_total_experts}
         // 2nd half : tokens per each expert
@@ -96,18 +98,25 @@ struct moe_mask_gen_impl : public typed_primitive_impl<moe_mask_gen> {
         //    - token 1  : uses exp1, exp2 
         // first half : experts_offset : [0, 1, 3, -1]
         // second half : tokens_per_expert : [[0], [0, 1], [1], []]
-        for (int expert = 0; expert < num_total_experts; expert++) {
-            if (tokens_per_expert[expert].empty())
-                gather_info_ptr[expert] = -1;
-            else
-                gather_info_ptr[expert] = expert_offset;
+        int expert_offset = 0;
+        for (int expert = 0; expert < num_total_experts ; expert++) {
+            // store offset
+            if (tokens_per_expert[expert].empty()) {
+                expert_data_offset_ptr[expert] = -1;
+            } else {
+                expert_data_offset_ptr[expert] = expert_offset;
+            }
+            // store num of tokens for each expert
+            expert_data_num_ptr[expert] = static_cast<int32_t>(tokens_per_expert[expert].size());
+            // recollect tokens for each expert
             for (int token : tokens_per_expert[expert]) {
-                gather_info_ptr[expert_data_start + expert_offset++] = token;
+                tokens_per_expert_ptr[expert_offset] = token;
+//                std::cout << "wrote token " << token << " for expert " << expert << " at offset " << expert_offset << std::endl;
+                expert_offset++;
             }
         }
         // make mask for gemm
         // TODO
-//        gemm_info_ptr[0] = topk_idx_ptr[0];
 
         for (size_t i = 0; i < input_mem_ptrs.size(); i++)
             input_mem_ptrs[i]->unlock(stream);
