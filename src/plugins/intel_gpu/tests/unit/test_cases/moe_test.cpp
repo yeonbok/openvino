@@ -8,6 +8,7 @@
 #include <intel_gpu/primitives/reorder.hpp>
 #include <intel_gpu/primitives/moe_mask_gen.hpp>
 #include <intel_gpu/primitives/moe_gather.hpp>
+#include <intel_gpu/primitives/moe_gemm.hpp>
 
 using namespace cldnn;
 using namespace ::tests;
@@ -157,4 +158,84 @@ TEST(moe_unit, moe_gather_test) {
     for (size_t i = 0; i < num_tokens * hidden_size; i++) {
         ASSERT_EQ(input_data[i], output_ptr[i]);
     }
+}
+
+TEST(moe_unit, moe_gemm_test) {
+    auto& engine = get_test_engine();
+    tests::random_generator rg(GET_SUITE_NAME);
+    // num total experts 32
+    // num active experts 2
+    // input activation [30, 64]
+    // mask_gather_info
+    //    expert_info_offsets [32]
+    //    tokens_indices_per_expert [30*2]
+    size_t num_tokens = 10;
+    size_t hidden_size = 16;
+    size_t num_total_experts = 4;
+    size_t experts_out_N = 16;
+
+    auto input_activation_shape = ov::PartialShape{ov::Dimension::dynamic(), ov::Dimension(hidden_size)};
+    auto input_activation_layout = layout{input_activation_shape, data_types::f16, format::bfyx};
+
+    auto experts_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(hidden_size), ov::Dimension(experts_out_N)};
+    auto experts_layout = layout{experts_shape, data_types::f16, format::bfyx};
+    auto experts_mem = engine.allocate_memory(experts_layout);
+    auto experts_data = rg.generate_random_1d<ov::float16>(num_total_experts * hidden_size * experts_out_N, -1, 1);
+    set_values(experts_mem, experts_data);
+
+    auto input_offset_shape = ov::PartialShape{ov::Dimension::dynamic()};
+    auto input_offsets_layout = layout{input_offset_shape, data_types::i32, format::bfyx};
+    auto weights_offset_shape = ov::PartialShape{ov::Dimension::dynamic()};
+    auto weight_offsets_layout = layout{weights_offset_shape, data_types::i32, format::bfyx};
+    auto input_tokens_lens_shape = ov::PartialShape{ov::Dimension::dynamic()};
+    auto input_tokens_lens_layout = layout{input_tokens_lens_shape, data_types::i32, format::bfyx};
+
+    topology topology(
+        input_layout("input", input_activation_layout),
+        data("moe_experts", experts_mem),
+        input_layout("input_offsets", input_offsets_layout),
+        input_layout("weight_offsets", weight_offsets_layout),
+        input_layout("input_tokens_lens", input_tokens_lens_layout),
+        moe_gemm("moe_gemm", input_info("input"),
+                             input_info("moe_experts"),
+                             input_info("input_offsets"),
+                             input_info("weight_offsets"),
+                             input_info("input_tokens_lens"))
+    );
+
+    auto input_data_shape = ov::PartialShape{ov::Dimension(num_tokens), ov::Dimension(hidden_size)};
+    auto input_data_layout = layout{input_data_shape, data_types::f16, format::bfyx};
+    auto input_mem = engine.allocate_memory(input_data_layout);
+    auto input_data = rg.generate_random_1d<ov::float16>(num_tokens * hidden_size, -1, 1);
+    set_values(input_mem, input_data);
+
+    std::vector<int32_t> input_offset_data = {0, 48};
+    std::vector<int32_t> weight_offset_data = {0, 512};
+    std::vector<int32_t> input_tokens_lens = {3, 7};
+
+    auto input_offset_data_shape = ov::PartialShape{ov::Dimension(2)};
+    auto input_offsets_data_layout = layout{input_offset_data_shape, data_types::i32, format::bfyx};
+    auto weights_offset_data_shape = ov::PartialShape{ov::Dimension(2)};
+    auto weight_offsets_data_layout = layout{weights_offset_data_shape, data_types::i32, format::bfyx};
+    auto input_tokens_lens_data_shape = ov::PartialShape{ov::Dimension(2)};
+    auto input_tokens_lens_data_layout = layout{input_tokens_lens_data_shape, data_types::i32, format::bfyx};
+
+    auto input_offset_mem = engine.allocate_memory(input_offsets_data_layout);
+    auto weight_offset_mem = engine.allocate_memory(weight_offsets_data_layout);
+    auto input_tokens_lens_mem = engine.allocate_memory(input_tokens_lens_data_layout);
+    set_values(input_offset_mem, input_offset_data);
+    set_values(weight_offset_mem, weight_offset_data);
+    set_values(input_tokens_lens_mem, input_tokens_lens);
+
+    network network(engine, topology, get_test_default_config(engine));
+    network.set_input_data("input", input_mem);
+    network.set_input_data("input_offsets", input_offset_mem);
+    network.set_input_data("weight_offsets", weight_offset_mem);
+    network.set_input_data("input_tokens_lens", input_tokens_lens_mem);
+
+    auto outputs = network.execute();
+
+    auto output = outputs.begin()->second.get_memory();
+    cldnn::mem_lock<ov::float16, mem_lock_type::read> output_ptr(output, get_test_stream());
+    std::cout << output_ptr[0] << std::endl;
 }
