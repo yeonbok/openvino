@@ -177,7 +177,9 @@ TEST(moe_unit, moe_gemm_test) {
     auto input_activation_shape = ov::PartialShape{ov::Dimension::dynamic(), ov::Dimension(hidden_size)};
     auto input_activation_layout = layout{input_activation_shape, data_types::f16, format::bfyx};
 
-    auto experts_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(hidden_size), ov::Dimension(experts_out_N)};
+//    auto experts_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(hidden_size), ov::Dimension(experts_out_N)};
+   // trnsposed way
+    auto experts_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(experts_out_N), ov::Dimension(hidden_size)};
     auto experts_layout = layout{experts_shape, data_types::f16, format::bfyx};
     auto experts_mem = engine.allocate_memory(experts_layout);
     auto experts_data = rg.generate_random_1d<ov::float16>(num_total_experts * hidden_size * experts_out_N, -1, 1);

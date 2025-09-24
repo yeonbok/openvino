@@ -21,37 +21,33 @@
 __attribute__((intel_reqd_sub_group_size(SUBGROUP_SIZE)))
 KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
         const global half *A, const global half *B, global float *C,
-//        const global int *A_offsets, const global int *B_offsets, const global int *C_offsets,
-        const global int *A_offsets, const global int *B_offsets,
-        const global int *n_array, int k) {
-//        int m, const global int *n_array, int k, local int *slm) {
+        const global int *A_offsets, const global int *B_offsets, const global int* C_offsets,
+//        const global int *n_array, int k, local int *slm) {
+        int m, const global int *n_array, int k) {
     printf("hello moe gemm micro\n");
-//    uint batch = get_group_id(2);
-//    A += A_offsets[batch];
-//    B += B_offsets[batch];
-//    C += C_offsets[batch];
-//
-//    int n = n_array[batch];
-//    int gid0 = get_global_id(0);
-//    int gid1 = get_global_id(1);
-//    int gid2 = get_global_id(2);
-//      printf("[%d,%d,%d] Aoffset %d Boffset %d Coffset %d\n", gid0, gid1, gid2, A_offsets[batch], B_offsets[batch], C_offsets[batch]);
-//      printf("[%d,%d,%d] m : %d n : %d k : %d\n", gid0, gid1, gid2, m, n, k);
-//
-//    int lda = k;
-//    int ldb = k;
-//
-//    uint sg_i = sub_group_broadcast(get_local_id(0)/SUBGROUP_SIZE, 0);
-//    uint sg_j = sub_group_broadcast(get_local_id(1), 0);
-//
-//    uint wg_i0 = get_group_id(0) * ugemm_wg_tile_m;
-//    uint wg_j0 = get_group_id(1) * ugemm_wg_tile_n;
-//    uint sg_i0 = wg_i0 + sg_i * ugemm_sg_tile_m;
-//    uint sg_j0 = wg_j0 + sg_j * ugemm_sg_tile_n;
-//
-//    if (wg_j0 >= n) return;     /* early exit if outside batch */
-//
-//    ugemm_c_type c_tile = ugemm(A, lda, B, ldb, m, n, k, wg_i0, wg_j0, 0, sg_i, sg_j);
-//
-//    tile_store(c_tile, C, m, n, sg_i0, sg_j0);     // note oneDNN version needs a leading dimension parameter
+    uint batch = get_group_id(2);
+    A += A_offsets[batch];
+    B += B_offsets[batch];
+    C += C_offsets[batch];
+    int n = n_array[0]; // TODO
+    int gid0 = get_global_id(0);
+    int gid1 = get_global_id(1);
+    int gid2 = get_global_id(2);
+
+    int lda = k;
+    int ldb = k;
+
+    uint sg_i = sub_group_broadcast(get_local_id(0)/SUBGROUP_SIZE, 0);
+    uint sg_j = sub_group_broadcast(get_local_id(1), 0);
+
+    uint wg_i0 = get_group_id(0) * ugemm_moe_wg_tile_m;
+    uint wg_j0 = get_group_id(1) * ugemm_moe_wg_tile_n;
+    uint sg_i0 = wg_i0 + sg_i * ugemm_moe_sg_tile_m;
+    uint sg_j0 = wg_j0 + sg_j * ugemm_moe_sg_tile_n;
+
+    if (wg_j0 >= n) return;     /* early exit if outside batch */
+
+    ugemm_moe_c_type c_tile = ugemm_moe(A, lda, B, ldb, m, n, k, wg_i0, wg_j0, 0, sg_i, sg_j);
+
+    tile_store(c_tile, C, m, n, sg_i0, sg_j0);     // note oneDNN version needs a leading dimension parameter
 }

@@ -26,15 +26,7 @@ class MoEGemmMicroGenerator : public MoEGemmOptGeneratorBase {
 public:
     explicit MoEGemmMicroGenerator(bool prefill) : MoEGemmOptGeneratorBase("moe_gemm", prefill ? "_prefill" : "_generate") {}
 
-    [[nodiscard]] std::string get_build_options(const kernel_impl_params& params) const override {
-        auto base_options = KernelGenerator::get_build_options(params);
-        std::string extra_options = " -Dcl_intel_dot_accumulate";
-        extra_options += " -Dcl_intel_global_float_atomic";
-        extra_options += " -Dcl_intel_subgroup_matrix_multiply_accumulate";
-        extra_options += " -Dcl_intel_subgroup_split_matrix_multiply_accumulate";
-
-        return base_options + extra_options;
-    }
+    [[nodiscard]] std::string get_build_options(const kernel_impl_params& params) const override;
 
     [[nodiscard]] KernelData get_kernel_data(const kernel_impl_params& params) const override;
 
@@ -45,26 +37,7 @@ public:
 
     [[nodiscard]] Arguments get_arguments_desc(const kernel_impl_params& params) const override;
 
-    [[nodiscard]] DispatchDataFunc get_dispatch_data_func() const override {
-        return DispatchDataFunc{[](const RuntimeParams& params, KernelData& kd, ImplRuntimeParams* rt_params) {
-            assert(!params.is_dynamic());
-            const auto& desc = params.typed_desc<moe_gemm>();
-
-            auto& wgs = kd.params.workGroups;
-            auto input_layout = params.get_input_layout();
-            auto output_layout = params.get_output_layout();
-
-            wgs.global = {1, 1, 1};
-            wgs.local = {1, 1, 1};
-
-            auto& scalars = kd.params.scalars;
-            scalars.clear();
-            scalars.reserve(1);
-            ScalarDescriptor s_k{ScalarDescriptor::Types::INT32};
-            s_k.v.s32 = 16; // TODO
-            scalars.push_back(s_k);
-    }};
-    }
+    [[nodiscard]] DispatchDataFunc get_dispatch_data_func() const override;
 
     static void init_microkernels(const kernel_impl_params& params, micro::Package& gemm_moe);
     static std::mutex mtx;
