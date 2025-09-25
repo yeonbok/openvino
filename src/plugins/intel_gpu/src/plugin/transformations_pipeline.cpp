@@ -107,6 +107,7 @@
 #include "transformations/common_optimizations/lstm_cell_fusion.hpp"
 #include "transformations/common_optimizations/move_eltwise_up_data_movement.hpp"
 #include "transformations/common_optimizations/mvn_fusion.hpp"
+#include "transformations/common_optimizations/matmul_experts_fusion.hpp"
 #include "transformations/common_optimizations/nop_elimination.hpp"
 #include "transformations/common_optimizations/rms_fusion.hpp"
 #include "transformations/common_optimizations/sdpa_scale_fusion.hpp"
@@ -188,6 +189,7 @@
 #include "openvino/op/ceiling.hpp"
 #include "openvino/op/clamp.hpp"
 #include "openvino/op/matmul.hpp"
+#include "openvino/op/moe.hpp"
 #include "openvino/op/reverse_sequence.hpp"
 #include "openvino/op/roll.hpp"
 #include "openvino/op/shuffle_channels.hpp"
@@ -210,6 +212,7 @@ static bool disable_reduce_decomposition(const std::shared_ptr<const ov::Node> n
 static bool is_decompression_multiply(const std::shared_ptr<const ov::Node> node, bool supports_immad) {
     std::vector<ov::DiscreteTypeInfo> target_consumers = { ov::opset1::MatMul::get_type_info_static(),
                                                            ov::op::v8::Gather::get_type_info_static(),
+                                                           ov::op::internal::MOE::get_type_info_static(),
                                                            ov::op::v1::Convolution::get_type_info_static(),
                                                            ov::opset1::Convolution::get_type_info_static(),
                                                            ov::op::v1::ConvolutionBackpropData::get_type_info_static(),
@@ -395,6 +398,7 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
             std::vector<ov::element::Type>{ ov::element::i8, ov::element::u8, ov::element::i4, ov::element::u4 },
             !device_info.supports_immad);
 
+        manager.register_pass<ov::pass::FuseVectorizedMOE>();
         manager.register_pass<ov::pass::InitNodeInfo>();
         manager.register_pass<EinsumDecomposition>();
 
@@ -465,7 +469,7 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
                 if (is_type<ov::op::v0::Convert>(next_node)) {
                     next_node = next_node->get_output_target_inputs(0).begin()->get_node();
                 }
-                return !is_type<ov::op::v0::MatMul>(next_node);
+                return !is_type<ov::op::v0::MatMul>(next_node) && !is_type<ov::op::internal::MOE>(next_node);
             });
 
         // Disable subtract folding only for the dGPUs to meet the requirements of oneDNN:
