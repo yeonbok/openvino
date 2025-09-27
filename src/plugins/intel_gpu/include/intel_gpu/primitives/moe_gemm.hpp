@@ -12,6 +12,15 @@ namespace cldnn {
 struct moe_gemm : public primitive_base<moe_gemm> {
     CLDNN_DECLARE_PRIMITIVE(moe_gemm)
 
+    enum MoEGemmInputIdx {
+        INPUT = 0,
+        WEIGHT = 1,
+        INPUT_OFFSETS = 2,
+        WEIGHT_OFFSETS = 3,
+        OUTPUT_OFFSETS = 4,
+        INPUT_TOKENS_LENS = 5,
+    };
+
     moe_gemm() : primitive_base("", {}) {}
 
     /// @brief Constructs moe_gemm primitive.
@@ -21,8 +30,9 @@ struct moe_gemm : public primitive_base<moe_gemm> {
               const input_info& weight,
               const input_info& input_offsets,
               const input_info& weight_offsets,
+              const input_info& output_offsets,
               const input_info& input_tokens_lens)
-        : primitive_base(id, {input, weight, input_offsets, weight_offsets, input_tokens_lens}) {}
+        : primitive_base(id, {input, weight, input_offsets, weight_offsets, output_offsets, input_tokens_lens}) {}
 
     size_t hash() const override {
         return primitive::hash();

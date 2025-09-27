@@ -22,6 +22,21 @@ static const int subgroup_size = 8;
 JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& params, const micro::Package& moe_gemm) const {
     auto jit = make_base_jit_constants(params);
     jit.make("SUBGROUP_SIZE", subgroup_size);
+    constexpr static std::array input_ids = { moe_gemm::MoEGemmInputIdx::INPUT,
+                                              moe_gemm::MoEGemmInputIdx::WEIGHT,
+                                              moe_gemm::MoEGemmInputIdx::INPUT_OFFSETS,
+                                              moe_gemm::MoEGemmInputIdx::WEIGHT_OFFSETS,
+                                              moe_gemm::MoEGemmInputIdx::INPUT_TOKENS_LENS
+                                            };
+    const auto& in_offsets_map = params.in_port_to_shape_info_offset;
+    const auto& out_offsets_map = params.out_port_to_shape_info_offset;
+
+    for (size_t i = 0; i < input_ids.size(); i++) {
+        const size_t tensor_id = input_ids[i];
+        jit.add(make_layout_jit_constants("INPUT" + to_code_string(i), params.input_layouts[tensor_id], in_offsets_map.at(tensor_id)));
+    }
+
+    jit.add(make_layout_jit_constants("OUTPUT", params.output_layouts[0], out_offsets_map.at(0)));
     // TODO
     return jit;
 }
@@ -41,7 +56,13 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
 //    const auto key_cache_id = 4; // TODO
 
     // TODO
-    int k = 16; 
+//    size_t batch = params.get_input_layout(1).get_shape()[0];
+    size_t batch = 1;
+//    size_t m = params.get_input_layout(1).get_shape()[1];
+//    size_t k = params.get_input_layout(1).get_shape()[2];
+    size_t m = 16;
+    size_t n = 10;
+    size_t k = 16;
     micro::GEMMProblem problem_moe;
     problem_moe.Ta = problem_moe.Ta_ext = micro::Type::f16;
     problem_moe.Tb = problem_moe.Tb_ext = micro::Type::f16;
@@ -55,17 +76,17 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     problem_moe.C.setAlignment(problem_moe.Tc.size());
 
     /* Set up microkernel options */
-    micro::GEMMProtocol::Options opts_moe;
-    opts_moe.localB = true;
-    opts_moe.slmPtr = true;
+//    micro::GEMMProtocol::Options opts_moe;
+//    opts_moe.localB = true;
+//    opts_moe.slmPtr = true;
 
     /* Set up problem_moe size information */
     micro::SizeParams sizes;
     // TODO fix
-    sizes.m = 128;
-    sizes.n = 128; 
-    sizes.k = 32;
-    sizes.batch = 1;
+    sizes.n = n; 
+    sizes.m = m;
+    sizes.k = k;
+    sizes.batch = batch;
 
     /* Set up microkernel requirements */
 //    int unroll_m = 4;
@@ -92,38 +113,41 @@ DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
     return DispatchDataFunc{[](const RuntimeParams& params, KernelData& kd, ImplRuntimeParams* rt_params) {
         assert(!params.is_dynamic());
         const auto& desc = params.typed_desc<moe_gemm>();
+        const auto& gemm_p = kd.micro_kernels[0]->p;
+        auto sg_per_wg_n = static_cast<size_t>(gemm_p.getSetting("sg_per_wg_n"));
+        auto sg_per_wg_m = static_cast<size_t>(gemm_p.getSetting("sg_per_wg_m"));
+        auto sg_tile_m = gemm_p.getSetting("sg_tile_m");
+        auto sg_tile_n = gemm_p.getSetting("sg_tile_n");
 
         auto& wgs = kd.params.workGroups;
         auto input_layout = params.get_input_layout(0);
-        std::cout << "get_dispatch_data_func for " << input_layout.get_shape() << std::endl;
         auto experts_weight_layout = params.get_input_layout(1);
         auto input_offset_layout = params.get_input_layout(2);
         auto weight_offset_layout = params.get_input_layout(3);
         auto input_tokens_lens_layout = params.get_input_layout(4);
         auto output_layout = params.get_output_layout();
 
-        size_t num_offsets = input_offset_layout.get_shape()[0];
-        wgs.global = {num_offsets, 1, 1};
-        wgs.local = {1, 1, 1};
-
-        auto& scalars = kd.params.scalars;
-        scalars.clear();
-        scalars.reserve(2);
-        ScalarDescriptor s_m{ScalarDescriptor::Types::INT32};
-        s_m.v.s32 = experts_weight_layout.get_shape()[1];  // TODO
-        scalars.push_back(s_m);
-    
-        ScalarDescriptor s_k{ScalarDescriptor::Types::INT32};
-        s_k.v.s32 = experts_weight_layout.get_shape()[0];  // TODO
-        scalars.push_back(s_k);
+        size_t num_active_experts = input_offset_layout.get_shape()[0];
+        // input : [num_experts, n, k]
+        // experts_weight : [num_experts, m, k]
+        size_t M = experts_weight_layout.get_shape()[1];
+        size_t N = input_layout.get_shape()[1];
+        wgs.local = { sg_per_wg_m * subgroup_size,
+                      sg_per_wg_n,
+                      1};
+        wgs.global = { align_to(ceil_div(M, sg_tile_m), sg_per_wg_m) * subgroup_size,
+                       align_to(ceil_div(N, sg_tile_n), sg_per_wg_n),
+                       num_active_experts};
+        std::cout << "output layout : " << output_layout.to_short_string() << std::endl;
+        std::cout << "gws : " << wgs.global[0] << ", " << wgs.global[1] << ", " << wgs.global[2] << std::endl;
     }};
 }
 
 std::string MoEGemmMicroGenerator::get_build_options(const kernel_impl_params& params) const {
     auto base_options = KernelGenerator::get_build_options(params);
-    std::string extra_options = " -Dcl_intel_dot_accumulate";
-    extra_options += " -Dcl_intel_global_float_atomic";
-    extra_options += " -Dcl_intel_subgroup_matrix_multiply_accumulate";
+//    std::string extra_options = " -Dcl_intel_dot_accumulate";
+//    extra_options += " -Dcl_intel_global_float_atomic";
+    std::string extra_options = " -Dcl_intel_subgroup_matrix_multiply_accumulate";
     extra_options += " -Dcl_intel_subgroup_split_matrix_multiply_accumulate";
     return base_options + extra_options;
 }
@@ -133,15 +157,13 @@ Arguments MoEGemmMicroGenerator::get_arguments_desc(const kernel_impl_params& pa
     if (params.is_dynamic())
         args.push_back({ArgumentDescriptor::Types::SHAPE_INFO, 0});
 
-    args.push_back({ArgumentDescriptor::Types::INPUT, 1});  // weight
     args.push_back({ArgumentDescriptor::Types::INPUT, 0});  // input
+    args.push_back({ArgumentDescriptor::Types::INPUT, 1});  // weight
     args.push_back({ArgumentDescriptor::Types::OUTPUT, 0});
     args.push_back({ArgumentDescriptor::Types::INPUT, 2});   // input offset
     args.push_back({ArgumentDescriptor::Types::INPUT, 3});   // weight offset
-    args.push_back({ArgumentDescriptor::Types::INPUT, 3});   // out offset // TODO
-    args.push_back({ArgumentDescriptor::Types::SCALAR, 0});  // m
-    args.push_back({ArgumentDescriptor::Types::INPUT, 3});   // n_array
-    args.push_back({ArgumentDescriptor::Types::SCALAR, 1});  // k
+    args.push_back({ArgumentDescriptor::Types::INPUT, 4});   // out offset // TODO
+    args.push_back({ArgumentDescriptor::Types::INPUT, 5});   // n_array
     return args;
 }
 

@@ -14,22 +14,24 @@ GPU_DEFINE_PRIMITIVE_TYPE_ID(moe_gemm)
 
 layout moe_gemm_inst::calc_output_layout(moe_gemm_node const& node, kernel_impl_params const& impl_param) {
     // TODO
-    std::cout << "calc_output_layout" << std::endl;
+    std::cout << "static shape!!! calc_output_layout" << std::endl;
     return impl_param.input_layouts[0];
 }
 
 template<typename ShapeType>
 std::vector<layout> moe_gemm_inst::calc_output_layouts(moe_gemm_node const& /*node*/, const kernel_impl_params& impl_param) {
     auto input_layout = impl_param.get_input_layout(0);
-    auto experts_layout = impl_param.get_input_layout(1);
+    auto experts_layout = impl_param.get_input_layout(1); // [experts, N, K]
 
     size_t total_experts = experts_layout.get_shape()[0];
-    auto m = input_layout.get_partial_shape()[0];
-    size_t n = experts_layout.get_shape()[2];
+    auto m = input_layout.get_partial_shape()[1]; // [experts, seq_len, K]
+    size_t n = experts_layout.get_shape()[1];
 
     ov::PartialShape output_shape = { ov::Dimension(total_experts), m, ov::Dimension(n) };
     std::cout << "calc_output_layouts" << std::endl;
-    return {layout{ output_shape, input_layout.data_type, format::bfyx }};
+    auto output_layout = layout{ output_shape, input_layout.data_type, format::bfyx };
+    std::cout << output_layout.to_short_string() << std::endl;
+    return {output_layout};
 }
 
 template std::vector<layout> moe_gemm_inst::calc_output_layouts<ov::PartialShape>(moe_gemm_node const& node, const kernel_impl_params& impl_param);
