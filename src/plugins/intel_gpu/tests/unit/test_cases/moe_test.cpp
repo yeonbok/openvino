@@ -216,9 +216,10 @@ TEST(moe_unit, moe_gemm_test) {
     std::vector<ov::float16> input_data(num_total_experts * num_tokens * hidden_size, 0.1f);
 
     set_values(input_mem, input_data);
-    std::vector<int32_t> input_offset_data = {0, 16*10*2};
+//    std::vector<int32_t> input_offset_data = {0, 16*10*2};
+    std::vector<int32_t> input_offset_data = {0, 3 * 16};
     std::vector<int32_t> weight_offset_data = {0, 16*16*2};
-    std::vector<int32_t> output_offset_data = {0, 16*10*2};
+    std::vector<int32_t> output_offset_data = {0, 3 * 16};
     std::vector<int32_t> input_tokens_lens = {3, 7};
 
     auto input_offset_data_shape = ov::PartialShape{ov::Dimension(num_actual_experts)};
@@ -253,6 +254,7 @@ TEST(moe_unit, moe_gemm_test) {
     auto outputs = network.execute();
 
     auto output = outputs.begin()->second.get_memory();
-    cldnn::mem_lock<ov::float16, mem_lock_type::read> output_ptr(output, get_test_stream());
+//    cldnn::mem_lock<ov::float16, mem_lock_type::read> output_ptr(output, get_test_stream());
+    cldnn::mem_lock<float, mem_lock_type::read> output_ptr(output, get_test_stream());
     std::cout << output_ptr[0] << std::endl;
 }

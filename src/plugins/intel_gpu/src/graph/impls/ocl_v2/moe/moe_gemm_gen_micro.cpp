@@ -57,7 +57,6 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
 
     // TODO
 //    size_t batch = params.get_input_layout(1).get_shape()[0];
-    size_t batch = 1;
 //    size_t m = params.get_input_layout(1).get_shape()[1];
 //    size_t k = params.get_input_layout(1).get_shape()[2];
     size_t m = 16;
@@ -86,7 +85,7 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     sizes.n = n; 
     sizes.m = m;
     sizes.k = k;
-    sizes.batch = batch;
+    sizes.batch = 1;
 
     /* Set up microkernel requirements */
 //    int unroll_m = 4;
@@ -103,6 +102,7 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     try {
  //       gemm_moe = micro::select_gemm_microkernel(micro::GEMMProtocol{}, hw_info, sizes, problem_moe, reqs_moe);
         gemm_moe = micro::select_gemm_microkernel(micro::GEMMProtocol{}, hw_info, sizes, problem_moe);
+//        gemm_moe = micro::select_gemm_microkernel(opts_moe, hw_info, sizes, problem_moe);
     } catch (const std::runtime_error& ex) {
         GPU_DEBUG_TRACE_DETAIL << "Can't create moe micro kernel: " << ex.what() << "\n";
         std::cout << "Can't create moe micro kernel: " << ex.what() << "\n";
@@ -120,6 +120,10 @@ DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
         auto sg_tile_n = gemm_p.getSetting("sg_tile_n");
 
         auto& wgs = kd.params.workGroups;
+        auto& scalars = kd.params.scalars;
+        scalars.clear();
+        scalars.reserve(3);
+
         auto input_layout = params.get_input_layout(0);
         auto experts_weight_layout = params.get_input_layout(1);
         auto input_offset_layout = params.get_input_layout(2);
@@ -130,16 +134,25 @@ DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
         size_t num_active_experts = input_offset_layout.get_shape()[0];
         // input : [num_experts, n, k]
         // experts_weight : [num_experts, m, k]
-        size_t M = experts_weight_layout.get_shape()[1];
-        size_t N = input_layout.get_shape()[1];
+        size_t m = experts_weight_layout.get_shape()[1];
+        size_t n = input_layout.get_shape()[1];
+        size_t k = input_layout.get_shape()[2];
         wgs.local = { sg_per_wg_m * subgroup_size,
                       sg_per_wg_n,
                       1};
-        wgs.global = { align_to(ceil_div(M, sg_tile_m), sg_per_wg_m) * subgroup_size,
-                       align_to(ceil_div(N, sg_tile_n), sg_per_wg_n),
+        wgs.global = { align_to(ceil_div(m, sg_tile_m), sg_per_wg_m) * subgroup_size,
+                       align_to(ceil_div(n, sg_tile_n), sg_per_wg_n),
                        num_active_experts};
         std::cout << "output layout : " << output_layout.to_short_string() << std::endl;
         std::cout << "gws : " << wgs.global[0] << ", " << wgs.global[1] << ", " << wgs.global[2] << std::endl;
+        std::cout << "lws : " << wgs.local[0] << ", " << wgs.local[1] << ", " << wgs.local[2] << std::endl;
+        ScalarDescriptor s_m{ScalarDescriptor::Types::INT32};
+        s_m.v.s32 = m;
+        scalars.push_back(s_m);
+
+        ScalarDescriptor s_k{ScalarDescriptor::Types::INT32};
+        s_k.v.s32 = k;
+        scalars.push_back(s_k);
     }};
 }
 
@@ -164,6 +177,10 @@ Arguments MoEGemmMicroGenerator::get_arguments_desc(const kernel_impl_params& pa
     args.push_back({ArgumentDescriptor::Types::INPUT, 3});   // weight offset
     args.push_back({ArgumentDescriptor::Types::INPUT, 4});   // out offset // TODO
     args.push_back({ArgumentDescriptor::Types::INPUT, 5});   // n_array
+
+    args.push_back({ArgumentDescriptor::Types::SCALAR, 0});  // m
+    args.push_back({ArgumentDescriptor::Types::SCALAR, 1});  // k
+
     return args;
 }
 

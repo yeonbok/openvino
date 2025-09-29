@@ -29,7 +29,7 @@ std::vector<layout> moe_gemm_inst::calc_output_layouts(moe_gemm_node const& /*no
 
     ov::PartialShape output_shape = { ov::Dimension(total_experts), m, ov::Dimension(n) };
     std::cout << "calc_output_layouts" << std::endl;
-    auto output_layout = layout{ output_shape, input_layout.data_type, format::bfyx };
+    auto output_layout = layout{ output_shape, data_types::f32, format::bfyx };
     std::cout << output_layout.to_short_string() << std::endl;
     return {output_layout};
 }
