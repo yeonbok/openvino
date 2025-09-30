@@ -24,7 +24,7 @@ __attribute__((intel_reqd_sub_group_size(SUBGROUP_SIZE)))
 KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
         const global half *input_ptr, const global half *weight_ptr, global float *out_ptr,
         const global int *input_offsets, const global int *weight_offsets, const global int* output_offsets,
-        const global int *n_array, int m, int k) {
+        const global int *n_array, int m, int k, local int* slm) {
     uint batch = get_group_id(2);
     input_ptr += input_offsets[batch];
     weight_ptr += weight_offsets[batch];
@@ -44,10 +44,12 @@ KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
     uint sg_i0 = wg_i0 + sg_i * ugemm_moe_sg_tile_m;
     uint sg_j0 = wg_j0 + sg_j * ugemm_moe_sg_tile_n;
 
-    if (wg_j0 >= n)
+    if (wg_j0 >= n) // if I set it as sg_j0 >= 0 : it hangs
         return;     /* early exit if outside batch */
     // ugemm_moe_c_type ugemm_moe(const global half* a, int lda, const global half* b, int ldb, int m, int n, int k, int i0, int j0, int h0, int local_id_m, int local_id_n) {$
-    ugemm_moe_c_type c_tile = ugemm_moe(weight_ptr, ld_weight, input_ptr, ld_input, m, n, k, wg_i0, wg_j0, 0, sg_i, sg_j);
-    //printf("wg_i0 : %d wg_j0 : %d c_tile %f\n", wg_i0, wg_j0, c_tile.x[0][0]); // debug
+    ugemm_moe_c_type c_tile = ugemm_moe(weight_ptr, ld_weight, input_ptr, ld_input, m, n, k, wg_i0, wg_j0, 0, sg_i, sg_j, slm);
+    //printf("gid : %d, %d, %d batch : %d wg_i0 : %d wg_j0 : %d input_offset: %d weight_offset :%d m : %d, n : %d k : %d c_tile %f\n", \
+    //            get_global_id(0), get_global_id(1), get_global_id(2), batch, wg_i0, wg_j0, input_offsets[batch], weight_offsets[batch], m,  n, k, c_tile.x[0][0]); // debug
+    printf("sg(%d, %d), gid:%d, %d, %d) n : %d, input[0]:%f weight[0]:%f, c[0]:%f\n",sg_i, sg_j, get_global_id(0), get_global_id(1), get_global_id(2), n, input_ptr[0], weight_ptr[0], c_tile.x[0][0]);
     tile_store(c_tile, out_ptr, m, n, sg_i0, sg_j0);     // note oneDNN version needs a leading dimension parameter
 }

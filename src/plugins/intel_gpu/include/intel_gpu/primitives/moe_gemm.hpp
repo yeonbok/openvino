@@ -26,14 +26,17 @@ struct moe_gemm : public primitive_base<moe_gemm> {
     /// @brief Constructs moe_gemm primitive.
     ///
     moe_gemm(const primitive_id& id,
-              const input_info& input,
-              const input_info& weight,
-              const input_info& input_offsets,
-              const input_info& weight_offsets,
-              const input_info& output_offsets,
-              const input_info& input_tokens_lens)
-        : primitive_base(id, {input, weight, input_offsets, weight_offsets, output_offsets, input_tokens_lens}) {}
+             const input_info& input,
+             const input_info& weight,
+             const input_info& input_offsets,
+             const input_info& weight_offsets,
+             const input_info& output_offsets,
+             const input_info& input_tokens_lens,
+             const int32_t num_active_experts)
+        : primitive_base(id, {input, weight, input_offsets, weight_offsets, output_offsets, input_tokens_lens}),
+          num_active_experts(num_active_experts) {}
 
+    int32_t num_active_experts = 0;
     size_t hash() const override {
         return primitive::hash();
     }

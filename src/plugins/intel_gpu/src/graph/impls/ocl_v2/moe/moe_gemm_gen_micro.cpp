@@ -65,7 +65,8 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     micro::GEMMProblem problem_moe;
     problem_moe.Ta = problem_moe.Ta_ext = micro::Type::f16;
     problem_moe.Tb = problem_moe.Tb_ext = micro::Type::f16;
-    problem_moe.Tc = problem_moe.Tc_ext = micro::Type::f32;
+    problem_moe.Tc = micro::Type::f32;
+    problem_moe.Tc_ext = micro::Type::f32;
     problem_moe.Ts = problem_moe.Tc;
     problem_moe.A.layout = micro::MatrixLayout::T;
     problem_moe.B.layout = micro::MatrixLayout::N;
@@ -75,9 +76,8 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     problem_moe.C.setAlignment(problem_moe.Tc.size());
 
     /* Set up microkernel options */
-//    micro::GEMMProtocol::Options opts_moe;
-//    opts_moe.localB = true;
-//    opts_moe.slmPtr = true;
+    micro::GEMMProtocol::Options opts_moe;
+    opts_moe.slmPtr = true;
 
     /* Set up problem_moe size information */
     micro::SizeParams sizes;
@@ -101,7 +101,7 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     /* Ask microkernel provider for microkernel */
     try {
  //       gemm_moe = micro::select_gemm_microkernel(micro::GEMMProtocol{}, hw_info, sizes, problem_moe, reqs_moe);
-        gemm_moe = micro::select_gemm_microkernel(micro::GEMMProtocol{}, hw_info, sizes, problem_moe);
+        gemm_moe = micro::select_gemm_microkernel(opts_moe, hw_info, sizes, problem_moe);
 //        gemm_moe = micro::select_gemm_microkernel(opts_moe, hw_info, sizes, problem_moe);
     } catch (const std::runtime_error& ex) {
         GPU_DEBUG_TRACE_DETAIL << "Can't create moe micro kernel: " << ex.what() << "\n";
@@ -131,18 +131,19 @@ DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
         auto input_tokens_lens_layout = params.get_input_layout(4);
         auto output_layout = params.get_output_layout();
 
-        size_t num_active_experts = input_offset_layout.get_shape()[0];
-        // input : [num_experts, n, k]
+        size_t num_offsets = input_offset_layout.get_shape()[0];
+        // input : [num_actual_experts * n, k]
+        size_t n = input_layout.get_shape()[0];
         // experts_weight : [num_experts, m, k]
         size_t m = experts_weight_layout.get_shape()[1];
-        size_t n = input_layout.get_shape()[1];
-        size_t k = input_layout.get_shape()[2];
+        size_t k = experts_weight_layout.get_shape()[2];
+        std::cout << "m : " << m << " n : " << n << " k : " << k << std::endl;
         wgs.local = { sg_per_wg_m * subgroup_size,
                       sg_per_wg_n,
                       1};
         wgs.global = { align_to(ceil_div(m, sg_tile_m), sg_per_wg_m) * subgroup_size,
                        align_to(ceil_div(n, sg_tile_n), sg_per_wg_n),
-                       num_active_experts};
+                       num_offsets};
         std::cout << "output layout : " << output_layout.to_short_string() << std::endl;
         std::cout << "gws : " << wgs.global[0] << ", " << wgs.global[1] << ", " << wgs.global[2] << std::endl;
         std::cout << "lws : " << wgs.local[0] << ", " << wgs.local[1] << ", " << wgs.local[2] << std::endl;
@@ -158,9 +159,9 @@ DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
 
 std::string MoEGemmMicroGenerator::get_build_options(const kernel_impl_params& params) const {
     auto base_options = KernelGenerator::get_build_options(params);
-//    std::string extra_options = " -Dcl_intel_dot_accumulate";
-//    extra_options += " -Dcl_intel_global_float_atomic";
-    std::string extra_options = " -Dcl_intel_subgroup_matrix_multiply_accumulate";
+    std::string extra_options = " -Dcl_intel_dot_accumulate";
+    extra_options += " -Dcl_intel_global_float_atomic";
+    extra_options += " -Dcl_intel_subgroup_matrix_multiply_accumulate";
     extra_options += " -Dcl_intel_subgroup_split_matrix_multiply_accumulate";
     return base_options + extra_options;
 }
@@ -180,6 +181,8 @@ Arguments MoEGemmMicroGenerator::get_arguments_desc(const kernel_impl_params& pa
 
     args.push_back({ArgumentDescriptor::Types::SCALAR, 0});  // m
     args.push_back({ArgumentDescriptor::Types::SCALAR, 1});  // k
+
+    args.push_back({ArgumentDescriptor::Types::LOCAL_MEMORY_SIZE, 0});
 
     return args;
 }
@@ -215,11 +218,16 @@ KernelData MoEGemmMicroGenerator::get_kernel_data(const kernel_impl_params& para
     shim_options.decorator = "moe";
 
     kd.code->jit += generateShim(moe_gemm, micro::HostLanguage::OpenCL_C, shim_options);
-//    if (moe_gemm.grfMin > 128) {
-    kd.code->options += " -cl-intel-256-GRF-per-thread";
-//    }
+    if (moe_gemm.grfMin > 128) {
+       kd.code->options += " -cl-intel-256-GRF-per-thread";
+    }
 
     kd.micro_kernels.push_back(std::make_shared<micro::MicroKernelPackage>(moe_gemm));
+
+    // Micro kernel is using slm implicitly inside the kernel.
+    // Therefore the slm should be allocated.
+    kd.params.local_memory_args.clear();
+    kd.params.local_memory_args.push_back(kd.micro_kernels[0]->p.getSetting("slm_size"));
     return kd;
 }
 }  // namespace ov::intel_gpu::ocl
