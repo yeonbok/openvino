@@ -67,15 +67,10 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     hw_info.gmdid = device_info.ip_version;
     hw_info.systolicAvailable = device_info.supports_immad;
 
-//    const auto key_cache_id = 4; // TODO
-
     // TODO
-//    size_t batch = params.get_input_layout(1).get_shape()[0];
-//    size_t m = params.get_input_layout(1).get_shape()[1];
-//    size_t k = params.get_input_layout(1).get_shape()[2];
-    size_t m = 16;
-    size_t n = 10;
-    size_t k = 16;
+    size_t m = params.get_input_layout(1).get_shape()[1];
+    size_t k = params.get_input_layout(1).get_shape()[2];
+    size_t n = 128;
     micro::GEMMProblem problem_moe;
     problem_moe.Ta = problem_moe.Ta_ext = micro::Type::f16;
     problem_moe.Tb = problem_moe.Tb_ext = micro::Type::f16;
@@ -102,21 +97,14 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     sizes.batch = 1;
 
     /* Set up microkernel requirements */
-//    int unroll_m = 4;
-//    int unroll_n = 4;
-//    int wg_m = 2;
-//    int wg_n = 2;
-//    std::vector<micro::StrategyRequirement> reqs_moe;
-//    reqs_moe.push_back(micro::StrategyRequirement::UnrollM == unroll_m);
-//    reqs_moe.push_back(micro::StrategyRequirement::UnrollN == unroll_n);
-//    reqs_moe.push_back(micro::StrategyRequirement::WGM == wg_m);
-//    reqs_moe.push_back(micro::StrategyRequirement::WGN == wg_n);
+    int unroll_n = 8;
+    std::vector<micro::StrategyRequirement> reqs_moe;
+    reqs_moe.push_back(micro::StrategyRequirement::UnrollN == unroll_n);
 
     /* Ask microkernel provider for microkernel */
     try {
  //       gemm_moe = micro::select_gemm_microkernel(micro::GEMMProtocol{}, hw_info, sizes, problem_moe, reqs_moe);
-        gemm_moe = micro::select_gemm_microkernel(opts_moe, hw_info, sizes, problem_moe);
-//        gemm_moe = micro::select_gemm_microkernel(opts_moe, hw_info, sizes, problem_moe);
+      gemm_moe = micro::select_gemm_microkernel(opts_moe, hw_info, sizes, problem_moe, reqs_moe);
     } catch (const std::runtime_error& ex) {
         GPU_DEBUG_TRACE_DETAIL << "Can't create moe micro kernel: " << ex.what() << "\n";
         std::cout << "Can't create moe micro kernel: " << ex.what() << "\n";
