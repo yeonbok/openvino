@@ -262,10 +262,10 @@ TEST(moe_unit, moe_gemm_test) {
     auto outputs = network.execute();
 
     auto output = outputs.begin()->second.get_memory();
-    cldnn::mem_lock<float, mem_lock_type::read> output_ptr(output, get_test_stream());
+    cldnn::mem_lock<ov::float16, mem_lock_type::read> output_ptr(output, get_test_stream());
     for (size_t m = 0; m < num_tokens; m++) {
         for (size_t n = 0; n < experts_out_N; n++) {
-            std::cout << "c[" << m << "][" << n << "]: " << output_ptr[m * experts_out_N + n] << std::endl;
+            std::cout << "c[" << m << "][" << n << "]: " << (float)output_ptr[m * experts_out_N + n] << std::endl;
         }
     }
 }

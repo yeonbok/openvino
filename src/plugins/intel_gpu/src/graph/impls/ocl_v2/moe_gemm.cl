@@ -17,12 +17,13 @@
 #include "include/batch_headers/generic_vector_ops.cl"
 #include "include/batch_headers/tile_ops.cl"
 
-
-//DECLARE_2D_TILE(c_tile_type_half, half, SUBGROUP_SIZE, 8, 4, 2, 1)
+DECLARE_2D_TILE(ugemm_moe_c_type_half, half, SUBGROUP_SIZE, ugemm_moe_c_type_block0, ugemm_moe_c_type_block1, ugemm_moe_c_type_nblock0, ugemm_moe_c_type_nblock1)
+DECLARE_2D_TILE_COPY_REBLOCK(ugemm_moe_c_type, SUBGROUP_SIZE, ugemm_moe_c_type_block0, ugemm_moe_c_type_block1, ugemm_moe_c_type_nblock0, ugemm_moe_c_type_nblock1,
+                             ugemm_moe_c_type_half, SUBGROUP_SIZE, ugemm_moe_c_type_block0, ugemm_moe_c_type_block1, ugemm_moe_c_type_nblock0, ugemm_moe_c_type_nblock1)
 
 __attribute__((intel_reqd_sub_group_size(SUBGROUP_SIZE)))
 KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
-        const global half *input_ptr, const global half *weight_ptr, global float *out_ptr,
+        const global half *input_ptr, const global half *weight_ptr, global half *out_ptr,
         const global int *input_offsets, const global int *weight_offsets, const global int* output_offsets,
         const global int *n_array, int m, int k, local int* slm) {
     uint batch = get_group_id(2);
@@ -51,5 +52,8 @@ KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
     //printf("gid : %d, %d, %d batch : %d wg_i0 : %d wg_j0 : %d input_offset: %d weight_offset :%d m : %d, n : %d k : %d c_tile %f\n", \
     //            get_global_id(0), get_global_id(1), get_global_id(2), batch, wg_i0, wg_j0, input_offsets[batch], weight_offsets[batch], m,  n, k, c_tile.x[0][0]); // debug
     printf("sg(%d, %d), gid:%d, %d, %d) n : %d, input[0]:%f weight[0]:%f, c[0]:%f\n",sg_i, sg_j, get_global_id(0), get_global_id(1), get_global_id(2), n, input_ptr[0], weight_ptr[0], c_tile.x[0][0]);
-    tile_store(c_tile, out_ptr, m, n, sg_i0, sg_j0);     // note oneDNN version needs a leading dimension parameter
+
+    ugemm_moe_c_type_half c_tile_half;
+    tile_copy_reblock(c_tile, &c_tile_half);
+    tile_store(c_tile_half, out_ptr, m, n, sg_i0, sg_j0);
 }
