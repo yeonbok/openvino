@@ -16,12 +16,26 @@
 
 // clang-format on
 namespace ov::intel_gpu::ocl {
-
-static const int subgroup_size = 8;
-
+static size_t get_subgroup_size(gpu_arch arch) {
+    switch (arch) {
+    case gpu_arch::gen9:
+    case gpu_arch::gen11:
+    case gpu_arch::xe_lp:
+    case gpu_arch::xe_hp:
+    case gpu_arch::xe_hpg:
+        return 8;
+    case gpu_arch::xe_hpc:
+    case gpu_arch::xe2:
+    case gpu_arch::xe3:
+        return 16;
+    default:
+        return 0;
+    }
+}
 JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& params, const micro::Package& moe_gemm) const {
+    const auto& device_info = params.get_device_info();
     auto jit = make_base_jit_constants(params);
-    jit.make("SUBGROUP_SIZE", subgroup_size);
+    jit.make("SUBGROUP_SIZE", get_subgroup_size(device_info.arch));
     constexpr static std::array input_ids = { moe_gemm::MoEGemmInputIdx::INPUT,
                                               moe_gemm::MoEGemmInputIdx::WEIGHT,
                                               moe_gemm::MoEGemmInputIdx::INPUT_OFFSETS,
@@ -113,6 +127,7 @@ DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
     return DispatchDataFunc{[](const RuntimeParams& params, KernelData& kd, ImplRuntimeParams* rt_params) {
         assert(!params.is_dynamic());
         const auto& desc = params.typed_desc<moe_gemm>();
+        const auto& device_info = params.get_device_info();
         const auto& gemm_p = kd.micro_kernels[0]->p;
         auto sg_per_wg_n = static_cast<size_t>(gemm_p.getSetting("sg_per_wg_n"));
         auto sg_per_wg_m = static_cast<size_t>(gemm_p.getSetting("sg_per_wg_m"));
@@ -138,10 +153,10 @@ DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
         size_t m = experts_weight_layout.get_shape()[1];
         size_t k = experts_weight_layout.get_shape()[2];
         std::cout << "m : " << m << " n : " << n << " k : " << k << std::endl;
-        wgs.local = { sg_per_wg_m * subgroup_size,
+        wgs.local = { sg_per_wg_m * get_subgroup_size(device_info.arch),
                       sg_per_wg_n,
                       1};
-        wgs.global = { align_to(ceil_div(m, sg_tile_m), sg_per_wg_m) * subgroup_size,
+        wgs.global = { align_to(ceil_div(m, sg_tile_m), sg_per_wg_m) * get_subgroup_size(device_info.arch),
                        align_to(ceil_div(n, sg_tile_n), sg_per_wg_n),
                        num_offsets};
         std::cout << "output layout : " << output_layout.to_short_string() << std::endl;
@@ -183,13 +198,13 @@ Arguments MoEGemmMicroGenerator::get_arguments_desc(const kernel_impl_params& pa
     args.push_back({ArgumentDescriptor::Types::SCALAR, 1});  // k
 
     args.push_back({ArgumentDescriptor::Types::LOCAL_MEMORY_SIZE, 0});
-
     return args;
 }
 
 KernelData MoEGemmMicroGenerator::get_kernel_data(const kernel_impl_params& params) const {
     std::cout << "get kernel data for micro " << get_kernel_name() << std::endl;
     micro::Package moe_gemm;
+    const auto& device_info = params.get_device_info();
     init_microkernels(params, moe_gemm); // TODO
 
     auto jit = get_jit_constants(params, moe_gemm);
@@ -206,6 +221,7 @@ KernelData MoEGemmMicroGenerator::get_kernel_data(const kernel_impl_params& para
     kd.code->str = build_code(get_kernel_name(), jit, kd.code->entry_point);
 
     kd.params.arguments = get_arguments_desc(params);
+
     kd.update_dispatch_data_func = get_dispatch_data_func();
 
     kd.need_args_update = true;
@@ -213,7 +229,7 @@ KernelData MoEGemmMicroGenerator::get_kernel_data(const kernel_impl_params& para
 
     /* Generate microkernel shims */
     micro::ShimOptions shim_options;
-    shim_options.subgroupSize = static_cast<int32_t>(subgroup_size);
+    shim_options.subgroupSize = static_cast<int32_t>(get_subgroup_size(device_info.arch));
     shim_options.useTileOps = true;
     shim_options.decorator = "moe";
 
@@ -226,8 +242,9 @@ KernelData MoEGemmMicroGenerator::get_kernel_data(const kernel_impl_params& para
 
     // Micro kernel is using slm implicitly inside the kernel.
     // Therefore the slm should be allocated.
+    auto slm_size = kd.micro_kernels[0]->p.getSetting("slm_size");
     kd.params.local_memory_args.clear();
-    kd.params.local_memory_args.push_back(kd.micro_kernels[0]->p.getSetting("slm_size"));
+    kd.params.local_memory_args.push_back(slm_size > 0 ? slm_size : 1);
     return kd;
 }
 }  // namespace ov::intel_gpu::ocl

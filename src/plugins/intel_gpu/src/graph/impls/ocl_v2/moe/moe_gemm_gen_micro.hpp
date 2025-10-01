@@ -18,7 +18,6 @@
 #include "moe_gemm_base.hpp"
 using namespace cldnn;  // TODO: Remove once namespaces are aligned
 namespace ov::intel_gpu::ocl {
-
 #ifdef ENABLE_ONEDNN_FOR_GPU
 #include "micro_utils.hpp"
 
