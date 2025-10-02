@@ -160,6 +160,33 @@ TEST(moe_unit, moe_gather_test) {
     }
 }
 
+static std::vector<ov::float16> get_ref_moe_gemm(std::vector<ov::float16>& input, std::vector<ov::float16>& experts, 
+                                    size_t M, size_t K, size_t N,
+                                    std::vector<int32_t>& experts_ids, std::vector<int32_t>& input_offset_per_expert,
+                                    std::vector<int32_t>& input_tokens_lens) {
+    std::vector<ov::float16> output(M * N, 0.0f);
+    size_t input_stride = K;
+    size_t expert_stride = K * N;
+    size_t output_stride = N;
+    for (size_t i = 0; i < input_offset_per_expert.size(); i++) {
+        int32_t expert_id = experts_ids[i];
+        int32_t input_offset = input_offset_per_expert[i] * input_stride;
+        int32_t weight_offset = expert_id * expert_stride;
+        int32_t output_offset = input_offset_per_expert[i] * output_stride;
+        int32_t tokens_lens = input_tokens_lens[i];
+        for (int32_t m = 0; m < tokens_lens; m++) {
+            for (size_t n = 0; n < N; n++) {
+                float sum = 0.0f;
+                for (size_t k = 0; k < K; k++) {
+                    sum += input[input_offset + m * input_stride + k] * experts[weight_offset + n * K + k];
+                }
+                output[output_offset + m * output_stride + n] = sum;
+            }
+        }
+    }
+    return output;
+};
+
 TEST(moe_unit, moe_gemm_test) {
     auto& engine = get_test_engine();
     tests::random_generator rg(GET_SUITE_NAME);
@@ -173,7 +200,7 @@ TEST(moe_unit, moe_gemm_test) {
     size_t hidden_size = 16;
     size_t num_total_experts = 4;
     size_t experts_out_N = 16;
-    size_t num_actual_experts = 2;
+    int32_t num_active_experts_per_token = 2;
 
     auto input_activation_shape = ov::PartialShape{ov::Dimension::dynamic(), ov::Dimension::dynamic(), ov::Dimension(hidden_size)};
     auto input_activation_layout = layout{input_activation_shape, data_types::f16, format::bfyx};
@@ -181,38 +208,38 @@ TEST(moe_unit, moe_gemm_test) {
     auto experts_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(experts_out_N), ov::Dimension(hidden_size)};
     auto experts_layout = layout{experts_shape, data_types::f16, format::bfyx};
     auto experts_mem = engine.allocate_memory(experts_layout);
-    //    auto experts_data = rg.generate_random_1d<ov::float16>(num_total_experts * hidden_size * experts_out_N, -1, 1);
     // weight to fill with 1.0f for initial test
     std::vector<ov::float16> experts_data(num_total_experts * hidden_size * experts_out_N, 1.0f);
     set_values(experts_mem, experts_data);
 
-    auto input_offset_shape = ov::PartialShape{ov::Dimension::dynamic()};
-    auto input_offsets_layout = layout{input_offset_shape, data_types::i32, format::bfyx};
-    auto weights_offset_shape = ov::PartialShape{ov::Dimension::dynamic()};
-    auto weight_offsets_layout = layout{weights_offset_shape, data_types::i32, format::bfyx};
-    auto input_tokens_lens_shape = ov::PartialShape{ov::Dimension::dynamic()};
+    auto experts_ids_shape = ov::PartialShape{ov::Dimension(num_total_experts)};
+    auto experts_ids_layout = layout{experts_ids_shape, data_types::i32, format::bfyx};
+
+    auto input_offset_per_expert_shape = ov::PartialShape{ov::Dimension::dynamic()};
+    auto input_offset_per_expert_layout = layout{input_offset_per_expert_shape, data_types::i32, format::bfyx};
+
+    auto input_tokens_lens_shape = ov::PartialShape{ov::Dimension(num_total_experts)};
     auto input_tokens_lens_layout = layout{input_tokens_lens_shape, data_types::i32, format::bfyx};
-    auto output_offset_shape = ov::PartialShape{ov::Dimension::dynamic()};
-    auto output_offsets_layout = layout{output_offset_shape, data_types::i32, format::bfyx};
 
     topology topology(
         input_layout("input", input_activation_layout),
         data("moe_experts", experts_mem),
-        input_layout("input_offsets", input_offsets_layout),
-        input_layout("weight_offsets", weight_offsets_layout),
-        input_layout("output_offsets", output_offsets_layout),
+        input_layout("experts_ids", experts_ids_layout),
+        input_layout("input_offset_per_expert", input_offset_per_expert_layout),
         input_layout("input_tokens_lens", input_tokens_lens_layout),
         moe_gemm("moe_gemm", input_info("input"),
                              input_info("moe_experts"),
-                             input_info("input_offsets"),
-                             input_info("weight_offsets"),
-                             input_info("output_offsets"),
+                             input_info("experts_ids"),
+                             input_info("input_offset_per_expert"), // this input will be croped to be same length as the actual used experts
                              input_info("input_tokens_lens"),
-                             num_actual_experts)
+                             num_active_experts_per_token
+        )
     );
 
-//    auto input_data_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(num_tokens), ov::Dimension(hidden_size)};
-    std::vector<int32_t> input_tokens_lens = {3, 7};
+    std::vector<int32_t> input_tokens_lens (num_total_experts, -1);
+    input_tokens_lens[0] = 3;
+    input_tokens_lens[1] = 7;
+
     auto input_data_shape = ov::PartialShape{ov::Dimension(num_tokens), ov::Dimension(hidden_size)};
     auto input_data_layout = layout{input_data_shape, data_types::f16, format::bfyx};
     auto input_mem = engine.allocate_memory(input_data_layout);
@@ -223,49 +250,45 @@ TEST(moe_unit, moe_gemm_test) {
     for (size_t i = input_tokens_lens[0] * hidden_size; i <  num_tokens * hidden_size; ++i) {
         input_data[i] = 2.0f;
     }
-
-
     set_values(input_mem, input_data);
-    std::vector<int32_t> input_offset_data = {0, 3 * 16};
-    std::vector<int32_t> weight_offset_data = {0, 16*16*2};
-    std::vector<int32_t> output_offset_data = {0, 3 * 16};
 
-    auto input_offset_data_shape = ov::PartialShape{ov::Dimension(num_actual_experts)};
-    auto weights_offset_data_shape = ov::PartialShape{ov::Dimension(num_actual_experts)};
-    auto output_offset_data_shape = ov::PartialShape{ov::Dimension(num_actual_experts)};
-    auto input_tokens_lens_data_shape = ov::PartialShape{ov::Dimension(num_actual_experts)};
+    std::vector<int32_t> experts_ids_data(num_total_experts, -1);
+    experts_ids_data[0] = 0;
+    experts_ids_data[1] = 2;
+    auto experts_ids_data_shape = ov::PartialShape{ov::Dimension(static_cast<int64_t>(experts_ids_data.size()))};
+    auto experts_ids_data_layout = layout{experts_ids_data_shape, data_types::i32, format::bfyx};
+    auto experts_ids_mem = engine.allocate_memory(experts_ids_data_layout);
+    set_values(experts_ids_mem, experts_ids_data);
 
-    auto input_offsets_data_layout = layout{input_offset_data_shape, data_types::i32, format::bfyx};
-    auto weight_offsets_data_layout = layout{weights_offset_data_shape, data_types::i32, format::bfyx};
-    auto output_offsets_data_layout = layout{output_offset_data_shape, data_types::i32, format::bfyx};
-    auto input_tokens_lens_data_layout = layout{input_tokens_lens_data_shape, data_types::i32, format::bfyx};
+    std::vector<int32_t> input_offset_per_expert_data = {0, 3};
+    auto input_offset_per_expert_data_shape = ov::PartialShape{ov::Dimension(static_cast<int64_t>(input_offset_per_expert_data.size()))};
+    auto input_offset_per_expert_data_layout = layout{input_offset_per_expert_data_shape, data_types::i32, format::bfyx};
+    auto input_offset_per_expert_mem = engine.allocate_memory(input_offset_per_expert_data_layout);
+    set_values(input_offset_per_expert_mem, input_offset_per_expert_data);
 
-    auto input_offset_mem = engine.allocate_memory(input_offsets_data_layout);
-    auto weight_offset_mem = engine.allocate_memory(weight_offsets_data_layout);
-    auto output_offset_mem = engine.allocate_memory(output_offsets_data_layout);
-    auto input_tokens_lens_mem = engine.allocate_memory(input_tokens_lens_data_layout);
-
-    set_values(input_offset_mem, input_offset_data);
-    set_values(weight_offset_mem, weight_offset_data);
-    set_values(output_offset_mem, output_offset_data);
-    set_values(input_tokens_lens_mem, input_tokens_lens);
+    auto input_tokens_lens_mem = engine.allocate_memory(input_tokens_lens_layout);
+    set_values(input_tokens_lens_mem, input_tokens_lens);  
 
     auto config = get_test_default_config(engine);
     config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
     network network(engine, topology, config);
     network.set_input_data("input", input_mem);
-    network.set_input_data("input_offsets", input_offset_mem);
-    network.set_input_data("weight_offsets", weight_offset_mem);
-    network.set_input_data("output_offsets", output_offset_mem);
+    network.set_input_data("experts_ids", experts_ids_mem);
+    network.set_input_data("input_offset_per_expert", input_offset_per_expert_mem);
     network.set_input_data("input_tokens_lens", input_tokens_lens_mem);
 
     auto outputs = network.execute();
+    auto output_ref = get_ref_moe_gemm(input_data, experts_data, 
+                                    num_tokens, hidden_size, experts_out_N,
+                                    experts_ids_data, input_offset_per_expert_data,
+                                    input_tokens_lens);
 
     auto output = outputs.begin()->second.get_memory();
     cldnn::mem_lock<ov::float16, mem_lock_type::read> output_ptr(output, get_test_stream());
     for (size_t m = 0; m < num_tokens; m++) {
         for (size_t n = 0; n < experts_out_N; n++) {
-            std::cout << "c[" << m << "][" << n << "]: " << (float)output_ptr[m * experts_out_N + n] << std::endl;
+            //std::cout << "c[" << m << "][" << n << "]: " << (float)output_ptr[m * experts_out_N + n] << std::endl;
+            ASSERT_NEAR(output_ptr[m * experts_out_N + n], output_ref[m * experts_out_N + n], 0.001f);
         }
     }
 }

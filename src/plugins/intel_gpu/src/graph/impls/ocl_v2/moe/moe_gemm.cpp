@@ -17,6 +17,8 @@
 
 namespace ov::intel_gpu::ocl {
 namespace {
+
+
 class MoEGemmImpl : public PrimitiveImplOCL {
 public:
     DECLARE_OBJECT_TYPE_SERIALIZATION(ov::intel_gpu::ocl::MoEGemmImpl)
@@ -34,6 +36,21 @@ public:
         return make_deep_copy<MoEGemmImpl>(this);
     }
     
+    void update_rt_params(const primitive_inst& instance) override {
+        update_stages_flags(instance);
+        if (m_rt_params == nullptr) {
+            m_rt_params = std::make_unique<MoEGemmRuntimeParams>();
+        }
+        auto rtp = static_cast<MoEGemmRuntimeParams*>(m_rt_params.get());
+        rtp->num_actual_used_experts = instance.get_input_layout(moe_gemm::MoEGemmInputIdx::INPUT_OFFSET_PER_EXPERT).get_shape()[0];
+        std::cout << "update_rt_params: " << " num_actual_used_experts: " << rtp->num_actual_used_experts << std::endl;
+    }
+
+    void update(primitive_inst& inst, const kernel_impl_params& impl_params) override {
+        inst.update_shape_info_tensor(impl_params);
+        update_rt_params(inst);
+    }
+
     [[nodiscard]] event::ptr execute(const std::vector<event::ptr>& events, primitive_inst& instance) override {
 //        const auto& params = *instance.get_impl_params();
         if (has_stage(regular_micro_multi_tokens)) {

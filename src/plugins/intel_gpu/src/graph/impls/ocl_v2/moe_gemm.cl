@@ -24,12 +24,13 @@ DECLARE_2D_TILE_COPY_REBLOCK(ugemm_moe_c_type, SUBGROUP_SIZE, ugemm_moe_c_type_b
 __attribute__((intel_reqd_sub_group_size(SUBGROUP_SIZE)))
 KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
         const global half *input_ptr, const global half *weight_ptr, global half *out_ptr,
-        const global int *input_offsets, const global int *weight_offsets, const global int* output_offsets,
+        const global int* experts_ids, const global int* input_offset_per_expert, 
         const global int *n_array, int m, int k, local int* slm) {
     uint batch = get_group_id(2);
-    input_ptr += input_offsets[batch];
-    weight_ptr += weight_offsets[batch];
-    out_ptr += output_offsets[batch];
+    int input_offset = input_offset_per_expert[batch];
+    input_ptr += input_offset * INPUT_STRIDE;
+    weight_ptr += experts_ids[batch] * EXPERT_STRIDE;
+    out_ptr += input_offset * OUTPUT_STRIDE;
     //printf("m : %d n : %d k : %d\n", m, n, k);
     int n = n_array[batch];
 

@@ -15,10 +15,9 @@ struct moe_gemm : public primitive_base<moe_gemm> {
     enum MoEGemmInputIdx {
         INPUT = 0,
         WEIGHT = 1,
-        INPUT_OFFSETS = 2,
-        WEIGHT_OFFSETS = 3,
-        OUTPUT_OFFSETS = 4,
-        INPUT_TOKENS_LENS = 5,
+        EXPERTS_IDS = 2,
+        INPUT_OFFSET_PER_EXPERT = 3,
+        INPUT_TOKENS_LENS = 4
     };
 
     moe_gemm() : primitive_base("", {}) {}
@@ -28,12 +27,11 @@ struct moe_gemm : public primitive_base<moe_gemm> {
     moe_gemm(const primitive_id& id,
              const input_info& input,
              const input_info& weight,
-             const input_info& input_offsets,
-             const input_info& weight_offsets,
-             const input_info& output_offsets,
+             const input_info& experts_ids,
+             const input_info& inputs_offset_per_expert,
              const input_info& input_tokens_lens,
              const int32_t num_active_experts)
-        : primitive_base(id, {input, weight, input_offsets, weight_offsets, output_offsets, input_tokens_lens}),
+        : primitive_base(id, {input, weight, experts_ids, inputs_offset_per_expert, input_tokens_lens}),
           num_active_experts(num_active_experts) {}
 
     int32_t num_active_experts = 0;

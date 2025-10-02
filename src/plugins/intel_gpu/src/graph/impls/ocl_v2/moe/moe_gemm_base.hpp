@@ -12,7 +12,9 @@
 #include "moe_gemm_inst.h"
 
 namespace ov::intel_gpu::ocl {
-
+    struct MoEGemmRuntimeParams : public ImplRuntimeParams {
+    int32_t num_actual_used_experts = 0;
+};
 struct MoEGemmBase : public KernelGenerator {
     MoEGemmBase(std::string_view name, std::string_view suffix) : KernelGenerator(name, suffix) {}
     

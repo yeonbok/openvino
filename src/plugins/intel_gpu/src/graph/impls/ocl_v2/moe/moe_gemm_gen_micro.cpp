@@ -16,6 +16,7 @@
 
 // clang-format on
 namespace ov::intel_gpu::ocl {
+
 static size_t get_subgroup_size(gpu_arch arch) {
     switch (arch) {
     case gpu_arch::gen9:
@@ -38,19 +39,20 @@ JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& 
     jit.make("SUBGROUP_SIZE", get_subgroup_size(device_info.arch));
     constexpr static std::array input_ids = { moe_gemm::MoEGemmInputIdx::INPUT,
                                               moe_gemm::MoEGemmInputIdx::WEIGHT,
-                                              moe_gemm::MoEGemmInputIdx::INPUT_OFFSETS,
-                                              moe_gemm::MoEGemmInputIdx::WEIGHT_OFFSETS,
+                                              moe_gemm::MoEGemmInputIdx::EXPERTS_IDS,
+                                              moe_gemm::MoEGemmInputIdx::INPUT_OFFSET_PER_EXPERT,
                                               moe_gemm::MoEGemmInputIdx::INPUT_TOKENS_LENS
                                             };
     const auto& in_offsets_map = params.in_port_to_shape_info_offset;
     const auto& out_offsets_map = params.out_port_to_shape_info_offset;
-
     for (size_t i = 0; i < input_ids.size(); i++) {
         const size_t tensor_id = input_ids[i];
         jit.add(make_layout_jit_constants("INPUT" + to_code_string(i), params.input_layouts[tensor_id], in_offsets_map.at(tensor_id)));
     }
-
     jit.add(make_layout_jit_constants("OUTPUT", params.output_layouts[0], out_offsets_map.at(0)));
+    jit.make("EXPERT_STRIDE", params.input_layouts[1].get_shape()[1] * params.input_layouts[1].get_shape()[2]);
+    jit.make("INPUT_STRIDE", params.input_layouts[1].get_shape()[2]);
+    jit.make("OUTPUT_STRIDE", params.input_layouts[1].get_shape()[1]);
     // TODO
     return jit;
 }
@@ -70,7 +72,9 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     // TODO
     size_t m = params.get_input_layout(1).get_shape()[1];
     size_t k = params.get_input_layout(1).get_shape()[2];
+    std::cout << "init_microkernels " << std::endl;
     size_t n = 128;
+    std::cout << "n :" << n << " m : " << m << " k : " << k << std::endl;
     micro::GEMMProblem problem_moe;
     problem_moe.Ta = problem_moe.Ta_ext = micro::Type::f16;
     problem_moe.Tb = problem_moe.Tb_ext = micro::Type::f16;
@@ -100,20 +104,22 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     int unroll_n = 8;
     std::vector<micro::StrategyRequirement> reqs_moe;
     reqs_moe.push_back(micro::StrategyRequirement::UnrollN == unroll_n);
-
+    std::cout << "problem_moe : " << problem_moe.toString() << std::endl;
     /* Ask microkernel provider for microkernel */
     try {
- //       gemm_moe = micro::select_gemm_microkernel(micro::GEMMProtocol{}, hw_info, sizes, problem_moe, reqs_moe);
       gemm_moe = micro::select_gemm_microkernel(opts_moe, hw_info, sizes, problem_moe, reqs_moe);
     } catch (const std::runtime_error& ex) {
         GPU_DEBUG_TRACE_DETAIL << "Can't create moe micro kernel: " << ex.what() << "\n";
         std::cout << "Can't create moe micro kernel: " << ex.what() << "\n";
         throw;
     }
+    std::cout << "Could create moe micro kernel " << std::endl;
 }
 DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
     return DispatchDataFunc{[](const RuntimeParams& params, KernelData& kd, ImplRuntimeParams* rt_params) {
         assert(!params.is_dynamic());
+
+        auto* rtp = static_cast<MoEGemmRuntimeParams*>(rt_params);
         const auto& desc = params.typed_desc<moe_gemm>();
         const auto& device_info = params.get_device_info();
         const auto& gemm_p = kd.micro_kernels[0]->p;
@@ -127,14 +133,11 @@ DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
         scalars.clear();
         scalars.reserve(3);
 
-        auto input_layout = params.get_input_layout(0);
-        auto experts_weight_layout = params.get_input_layout(1);
-        auto input_offset_layout = params.get_input_layout(2);
-        auto weight_offset_layout = params.get_input_layout(3);
+        auto input_layout = params.get_input_layout(moe_gemm::MoEGemmInputIdx::INPUT);
+        auto experts_weight_layout = params.get_input_layout(moe_gemm::MoEGemmInputIdx::WEIGHT);
         auto input_tokens_lens_layout = params.get_input_layout(4);
         auto output_layout = params.get_output_layout();
 
-        size_t num_offsets = input_offset_layout.get_shape()[0];
         // input : [num_actual_experts * n, k]
         size_t n = input_layout.get_shape()[0];
         // experts_weight : [num_experts, m, k]
@@ -146,7 +149,7 @@ DispatchDataFunc MoEGemmMicroGenerator::get_dispatch_data_func() const {
                       1};
         wgs.global = { align_to(ceil_div(m, sg_tile_m), sg_per_wg_m) * get_subgroup_size(device_info.arch),
                        align_to(ceil_div(n, sg_tile_n), sg_per_wg_n),
-                       num_offsets};
+                       static_cast<size_t>(rtp->num_actual_used_experts)};
         std::cout << "output layout : " << output_layout.to_short_string() << std::endl;
         std::cout << "gws : " << wgs.global[0] << ", " << wgs.global[1] << ", " << wgs.global[2] << std::endl;
         std::cout << "lws : " << wgs.local[0] << ", " << wgs.local[1] << ", " << wgs.local[2] << std::endl;
@@ -177,10 +180,10 @@ Arguments MoEGemmMicroGenerator::get_arguments_desc(const kernel_impl_params& pa
     args.push_back({ArgumentDescriptor::Types::INPUT, 0});  // input
     args.push_back({ArgumentDescriptor::Types::INPUT, 1});  // weight
     args.push_back({ArgumentDescriptor::Types::OUTPUT, 0});
-    args.push_back({ArgumentDescriptor::Types::INPUT, 2});   // input offset
-    args.push_back({ArgumentDescriptor::Types::INPUT, 3});   // weight offset
-    args.push_back({ArgumentDescriptor::Types::INPUT, 4});   // out offset // TODO
-    args.push_back({ArgumentDescriptor::Types::INPUT, 5});   // n_array
+    args.push_back({ArgumentDescriptor::Types::INPUT, 2});   // experts_ids
+    args.push_back({ArgumentDescriptor::Types::INPUT, 3});   // input_offset_per_expert
+
+    args.push_back({ArgumentDescriptor::Types::INPUT, 4});   // n_array
 
     args.push_back({ArgumentDescriptor::Types::SCALAR, 0});  // m
     args.push_back({ArgumentDescriptor::Types::SCALAR, 1});  // k
@@ -190,7 +193,7 @@ Arguments MoEGemmMicroGenerator::get_arguments_desc(const kernel_impl_params& pa
 }
 
 KernelData MoEGemmMicroGenerator::get_kernel_data(const kernel_impl_params& params) const {
-    std::cout << "get kernel data for micro " << get_kernel_name() << std::endl;
+    std::cout << "start get kernel data for micro " << get_kernel_name() << std::endl;
     micro::Package moe_gemm;
     const auto& device_info = params.get_device_info();
     init_microkernels(params, moe_gemm); // TODO
@@ -233,6 +236,7 @@ KernelData MoEGemmMicroGenerator::get_kernel_data(const kernel_impl_params& para
     auto slm_size = kd.micro_kernels[0]->p.getSetting("slm_size");
     kd.params.local_memory_args.clear();
     kd.params.local_memory_args.push_back(slm_size > 0 ? slm_size : 1);
+    std::cout << "get_kernel_data finished" << std::endl;
     return kd;
 }
 }  // namespace ov::intel_gpu::ocl
