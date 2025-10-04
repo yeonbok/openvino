@@ -34,7 +34,10 @@ std::vector<layout> moe_gemm_inst::calc_output_layouts(moe_gemm_node const& /*no
         output_shape = { ov::Dimension::dynamic(), ov::Dimension(n) };
     } else {
         auto m = input_layout.get_shape()[0]; // [num_actual_experts * seq_len, K]
-        output_shape = { ov::Dimension(m), ov::Dimension(n) };
+        if (m == 1) // first gemm in the generate phase
+            output_shape = {ov::Dimension(impl_param.get_input_layout(3).get_shape()[0]), ov::Dimension(n)};
+        else
+            output_shape = { ov::Dimension(m), ov::Dimension(n) };
     }
     std::cout << "calc_output_layouts" << std::endl;
     auto output_layout = layout{ output_shape, data_types::f16, format::bfyx };

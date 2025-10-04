@@ -53,16 +53,18 @@ JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& 
     jit.make("EXPERT_STRIDE", params.input_layouts[1].get_shape()[1] * params.input_layouts[1].get_shape()[2]);
     jit.make("INPUT_STRIDE", params.input_layouts[1].get_shape()[2]);
     jit.make("OUTPUT_STRIDE", params.input_layouts[1].get_shape()[1]);
+    if (!m_is_prefill)
+        jit.make("IS_GENERATE", 1);
     // TODO
     return jit;
 }
 
 std::mutex MoEGemmMicroGenerator::mtx;
 void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
-                                           micro::Package& gemm_moe) {
+                                           micro::Package& gemm_moe, bool is_prefill) {
     // TODO: Remove once micro API is thread safe
     std::lock_guard<std::mutex> l(mtx);
-
+    std::cout << "init_micro_kernels. is_prefill? " << is_prefill << std::endl;
     const auto& device_info = params.get_device_info();
     micro::HWInformation hw_info;
     hw_info.euCount = device_info.execution_units_count;
@@ -73,7 +75,7 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     size_t m = params.get_input_layout(1).get_shape()[1];
     size_t k = params.get_input_layout(1).get_shape()[2];
     std::cout << "init_microkernels " << std::endl;
-    size_t n = 128;
+    size_t n = is_prefill ? 128 : 8; // TODO
     std::cout << "n :" << n << " m : " << m << " k : " << k << std::endl;
     micro::GEMMProblem problem_moe;
     problem_moe.Ta = problem_moe.Ta_ext = micro::Type::f16;
@@ -101,7 +103,8 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     sizes.batch = 1;
 
     /* Set up microkernel requirements */
-    int unroll_n = 8;
+//    int unroll_n = is_prefill ? 8 : 1;
+    int unroll_n = is_prefill ? 8 : n;
     std::vector<micro::StrategyRequirement> reqs_moe;
     reqs_moe.push_back(micro::StrategyRequirement::UnrollN == unroll_n);
     std::cout << "problem_moe : " << problem_moe.toString() << std::endl;
@@ -196,7 +199,7 @@ KernelData MoEGemmMicroGenerator::get_kernel_data(const kernel_impl_params& para
     std::cout << "start get kernel data for micro " << get_kernel_name() << std::endl;
     micro::Package moe_gemm;
     const auto& device_info = params.get_device_info();
-    init_microkernels(params, moe_gemm); // TODO
+    init_microkernels(params, moe_gemm, m_is_prefill); // TODO
 
     auto jit = get_jit_constants(params, moe_gemm);
 

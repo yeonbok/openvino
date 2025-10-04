@@ -18,18 +18,30 @@
 namespace ov::intel_gpu::ocl {
 namespace {
 
+    inline bool is_prefill_stage(const RuntimeParams& params) {
+        const auto target_seq_len = params.input_layouts[0].get_partial_shape()[0];
+        const auto num_offsets = params.input_layouts[3].get_partial_shape()[0];
+        if (num_offsets.is_dynamic())
+            return false;
+        if (target_seq_len.is_dynamic())
+            return false;
+        return (target_seq_len.get_length() / num_offsets.get_length()) > 1;
+    }
 
 class MoEGemmImpl : public PrimitiveImplOCL {
 public:
     DECLARE_OBJECT_TYPE_SERIALIZATION(ov::intel_gpu::ocl::MoEGemmImpl)
+    static constexpr bool prefill = true;
 
-    Stage::Ptr regular_micro_multi_tokens = make_stage<MoEGemmMicroGenerator>(true);
+    Stage::Ptr regular_micro_single_token = make_stage<MoEGemmMicroGenerator>(!prefill);
+    Stage::Ptr regular_micro_multi_tokens = make_stage<MoEGemmMicroGenerator>(prefill);
 
     explicit MoEGemmImpl() : PrimitiveImplOCL(MoEGemm::get_type_info_static()) {}
     explicit MoEGemmImpl(const RuntimeParams& impl_param) : MoEGemmImpl() {
         auto params = impl_param;
         GPU_DEBUG_TRACE_DETAIL << "create stages for dynamic = " << params.is_dynamic() << "\n";
         add_stage(regular_micro_multi_tokens, params);
+        add_stage(regular_micro_single_token, params);
     }
 
     [[nodiscard]] std::unique_ptr<primitive_impl> clone() const override {
@@ -52,9 +64,14 @@ public:
     }
 
     [[nodiscard]] event::ptr execute(const std::vector<event::ptr>& events, primitive_inst& instance) override {
-//        const auto& params = *instance.get_impl_params();
-        if (has_stage(regular_micro_multi_tokens)) {
+        const auto& params = *instance.get_impl_params();
+        bool is_prefill = is_prefill_stage(params);
+        if (is_prefill && has_stage(regular_micro_multi_tokens)) {
+            std::cout << "Execute kernel : is prefill" << std::endl;
             return execute_stage(events, instance, regular_micro_multi_tokens);
+        } else {
+            std::cout << "Execute kernel : is generate phase" << std::endl;
+            return execute_stage(events, instance, regular_micro_single_token);
         }
 
         return nullptr;

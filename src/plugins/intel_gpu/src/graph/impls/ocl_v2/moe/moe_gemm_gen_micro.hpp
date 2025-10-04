@@ -23,7 +23,7 @@ namespace ov::intel_gpu::ocl {
 
 class MoEGemmMicroGenerator : public MoEGemmOptGeneratorBase {
 public:
-    explicit MoEGemmMicroGenerator(bool prefill) : MoEGemmOptGeneratorBase("moe_gemm", prefill ? "_prefill" : "_generate") {}
+    explicit MoEGemmMicroGenerator(bool prefill) : MoEGemmOptGeneratorBase("moe_gemm", prefill ? "_prefill" : "_generate"), m_is_prefill(prefill) {}
 
     [[nodiscard]] std::string get_build_options(const kernel_impl_params& params) const override;
 
@@ -38,7 +38,9 @@ public:
 
     [[nodiscard]] DispatchDataFunc get_dispatch_data_func() const override;
 
-    static void init_microkernels(const kernel_impl_params& params, micro::Package& gemm_moe);
+    static void init_microkernels(const kernel_impl_params& params, micro::Package& gemm_moe, bool is_prefill);
+
+    bool m_is_prefill;
     static std::mutex mtx;
 };
 #endif
