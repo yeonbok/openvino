@@ -29,18 +29,14 @@ struct moe_gather_impl : public typed_primitive_impl<moe_gather> {
 
     void set_node_params(const program_node& arg) override {
         OPENVINO_ASSERT(arg.is_type<moe_gather>(), "[GPU] Incorrect program_node type");
-        //const auto& node = arg.as<moe_gather>();
-        //num_active_experts = node.get_primitive()->num_active_experts;
     }
 
     void save(BinaryOutputBuffer& ob) const override {
         parent::save(ob);
-//        ob << num_active_experts;
     }
 
     void load(BinaryInputBuffer& ib) override {
         parent::load(ib);
-//        ib >> num_active_experts;
     }
 
     event::ptr execute_impl(const std::vector<event::ptr>& events, moe_gather_inst& instance) override {
@@ -56,36 +52,27 @@ struct moe_gather_impl : public typed_primitive_impl<moe_gather> {
             stream.wait_for_events(events);
         }
         auto input_activations_mem_ptr = instance.dep_memory_ptr(0);
-        auto gather_info_mem_ptr = instance.dep_memory_ptr(1);
+        auto experts_info_offsets_mem_ptr = instance.dep_memory_ptr(1);
+        auto tokens_per_expert_mem_ptr = instance.dep_memory_ptr(2);
+        auto tokens_len_per_expert_mem_ptr = instance.dep_memory_ptr(3);
         auto out_mem_ptr = instance.output_memory_ptr(0);
+        auto num_used_experts = instance.get_input_layout(1).get_shape()[0];
+        auto hidden_size = instance.get_input_layout(0).get_shape()[1];
         cldnn::mem_lock<ov::float16, mem_lock_type::read> input_data(input_activations_mem_ptr, stream);
-        cldnn::mem_lock<int32_t, mem_lock_type::read> gather_info_data(gather_info_mem_ptr, stream);
+        cldnn::mem_lock<int32_t, mem_lock_type::read> experts_info_offsets(experts_info_offsets_mem_ptr, stream);
+        cldnn::mem_lock<int32_t, mem_lock_type::read> tokens_per_expert(tokens_per_expert_mem_ptr, stream);
+        cldnn::mem_lock<int32_t, mem_lock_type::read> tokens_len_per_expert(tokens_len_per_expert_mem_ptr, stream);
         cldnn::mem_lock<ov::float16, mem_lock_type::read_write> output(out_mem_ptr, stream);
 
-        auto params = instance.get_impl_params();
-        const auto& desc = params->typed_desc<moe_gather>(); 
-        auto num_total_experts = desc->num_total_experts;
-        auto experts_data_offset_ptr = &gather_info_data[0];
-        auto experts_data_num_ptr = experts_data_offset_ptr + num_total_experts;
-        auto tokens_per_expert_ptr = experts_data_num_ptr + num_total_experts;
-
-        auto hidden_size = instance.get_input_layout(0).get_shape()[1];
-
-        size_t out_offset = 0;
-        for (auto expert = 0; expert < num_total_experts; expert++) {
-            auto expert_offset = experts_data_offset_ptr[expert];
-            auto num_tokens_per_expert = experts_data_num_ptr[expert];
-            if (expert_offset == -1) {
-                continue;
-            }
-//            std::cout << "Read " << num_tokens_per_expert << " tokens from offset " << expert_offset << " for expert " << expert << std::endl;
-            for (auto i = 0; i < num_tokens_per_expert; i++) {
-                auto token = tokens_per_expert_ptr[expert_offset + i];
-//                std::cout << "gathering token " << token << " for expert " << expert << std::endl;
-                // copy input activation to output
-                auto input_ptr = &input_data[token * hidden_size];
-                for (size_t h = 0; h < hidden_size; h++) {
-                    output[out_offset++] = input_ptr[h];
+        for (size_t e = 0; e < num_used_experts; ++e) {
+            size_t expert_info_offset = experts_info_offsets[e];
+            size_t tokens_len = tokens_len_per_expert[e];
+            for (size_t t = 0; t < tokens_len; ++t) {
+                size_t token_id = tokens_per_expert[expert_info_offset + t];
+                for (size_t h = 0; h < hidden_size; ++h) {
+                    auto input_idx = token_id * hidden_size + h;
+                    auto output_idx = (expert_info_offset + t) * hidden_size + h;
+                    output[output_idx] = input_data[input_idx];
                 }
             }
         }

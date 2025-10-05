@@ -13,18 +13,19 @@ namespace cldnn {
 GPU_DEFINE_PRIMITIVE_TYPE_ID(moe_gather)
 
 layout moe_gather_inst::calc_output_layout(moe_gather_node const& node, kernel_impl_params const& impl_param) {
-    // TODO
+    // TODO (not implemented yet)
     return impl_param.input_layouts[0];
 }
 
 template<typename ShapeType>
 std::vector<layout> moe_gather_inst::calc_output_layouts(moe_gather_node const& /*node*/, const kernel_impl_params& impl_param) {
-    // TODO
     const auto& desc = impl_param.typed_desc<moe_gather>();
-    const auto num_active_experts = desc->num_active_experts;
-    const auto num_tokens = impl_param.input_layouts[0].get_shape()[0];
+    const auto num_experts_per_token = desc->num_experts_per_token;
     const auto hidden_size = impl_param.input_layouts[0].get_shape()[1];
-    const auto& out_shape = ov::PartialShape{ov::Dimension(num_tokens * num_active_experts), ov::Dimension(hidden_size)};
+    if (impl_param.input_layouts[0].is_dynamic())
+        return {layout{ov::PartialShape{ov::Dimension::dynamic(), ov::Dimension(hidden_size)}, impl_param.input_layouts[0].data_type, impl_param.input_layouts[0].format}};
+    const auto num_tokens = impl_param.input_layouts[0].get_shape()[0];
+    const auto& out_shape = ov::PartialShape{ov::Dimension(num_tokens * num_experts_per_token), ov::Dimension(hidden_size)};
     return {layout{out_shape, impl_param.input_layouts[0].data_type, impl_param.input_layouts[0].format}};
 }
 
