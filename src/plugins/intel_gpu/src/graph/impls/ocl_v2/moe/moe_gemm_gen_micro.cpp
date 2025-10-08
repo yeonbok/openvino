@@ -37,12 +37,23 @@ JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& 
     const auto& device_info = params.get_device_info();
     auto jit = make_base_jit_constants(params);
     jit.make("SUBGROUP_SIZE", get_subgroup_size(device_info.arch));
-    constexpr static std::array input_ids = { moe_gemm::MoEGemmInputIdx::INPUT,
-                                              moe_gemm::MoEGemmInputIdx::WEIGHT,
-                                              moe_gemm::MoEGemmInputIdx::EXPERTS_IDS,
-                                              moe_gemm::MoEGemmInputIdx::INPUT_OFFSET_PER_EXPERT,
-                                              moe_gemm::MoEGemmInputIdx::INPUT_TOKENS_LENS
-                                            };
+    std::vector<moe_gemm::MoEGemmInputIdx> input_ids = {moe_gemm::MoEGemmInputIdx::INPUT,
+                                                        moe_gemm::MoEGemmInputIdx::WEIGHT,
+                                                        moe_gemm::MoEGemmInputIdx::EXPERTS_IDS,
+                                                        moe_gemm::MoEGemmInputIdx::INPUT_OFFSET_PER_EXPERT,
+                                                        moe_gemm::MoEGemmInputIdx::INPUT_TOKENS_LENS};
+    bool has_bias = false; // TODO
+    if (params.input_layouts[1].data_type == data_types::u4 ||
+        params.input_layouts[1].data_type == data_types::i4) {
+        if (has_bias) {
+            input_ids.push_back(moe_gemm::MoEGemmInputIdx::WEIGHT_SCALE);
+            input_ids.push_back(moe_gemm::MoEGemmInputIdx::WEIGHT_ZP);
+        } else {
+            input_ids.push_back((moe_gemm::MoEGemmInputIdx)((int)moe_gemm::MoEGemmInputIdx::WEIGHT_SCALE - 1));
+            input_ids.push_back((moe_gemm::MoEGemmInputIdx)((int)moe_gemm::MoEGemmInputIdx::WEIGHT_ZP - 1));
+        }
+    }
+   
     const auto& in_offsets_map = params.in_port_to_shape_info_offset;
     const auto& out_offsets_map = params.out_port_to_shape_info_offset;
     for (size_t i = 0; i < input_ids.size(); i++) {
@@ -56,8 +67,35 @@ JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& 
     if (!m_is_prefill)
         jit.make("IS_GENERATE", 1);
     // TODO
+    if (params.input_layouts[1].data_type == data_types::u4 ||
+        params.input_layouts[1].data_type == data_types::i4) {
+        std::cout << "weight is compressed int4" << std::endl;
+        jit.make("WEIGHT_COMPRESSED_INT4", 1);
+        jit.make("WEIGHT_SCALE_DT", to_ocl_type(data_types::f16));
+        jit.make("WEIGHT_ZP_DT", to_ocl_type(data_types::u8));
+    }
     return jit;
 }
+
+//static micro::Type convert_type(ov::element::Type t) {
+//    switch (t) {
+//    case ov::element::f32:
+//        return micro::Type::f32;
+//    case ov::element::f16:
+//        return micro::Type::f16;
+//    case ov::element::i8:
+//        return micro::Type::s8;
+//    case ov::element::u8:
+//        return micro::Type::u8;
+//    case ov::element::i32:
+//        return micro::Type::s32;
+//    case ov::element::u4:
+//        return micro::Type::u4;
+//    default:
+//        break;
+//    }
+//    OPENVINO_THROW("Unsupported element type: ", t);
+//}
 
 std::mutex MoEGemmMicroGenerator::mtx;
 void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
@@ -70,15 +108,39 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     hw_info.euCount = device_info.execution_units_count;
     hw_info.gmdid = device_info.ip_version;
     hw_info.systolicAvailable = device_info.supports_immad;
-
+    bool weight_compressed_u4 = false;
+    if (params.input_layouts[1].data_type == data_types::u4 ||
+        params.input_layouts[1].data_type == data_types::i4) {
+            weight_compressed_u4 = true;
+    }
     // TODO
     size_t m = params.get_input_layout(1).get_shape()[1];
     size_t k = params.get_input_layout(1).get_shape()[2];
-    std::cout << "init_microkernels " << std::endl;
+    std::cout << "init_microkernels (weight u4? " << weight_compressed_u4 << " )" << std::endl;
     size_t n = is_prefill ? 128 : 8; // TODO
     std::cout << "n :" << n << " m : " << m << " k : " << k << std::endl;
     micro::GEMMProblem problem_moe;
-    problem_moe.Ta = problem_moe.Ta_ext = micro::Type::f16;
+    if (weight_compressed_u4) {
+        problem_moe.Ta = micro::Type::f16; // weight register
+        problem_moe.Ta_ext = micro::Type::u4; // weight memory
+
+        problem_moe.Ta_scale = micro::Type::f16; // scale dtype
+        problem_moe.A_scale.setAlignment(2); // scale : half
+        problem_moe.A_scale.layout = micro::MatrixLayout::T; // scale layout
+        problem_moe.asPtrDims = 2; // A/B scale dimensionality (-1: none; 0: scalar; 1: vector, 2: matrix)
+
+        problem_moe.aqGroupM = 1;
+        problem_moe.aqGroupK = k;
+
+        problem_moe.Tao = micro::Type::u8; // zp dt
+        problem_moe.AO.setAlignment(1); // zp : u8
+        problem_moe.AO.layout = micro::MatrixLayout::T;
+        problem_moe.aoPtrDims = 2; // // A/B offset dimensionality (-1: none; 0: scalar; 1: vector, 2: matrix)
+        problem_moe.aOffset = micro::ABOffset::Calc; // Calculate A/B row/column sums in kernel.
+    } else {
+        problem_moe.Ta = problem_moe.Ta_ext = micro::Type::f16;
+    }
+
     problem_moe.Tb = problem_moe.Tb_ext = micro::Type::f16;
     problem_moe.Tc = micro::Type::f32;
     problem_moe.Tc_ext = micro::Type::f32;
@@ -94,6 +156,9 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     micro::GEMMProtocol::Options opts_moe;
     opts_moe.slmPtr = true;
 
+    if (weight_compressed_u4) {
+        opts_moe.scaleA = opts_moe.offsetA = true;
+    }
     /* Set up problem_moe size information */
     micro::SizeParams sizes;
     // TODO fix
@@ -104,9 +169,9 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
 
     /* Set up microkernel requirements */
 //    int unroll_n = is_prefill ? 8 : 1;
-    int unroll_n = is_prefill ? 8 : n;
+//    int unroll_n = is_prefill ? 8 : n;
     std::vector<micro::StrategyRequirement> reqs_moe;
-    reqs_moe.push_back(micro::StrategyRequirement::UnrollN == unroll_n);
+//    reqs_moe.push_back(micro::StrategyRequirement::UnrollN == unroll_n);
     std::cout << "problem_moe : " << problem_moe.toString() << std::endl;
     /* Ask microkernel provider for microkernel */
     try {
@@ -192,6 +257,13 @@ Arguments MoEGemmMicroGenerator::get_arguments_desc(const kernel_impl_params& pa
     args.push_back({ArgumentDescriptor::Types::SCALAR, 1});  // k
 
     args.push_back({ArgumentDescriptor::Types::LOCAL_MEMORY_SIZE, 0});
+
+    if (params.input_layouts[1].data_type == data_types::u4 ||
+        params.input_layouts[1].data_type == data_types::i4) {
+        args.push_back({ArgumentDescriptor::Types::INPUT, 5});  // weight scales // TODO adjust idx
+        args.push_back({ArgumentDescriptor::Types::INPUT, 6});  // weight zp
+    }
+
     return args;
 }
 

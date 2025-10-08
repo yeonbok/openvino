@@ -23,9 +23,14 @@ DECLARE_2D_TILE_COPY_REBLOCK(ugemm_moe_c_type, SUBGROUP_SIZE, ugemm_moe_c_type_b
 
 __attribute__((intel_reqd_sub_group_size(SUBGROUP_SIZE)))
 KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
-        const global half *input_ptr, const global half *weight_ptr, global half *out_ptr,
-        const global int* experts_ids, const global int* input_offset_per_expert, 
-        const global int *n_array, int m, int k, local int* slm) {
+        const global INPUT0_TYPE *input_ptr, const global INPUT1_TYPE *weight_ptr, global OUTPUT_TYPE *out_ptr,
+        const global INPUT2_TYPE *experts_ids, const global INPUT3_TYPE * input_offset_per_expert, 
+        const global INPUT4_TYPE *n_array, int m, int k, local int* slm
+#ifdef WEIGHT_COMPRESSED_INT4
+        , const global WEIGHT_SCALE_DT *weight_scales
+        , const global WEIGHT_ZP_DT *weight_zps
+#endif
+) {
     uint batch = get_group_id(2);
     int input_offset = input_offset_per_expert[batch];
     #ifdef IS_GENERATE

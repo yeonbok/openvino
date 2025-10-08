@@ -24,6 +24,10 @@ struct MoEGemm : public ImplementationManager {
             ov::element::f32,
             ov::element::f16,
             ov::element::i32,
+            ov::element::u4,
+            ov::element::i4,
+            ov::element::i8,
+            ov::element::u8,
         };
 
         for (const auto& input_layout : node.get_input_layouts()) {

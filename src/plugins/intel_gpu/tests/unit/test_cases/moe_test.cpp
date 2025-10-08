@@ -822,3 +822,177 @@ TEST(moe_unit, moe_gemm_test_generate_down) {
         std::cout << "output : " << output->get_layout().to_string() << std::endl;
     }
 }
+
+TEST(moe_unit, moe_gemm_test_small_u4) {
+    auto& engine = get_test_engine();
+    tests::random_generator rg(GET_SUITE_NAME);
+    size_t num_tokens = 10;
+    size_t hidden_size = 32;
+    size_t num_total_experts = 4;
+    size_t experts_out_N = 16;
+    int32_t num_active_experts_per_token = 2;
+    size_t scale_group_size = hidden_size;
+    size_t num_scale_groups = hidden_size / scale_group_size;
+
+    auto input_activation_shape = ov::PartialShape{ov::Dimension::dynamic(), ov::Dimension::dynamic(), ov::Dimension(hidden_size)};
+    auto input_activation_layout = layout{input_activation_shape, data_types::f16, format::bfyx};
+
+
+    // weight to fill with 1.0f for initial test
+    std::vector<ov::float16> experts_data_f16(num_total_experts * hidden_size * experts_out_N);
+    std::vector<uint8_t> experts_data_u4(num_total_experts * hidden_size * experts_out_N / 2);
+    std::vector<ov::float16> scales_data(num_total_experts * num_scale_groups * experts_out_N);
+    std::vector<uint8_t> zp_data(num_total_experts * num_scale_groups * experts_out_N);
+
+    // create and quantize data
+    for (size_t e = 0; e < num_total_experts; ++e) {
+        for (size_t n = 0; n < experts_out_N ; ++n) {
+            std::vector<uint8_t> tmp_u8(hidden_size);
+            ov::float16 min_val = std::numeric_limits<ov::float16>::max();
+            ov::float16 max_val = std::numeric_limits<ov::float16>::lowest();
+            ov::float16 diff = 0;
+            for (size_t h = 0; h < hidden_size; ++h) {
+                size_t idx = e * experts_out_N * hidden_size + n * hidden_size + h;
+                experts_data_f16[idx] = static_cast<ov::float16>((e + n + h + 1) / 10.0f);
+                std::cout << experts_data_f16[idx] << " ";
+                min_val = std::min(min_val, experts_data_f16[idx]);
+                max_val = std::max(max_val, experts_data_f16[idx]);
+                diff = max_val - min_val;
+            }
+            //std::cout << "\n n : " << n << " : min :  " << min_val << " max : " << max_val << " diff : " << diff << std::endl;
+            if (diff < 1e-5) {
+                diff = 1e-5;
+            }
+            unsigned uint4_max = 15;
+            unsigned uint4_min = 0;
+            float scale_tmp = (uint4_max - uint4_min) / (float)diff;
+            float zp_tmp = uint4_min -min_val * scale_tmp;
+            
+            //std::cout << "q : ";
+            for (size_t h = 0; h < hidden_size; ++h) {
+                size_t idx = e * experts_out_N * hidden_size + n * hidden_size + h;
+                auto tmp_f16 = experts_data_f16[idx];
+                uint8_t q = tmp_f16 * scale_tmp + zp_tmp;
+                //std::cout << (int)q << ",  ";
+                tmp_u8[h] = std::max(0u, std::min(uint4_max, (unsigned)q));
+            }
+            const size_t hidden_size_u4 = hidden_size / 2;
+            for (size_t h = 0; h < hidden_size_u4; ++h) {
+                size_t idx = e * experts_out_N * hidden_size_u4 + n * hidden_size_u4 + h;
+                uint8_t q1 = tmp_u8[h * 2];
+                uint8_t q2 = tmp_u8[h * 2 + 1];
+                experts_data_u4[idx] = (q2 << 4) | (q1 & 0x0F);
+            }
+            scales_data[e * num_scale_groups * experts_out_N + n * num_scale_groups + 0] = static_cast<ov::float16>(1.0f / scale_tmp);
+            zp_data[e * num_scale_groups * experts_out_N + n * num_scale_groups + 0] = static_cast<uint8_t>(zp_tmp);
+//            std::cout << std::endl;
+//            std::cout << "decompress : ";
+//            for (size_t h = 0; h < hidden_size; ++h) {
+//                uint8_t q = tmp_u8[h];
+//                float f = (static_cast<float>(q) - zp_tmp) / scale_tmp;
+//                std::cout << f << ", ";
+//            }
+//            std::cout << std::endl;
+        }
+    }
+
+    auto experts_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(experts_out_N), ov::Dimension(hidden_size)};
+    auto experts_layout = layout{experts_shape, data_types::u4, format::bfyx};
+    auto experts_mem = engine.allocate_memory(experts_layout);
+    set_values(experts_mem, experts_data_u4);
+
+    auto experts_ids_shape = ov::PartialShape{ov::Dimension(num_total_experts)};
+    auto experts_ids_layout = layout{experts_ids_shape, data_types::i32, format::bfyx};
+
+    auto input_offset_per_expert_shape = ov::PartialShape{ov::Dimension::dynamic()};
+    auto input_offset_per_expert_layout = layout{input_offset_per_expert_shape, data_types::i32, format::bfyx};
+
+    auto input_tokens_lens_shape = ov::PartialShape{ov::Dimension(num_total_experts)};
+    auto input_tokens_lens_layout = layout{input_tokens_lens_shape, data_types::i32, format::bfyx};
+
+    auto scale_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(experts_out_N), ov::Dimension(hidden_size / scale_group_size)};
+    auto scale_layout = layout{scale_shape, data_types::f16, format::bfyx};
+    auto scale_mem = engine.allocate_memory(scale_layout);
+    set_values(scale_mem, scales_data);
+
+    auto zp_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(experts_out_N), ov::Dimension(hidden_size / scale_group_size)};
+    auto zp_layout = layout{zp_shape, data_types::u8, format::bfyx};
+    auto zp_mem = engine.allocate_memory(zp_layout);
+    set_values(zp_mem, zp_data);
+
+    topology topology(
+        input_layout("input", input_activation_layout),
+        data("moe_experts", experts_mem),
+        input_layout("experts_ids", experts_ids_layout),
+        input_layout("input_offset_per_expert", input_offset_per_expert_layout),
+        input_layout("input_tokens_lens", input_tokens_lens_layout),
+        data("weight_scale", scale_mem),
+        data("weight_zp", zp_mem),
+        moe_gemm("moe_gemm", input_info("input"),
+                             input_info("moe_experts"),
+                             input_info("experts_ids"),
+                             input_info("input_offset_per_expert"), // this input will be croped to be same length as the actual used experts
+                             input_info("input_tokens_lens"),
+                             "",
+                             input_info("weight_scale"),
+                             input_info("weight_zp"),
+                             num_active_experts_per_token
+        )
+    );
+
+    std::vector<int32_t> input_tokens_lens (num_total_experts, -1);
+    input_tokens_lens[0] = 3;
+    input_tokens_lens[1] = 7;
+
+    auto input_data_shape = ov::PartialShape{ov::Dimension(num_tokens), ov::Dimension(hidden_size)};
+    auto input_data_layout = layout{input_data_shape, data_types::f16, format::bfyx};
+    auto input_mem = engine.allocate_memory(input_data_layout);
+    std::vector<ov::float16> input_data(num_tokens * hidden_size);
+    for (size_t i = 0; i < input_tokens_lens[0] * hidden_size; ++i) {
+        input_data[i] = 1.0f;
+    }
+    for (size_t i = input_tokens_lens[0] * hidden_size; i <  num_tokens * hidden_size; ++i) {
+        input_data[i] = 2.0f;
+    }
+    set_values(input_mem, input_data);
+
+    std::vector<int32_t> experts_ids_data(num_total_experts, -1);
+    experts_ids_data[0] = 0;
+    experts_ids_data[1] = 2;
+    auto experts_ids_data_shape = ov::PartialShape{ov::Dimension(static_cast<int64_t>(experts_ids_data.size()))};
+    auto experts_ids_data_layout = layout{experts_ids_data_shape, data_types::i32, format::bfyx};
+    auto experts_ids_mem = engine.allocate_memory(experts_ids_data_layout);
+    set_values(experts_ids_mem, experts_ids_data);
+
+    std::vector<int32_t> input_offset_per_expert_data = {0, 3};
+    auto input_offset_per_expert_data_shape = ov::PartialShape{ov::Dimension(static_cast<int64_t>(input_offset_per_expert_data.size()))};
+    auto input_offset_per_expert_data_layout = layout{input_offset_per_expert_data_shape, data_types::i32, format::bfyx};
+    auto input_offset_per_expert_mem = engine.allocate_memory(input_offset_per_expert_data_layout);
+    set_values(input_offset_per_expert_mem, input_offset_per_expert_data);
+
+    auto input_tokens_lens_mem = engine.allocate_memory(input_tokens_lens_layout);
+    set_values(input_tokens_lens_mem, input_tokens_lens);  
+
+    auto config = get_test_default_config(engine);
+    config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
+    network network(engine, topology, config);
+    network.set_input_data("input", input_mem);
+    network.set_input_data("experts_ids", experts_ids_mem);
+    network.set_input_data("input_offset_per_expert", input_offset_per_expert_mem);
+    network.set_input_data("input_tokens_lens", input_tokens_lens_mem);
+
+    auto outputs = network.execute();
+//    auto output_ref = get_ref_moe_gemm(input_data, experts_data, 
+//                                    num_tokens, hidden_size, experts_out_N,
+//                                    experts_ids_data, input_offset_per_expert_data,
+//                                    input_tokens_lens, num_active_experts_per_token);
+//
+    auto output = outputs.begin()->second.get_memory();
+    cldnn::mem_lock<ov::float16, mem_lock_type::read> output_ptr(output, get_test_stream());
+    for (size_t m = 0; m < num_tokens; m++) {
+        for (size_t n = 0; n < experts_out_N; n++) {
+            std::cout << "c[" << m << "][" << n << "]: " << (float)output_ptr[m * experts_out_N + n] << std::endl;
+//            ASSERT_NEAR(output_ptr[m * experts_out_N + n], output_ref[m * experts_out_N + n], 0.001f);
+        }
+    }
+}
