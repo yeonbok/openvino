@@ -266,7 +266,15 @@ TEST(moe_unit, moe_gemm_test_small) {
     auto experts_layout = layout{experts_shape, data_types::f16, format::bfyx};
     auto experts_mem = engine.allocate_memory(experts_layout);
     // weight to fill with 1.0f for initial test
-    std::vector<ov::float16> experts_data(num_total_experts * hidden_size * experts_out_N, 1.0f);
+    std::vector<ov::float16> experts_data(num_total_experts * hidden_size * experts_out_N);
+    for (size_t e = 0; e < num_total_experts; ++e) {
+        for (size_t n = 0; n < experts_out_N; ++n) {
+            for (size_t k = 0; k < hidden_size; ++k) {
+                experts_data[e * experts_out_N * hidden_size + n * hidden_size + k] = static_cast<ov::float16>((k % 10 + 1.0f) / 10);
+            }
+        }
+    }
+
     set_values(experts_mem, experts_data);
 
     auto experts_ids_shape = ov::PartialShape{ov::Dimension(num_total_experts)};
@@ -301,9 +309,11 @@ TEST(moe_unit, moe_gemm_test_small) {
     auto input_data_layout = layout{input_data_shape, data_types::f16, format::bfyx};
     auto input_mem = engine.allocate_memory(input_data_layout);
     std::vector<ov::float16> input_data(num_tokens * hidden_size);
+    // first expert
     for (size_t i = 0; i < input_tokens_lens[0] * hidden_size; ++i) {
         input_data[i] = 1.0f;
     }
+    // second expert
     for (size_t i = input_tokens_lens[0] * hidden_size; i <  num_tokens * hidden_size; ++i) {
         input_data[i] = 2.0f;
     }
@@ -823,6 +833,102 @@ TEST(moe_unit, moe_gemm_test_generate_down) {
     }
 }
 
+static void quantize_u4(std::vector<ov::float16>& weight_fp, std::vector<uint8_t>& weight_u4, int B, int N, int K, int group_size,
+                 std::vector<ov::float16>& weight_scale, std::vector<ov::float16>& weight_zp) {
+    const uint8_t u4_max = 15;
+    const uint8_t u4_min = 0;
+    const int lda_u4 = K/2;
+
+    for (int b = 0; b < B; b++)
+    {
+        for (int m = 0; m < N; m++)
+        {
+            ov::float16 amax = std::numeric_limits<ov::float16>::min();
+            ov::float16 amin = std::numeric_limits<ov::float16>::max();
+            for (int k = 0; k < K; k++)
+            {
+                ov::float16 v = weight_fp[b * N * K + m * K + k];
+                amax = std::max(amax, v);
+                amin = std::min(amin, v);
+            }
+            float range = (float)amax - (float)amin;
+            if (range <= 1e-5f)
+                range = 1e-2f;
+            float inv_scale = (u4_max - u4_min) / range;
+            float zp_tmp = (float) (u4_min - amin * inv_scale);
+            ov::float16 zp = zp_tmp;
+            // quantize
+            for (int k = 0; k < K / 2; k++)
+            {
+                ov::float16 v0 = weight_fp[b * N * K + m * K + k * 2];
+                ov::float16 v1 = weight_fp[b * N * K + m * K + k * 2 + 1];
+                uint8_t q0 = std::min(std::max((uint8_t)(float(v0) * inv_scale + (float)zp), (uint8_t)0), u4_max); // u4
+                uint8_t q1 = std::min(std::max((uint8_t)(float(v1) * inv_scale + (float)zp), (uint8_t)0), u4_max); // u4
+
+                uint8_t q0q1 = (q1 << 4) | (q0 & 0x0F);
+                weight_u4[b * N * lda_u4 + m * lda_u4 + k] = uint8_t(q0q1);
+            }
+            ov::float16 scale = 1 / inv_scale;
+            weight_scale[b * N + m] = scale;
+            weight_zp[b * N + m] = zp;
+            // test quantized result
+//            for (int k = 0; k < K / 2; k++)
+//            {
+//                uint8_t q_v = weight_u4[b * M * lda_u4 + m * lda_u4 + k];
+//                uint8_t q0 = q_v & 0x0F;
+//                uint8_t q1 = (q_v >> 4) & 0x0F;
+//                float dq0 = (float(q0) - float(zp)) * float(scale);
+//                float dq1 = (float(q1) - float(zp)) * float(scale);
+//                auto orig_idx = b * M * K + m * K + 2 * k;
+//                std::cout << "A[" << b << "][" << m << "][" << k * 2     << "] (" << b * M * lda_u4  + m * lda_u4 + k << ") scale : " << scale << " zp : " << zp << " fp : " << float(weight_fp[orig_idx]) << " q: " << int(q0) << " dq: " << dq0 << std::endl;
+//                std::cout << "A[" << b << "][" << m << "][" << k * 2 + 1 << "] (" << b * M * lda_u4  + m * lda_u4 + k << ") scale : " << scale << " zp : " << zp << " fp : " << float(weight_fp[orig_idx + 1]) << " q: " << int(q1) << " dq: " << dq1 << std::endl;
+//            }
+        }
+    }
+}
+
+static void reference_u4(const std::vector<uint8_t> &W, const std::vector<ov::float16> &In, std::vector<float> &C,
+               const std::vector<int32_t> &experts_ids, const std::vector<int32_t> &input_offset_per_expert,
+               const std::vector<int32_t> &input_tokens_lens,
+               //const std::vector<int32_t> &n_array,
+               int32_t N, int32_t K,
+               const std::vector<ov::float16> &W_scale, const std::vector<ov::float16> &W_zp, int32_t W_group_size)
+{
+    auto ld_w = K/2, ld_in = K, ld_out = N;
+    auto batch = input_tokens_lens.size();
+
+    auto expert_stride = ld_w * N;
+    for (size_t b = 0; b < batch; b++) {
+        int32_t expert_id = experts_ids[b];
+        auto Wp = &W[expert_id * expert_stride];
+        auto Inp = &In[input_offset_per_expert[b] * ld_in];
+        auto Cp = &C[input_offset_per_expert[b] * ld_out];
+        auto cur_m = input_tokens_lens[b];
+
+        for (int j = 0; j < cur_m; j++) {
+            for (int n = 0; n < N; n++) {
+                auto W_r = Wp + n * ld_w;
+                auto In_r = Inp + j * ld_in;
+                float acc = 0.0f;
+                for (int k = 0; k < ld_w; k++) {
+                    // decompress
+                    uint8_t q0 = ((uint8_t)W_r[k] & 0x0F);
+                    uint8_t q1 = ((uint8_t)W_r[k] >> 4) & 0x0F;
+                    float scale = float(W_scale[expert_id * N + n]);
+                    float zp = float(W_zp[expert_id * N + n]);
+                    float fa0 = (float(q0) - zp) * scale;
+                    float fa1 = (float(q1) - zp) * scale;
+                    acc += fa0 * In_r[2 * k];
+                    acc += fa1 * In_r[2 * k + 1];
+//                    std::cout << "ref_A[" << b << "][" << m << "][" << k * 2     << "] scale : " << scale << " zp : " << zp << " q: " << (int) q0 << " fa : " << fa0 << std::endl;
+//                    std::cout << "ref_A[" << b << "][" << m << "][" << k * 2 + 1 << "] scale : " << scale << " zp : " << zp << " q: " << (int) q1 << " fa : " << fa1 << std::endl;
+                }
+                Cp[j * ld_out + n] = acc;
+            }
+        }
+    }
+}
+
 TEST(moe_unit, moe_gemm_test_small_u4) {
     auto& engine = get_test_engine();
     tests::random_generator rg(GET_SUITE_NAME);
@@ -842,59 +948,22 @@ TEST(moe_unit, moe_gemm_test_small_u4) {
     std::vector<ov::float16> experts_data_f16(num_total_experts * hidden_size * experts_out_N);
     std::vector<uint8_t> experts_data_u4(num_total_experts * hidden_size * experts_out_N / 2);
     std::vector<ov::float16> scales_data(num_total_experts * num_scale_groups * experts_out_N);
-    std::vector<uint8_t> zp_data(num_total_experts * num_scale_groups * experts_out_N);
+    std::vector<ov::float16> zp_data(num_total_experts * num_scale_groups * experts_out_N);
 
     // create and quantize data
     for (size_t e = 0; e < num_total_experts; ++e) {
         for (size_t n = 0; n < experts_out_N ; ++n) {
             std::vector<uint8_t> tmp_u8(hidden_size);
-            ov::float16 min_val = std::numeric_limits<ov::float16>::max();
-            ov::float16 max_val = std::numeric_limits<ov::float16>::lowest();
-            ov::float16 diff = 0;
+            //ov::float16 min_val = std::numeric_limits<ov::float16>::max();
+            //ov::float16 max_val = std::numeric_limits<ov::float16>::lowest();
+            //ov::float16 diff = 0;
             for (size_t h = 0; h < hidden_size; ++h) {
                 size_t idx = e * experts_out_N * hidden_size + n * hidden_size + h;
-                experts_data_f16[idx] = static_cast<ov::float16>((e + n + h + 1) / 10.0f);
-                std::cout << experts_data_f16[idx] << " ";
-                min_val = std::min(min_val, experts_data_f16[idx]);
-                max_val = std::max(max_val, experts_data_f16[idx]);
-                diff = max_val - min_val;
+                experts_data_f16[idx] = static_cast<ov::float16>((n + h + 1) / 10.0f);
             }
-            //std::cout << "\n n : " << n << " : min :  " << min_val << " max : " << max_val << " diff : " << diff << std::endl;
-            if (diff < 1e-5) {
-                diff = 1e-5;
-            }
-            unsigned uint4_max = 15;
-            unsigned uint4_min = 0;
-            float scale_tmp = (uint4_max - uint4_min) / (float)diff;
-            float zp_tmp = uint4_min -min_val * scale_tmp;
-            
-            //std::cout << "q : ";
-            for (size_t h = 0; h < hidden_size; ++h) {
-                size_t idx = e * experts_out_N * hidden_size + n * hidden_size + h;
-                auto tmp_f16 = experts_data_f16[idx];
-                uint8_t q = tmp_f16 * scale_tmp + zp_tmp;
-                //std::cout << (int)q << ",  ";
-                tmp_u8[h] = std::max(0u, std::min(uint4_max, (unsigned)q));
-            }
-            const size_t hidden_size_u4 = hidden_size / 2;
-            for (size_t h = 0; h < hidden_size_u4; ++h) {
-                size_t idx = e * experts_out_N * hidden_size_u4 + n * hidden_size_u4 + h;
-                uint8_t q1 = tmp_u8[h * 2];
-                uint8_t q2 = tmp_u8[h * 2 + 1];
-                experts_data_u4[idx] = (q2 << 4) | (q1 & 0x0F);
-            }
-            scales_data[e * num_scale_groups * experts_out_N + n * num_scale_groups + 0] = static_cast<ov::float16>(1.0f / scale_tmp);
-            zp_data[e * num_scale_groups * experts_out_N + n * num_scale_groups + 0] = static_cast<uint8_t>(zp_tmp);
-//            std::cout << std::endl;
-//            std::cout << "decompress : ";
-//            for (size_t h = 0; h < hidden_size; ++h) {
-//                uint8_t q = tmp_u8[h];
-//                float f = (static_cast<float>(q) - zp_tmp) / scale_tmp;
-//                std::cout << f << ", ";
-//            }
-//            std::cout << std::endl;
         }
     }
+    quantize_u4(experts_data_f16, experts_data_u4, num_total_experts, experts_out_N, hidden_size, hidden_size, scales_data, zp_data);
 
     auto experts_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(experts_out_N), ov::Dimension(hidden_size)};
     auto experts_layout = layout{experts_shape, data_types::u4, format::bfyx};
@@ -971,7 +1040,7 @@ TEST(moe_unit, moe_gemm_test_small_u4) {
     set_values(input_offset_per_expert_mem, input_offset_per_expert_data);
 
     auto input_tokens_lens_mem = engine.allocate_memory(input_tokens_lens_layout);
-    set_values(input_tokens_lens_mem, input_tokens_lens);  
+    set_values(input_tokens_lens_mem, input_tokens_lens);
 
     auto config = get_test_default_config(engine);
     config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
@@ -989,10 +1058,18 @@ TEST(moe_unit, moe_gemm_test_small_u4) {
 //
     auto output = outputs.begin()->second.get_memory();
     cldnn::mem_lock<ov::float16, mem_lock_type::read> output_ptr(output, get_test_stream());
+
+    std::vector<float> out_ref(num_tokens * experts_out_N);
+    // TODO : calculate offsets
+    reference_u4(experts_data_u4, input_data, out_ref, experts_ids_data, input_offset_per_expert_data, input_tokens_lens,
+               experts_out_N, hidden_size, scales_data, zp_data, scale_group_size); 
     for (size_t m = 0; m < num_tokens; m++) {
         for (size_t n = 0; n < experts_out_N; n++) {
-            std::cout << "c[" << m << "][" << n << "]: " << (float)output_ptr[m * experts_out_N + n] << std::endl;
-//            ASSERT_NEAR(output_ptr[m * experts_out_N + n], output_ref[m * experts_out_N + n], 0.001f);
+            std::cout << "c[" << m << "][" << n << "]: " << (float)output_ptr[m * experts_out_N + n] << ", " << out_ref[m * experts_out_N + n] << std::endl;
+            ASSERT_NEAR(output_ptr[m * experts_out_N + n], out_ref[m * experts_out_N + n], 0.1f);
+            if (std::abs(output_ptr[m * experts_out_N + n] - out_ref[m * experts_out_N + n]) > 0.1f) {
+                std::cout << "!!! mismatch at [" << m << "][" << n << "]" << std::endl;
+            }
         }
     }
 }

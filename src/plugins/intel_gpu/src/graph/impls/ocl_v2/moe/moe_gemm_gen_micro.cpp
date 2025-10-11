@@ -52,8 +52,11 @@ JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& 
             input_ids.push_back((moe_gemm::MoEGemmInputIdx)((int)moe_gemm::MoEGemmInputIdx::WEIGHT_SCALE - 1));
             input_ids.push_back((moe_gemm::MoEGemmInputIdx)((int)moe_gemm::MoEGemmInputIdx::WEIGHT_ZP - 1));
         }
+        jit.make("EXPERT_STRIDE", (params.input_layouts[1].get_shape()[1] * params.input_layouts[1].get_shape()[2]) / 2);
+    } else {
+        jit.make("EXPERT_STRIDE", params.input_layouts[1].get_shape()[1] * params.input_layouts[1].get_shape()[2]);
     }
-   
+
     const auto& in_offsets_map = params.in_port_to_shape_info_offset;
     const auto& out_offsets_map = params.out_port_to_shape_info_offset;
     for (size_t i = 0; i < input_ids.size(); i++) {
@@ -61,7 +64,6 @@ JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& 
         jit.add(make_layout_jit_constants("INPUT" + to_code_string(i), params.input_layouts[tensor_id], in_offsets_map.at(tensor_id)));
     }
     jit.add(make_layout_jit_constants("OUTPUT", params.output_layouts[0], out_offsets_map.at(0)));
-    jit.make("EXPERT_STRIDE", params.input_layouts[1].get_shape()[1] * params.input_layouts[1].get_shape()[2]);
     jit.make("INPUT_STRIDE", params.input_layouts[1].get_shape()[2]);
     jit.make("OUTPUT_STRIDE", params.input_layouts[1].get_shape()[1]);
     if (!m_is_prefill)
@@ -72,7 +74,7 @@ JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& 
         std::cout << "weight is compressed int4" << std::endl;
         jit.make("WEIGHT_COMPRESSED_INT4", 1);
         jit.make("WEIGHT_SCALE_DT", to_ocl_type(data_types::f16));
-        jit.make("WEIGHT_ZP_DT", to_ocl_type(data_types::u8));
+        jit.make("WEIGHT_ZP_DT", to_ocl_type(data_types::f16));
     }
     return jit;
 }
@@ -123,6 +125,7 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     if (weight_compressed_u4) {
         problem_moe.Ta = micro::Type::f16; // weight register
         problem_moe.Ta_ext = micro::Type::u4; // weight memory
+        problem_moe.A.setAlignment(micro::alignment_for_ld(k * problem_moe.Ta_ext));
 
         problem_moe.Ta_scale = micro::Type::f16; // scale dtype
         problem_moe.A_scale.setAlignment(2); // scale : half
@@ -132,13 +135,14 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
         problem_moe.aqGroupM = 1;
         problem_moe.aqGroupK = k;
 
-        problem_moe.Tao = micro::Type::u8; // zp dt
-        problem_moe.AO.setAlignment(1); // zp : u8
+        problem_moe.Tao = micro::Type::f16; // zp dt
+        problem_moe.AO.setAlignment(2); // zp : u8
         problem_moe.AO.layout = micro::MatrixLayout::T;
         problem_moe.aoPtrDims = 2; // // A/B offset dimensionality (-1: none; 0: scalar; 1: vector, 2: matrix)
         problem_moe.aOffset = micro::ABOffset::Calc; // Calculate A/B row/column sums in kernel.
     } else {
         problem_moe.Ta = problem_moe.Ta_ext = micro::Type::f16;
+        problem_moe.A.setAlignment(micro::alignment_for_ld(k * problem_moe.Ta));
     }
 
     problem_moe.Tb = problem_moe.Tb_ext = micro::Type::f16;
@@ -148,7 +152,6 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     problem_moe.A.layout = micro::MatrixLayout::T;
     problem_moe.B.layout = micro::MatrixLayout::N;
     problem_moe.C.layout = micro::MatrixLayout::N;
-    problem_moe.A.setAlignment(micro::alignment_for_ld(k * problem_moe.Ta));
     problem_moe.B.setAlignment(micro::alignment_for_ld(k * problem_moe.Tb));
     problem_moe.C.setAlignment(problem_moe.Tc.size());
 
@@ -162,7 +165,7 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     /* Set up problem_moe size information */
     micro::SizeParams sizes;
     // TODO fix
-    sizes.n = n; 
+    sizes.n = n;
     sizes.m = m;
     sizes.k = k;
     sizes.batch = 1;
@@ -170,12 +173,12 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
     /* Set up microkernel requirements */
 //    int unroll_n = is_prefill ? 8 : 1;
 //    int unroll_n = is_prefill ? 8 : n;
-    std::vector<micro::StrategyRequirement> reqs_moe;
+//    std::vector<micro::StrategyRequirement> reqs_moe;
 //    reqs_moe.push_back(micro::StrategyRequirement::UnrollN == unroll_n);
     std::cout << "problem_moe : " << problem_moe.toString() << std::endl;
     /* Ask microkernel provider for microkernel */
     try {
-      gemm_moe = micro::select_gemm_microkernel(opts_moe, hw_info, sizes, problem_moe, reqs_moe);
+      gemm_moe = micro::select_gemm_microkernel(opts_moe, hw_info, sizes, problem_moe);
     } catch (const std::runtime_error& ex) {
         GPU_DEBUG_TRACE_DETAIL << "Can't create moe micro kernel: " << ex.what() << "\n";
         std::cout << "Can't create moe micro kernel: " << ex.what() << "\n";
