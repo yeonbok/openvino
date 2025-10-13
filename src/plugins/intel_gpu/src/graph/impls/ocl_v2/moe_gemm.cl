@@ -23,9 +23,17 @@ DECLARE_2D_TILE_COPY_REBLOCK(ugemm_moe_c_type, SUBGROUP_SIZE, ugemm_moe_c_type_b
 
 __attribute__((intel_reqd_sub_group_size(SUBGROUP_SIZE)))
 KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
-        const global INPUT0_TYPE *input_ptr, const global INPUT1_TYPE *weight_ptr, global OUTPUT_TYPE *out_ptr,
-        const global INPUT2_TYPE *experts_ids, const global INPUT3_TYPE * input_offset_per_expert, 
-        const global INPUT4_TYPE *n_array, int m, int k, local int* slm
+        const global INPUT0_TYPE *input_ptr,
+#ifdef WEIGHT_COMPRESSED_INT4
+        const global uchar *weight_ptr,
+#else
+        const global INPUT1_TYPE *weight_ptr,
+#endif
+        global OUTPUT_TYPE *out_ptr,
+        const global INPUT2_TYPE *experts_ids,
+        const global INPUT3_TYPE * input_offset_per_expert, 
+        const global INPUT4_TYPE *n_array,
+        int m, int k, local int* slm
 #ifdef WEIGHT_COMPRESSED_INT4
         , const global WEIGHT_SCALE_DT *weight_scales
         , const global WEIGHT_ZP_DT *weight_zps
@@ -42,11 +50,15 @@ KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
     #endif
     out_ptr += input_offset * OUTPUT_STRIDE;
     weight_ptr += experts_ids[batch] * EXPERT_STRIDE;
+
+    int ld_input = k;
+#ifdef WEIGHT_COMPRESSED_INT4
+    weight_scales += experts_ids[batch] * m;
+    weight_zps += experts_ids[batch] * m;
+#endif
+    int ld_weight = k;
 //    printf("m : %d n : %d k : %d\n", m, n, k);
     int cur_n_tokens = n_array[batch];
-
-    int ld_weight = k;
-    int ld_input = k;
 
     uint sg_i = sub_group_broadcast(get_local_id(0)/SUBGROUP_SIZE, 0);
     uint sg_j = sub_group_broadcast(get_local_id(1), 0);
@@ -59,9 +71,9 @@ KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
 
     if (wg_j0 >= cur_n_tokens) // if I set it as sg_j0 >= 0 : it hangs
         return;     /* early exit if outside batch */
-    ugemm_moe_c_type c_tile = ugemm_moe(weight_ptr, ld_weight, input_ptr, ld_input, m, cur_n_tokens, k, wg_i0, wg_j0, 0, sg_i, sg_j, slm,
+    ugemm_moe_c_type c_tile = ugemm_moe(weight_ptr, ld_weight, input_ptr, ld_input, m, cur_n_tokens, k, wg_i0, wg_j0, 0, sg_i, sg_j, slm
 #ifdef WEIGHT_COMPRESSED_INT4
-        weight_scales, weight_zps, 1
+                                        , weight_scales, weight_zps, 1
 #endif
 );
     //printf("gid : %d, %d, %d batch : %d wg_i0 : %d wg_j0 : %d input_offset: %d weight_offset :%d m : %d, n : %d k : %d c_tile %f\n", \

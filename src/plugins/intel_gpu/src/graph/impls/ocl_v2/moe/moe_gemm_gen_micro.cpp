@@ -52,6 +52,7 @@ JitConstants MoEGemmMicroGenerator::get_jit_constants(const kernel_impl_params& 
             input_ids.push_back((moe_gemm::MoEGemmInputIdx)((int)moe_gemm::MoEGemmInputIdx::WEIGHT_SCALE - 1));
             input_ids.push_back((moe_gemm::MoEGemmInputIdx)((int)moe_gemm::MoEGemmInputIdx::WEIGHT_ZP - 1));
         }
+        std::cout << "# is u4||i4" << std::endl;
         jit.make("EXPERT_STRIDE", (params.input_layouts[1].get_shape()[1] * params.input_layouts[1].get_shape()[2]) / 2);
     } else {
         jit.make("EXPERT_STRIDE", params.input_layouts[1].get_shape()[1] * params.input_layouts[1].get_shape()[2]);
@@ -136,7 +137,7 @@ void MoEGemmMicroGenerator::init_microkernels(const kernel_impl_params& params,
         problem_moe.aqGroupK = k;
 
         problem_moe.Tao = micro::Type::f16; // zp dt
-        problem_moe.AO.setAlignment(2); // zp : u8
+        problem_moe.AO.setAlignment(2); // zp : half
         problem_moe.AO.layout = micro::MatrixLayout::T;
         problem_moe.aoPtrDims = 2; // // A/B offset dimensionality (-1: none; 0: scalar; 1: vector, 2: matrix)
         problem_moe.aOffset = micro::ABOffset::Calc; // Calculate A/B row/column sums in kernel.
