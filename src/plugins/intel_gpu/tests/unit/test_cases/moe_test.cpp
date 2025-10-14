@@ -889,9 +889,9 @@ static void quantize_u4(std::vector<ov::float16>& weight_fp, std::vector<uint8_t
     }
 }
 
-static void quantize_i4_sym(std::vector<ov::float16>& weight_fp, std::vector<int8_t>& weight_i4, int B, int N, int K, int group_size, std::vector<ov::float16>& weight_scale) {
-    const int8_t i4_max = -8;
-    const int8_t i4_min = 7;
+static void quantize_i4_sym(std::vector<ov::float16>& weight_fp, std::vector<uint8_t>& weight_i4, int B, int N, int K, int group_size, std::vector<ov::float16>& weight_scale) {
+    const int8_t i4_max = 7;
+    const int8_t i4_min = -8;
     const int K_i4 = K/2;
     const int num_elements_per_byte = 2;
     const int num_scale_groups = K / group_size;
@@ -907,10 +907,7 @@ static void quantize_i4_sym(std::vector<ov::float16>& weight_fp, std::vector<int
                     amax = std::max(amax, v);
                     amin = std::min(amin, v);
                 }
-                float range = (float)amax - (float)amin;
-                if (range <= 1e-5f)
-                    range = 1e-2f;
-                float inv_scale = (i4_max - i4_min) / range;
+                float inv_scale = (float)i4_max / (float)(std::abs(amax));
                 // quantize
                 for (int ki = 0; ki < group_size / num_elements_per_byte; ki++)  {
                     ov::float16 v0 = weight_fp[(b * N * K) + (m * K) + (group_iter * group_size) + num_elements_per_byte * ki];
@@ -918,22 +915,30 @@ static void quantize_i4_sym(std::vector<ov::float16>& weight_fp, std::vector<int
                     int8_t q0 = std::min(std::max((int8_t)(float(v0) * inv_scale), (int8_t)i4_min), i4_max); // u4
                     int8_t q1 = std::min(std::max((int8_t)(float(v1) * inv_scale), (int8_t)i4_min), i4_max); // u4
     
-                    int8_t q0q1 = (q1 << 4) | (q0 & 0x0F);
-                    weight_i4[b * N * K_i4 + (m * K_i4) + (group_iter * group_size / num_elements_per_byte) + ki] = int8_t(q0q1);
+//                    uint8_t q0q1 = (q1 << 4) | (q0 & 0x0F);
+                    uint8_t q0q1 = ((uint8_t)q1 << 4) | ((uint8_t)q0 & 0x0F);
+                    weight_i4[b * N * K_i4 + (m * K_i4) + (group_iter * group_size / num_elements_per_byte) + ki] = q0q1;
                 }
                 ov::float16 scale = 1 / inv_scale;
                 weight_scale[b * N + m * num_scale_groups + group_iter ] = scale;
                 // test quantized result
                 for (int ki = 0; ki < group_size / num_elements_per_byte; ki++)
                 {
-                    int8_t q_v = weight_i4[(b * N * K_i4) + (m * K_i4) + (group_iter * group_size / num_elements_per_byte) + ki];
-                    int8_t q0 = q_v & 0x0F;
-                    int8_t q1 = (q_v >> 4) & 0x0F;
+                    uint8_t q_v = weight_i4[(b * N * K_i4) + (m * K_i4) + (group_iter * group_size / num_elements_per_byte) + ki];
+                    int8_t q0 = (int8_t)(q_v & 0x0F);
+                    int8_t q1 = (int8_t)((q_v >> 4) & 0x0F);
+                    if (q0 > 7)
+                        q0 -= 16;
+                    if (q1 > 7)
+                        q1 -= 16;
                     float dq0 = float(q0) * float(scale);
                     float dq1 = float(q1) * float(scale);
                     auto orig_idx = (b * N * K) + (m * K) + group_iter * group_size + ki * num_elements_per_byte;
-                    std::cout << "A[" << b << "][" << m << "][" << group_iter * group_size + ki * num_elements_per_byte     << "] (" << orig_idx << ") scale : " << scale << " fp : " << float(weight_fp[orig_idx]) << " q: " << int(q0) << " dq: " << dq0 << std::endl;
-                    std::cout << "A[" << b << "][" << m << "][" << group_iter * group_size + ki * num_elements_per_byte + 1 << "] (" << orig_idx + 1 << ") scale : " << scale << " fp : " << float(weight_fp[orig_idx + 1]) << " q: " << int(q1) << " dq: " << dq1 << std::endl;
+                    std::cout << "A[" << b << "][" << m << "][" << group_iter * group_size + ki * num_elements_per_byte << "] (" << orig_idx
+                              << ") scale : " << scale << " fp : " << float(weight_fp[orig_idx]) << " q: " << int(q0) << "(" << std::hex << int(q0) << ")" << std::dec
+                              << " dq: " << dq0 << std::endl;
+                    std::cout << "A[" << b << "][" << m << "][" << group_iter * group_size + ki * num_elements_per_byte + 1 << "] (" << orig_idx + 1
+                              << ") scale : " << scale << " fp : " << float(weight_fp[orig_idx + 1]) << " q: " << int(q1) << " dq: " << dq1 << std::endl;
                 }
                 group_iter++;
             }
@@ -1489,17 +1494,16 @@ TEST(moe_unit, moe_gemm_test_small_i4_s32) {
 
     // weight to fill with 1.0f for initial test
     std::vector<ov::float16> experts_data_f16(num_total_experts * hidden_size * experts_out_N);
-    std::vector<int8_t> experts_data_i4(num_total_experts * hidden_size * experts_out_N / 2);
+    std::vector<uint8_t> experts_data_i4(num_total_experts * hidden_size * experts_out_N / 2);
     // [32, 32, 2/*num_scale_groups*/]
     std::vector<ov::float16> scales_data(num_total_experts * num_scale_groups * experts_out_N);
-//    std::vector<ov::float16> zp_data(num_total_experts * num_scale_groups * experts_out_N);
 
     // create and quantize data
     for (size_t e = 0; e < num_total_experts; ++e) {
         for (size_t n = 0; n < experts_out_N ; ++n) {
             for (size_t h = 0; h < hidden_size; ++h) {
                 size_t idx = e * experts_out_N * hidden_size + n * hidden_size + h;
-                experts_data_f16[idx] = static_cast<ov::float16>((e + (n % 2) + (h % 3) + 1) / 50.0f);
+                experts_data_f16[idx] = static_cast<ov::float16>(((e % 2) + (n % 10) + (h % 10) + 1) / 10.0f);
                 if (idx % 4 == 0)
                     experts_data_f16[idx] *= -0.5f;
                 if (idx % 3 == 0)
@@ -1508,7 +1512,6 @@ TEST(moe_unit, moe_gemm_test_small_i4_s32) {
             }
         }
     }
-//    quantize_u4(experts_data_f16, experts_data_u4, num_total_experts, experts_out_N, hidden_size, scale_group_size, scales_data, zp_data);
     quantize_i4_sym(experts_data_f16, experts_data_i4, num_total_experts, experts_out_N, hidden_size, scale_group_size, scales_data);
 
     auto experts_shape = ov::PartialShape{ov::Dimension(num_total_experts), ov::Dimension(experts_out_N), ov::Dimension(hidden_size)};
