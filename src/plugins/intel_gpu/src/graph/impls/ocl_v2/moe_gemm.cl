@@ -36,7 +36,9 @@ KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
         int m, int k, local int* slm
 #ifdef WEIGHT_COMPRESSED_INT4
         , const global WEIGHT_SCALE_DT *weight_scales
+        #ifdef WEIGHT_ZP_DT
         , const global WEIGHT_ZP_DT *weight_zps
+        #endif
 #endif
 ) {
     uint batch = get_group_id(2);
@@ -54,7 +56,9 @@ KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
     int ld_input = k;
 #ifdef WEIGHT_COMPRESSED_INT4
     weight_scales += experts_ids[batch] * m;
+    #ifdef WEIGHT_ZP_DT
     weight_zps += experts_ids[batch] * m;
+    #endif
 #endif
     int ld_weight = k;
 //    printf("m : %d n : %d k : %d\n", m, n, k);
@@ -73,7 +77,11 @@ KERNEL(moe_gemm)(OPTIONAL_SHAPE_INFO_ARG
         return;     /* early exit if outside batch */
     ugemm_moe_c_type c_tile = ugemm_moe(weight_ptr, ld_weight, input_ptr, ld_input, m, cur_n_tokens, k, wg_i0, wg_j0, 0, sg_i, sg_j, slm
 #ifdef WEIGHT_COMPRESSED_INT4
-                                        , weight_scales, weight_zps, 1
+                                        , weight_scales
+#ifdef WEIGHT_ZP_DT
+                                        , weight_zps
+#endif
+                                        , NUM_GROUPS
 #endif
 );
     //printf("gid : %d, %d, %d batch : %d wg_i0 : %d wg_j0 : %d input_offset: %d weight_offset :%d m : %d, n : %d k : %d c_tile %f\n", \

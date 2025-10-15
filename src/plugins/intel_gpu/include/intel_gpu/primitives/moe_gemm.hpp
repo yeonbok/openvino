@@ -54,6 +54,23 @@ struct moe_gemm : public primitive_base<moe_gemm> {
             input_tokens_lens(input_tokens_lens), bias(bias), weight_scale(weight_scale), weight_zp(weight_zp),
             num_active_experts(num_active_experts) {}
 
+    moe_gemm(const primitive_id& id,
+             const input_info& input,
+             const input_info& weight,
+             const input_info& experts_ids,
+             const input_info& inputs_offset_per_expert,
+             const input_info& input_tokens_lens,
+             const primitive_id& bias,
+             const input_info& weight_scale,
+             const primitive_id& weight_zp,
+             const int32_t num_active_experts)
+          : primitive_base(id, {input, weight, experts_ids, inputs_offset_per_expert, input_tokens_lens, weight_scale}),
+            weight(weight), experts_ids(experts_ids), inputs_offset_per_expert(inputs_offset_per_expert),
+            input_tokens_lens(input_tokens_lens), bias(bias), weight_scale(weight_scale), weight_zp(weight_zp),
+            num_active_experts(num_active_experts) {
+            }
+
+
     input_info weight;
     input_info experts_ids;
     input_info inputs_offset_per_expert;
@@ -61,6 +78,10 @@ struct moe_gemm : public primitive_base<moe_gemm> {
     input_info bias;
     input_info weight_scale;
     input_info weight_zp;
+
+    bool has_bias = false;
+    bool has_weight_scale = false;
+    bool has_weight_zp = false;
 
     int32_t num_active_experts = 0;
     size_t hash() const override {

@@ -30,7 +30,7 @@ Arguments MoEGemmBase::get_arguments_desc(const RuntimeParams& params) const {
     args.push_back({ArgumentDescriptor::Types::OUTPUT, 0});
     args.push_back({ArgumentDescriptor::Types::INPUT, 2}); // input offset
     args.push_back({ArgumentDescriptor::Types::INPUT, 3}); // weight offset
-    args.push_back({ArgumentDescriptor::Types::INPUT, 4}); // n_array 
+    args.push_back({ArgumentDescriptor::Types::INPUT, 4}); // n_array
     args.push_back({ArgumentDescriptor::Types::SCALAR, 0});  // k
     return args;
 }

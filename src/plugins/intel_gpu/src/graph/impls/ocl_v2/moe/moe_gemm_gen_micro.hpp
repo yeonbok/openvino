@@ -21,9 +21,21 @@ namespace ov::intel_gpu::ocl {
 #ifdef ENABLE_ONEDNN_FOR_GPU
 #include "micro_utils.hpp"
 
+struct moe_config {
+    bool has_bias = false;
+    bool is_activation_quantized = false;
+    bool is_activation_symmetric_quantized = false;
+    bool is_weight_quantized = false;
+    bool is_weight_symmetric_quantized = false;
+    int32_t weight_group_size = -1;
+};
+
 class MoEGemmMicroGenerator : public MoEGemmOptGeneratorBase {
 public:
-    explicit MoEGemmMicroGenerator(bool prefill) : MoEGemmOptGeneratorBase("moe_gemm", prefill ? "_prefill" : "_generate"), m_is_prefill(prefill) {}
+    explicit MoEGemmMicroGenerator(bool prefill)
+        : MoEGemmOptGeneratorBase("moe_gemm", prefill ? "_prefill" : "_generate"),
+          m_is_prefill(prefill) {
+    }
 
     [[nodiscard]] std::string get_build_options(const kernel_impl_params& params) const override;
 
@@ -32,13 +44,15 @@ public:
     [[nodiscard]] JitConstants get_jit_constants(const kernel_impl_params& params) const override {
         OPENVINO_THROW("Use overloaded version instead");
     }
-    [[nodiscard]] JitConstants get_jit_constants(const kernel_impl_params& params, const micro::Package& moe_gemm) const;
+    [[nodiscard]] JitConstants get_jit_constants(const kernel_impl_params& params, const micro::Package& moe_gemm, const moe_config& cfg) const;
 
     [[nodiscard]] Arguments get_arguments_desc(const kernel_impl_params& params) const override;
 
     [[nodiscard]] DispatchDataFunc get_dispatch_data_func() const override;
 
     static void init_microkernels(const kernel_impl_params& params, micro::Package& gemm_moe, bool is_prefill);
+
+    static moe_config get_moe_cfg(const kernel_impl_params& params);
 
     bool m_is_prefill;
     static std::mutex mtx;

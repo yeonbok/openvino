@@ -40,6 +40,8 @@ public:
     explicit MoEGemmImpl(const RuntimeParams& impl_param) : MoEGemmImpl() {
         auto params = impl_param;
         GPU_DEBUG_TRACE_DETAIL << "create stages for dynamic = " << params.is_dynamic() << "\n";
+
+
         add_stage(regular_micro_multi_tokens, params);
         add_stage(regular_micro_single_token, params);
     }
@@ -49,10 +51,10 @@ public:
     }
     
     void update_rt_params(const primitive_inst& instance) override {
-        update_stages_flags(instance);
         if (m_rt_params == nullptr) {
             m_rt_params = std::make_unique<MoEGemmRuntimeParams>();
         }
+        update_stages_flags(instance);
         auto rtp = static_cast<MoEGemmRuntimeParams*>(m_rt_params.get());
         rtp->num_actual_used_experts = instance.get_input_layout(moe_gemm::MoEGemmInputIdx::INPUT_OFFSET_PER_EXPERT).get_shape()[0];
         std::cout << "update_rt_params: " << " num_actual_used_experts: " << rtp->num_actual_used_experts << std::endl;
