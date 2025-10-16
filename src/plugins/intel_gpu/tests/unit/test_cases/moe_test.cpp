@@ -31,67 +31,66 @@ TEST(moe_unit, moe_mask_gen_test) {
         4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4 ,8,
     };
 
-    std::vector<int32_t> dummy_data = {
-        4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4 ,8,
-        4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4 ,8,
-        4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4 ,8
-    };
+    int64_t num_tokens = 30;
+    int64_t num_active_experts_per_token = 2;
+    int32_t num_actually_used_experts = 2;
+    // input shape
+    auto topk_shape = ov::PartialShape{ov::Dimension::dynamic(), ov::Dimension(num_active_experts_per_token)};
+    auto topk_layout = layout{topk_shape, data_types::i32, format::bfyx};
 
-//    std::vector<int32_t> gather_info_data = {
-//            // expert offsets
-//            -1, -1, -1, -1, 0,  -1, -1, -1,
-//            30, -1, -1, -1, -1, -1, -1, -1,
-//            -1, -1, -1, -1, -1, -1, -1, -1,
-//            -1, -1, -1, -1, -1, -1, -1, -1,
-//            // tokens per experts 
-//            0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
-//            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-//            0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
-//            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29
-//    };
-
-    std::vector<int32_t> gather_info_data =
-    {
-        -1, -1, -1, -1, 0, -1, -1, -1,
-        30, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1,
-        0,   0,  0,  0, 30,  0,  0,  0, 30,  0,  0,  0,
-        0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-        0,   0,  0,  0,  0,  0,  0,  0,
-        0,   1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
-       16,  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-        0,   1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
-       16,  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29
-    };
-
-    auto topk_shape = ov::PartialShape{ov::Dimension(30), ov::Dimension(2)};
-    auto topk_idx_layout = layout{topk_shape, data_types::i32, format::bfyx};
-    auto topk_idx_mem = engine.allocate_memory(topk_idx_layout);
-
-    // dummy now
-    auto weight_data = engine.allocate_memory(topk_idx_layout);
-    auto weight_layout = layout{topk_shape, data_types::i32, format::bfyx};
-    auto weight_mem = engine.allocate_memory(topk_idx_layout);
-
-    set_values(topk_idx_mem, topk_idx);
+    std::vector<int32_t> num_actually_used_experts_ref = {num_actually_used_experts};
     topology topology(
-        input_layout("input_topk", topk_idx_layout),
-        data("weight_dummy", weight_mem),
-        moe_mask_gen("moe_mask_gen", input_info("input_topk"), input_info("weight_dummy"), 32, 2)
+        input_layout("input_topk", topk_layout),
+        moe_mask_gen("moe_mask_gen", input_info("input_topk"), 32, 2),
+        reorder("num_actual_used_experts", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::NUM_ACTUALLY_USED_EXPERTS), format::bfyx, data_types::f32),
+        reorder("tokens_per_experts", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::TOKENS_PER_EXPERT), format::bfyx, data_types::f32),
+        reorder("experts_info_start_idx", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::EXPERTS_INFO_START_IDX), format::bfyx, data_types::f32),
+        reorder("experts_ids", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::EXPERTS_ID), format::bfyx, data_types::f32),
+        reorder("tokens_lens_per_expert", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::TOKENS_LENS_PER_EXPERT), format::bfyx, data_types::f32)
     );
-//    network network(engine, topology, get_test_default_config(engine));
-    auto network = get_network(engine, topology, get_test_default_config(engine), get_test_stream_ptr(), false);
-    network->set_input_data("input_topk", topk_idx_mem);
-    auto outputs = network->execute();
-    auto output = outputs.begin()->second.get_memory();
 
-    cldnn::mem_lock<int32_t, mem_lock_type::read> output_ptr(output, get_test_stream());
-    for (size_t i = 0; i < output->get_layout().count(); i++) {
-//        std::cout << output_ptr[i] << ", ";
-        ASSERT_EQ(output_ptr[i], gather_info_data[i]);
+    auto config = get_test_default_config(engine);
+    config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
+    auto network = get_network(engine, topology, config, get_test_stream_ptr(), false);
+
+    auto topk_data_shape = ov::PartialShape{ov::Dimension(num_tokens), ov::Dimension(num_active_experts_per_token)};
+    auto topk_data_layout = layout{topk_data_shape, data_types::i32, format::bfyx};
+    auto topk_idx_mem = engine.allocate_memory(topk_data_layout);
+    set_values(topk_idx_mem, topk_idx);
+    network->set_input_data("input_topk", topk_idx_mem);
+
+    auto outputs = network->execute();
+    std::cout << "num outputs: " << outputs.size() << std::endl;
+    const auto& output_num_actual_experts = outputs.at("num_actual_used_experts").get_memory();
+
+    cldnn::mem_lock<float, mem_lock_type::read> output_num_actual_experts_ptr(output_num_actual_experts, get_test_stream());
+    ASSERT_EQ(static_cast<int32_t>(output_num_actual_experts_ptr[0]), num_actually_used_experts);
+
+    const auto& output_tokens_per_experts = outputs.at("tokens_per_experts").get_memory();
+    cldnn::mem_lock<float, mem_lock_type::read> output_tokens_per_experts_ptr(output_tokens_per_experts, get_test_stream());
+    std::vector<float> tokens_per_expert_ref = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+                                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29};
+    for (size_t i = 0; i < static_cast<size_t>(num_tokens * num_active_experts_per_token); i++) {
+        ASSERT_EQ(output_tokens_per_experts_ptr[i], tokens_per_expert_ref[i]);
     }
-    std::cout << std::endl;
+    std::vector<float> expert_ids_ref = {4, 8};
+    const auto& output_expert_ids = outputs.at("experts_ids").get_memory();
+    cldnn::mem_lock<float, mem_lock_type::read> output_expert_ids_ptr(output_expert_ids, get_test_stream());
+    for (size_t i = 0; i < static_cast<size_t>(num_actually_used_experts); i++) {
+        ASSERT_EQ(static_cast<int32_t>(output_expert_ids_ptr[i]), expert_ids_ref[i]);
+    }
+    std::vector<float> experts_info_start_idx_ref = {0, 30};
+    const auto& output_experts_info_start_idx = outputs.at("experts_info_start_idx").get_memory();
+    cldnn::mem_lock<float, mem_lock_type::read> output_experts_info_start_idx_ptr(output_experts_info_start_idx, get_test_stream());
+    for (size_t i = 0; i < static_cast<size_t>(num_actually_used_experts); i++) {
+        ASSERT_EQ(static_cast<int32_t>(output_experts_info_start_idx_ptr[i]), experts_info_start_idx_ref[i]);
+    }
+    std::vector<float> tokens_lens_per_expert_ref = {30, 30};
+    const auto& output_tokens_lens_per_expert = outputs.at("tokens_lens_per_expert").get_memory();
+    cldnn::mem_lock<float, mem_lock_type::read> output_tokens_lens_per_expert_ptr(output_tokens_lens_per_expert, get_test_stream());
+    for (size_t i = 0; i < static_cast<size_t>(num_actually_used_experts); i++) {
+        ASSERT_EQ(static_cast<int32_t>(output_tokens_lens_per_expert_ptr[i]), tokens_lens_per_expert_ref[i]);
+    }
 }
 
 

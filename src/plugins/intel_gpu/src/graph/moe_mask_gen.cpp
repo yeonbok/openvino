@@ -13,26 +13,38 @@ namespace cldnn {
 GPU_DEFINE_PRIMITIVE_TYPE_ID(moe_mask_gen)
 
 layout moe_mask_gen_inst::calc_output_layout(moe_mask_gen_node const& node, kernel_impl_params const& impl_param) {
-    // TODO
-    const auto& num_total_experts = impl_param.typed_desc<moe_mask_gen>()->num_total_experts;
-    const auto& num_active_experts = impl_param.typed_desc<moe_mask_gen>()->num_active_experts;
-    const auto num_tokens = impl_param.get_input_layout(0).get_shape()[0];
-    std::vector<layout> output_layouts;
-    auto gather_info_shape = ov::Shape{static_cast<size_t>(num_total_experts * 2 + num_tokens * num_active_experts)};
-    return layout{gather_info_shape, data_types::i32, format::bfyx};
-
+    OPENVINO_THROW("moe_mask_gen has multiple outputs so only supports allow_new_shape_infer = true.");
+    return calc_output_layouts<ov::PartialShape>(node, impl_param)[1];
 }
 
 template<typename ShapeType>
 std::vector<layout> moe_mask_gen_inst::calc_output_layouts(moe_mask_gen_node const& /*node*/, const kernel_impl_params& impl_param) {
     // TODO
-    const auto& num_total_experts = impl_param.typed_desc<moe_mask_gen>()->num_total_experts;
-//    const auto& num_active_experts = impl_param.typed_desc<moe_mask_gen>()->num_active_experts;
     std::vector<layout> output_layouts;
-    auto gather_info_shape = ov::Shape{static_cast<size_t>(num_total_experts * 2)};
-    auto gemm_info_shape = ov::Shape{static_cast<size_t>(num_total_experts * 6)};
-    output_layouts.emplace_back(gather_info_shape, data_types::i32, format::bfyx);
-    output_layouts.emplace_back(gemm_info_shape, data_types::i32, format::bfyx);
+    const auto& num_total_experts = impl_param.typed_desc<moe_mask_gen>()->num_total_experts;
+    const auto& num_experts_per_token = impl_param.typed_desc<moe_mask_gen>()->num_experts_per_token;
+    auto num_actual_used_experts_shape = ov::Shape{static_cast<size_t>(1)};
+    // out0: num_actual_expert
+    output_layouts.emplace_back(num_actual_used_experts_shape, data_types::i32, format::bfyx);
+    if (impl_param.get_input_layout(0).is_dynamic()) {
+        // out1: tokens_per_expert
+        auto tokens_per_expert_shape = ov::PartialShape::dynamic();
+        output_layouts.emplace_back(tokens_per_expert_shape, data_types::i32, format::bfyx);
+    } else {
+        const auto num_tokens = impl_param.get_input_layout(0).get_shape()[0];
+        // out1: tokens_per_expert
+        auto tokens_per_expert_shape = ov::Shape{num_tokens * num_experts_per_token};
+        output_layouts.emplace_back(tokens_per_expert_shape, data_types::i32, format::bfyx);
+    }
+    // out2: experts_info_start_idx
+    auto experts_info_start_idx_shape = ov::Shape{static_cast<size_t>(num_total_experts)};
+     output_layouts.emplace_back(experts_info_start_idx_shape, data_types::i32, format::bfyx);
+    // out3: experts_id
+    auto experts_ids = ov::Shape{static_cast<size_t>(num_total_experts)};
+    output_layouts.emplace_back(experts_ids, data_types::i32, format::bfyx);
+    // out4: tokens_lens_per_expert
+    auto tokens_lens_per_expert = ov::Shape{static_cast<size_t>(num_total_experts)};
+    output_layouts.emplace_back(tokens_lens_per_expert, data_types::i32, format::bfyx);
     return output_layouts;
 }
 
