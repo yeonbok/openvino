@@ -168,6 +168,7 @@ REGISTER_IMPLS(col2im);
 REGISTER_IMPLS(vl_sdpa);
 REGISTER_IMPLS(moe_gather);
 REGISTER_IMPLS(moe_mask_gen);
+REGISTER_IMPLS(moe_mask_gen_reshape);
 REGISTER_IMPLS(moe_gemm);
 
 REGISTER_DEFAULT_IMPLS(assign, CPU_S, CPU_D);

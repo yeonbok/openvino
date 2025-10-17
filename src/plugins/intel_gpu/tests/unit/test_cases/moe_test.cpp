@@ -42,12 +42,23 @@ TEST(moe_unit, moe_mask_gen_test) {
     topology topology(
         input_layout("input_topk", topk_layout),
         moe_mask_gen("moe_mask_gen", input_info("input_topk"), 32, 2),
-        reorder("num_actual_used_experts", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::NUM_ACTUALLY_USED_EXPERTS), format::bfyx, data_types::f32),
-        reorder("tokens_per_experts", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::TOKENS_PER_EXPERT), format::bfyx, data_types::f32),
-        reorder("experts_info_start_idx", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::EXPERTS_INFO_START_IDX), format::bfyx, data_types::f32),
-        reorder("experts_ids", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::EXPERTS_ID), format::bfyx, data_types::f32),
-        reorder("tokens_lens_per_expert", input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::TOKENS_LENS_PER_EXPERT), format::bfyx, data_types::f32)
-    );
+        moe_mask_gen_reshape("moe_mask_gen_reshape",
+                             input_info("moe_mask_gen", 0),
+                             input_info("moe_mask_gen", 1),
+                             input_info("moe_mask_gen", 2),
+                             input_info("moe_mask_gen", 3),
+                             input_info("moe_mask_gen", 4)),
+        reorder("num_actual_used_experts",
+                input_info("moe_mask_gen", moe_mask_gen::MoEMaskGenOutputIdx::NUM_ACTUALLY_USED_EXPERTS),
+                format::bfyx,
+                data_types::f32),
+        reorder("tokens_per_experts", input_info("moe_mask_gen_reshape", moe_mask_gen_reshape::MoEMaskGenReshapeOutputIdx::TOKENS_PER_EXPERT), format::bfyx, data_types::f32),
+        reorder("experts_info_start_idx", input_info("moe_mask_gen_reshape", moe_mask_gen_reshape::MoEMaskGenReshapeOutputIdx::EXPERTS_INFO_START_IDX), format::bfyx, data_types::f32),
+        reorder("experts_ids", input_info("moe_mask_gen_reshape", moe_mask_gen_reshape::MoEMaskGenReshapeOutputIdx::EXPERTS_ID), format::bfyx, data_types::f32),
+        reorder("tokens_lens_per_expert",
+                input_info("moe_mask_gen_reshape", moe_mask_gen_reshape::MoEMaskGenReshapeOutputIdx::TOKENS_LENS_PER_EXPERT),
+                format::bfyx,
+                data_types::f32));
 
     auto config = get_test_default_config(engine);
     config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
@@ -60,7 +71,6 @@ TEST(moe_unit, moe_mask_gen_test) {
     network->set_input_data("input_topk", topk_idx_mem);
 
     auto outputs = network->execute();
-    std::cout << "num outputs: " << outputs.size() << std::endl;
     const auto& output_num_actual_experts = outputs.at("num_actual_used_experts").get_memory();
 
     cldnn::mem_lock<float, mem_lock_type::read> output_num_actual_experts_ptr(output_num_actual_experts, get_test_stream());

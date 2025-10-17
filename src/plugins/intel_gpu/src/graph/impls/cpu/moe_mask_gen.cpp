@@ -70,8 +70,6 @@ struct moe_mask_gen_impl : public typed_primitive_impl<moe_mask_gen> {
         auto tokens_lens_per_expert_mem_ptr = instance.output_memory_ptr(4);
 
         cldnn::mem_lock<int32_t, mem_lock_type::read> topk_idx_lock(topk_idx_mem_ptr, stream);
-//        cldnn::mem_lock<int32_t, mem_lock_type::read_write> gather_info_lock(gather_info_mem_ptr, stream);
-//        cldnn::mem_lock<uint8_t, mem_lock_type::read_write> gemm_info_lock(gemm_info_mem_ptr, stream);
         cldnn::mem_lock<int32_t, mem_lock_type::read_write> num_actual_used_experts_lock(num_actual_used_experts_mem_ptr, stream);
         cldnn::mem_lock<int32_t, mem_lock_type::read_write> tokens_per_expert_lock(tokens_per_expert_mem_ptr, stream);
         cldnn::mem_lock<int32_t, mem_lock_type::read_write> experts_info_start_idx_lock(experts_info_start_idx_mem_ptr, stream);
@@ -79,7 +77,6 @@ struct moe_mask_gen_impl : public typed_primitive_impl<moe_mask_gen> {
         cldnn::mem_lock<int32_t, mem_lock_type::read_write> tokens_lens_per_expert_lock(tokens_lens_per_expert_mem_ptr, stream);
 
         auto topk_idx_ptr = topk_idx_lock.data();
-//        auto gather_info_ptr = gather_info_lock.data();
         auto num_actually_used_experts_ptr = num_actual_used_experts_lock.data();
         auto tokens_per_expert_ptr = tokens_per_expert_lock.data();
         auto experts_info_start_idx_ptr = experts_info_start_idx_lock.data();
@@ -129,9 +126,52 @@ public:
     }
 };
 
+struct moe_mask_gen_reshape_impl : public typed_primitive_impl<moe_mask_gen_reshape> {
+    using parent = typed_primitive_impl<moe_mask_gen_reshape>;
+    using parent::parent;
+
+    DECLARE_OBJECT_TYPE_SERIALIZATION(cldnn::cpu::moe_mask_gen_reshape_impl)
+
+    std::unique_ptr<primitive_impl> clone() const override {
+        return std::make_unique<moe_mask_gen_reshape_impl>(*this);
+    }
+
+    moe_mask_gen_reshape_impl() : parent("moe_mask_gen_reshape_cpu_impl") {}
+
+    explicit moe_mask_gen_reshape_impl(const moe_mask_gen_reshape_node& outer) {
+        set_node_params(outer);
+    }
+
+    void set_node_params(const program_node& arg) override {
+        OPENVINO_ASSERT(arg.is_type<moe_mask_gen_reshape>(), "[GPU] Incorrect program_node type");
+    }
+
+    void save(BinaryOutputBuffer& ob) const override {
+        parent::save(ob);
+    }
+
+    void load(BinaryInputBuffer& ib) override {
+        parent::load(ib);
+    }
+
+    event::ptr execute_impl(const std::vector<event::ptr>& events, moe_mask_gen_reshape_inst& instance) override {
+        OV_ITT_SCOPED_TASK(ov::intel_gpu::itt::domains::intel_gpu_plugin, "moe_mask_gen_reshape::execute_impl");
+        auto& stream = instance.get_network().get_stream();
+
+        return stream.group_events(events);
+    }
+
+    void init_kernels(const kernels_cache& , const kernel_impl_params&) override {}
+
+    void update(primitive_inst& inst, const kernel_impl_params& impl_param) override {}
+
+public:
+    static std::unique_ptr<primitive_impl> create(const moe_mask_gen_reshape_node& arg, const kernel_impl_params& impl_param) {
+        return std::make_unique<moe_mask_gen_reshape_impl>();
+    }
+};
 
 namespace detail {
-
 attach_moe_mask_gen_impl::attach_moe_mask_gen_impl() {
     auto formats = {
         format::bfyx,
@@ -147,9 +187,27 @@ attach_moe_mask_gen_impl::attach_moe_mask_gen_impl() {
     implementation_map<moe_mask_gen>::add(impl_types::cpu, shape_types::dynamic_shape, moe_mask_gen_impl::create, types, formats);
 }
 
+attach_moe_mask_gen_reshape_impl::attach_moe_mask_gen_reshape_impl() {
+    auto formats = {
+        format::bfyx,
+    };
+
+    auto types = {
+        data_types::i32,
+        data_types::i64,
+        data_types::f32,
+    };
+
+    implementation_map<moe_mask_gen_reshape>::add(impl_types::cpu, shape_types::static_shape, moe_mask_gen_reshape_impl::create, types, formats);
+    implementation_map<moe_mask_gen_reshape>::add(impl_types::cpu, shape_types::dynamic_shape, moe_mask_gen_reshape_impl::create, types, formats);
+}
+
 }  // namespace detail
 }  // namespace cpu
 }  // namespace cldnn
 
 BIND_BINARY_BUFFER_WITH_TYPE(cldnn::cpu::moe_mask_gen_impl)
 BIND_BINARY_BUFFER_WITH_TYPE(cldnn::moe_mask_gen)
+
+BIND_BINARY_BUFFER_WITH_TYPE(cldnn::cpu::moe_mask_gen_reshape_impl)
+BIND_BINARY_BUFFER_WITH_TYPE(cldnn::moe_mask_gen_reshape)

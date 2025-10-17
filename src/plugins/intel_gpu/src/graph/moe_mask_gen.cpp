@@ -64,4 +64,79 @@ std::string moe_mask_gen_inst::to_string(moe_mask_gen_node const& node) {
 }
 
 moe_mask_gen_inst::typed_primitive_inst(network& network, moe_mask_gen_node const& node) : parent(network, node) { }
+
+GPU_DEFINE_PRIMITIVE_TYPE_ID(moe_mask_gen_reshape)
+layout moe_mask_gen_reshape_inst::calc_output_layout(moe_mask_gen_reshape_node const& node, kernel_impl_params const& impl_param) {
+    OPENVINO_THROW("moe_mask_gen has multiple outputs so only supports allow_new_shape_infer = true.");
+    return calc_output_layouts<ov::PartialShape>(node, impl_param)[1];
+}
+
+template<typename ShapeType>
+std::vector<layout> moe_mask_gen_reshape_inst::calc_output_layouts(moe_mask_gen_reshape_node const& /*node*/, const kernel_impl_params& impl_param) {
+    std::vector<layout> output_layouts;
+    if (!impl_param.memory_deps.count(0)) {
+        output_layouts.emplace_back(impl_param.get_input_layout(1));
+        output_layouts.emplace_back(impl_param.get_input_layout(2));
+        output_layouts.emplace_back(impl_param.get_input_layout(3));
+        output_layouts.emplace_back(impl_param.get_input_layout(4));
+        return output_layouts;
+    }
+    auto num_actually_used_experts = read_vector<int32_t>(impl_param.memory_deps.at(0), impl_param.get_stream())[0];
+    // tokens_per_expert
+    output_layouts.emplace_back(impl_param.get_input_layout(1));
+    // experts_info_start_idx
+    auto experts_info_start_idx_shape = ov::Shape{static_cast<size_t>(num_actually_used_experts)};
+    output_layouts.emplace_back(experts_info_start_idx_shape, data_types::i32, format::bfyx);
+    // experts_id
+    auto experts_ids = ov::Shape{static_cast<size_t>(num_actually_used_experts)};
+    output_layouts.emplace_back(experts_ids, data_types::i32, format::bfyx);
+    // tokens_lens_per_expert
+    auto tokens_lens_per_expert = ov::Shape{static_cast<size_t>(num_actually_used_experts)};
+    output_layouts.emplace_back(tokens_lens_per_expert, data_types::i32, format::bfyx);
+    return output_layouts;
+}
+
+template std::vector<layout> moe_mask_gen_reshape_inst::calc_output_layouts<ov::PartialShape>(moe_mask_gen_reshape_node const& node, const kernel_impl_params& impl_param);
+
+std::string moe_mask_gen_reshape_inst::to_string(moe_mask_gen_reshape_node const& node) {
+    auto node_info = node.desc_to_json();
+    auto desc = node.get_primitive();
+    std::stringstream primitive_description;
+
+    json_composite moe_mask_gen_reshape_info;
+    if (desc->output_data_types[0].has_value())
+        moe_mask_gen_reshape_info.add("out dt: ", dt_to_str(*desc->output_data_types[0]));
+    node_info->dump(primitive_description);
+
+    return primitive_description.str();
+}
+
+moe_mask_gen_reshape_inst::typed_primitive_inst(network& network, moe_mask_gen_reshape_node const& node) : parent(network, node, false) {
+    update_output_memory();
+}
+
+void moe_mask_gen_reshape_inst::on_execute() {
+    update_output_memory();
+}
+
+void moe_mask_gen_reshape_inst::update_output_memory() {
+    if (!can_be_optimized())
+        return;
+    if (_node != nullptr)
+        build_deps();
+
+    for (size_t i = 0; i < _outputs.size(); ++i) {
+        if (static_cast<bool>(_outputs[i]) && get_node().get_program().get_config().get_enable_memory_pool()) {
+            _network.get_memory_pool().release_memory(_outputs[i].get(), get_node().get_unique_id(), get_node().id(), _network.get_id());
+        }
+    }
+
+    _outputs = {
+        _network.get_engine().reinterpret_buffer(input_memory(1), _impl_params->get_output_layout(0)),
+        _network.get_engine().reinterpret_buffer(input_memory(2), _impl_params->get_output_layout(1)),
+        _network.get_engine().reinterpret_buffer(input_memory(3), _impl_params->get_output_layout(2)),
+        _network.get_engine().reinterpret_buffer(input_memory(4), _impl_params->get_output_layout(3))
+    };
+    _mem_allocated = false;
+}
 }  // namespace cldnn

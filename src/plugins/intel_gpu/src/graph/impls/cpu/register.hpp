@@ -60,6 +60,7 @@ REGISTER_CPU(reduce);
 REGISTER_CPU(fake_convert);
 REGISTER_CPU(moe_gather);
 REGISTER_CPU(moe_mask_gen);
+REGISTER_CPU(moe_mask_gen_reshape);
 
 #undef REGISTER_CPU
 
